@@ -4969,15 +4969,18 @@ class MainWindow(QMainWindow):
             if self._agent.session is not None and self._agent.session is not self.session:
                 self.session = self._agent.session
                 self._bind_ai()
+            # The open canvas is still the pre-op scene. Reload it from the
+            # model before save or the dirty snapshot, both of which read
+            # scene positions. A same-tag device on another page is a
+            # different placement and must not inherit this page's scene.
+            self._refresh_from_session(fit=False)
             if any(r.get("ok") for r in replies) and self.session.path is not None:
                 try:
-                    # Canvas still has pre-op positions. Syncing them back would
-                    # undo layout_io / cleanup / move from the inbox.
                     self.session.save()
                     self._remember_saved_project()
                 except Exception:  # noqa: BLE001
                     pass
-            self._refresh_from_session(fit=False)
+                self._note_yaml_mtime()
             self._ai_idle_ticks = 0
             n_ok = sum(1 for r in replies if r.get("ok"))
             model = self.session.actor.get("model") or DEFAULT_MODEL

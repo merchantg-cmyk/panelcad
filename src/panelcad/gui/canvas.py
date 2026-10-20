@@ -409,9 +409,14 @@ class ComponentItem(QGraphicsItem):
         layout: bool = False,
         network: bool = False,
         io_card: bool = False,
+        *,
+        sheet_id: str = "",
     ) -> None:
         super().__init__()
         self.component_id = component.id
+        # The tag is not an instance. M1 on the power page and M1 on the
+        # control page are two placements, and each keeps its own position.
+        self.sheet_id = str(sheet_id or "")
         self.device = device
         self._library_id = component.library_id
         from panelcad.library.panel import is_info_needed_placeholder
@@ -432,6 +437,9 @@ class ComponentItem(QGraphicsItem):
         self._snap = PANEL_SNAP if layout else SNAP
         self._scale = component.visual_scale()
         self.setPos(component.x, component.y)
+        # Model coordinates this item was built from. A later sync treats the
+        # scene as authoritative only after the item moves away from here.
+        self._model_xy = (float(component.x), float(component.y))
         self.setRotation(0 if layout else component.rotation)
         self.setZValue(10)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
@@ -1938,6 +1946,7 @@ class SchematicView(QGraphicsView):
         self._gesture_edit = False
         self._closing_gesture = False
         self._applying_model_pos = False
+        self._shown_sheet_id = ""
         self._strip_caption = ""
         self._findings: list[dict[str, str]] = []
         self._trace_highlight = None
@@ -1999,6 +2008,7 @@ class SchematicView(QGraphicsView):
         self._cloud_origin = None
         self.scene.clear()
         sheet = self.session.sheet()
+        self._shown_sheet_id = sheet.id
         w, h = sheet.page.dimensions()
         self.scene.setSceneRect(0, 0, w, h)
         self._draw_grid(sheet)
@@ -2033,6 +2043,7 @@ class SchematicView(QGraphicsView):
                 layout=layout,
                 network=network,
                 io_card=io_page and is_io_module(device) and not comp.properties.get("ladder_card"),
+                sheet_id=sheet.id,
             )
             if comp.id in tags:
                 item.set_tag_layout(tags[comp.id])
@@ -2428,46 +2439,100 @@ class SchematicView(QGraphicsView):
             self._redraw_wires()
         self.status.emit(self._status_text())
 
-    def sync_positions(self) -> set[str]:
-        """Copy scene positions onto the sheet.
+    def _sheet_for_item(self, item: ComponentItem):
+        """Sheet this symbol was placed on. The active tab is not that identity."""
 
+        sid = str(getattr(item, "sheet_id", "") or getattr(self, "_shown_sheet_id", "") or "")
+        if not sid:
+            return self.session.sheet()
+        try:
+            return self.session.project.sheet(sid)
+        except KeyError:
+            return None
+
+    def sync_positions(self) -> set[str]:
+        """Copy a dragged symbol onto the instance it was built for.
+
+        The same tag on another page is a different placement. A scene item
+        writes only that placement, never the active sheet's copy of the tag.
+
+        The scene wins only while the pointer is dragging that symbol. An edit
+        that arrived in the model — a ``panelcad send`` move, undo, or another
+        page — refreshes the item. Writing the stale scene back is what put an
+        on-screen device back where it started.
         The drawing grid applies only to symbols the pointer has dragged.
         Rounding every item pulled an imported, off-grid layout onto the grid
         the first time someone clicked a device.
         """
 
-        sheet = self.session.sheet()
-        by_id = {c.id: c for c in sheet.components}
         snap_ids = set(self._dragged_ids) if self._moved_since_press else set()
         moved: set[str] = set()
+        active_id = self.session.active_sheet_id
         for item in self.scene.items():
-            if isinstance(item, ComponentItem) and item.component_id in by_id:
-                comp = by_id[item.component_id]
-                nx = float(item.pos().x())
-                ny = float(item.pos().y())
-                if item.component_id in snap_ids:
-                    step = item._snap
-                    nx = round(nx / step) * step
-                    ny = round(ny / step) * step
-                if abs(comp.x - nx) > 1e-6 or abs(comp.y - ny) > 1e-6:
-                    moved.add(item.component_id)
+            if not isinstance(item, ComponentItem):
+                continue
+            sheet = self._sheet_for_item(item)
+            if sheet is None:
+                continue
+            try:
+                comp = sheet.component(item.component_id)
+            except KeyError:
+                continue
+            scene_x = float(item.pos().x())
+            scene_y = float(item.pos().y())
+            built = getattr(item, "_model_xy", None)
+            if not built:
+                built = (scene_x, scene_y)
+            built_x, built_y = float(built[0]), float(built[1])
+            model_x, model_y = float(comp.x), float(comp.y)
+            scene_moved = abs(scene_x - built_x) > 1e-6 or abs(scene_y - built_y) > 1e-6
+            model_moved = abs(model_x - built_x) > 1e-6 or abs(model_y - built_y) > 1e-6
+            # Only a drag owns the scene. Anything else, including a command
+            # that moved the model while this picture was still on screen,
+            # keeps the model and the picture catches up.
+            if scene_moved and item.component_id in snap_ids:
+                nx, ny = scene_x, scene_y
+                step = item._snap
+                nx = round(nx / step) * step
+                ny = round(ny / step) * step
+                if abs(model_x - nx) > 1e-6 or abs(model_y - ny) > 1e-6:
                     comp.x = nx
                     comp.y = ny
+                    if sheet.id == active_id:
+                        moved.add(item.component_id)
+                item._model_xy = (float(comp.x), float(comp.y))
+                if abs(scene_x - comp.x) > 1e-6 or abs(scene_y - comp.y) > 1e-6:
+                    self._applying_model_pos = True
+                    try:
+                        item.setPos(comp.x, comp.y)
+                    finally:
+                        self._applying_model_pos = False
+            elif scene_moved or model_moved:
+                self._applying_model_pos = True
+                try:
+                    item.setPos(model_x, model_y)
+                finally:
+                    self._applying_model_pos = False
+                item._model_xy = (model_x, model_y)
         return moved
 
     def _sync_scene_from_model(self, ids: set[str]) -> None:
         if not ids:
             return
-        by_id = {c.id: c for c in self.session.sheet().components}
+        sheet = self.session.sheet()
+        by_id = {c.id: c for c in sheet.components}
         self._applying_model_pos = True
         try:
             for item in self.scene.items():
                 if not isinstance(item, ComponentItem):
                     continue
+                if str(getattr(item, "sheet_id", "") or "") not in {"", sheet.id}:
+                    continue
                 if item.component_id not in ids or item.component_id not in by_id:
                     continue
                 comp = by_id[item.component_id]
                 item.setPos(comp.x, comp.y)
+                item._model_xy = (float(comp.x), float(comp.y))
         finally:
             self._applying_model_pos = False
 
@@ -2498,10 +2563,13 @@ class SchematicView(QGraphicsView):
         return moved
 
     def _wires_follow_component(self, item: ComponentItem) -> None:
-        if is_layout_sheet(self.session.sheet()):
+        sheet = self._sheet_for_item(item)
+        if sheet is None or is_layout_sheet(sheet):
+            return
+        if sheet.id != self.session.sheet().id:
             return
         try:
-            comp = self.session.sheet().component(item.component_id)
+            comp = sheet.component(item.component_id)
         except KeyError:
             return
         step = item._snap
@@ -2577,6 +2645,7 @@ class SchematicView(QGraphicsView):
             layout=is_layout_sheet(self.session.sheet()),
             network=is_network_sheet(self.session.sheet()),
             io_card=is_io_sheet(self.session.sheet()) and is_io_module(device) and not comp.properties.get("ladder_card"),
+            sheet_id=self.session.sheet().id,
         )
         if self.session.sheet().kind == "schematic" and not item.layout and not item.network:
             laid = self._device_tag_layouts().get(comp.id)
