@@ -1,0 +1,103 @@
+format: panelcad
+version: '0.1'
+name: RELAY LOGIC
+properties: {}
+title_block:
+  company: ''
+  address: ''
+  logo: ''
+  customer: ''
+  location: ''
+  drawing_number: FIG. P2
+  drawn_by: ''
+  checked_by: ''
+  approved_by: ''
+  scale: NTS
+  standard: NEMA/ANSI
+  drawing_style: ladder
+  coil_style: square
+  rail_hot: L1
+  rail_return: L2
+  revisions:
+  - rev: ''
+    date: ''
+    description: ''
+    drawn: ''
+    checked: ''
+    approved: ''
+sheets:
+- id: main
+  title: RELAY LOGIC
+  description: ''
+  kind: schematic
+  page:
+    size: A3
+    orientation: landscape
+  components:
+  - id: CR1
+    library_id: nema.contactors.coil
+    x: 355.0
+    y: 43.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: PB1
+    library_id: nema.operators.pb_no
+    x: 37.0
+    y: 33.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: CR1-3-4
+    library_id: nema.contactors.aux_no
+    x: 37.0
+    y: 75.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: PL1
+    library_id: nema.operators.pilot_light
+    x: 359.0
+    y: 73.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  wires:
+  - id: w1
+    from: CR1-3-4.4
+    to: PL1.X1
+    net: L1
+    label: L1
+    points: []
+  - id: w2
+    from: PB1.4
+    to: CR1.A1
+    net: L1
+    label: L1
+    points: []
+  - id: w3
+    from: CR1.A2
+    to: L2
+    net: L2
+    label: L2
+    points: []
+  - id: w4
+    from: L1
+    to: CR1-3-4.3
+    net: L1
+    label: L1
+    points: []
+  - id: w5
+    from: L1
+    to: PB1.3
+    net: L1
+    label: L1
+    points: []
+  - id: w6
+    from: PL1.X2
+    to: L2
+    net: L2
+    label: L2
+    points: []
+  rail_hot: L1
+  rail_return: L2

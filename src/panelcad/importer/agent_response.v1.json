@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "panelcad.agent-print/v1",
+  "title": "PanelCAD agent print response",
+  "description": "JSON an outside agent returns after reading a folder from `panelcad import prep`. PanelCAD does not call a model. Unknown parts stay needs-info: no millimetres, off the BOM and the quote.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "prep_dir", "title_block", "devices", "terminals", "wires"],
+  "properties": {
+    "schema_version": {
+      "const": "panelcad.agent-print/v1",
+      "description": "Must match the prep folder. This file is version 1."
+    },
+    "prep_dir": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Folder written by `panelcad import prep`. Absolute, or relative to this JSON file."
+    },
+    "project_name": {
+      "type": "string",
+      "description": "Project name. Empty uses the title block."
+    },
+    "out": {
+      "type": "string",
+      "description": "Where to write the .pcad.yaml. `panelcad import apply --out` overrides this."
+    },
+    "title_block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "company",
+        "project",
+        "title",
+        "drawing_number",
+        "rev",
+        "sheet_number",
+        "sheet_count",
+        "customer",
+        "location",
+        "drawn_by",
+        "date",
+        "scale",
+        "standard",
+        "confidence",
+        "needs_info",
+        "unreadable_fields"
+      ],
+      "properties": {
+        "company": {"type": "string"},
+        "project": {"type": "string"},
+        "title": {"type": "string"},
+        "drawing_number": {"type": "string"},
+        "rev": {"type": "string"},
+        "sheet_number": {"type": "string"},
+        "sheet_count": {"type": "string"},
+        "customer": {"type": "string"},
+        "location": {"type": "string"},
+        "drawn_by": {"type": "string"},
+        "date": {"type": "string"},
+        "scale": {"type": "string"},
+        "standard": {"type": "string", "enum": ["", "IEC", "NEMA/ANSI"]},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "needs_info": {"type": "boolean"},
+        "unreadable_fields": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "devices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tag",
+          "symbol",
+          "contact",
+          "x",
+          "y",
+          "sheet",
+          "rung",
+          "confidence",
+          "needs_info",
+          "manufacturer",
+          "catalog",
+          "terminals",
+          "bbox"
+        ],
+        "properties": {
+          "tag": {"type": "string", "minLength": 1, "description": "Printed tag. Copied exactly."},
+          "symbol": {
+            "type": "string",
+            "description": "Symbol type that is drawn (breaker, contactor, relay, contact, terminal, pushbutton). Not a catalog number and not a library id."
+          },
+          "contact": {"type": "string", "enum": ["", "NO", "NC"], "description": "NO, NC, or empty when the symbol is not a contact."},
+          "x": {"type": "number", "description": "Millimetres from the left of the page."},
+          "y": {"type": "number", "description": "Millimetres from the top of the page."},
+          "sheet": {"type": "string", "minLength": 1, "description": "Page id from manifest.json, such as page_001."},
+          "rung": {"type": "integer", "minimum": 0, "description": "Ladder rung number. 0 when the sheet has no rung number."},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "needs_info": {
+            "type": "boolean",
+            "description": "True when the part is unknown or unreadable. PanelCAD will not guess a catalog part."
+          },
+          "manufacturer": {"type": "string", "description": "Empty unless the manufacturer is printed."},
+          "catalog": {"type": "string", "description": "Printed catalog number. Empty when it is not printed. PanelCAD keeps the part as needs-info unless this number is in the catalog with published dimensions."},
+          "terminals": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "description": "Terminal names printed on this device."
+          },
+          "bbox": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["x", "y", "w", "h"],
+            "description": "Symbol box in millimetres, origin top-left. The wizard crops this for confirm.",
+            "properties": {
+              "x": {"type": "number"},
+              "y": {"type": "number"},
+              "w": {"type": "number", "minimum": 0},
+              "h": {"type": "number", "minimum": 0}
+            }
+          }
+        }
+      }
+    },
+    "terminals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["device", "terminal", "sheet", "confidence", "needs_info", "bbox"],
+        "properties": {
+          "device": {"type": "string", "minLength": 1},
+          "terminal": {"type": "string", "minLength": 1},
+          "sheet": {"type": "string", "minLength": 1},
+          "x": {"type": "number"},
+          "y": {"type": "number"},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "needs_info": {"type": "boolean"},
+          "bbox": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["x", "y", "w", "h"],
+            "description": "Terminal box in millimetres, origin top-left.",
+            "properties": {
+              "x": {"type": "number"},
+              "y": {"type": "number"},
+              "w": {"type": "number", "minimum": 0},
+              "h": {"type": "number", "minimum": 0}
+            }
+          }
+        }
+      }
+    },
+    "wires": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["number", "from", "to", "sheet", "confidence", "needs_info", "bbox"],
+        "properties": {
+          "number": {"type": "string", "description": "Printed wire number. Empty only when needs_info is true."},
+          "from": {
+            "type": "string",
+            "minLength": 3,
+            "pattern": "^.+\\..+$",
+            "description": "device.terminal using the first dot. Example: Q1.2 or CR1.A1."
+          },
+          "to": {
+            "type": "string",
+            "minLength": 3,
+            "pattern": "^.+\\..+$",
+            "description": "device.terminal using the first dot."
+          },
+          "sheet": {"type": "string", "minLength": 1},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "needs_info": {"type": "boolean"},
+          "bbox": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["x", "y", "w", "h"],
+            "description": "Wire-number box in millimetres, origin top-left.",
+            "properties": {
+              "x": {"type": "number"},
+              "y": {"type": "number"},
+              "w": {"type": "number", "minimum": 0},
+              "h": {"type": "number", "minimum": 0}
+            }
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "schema_version": "panelcad.agent-print/v1",
+      "prep_dir": ".",
+      "project_name": "Example",
+      "title_block": {
+        "company": "ACME CONTROLS",
+        "project": "Example",
+        "title": "Power",
+        "drawing_number": "E-100",
+        "rev": "A",
+        "sheet_number": "1",
+        "sheet_count": "1",
+        "customer": "",
+        "location": "",
+        "drawn_by": "",
+        "date": "",
+        "scale": "",
+        "standard": "IEC",
+        "confidence": 0.9,
+        "needs_info": false,
+        "unreadable_fields": []
+      },
+      "devices": [
+        {
+          "tag": "Q1",
+          "symbol": "breaker",
+          "contact": "",
+          "x": 40,
+          "y": 30,
+          "sheet": "page_001",
+          "rung": 1,
+          "confidence": 0.95,
+          "needs_info": false,
+          "manufacturer": "Allen-Bradley",
+          "catalog": "1489-M1C010",
+          "terminals": ["1", "2"],
+          "bbox": {"x": 36, "y": 22, "w": 16, "h": 20}
+        },
+        {
+          "tag": "CR1",
+          "symbol": "relay",
+          "contact": "NO",
+          "x": 80,
+          "y": 30,
+          "sheet": "page_001",
+          "rung": 1,
+          "confidence": 0.4,
+          "needs_info": true,
+          "manufacturer": "",
+          "catalog": "",
+          "terminals": ["A1", "A2"],
+          "bbox": {"x": 74, "y": 22, "w": 16, "h": 20}
+        }
+      ],
+      "terminals": [
+        {
+          "device": "CR1",
+          "terminal": "A1",
+          "sheet": "page_001",
+          "x": 78,
+          "y": 24,
+          "confidence": 0.5,
+          "needs_info": true,
+          "bbox": {"x": 74, "y": 20, "w": 8, "h": 8}
+        }
+      ],
+      "wires": [
+        {
+          "number": "101",
+          "from": "Q1.2",
+          "to": "CR1.A1",
+          "sheet": "page_001",
+          "confidence": 0.8,
+          "needs_info": false,
+          "bbox": {"x": 48, "y": 26, "w": 20, "h": 8}
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,628 @@
+# Allen-Bradley catalog parts. Every number is on a Rockwell product page
+# or publication listed in `source:`. Blank fields were not published there.
+# Do not invent catalog numbers, dimensions, or ratings.
+kind: manufacturer_parts
+manufacturer: Allen-Bradley
+version: "0.1"
+
+# 100-C coil code after the current rating. Official construction rule:
+# 100-TD013 "The Cat. No. as listed is incomplete… 100-C09◊10 becomes 100-C09D10".
+suffix_rules:
+  - id: 100-c-coil
+    placeholder: coil
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/100-td013_-en-p.pdf
+    description: >
+      100-C / 104-C coil voltage codes (100-TD013, Coil Voltage Codes table).
+      D = 110 V 50 Hz / 120 V 60 Hz. KJ = 24 V 50/60 Hz. EJ = 24 V DC
+      electronic with integrated diode (100-C09…C55).
+    codes:
+      - { code: D, coil_voltage: "110VAC 50Hz / 120VAC 60Hz" }
+      - { code: KJ, coil_voltage: "24VAC 50/60Hz" }
+      - { code: EJ, coil_voltage: "24VDC" }
+
+parts:
+  # --- 1489-M miniature circuit breakers ---
+  # Family: https://www.rockwellautomation.com/en-us/products/hardware/circuit-and-load-protection/1489-m.html
+  # Catalog table + pole H×D×W 111×69×17.5 mm + UL 10 kA / IEC Icu 15 kA +
+  # power loss per pole: 1492-SG122.
+  - catalog: "1489-M1C010"
+    library_id: iec.breakers.mcb_1p_16a
+    category: protection.breaker
+    description: "Bulletin 1489-M thermal-magnetic MCB, 1 pole, 1 A, C-curve"
+    verified: full
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/sg/1492-sg122_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 1489-M
+    amps: 1
+    poles: 1
+    ka: 10
+    heat_w: 1.4
+    mounting: din
+    width_mm: 17.5
+    height_mm: 111
+    depth_mm: 69
+    notes: "UL 489 10 kA. IEC/EN 60947-2 Icu 15 kA. heat_w is published power loss per pole."
+
+  - catalog: "1489-M1C100"
+    library_id: iec.breakers.mcb_1p_16a
+    category: protection.breaker
+    description: "Bulletin 1489-M thermal-magnetic MCB, 1 pole, 10 A, C-curve"
+    verified: full
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/sg/1492-sg122_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 1489-M
+    amps: 10
+    poles: 1
+    ka: 10
+    heat_w: 2.1
+    mounting: din
+    width_mm: 17.5
+    height_mm: 111
+    depth_mm: 69
+    notes: "1492-SG122 catalog table 1489-M1C100 10 A C. Pole H×D×W 111×69×17.5 mm, UL 10 kA. heat_w is published power loss per pole at 10 A. Product page confirms 10 A / 1 pole / C only."
+
+  - catalog: "1489-M1C160"
+    library_id: iec.breakers.mcb_1p_16a
+    category: protection.breaker
+    description: "Bulletin 1489-M thermal-magnetic MCB, 1 pole, 16 A, C-curve"
+    verified: full
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/sg/1492-sg122_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 1489-M
+    amps: 16
+    poles: 1
+    ka: 10
+    heat_w: 2.5
+    mounting: din
+    width_mm: 17.5
+    height_mm: 111
+    depth_mm: 69
+    notes: "UL 489 10 kA. IEC Icu 15 kA. heat_w is published power loss per pole at 16 A."
+
+  - catalog: "1489-M2C160"
+    library_id: iec.breakers.mcb_3p_32a
+    category: protection.breaker
+    description: "Bulletin 1489-M thermal-magnetic MCB, 2 pole, 16 A, C-curve"
+    verified: full
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/sg/1492-sg122_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 1489-M
+    amps: 16
+    poles: 2
+    ka: 10
+    heat_w: 5.0
+    mounting: din
+    width_mm: 35.0
+    height_mm: 111
+    depth_mm: 69
+    notes: "1492-SG122 catalog table 1489-M2C160 16 A C. Width 2×17.5 mm. heat_w = 2.5 W/pole × 2 from the published per-pole table."
+
+  - catalog: "1489-M3C100"
+    library_id: iec.breakers.mcb_3p_32a
+    category: protection.breaker
+    description: "Bulletin 1489-M thermal-magnetic MCB, 3 pole, 10 A, C-curve"
+    verified: full
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/sg/1492-sg122_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 1489-M
+    amps: 10
+    poles: 3
+    ka: 10
+    heat_w: 6.3
+    mounting: din
+    width_mm: 52.5
+    height_mm: 111
+    depth_mm: 69
+    notes: "1492-SG122 catalog table 1489-M3C100 10 A C. Width 3×17.5 mm. heat_w = 2.1 W/pole × 3 from the published per-pole table."
+
+  - catalog: "1489-M3C160"
+    library_id: iec.breakers.mcb_3p_32a
+    category: protection.breaker
+    description: "Bulletin 1489-M thermal-magnetic MCB, 3 pole, 16 A, C-curve"
+    verified: full
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/sg/1492-sg122_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 1489-M
+    amps: 16
+    poles: 3
+    ka: 10
+    heat_w: 7.5
+    mounting: din
+    width_mm: 52.5
+    height_mm: 111
+    depth_mm: 69
+    notes: "Catalog table 1489-M3C160. Width 3×17.5 mm. heat_w = 2.5 W/pole × 3."
+
+  - catalog: "1489-M3C200"
+    library_id: iec.breakers.mcb_3p_32a
+    category: protection.breaker
+    description: "Bulletin 1489-M thermal-magnetic MCB, 3 pole, 20 A, C-curve"
+    verified: full
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/sg/1492-sg122_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 1489-M
+    amps: 20
+    poles: 3
+    ka: 10
+    heat_w: 7.5
+    mounting: din
+    width_mm: 52.5
+    height_mm: 111
+    depth_mm: 69
+    notes: "Catalog table 1489-M3C200. heat_w = 2.5 W/pole × 3 (20 A row)."
+
+  # --- 100-C IEC contactors (coil code is a documented suffix) ---
+  # Product page for the D10 example + 100-TD013 dimensions a/b/c = 45/81/80.5 mm
+  # (100-C09…C23) and total power dissipation at Ie AC-3/400 V.
+  - catalog_template: "100-C09{coil}10"
+    suffix_rule: 100-c-coil
+    expand: [D, KJ, EJ]
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "Bulletin 100-C IEC contactor, 9 A AC-3, 1 NO auxiliary, screw / line-side coil"
+    verified: full
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/100-td013_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 100-C
+    amps: 9
+    poles: 3
+    contact_config: 1NO
+    heat_w: 3.4
+    mounting: din
+    width_mm: 45
+    height_mm: 81
+    depth_mm: 80.5
+    notes: >
+      100-TD013: 100-C09◊10 becomes 100-C09D10; D / KJ / EJ coil codes;
+      Table 24 100-C09…C23 a=45 b=81 c=80.5 mm; AC total dissipation 3.4 W.
+      100-C09EJ10 overrides heat_w to the electronic-DC 2.4 W row.
+      Product page confirms 9 A, 1 NO, screw / line-side only.
+
+  - catalog: "100-C09EJ10"
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "Bulletin 100-C IEC contactor, 9 A AC-3, 24 V DC electronic coil, 1 NO auxiliary"
+    verified: full
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/100-td013_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 100-C
+    amps: 9
+    poles: 3
+    coil_voltage: "24VDC"
+    contact_config: 1NO
+    heat_w: 2.4
+    mounting: din
+    width_mm: 45
+    height_mm: 81
+    depth_mm: 80.5
+    suffix_rule: 100-c-coil
+
+  - catalog_template: "100-C12{coil}10"
+    suffix_rule: 100-c-coil
+    expand: [D, EJ]
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "Bulletin 100-C IEC contactor, 12 A AC-3, 1 NO auxiliary, screw / line-side coil"
+    verified: full
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/100-td013_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 100-C
+    amps: 12
+    poles: 3
+    contact_config: 1NO
+    heat_w: 3.9
+    mounting: din
+    width_mm: 45
+    height_mm: 81
+    depth_mm: 80.5
+    notes: "100-C12◊10 in 100-TD013. EJ heat_w overridden below if needed — AC total 3.9 W, electronic DC 2.9 W."
+
+  - catalog: "100-C12EJ10"
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "Bulletin 100-C IEC contactor, 12 A AC-3, 24 V DC electronic coil, 1 NO auxiliary"
+    verified: full
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/100-td013_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 100-C
+    amps: 12
+    poles: 3
+    coil_voltage: "24VDC"
+    contact_config: 1NO
+    heat_w: 2.9
+    mounting: din
+    width_mm: 45
+    height_mm: 81
+    depth_mm: 80.5
+    suffix_rule: 100-c-coil
+    notes: "Same 100-C12 frame. heat_w is electronic-DC total dissipation (2.9 W) from 100-TD013."
+
+  - catalog_template: "100-C16{coil}10"
+    suffix_rule: 100-c-coil
+    expand: [D, EJ]
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "Bulletin 100-C IEC contactor, 16 A AC-3, 1 NO auxiliary, screw / line-side coil"
+    verified: full
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/100-td013_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 100-C
+    amps: 16
+    poles: 3
+    contact_config: 1NO
+    heat_w: 4.8
+    mounting: din
+    width_mm: 45
+    height_mm: 81
+    depth_mm: 80.5
+    notes: "100-C16◊10. AC total dissipation 4.8 W (EJ row replaced below)."
+
+  - catalog: "100-C16EJ10"
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "Bulletin 100-C IEC contactor, 16 A AC-3, 24 V DC electronic coil, 1 NO auxiliary"
+    verified: full
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/100-td013_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 100-C
+    amps: 16
+    poles: 3
+    coil_voltage: "24VDC"
+    contact_config: 1NO
+    heat_w: 3.8
+    mounting: din
+    width_mm: 45
+    height_mm: 81
+    depth_mm: 80.5
+    suffix_rule: 100-c-coil
+
+  - catalog_template: "100-C23{coil}10"
+    suffix_rule: 100-c-coil
+    expand: [D, EJ]
+    library_id: iec.contactors.ac3_32a
+    category: switching.contactor
+    description: "Bulletin 100-C IEC contactor, 23 A AC-3, 1 NO auxiliary, screw / line-side coil"
+    verified: full
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/100-td013_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 100-C
+    amps: 23
+    poles: 3
+    contact_config: 1NO
+    heat_w: 6.3
+    mounting: din
+    width_mm: 45
+    height_mm: 81
+    depth_mm: 80.5
+    notes: "100-C23◊10 still uses the 100-C09…C23 envelope (45×81×80.5 mm)."
+
+  - catalog: "100-C23EJ10"
+    library_id: iec.contactors.ac3_32a
+    category: switching.contactor
+    description: "Bulletin 100-C IEC contactor, 23 A AC-3, 24 V DC electronic coil, 1 NO auxiliary"
+    verified: full
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/100-td013_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 100-C
+    amps: 23
+    poles: 3
+    coil_voltage: "24VDC"
+    contact_config: 1NO
+    heat_w: 4.9
+    mounting: din
+    width_mm: 45
+    height_mm: 81
+    depth_mm: 80.5
+    suffix_rule: 100-c-coil
+
+  # --- 193-T1 bimetallic overloads for 100-C ---
+  # Selection table: 193-TD010 / A117 IEC Motor Control catalog.
+  # Dimensions are drawing-only in 193-TD010 (no numeric W×H×D in the extract) → partial.
+  - catalog: "193-T1AC10"
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Bulletin 193-T1 bimetallic overload, 7.2–10 A, for 100-C09…100-C23"
+    verified: partial
+    source: https://www.rockwellautomation.com/en-us/products/details.193-T1AC10.html
+    source_date: "2026-10-08"
+    series: 193-T1
+    amps: 10
+    amps_min: 7.2
+    amps_max: 10
+    poles: 3
+    contact_config: 1NO1NC
+    mounting: plug_on
+    notes: "Setting range 7.2–10.0 A is on the Rockwell product page (fetched 2026-10-08). Contactor family for the 193-T1A suffix is 100-C09…100-C23 in Rockwell CE Declaration of Conformity 193-CT001 (https://literature.rockwellautomation.com/idc/groups/literature/documents/ct/193-ct001_-en-e.pdf). 193-TD010 lists the 193-T1A/B family span (0.5…36 A) and does not list the AC10 cell. Mounts directly under a 100-C09…100-C23 contactor; no separate DIN width. Footprint is a drawing in 193-TD010 — W/H/D left blank. Do not use on conventional DC-coil 100-C09…C43 (193-T1 note)."
+
+  - catalog: "193-T1AC16"
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Bulletin 193-T1 bimetallic overload, 11.3–16 A, for 100-C09…100-C23"
+    verified: partial
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/193-td010_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 193-T1
+    amps: 16
+    amps_min: 11.3
+    amps_max: 16
+    poles: 3
+    contact_config: 1NO1NC
+    mounting: plug_on
+    notes: "Setting range 11.3–16 A matches the 193-T1A C16 cell. Contactor family for the 193-T1A suffix is 100-C09…100-C23 in Rockwell CE Declaration of Conformity 193-CT001 (https://literature.rockwellautomation.com/idc/groups/literature/documents/ct/193-ct001_-en-e.pdf). Mounts directly under a 100-C12…100-C23 contactor; no separate DIN width. W/H/D not extracted from 193-TD010 drawings."
+
+  - catalog: "193-T1AB63"
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Bulletin 193-T1 bimetallic overload, 4.5–6.3 A, for 100-C09…100-C23"
+    verified: partial
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/193-td010_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 193-T1
+    amps: 6.3
+    amps_min: 4.5
+    amps_max: 6.3
+    poles: 3
+    contact_config: 1NO1NC
+    mounting: plug_on
+    notes: "Setting range 4.5–6.3 A matches the 193-T1A B63 cell. Contactor family for the 193-T1A suffix is 100-C09…100-C23 in Rockwell CE Declaration of Conformity 193-CT001 (https://literature.rockwellautomation.com/idc/groups/literature/documents/ct/193-ct001_-en-e.pdf). Mounts directly under a 100-C09…100-C23 contactor; no separate DIN width. W/H/D not extracted from 193-TD010 drawings."
+
+  # E1 Plus (193-EE) — official 193-TD011. Discontinued after 2021; numbers still published.
+  - catalog: "193-EEDB"
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "E1 Plus electronic overload, 3.2–16 A, mounts on 100-C09…100-C23"
+    verified: partial
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/193-td011_-en-p.pdf
+    source_date: "2026-10-07"
+    series: E1 Plus
+    amps: 16
+    amps_min: 3.2
+    amps_max: 16
+    poles: 3
+    mounting: din
+    notes: "Adjustment range 3.2–16 A in 193-TD011. E1 Plus discontinued (use E100 for new). W/H/D left blank (drawing only)."
+
+  - catalog: "193-EEEB"
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "E1 Plus electronic overload, 5.4–27 A, mounts on 100-C09…100-C23"
+    verified: partial
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/193-td011_-en-p.pdf
+    source_date: "2026-10-07"
+    series: E1 Plus
+    amps: 27
+    amps_min: 5.4
+    amps_max: 27
+    poles: 3
+    mounting: din
+    notes: "Adjustment range 5.4–27 A. W/H/D left blank."
+
+  # --- 700-HA / 700-HK relays and sockets ---
+  # Catalog numbers from 700-TD552. Socket/relay drawings did not yield W×H×D → partial.
+  - catalog: "700-HA32A1"
+    library_id: iec.relays.k_4co_24vdc
+    category: switching.relay
+    description: "Bulletin 700-HA tube-base relay, DPDT, 10 A, 120 V AC coil"
+    verified: partial
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/700-td552_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 700-HA
+    poles: 2
+    coil_voltage: "120VAC"
+    contact_config: DPDT
+    mounting: din
+    notes: "700-TD552 product selection. Use socket 700-HN100. Footprint not published as W×H×D in the extract."
+
+  - catalog: "700-HA32Z24"
+    library_id: iec.relays.k_4co_24vdc
+    category: switching.relay
+    description: "Bulletin 700-HA tube-base relay, DPDT, 10 A, 24 V DC coil"
+    verified: partial
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/700-td552_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 700-HA
+    poles: 2
+    coil_voltage: "24VDC"
+    contact_config: DPDT
+    mounting: din
+    notes: "700-TD552. Socket 700-HN100."
+
+  - catalog: "700-HN100"
+    library_id: iec.relays.k_4co_24vdc
+    category: switching.relay
+    description: "8-pin tube-base socket for 700-HA DPDT, screw, DIN or panel"
+    verified: partial
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/700-td552_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 700-HA
+    mounting: din
+    notes: "Guarded-terminal 8-pin socket. W/H/D left blank (drawing only)."
+
+  - catalog: "700-HK36A1"
+    library_id: iec.relays.k_4co_24vdc
+    category: switching.relay
+    description: "Bulletin 700-HK slim-line relay, SPDT, 120 V AC coil"
+    verified: partial
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/700-td552_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 700-HK
+    poles: 1
+    coil_voltage: "120VAC"
+    contact_config: SPDT
+    mounting: din
+    notes: "700-TD552 / 700-HK product page family. Socket 700-HN121. SPDT 16 A class on the family page."
+
+  - catalog: "700-HK36Z24"
+    library_id: iec.relays.k_4co_24vdc
+    category: switching.relay
+    description: "Bulletin 700-HK slim-line relay, SPDT, 24 V DC coil"
+    verified: partial
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/700-td552_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 700-HK
+    poles: 1
+    coil_voltage: "24VDC"
+    contact_config: SPDT
+    mounting: din
+    notes: "700-TD552. Socket 700-HN121."
+
+  - catalog: "700-HN121"
+    library_id: iec.relays.k_4co_24vdc
+    category: switching.relay
+    description: "5-blade miniature screw socket for 1-pole 700-HK, DIN or panel"
+    verified: partial
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/700-td552_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 700-HK
+    mounting: din
+    notes: "10 A @ 70 °C rating on the socket row. W/H/D left blank."
+
+  # --- 800F 22 mm operators ---
+  # Product pages call this the 22.5 mm family. The mounting hole is Ø22.3 +0.4/−0
+  # (800-TD008). Operator / block envelope is drawing-only → partial.
+  - catalog: "800FP-F3"
+    library_id: iec.operators.pb_no
+    category: operator.pushbutton
+    description: "800F plastic flush momentary push-button operator, green, 22.5 mm hole"
+    verified: partial
+    source: https://www.rockwellautomation.com/en-us/products/details.800FP-F3.html
+    source_date: "2026-10-07"
+    series: 800F
+    mounting: door
+    notes: "Operator only (add 800F-X10M contact block). Mounting hole is Ø22.3 +0.4/−0 mm (800-TD008 p. 47); 22.5 mm is the family name. Front-of-panel W×H×D not extracted from 800-TD008 drawings."
+
+  - catalog: "800FP-F4"
+    library_id: iec.operators.pb_nc
+    category: operator.pushbutton
+    description: "800F plastic flush momentary push-button operator, red, 22.5 mm hole"
+    verified: partial
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/800-td008_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 800F
+    mounting: door
+    notes: "800-TD008 table: 800FP-F4 Red. Operator only."
+
+  - catalog: "800F-X10M"
+    library_id: iec.contactors.aux_no
+    category: switching.aux
+    description: "800F contact block, 1 NO, metal latch"
+    verified: partial
+    source: https://www.rockwellautomation.com/en-us/products/details.800F-X10M.html
+    source_date: "2026-10-07"
+    series: 800F
+    contact_config: 1NO
+    mounting: door
+    notes: "Back-of-panel contact block. W/H/D left blank (800-TD008 drawing)."
+
+  - catalog: "800FD-P3N3R"
+    library_id: iec.operators.pilot_light
+    category: operator.light
+    description: "800FD monolithic pilot light, plastic, green LED, 24 V AC/DC"
+    verified: partial
+    source: https://www.rockwellautomation.com/en-us/products/details.800FD-P3N3R.html
+    source_date: "2026-10-07"
+    series: 800F
+    coil_voltage: "24VAC/DC"
+    current_a: 0.012
+    mounting: door
+    notes: >
+      Mounting hole is Ø22.3 +0.4/−0 mm (800-TD008 p. 89); 22.5 mm is the family name.
+      Complete monolithic pilot. Envelope left blank.
+      800-TD008 universal 24–120 V AC/DC LED module: typical 12 mA DC / 15 mA AC.
+      current_a is the 12 mA DC figure (24 V DC control). Dedicated 24 V DC module is 24 mA; this SKU is the universal 24 V AC/DC light.
+      https://literature.rockwellautomation.com/idc/groups/literature/documents/td/800-td008_-en-p.pdf
+
+  - catalog: "800FP-LSM23PN5GX01"
+    library_id: iec.operators.selector_2pos
+    category: operator.selector
+    description: "800F illuminated 2-position maintained selector, plastic, green LED, 120 V AC, 1 NO"
+    verified: partial
+    source: https://www.rockwellautomation.com/en-us/products/details.800FP-LSM23PN5GX01.html
+    source_date: "2026-10-07"
+    series: 800F
+    coil_voltage: "120VAC"
+    contact_config: 1NO
+    mounting: door
+    notes: "Complete assembled selector on the product page. Envelope left blank."
+
+  # --- 1606-XLE power supplies ---
+  - catalog: "1606-XLE120E"
+    library_id: iec.power.psu_24v_5a
+    category: power.supply
+    description: "1606-XLE essential power supply, 24 V DC 5 A / 120 W, single-phase"
+    verified: full
+    source: https://www.rockwellautomation.com/en-us/products/details.1606-XLE120E.html
+    source_date: "2026-10-07"
+    series: 1606-XLE
+    amps: 5
+    current_a: 5
+    power_w: 120
+    heat_w: 7.3
+    watt_loss: 7.3
+    watt_loss_source: https://www.rockwellautomation.com/en-us/products/details.1606-XLE120E.html
+    watt_loss_note: "Typical power losses 7.3 W from the Rockwell product page."
+    mounting: din
+    width_mm: 32
+    height_mm: 124
+    depth_mm: 102
+    notes: "Product page W×H×D 32×124×102 mm. Typical power losses 7.3 W. Also 1606-RM100 / 1606-TD002. output_trip is 1606-SR027 section 25.4 page 17, not the product page."
+    output_trip:
+      source: https://literature.rockwellautomation.com/idc/groups/literature/documents/sr/1606-sr027_-en-e.pdf
+      publication: 1606-SR027
+      pages: "17"
+      section: "25.4"
+      supply_end:
+        - { curve: A, max_amps: 8, loop_mohm: 20 }
+        - { curve: Z, max_amps: 8, loop_mohm: 20 }
+        - { curve: B, trips: false, note: "no tripping at 6 A or above; no breaker available below 6 A" }
+        - { curve: C, max_amps: 4, loop_mohm: 20 }
+      load_end:
+        - { curve: A, max_amps: 6, loop_mohm: 180 }
+        - { curve: Z, max_amps: 6, loop_mohm: 180 }
+        - { curve: B, trips: false, note: "no tripping at 6 A or above; no breaker available below 6 A" }
+        - { curve: C, max_amps: 3, loop_mohm: 270 }
+
+  - catalog: "1606-XLE240E"
+    library_id: iec.power.psu_24v_5a
+    category: power.supply
+    description: "1606-XLE essential power supply, 24 V DC 10 A / 240 W, single-phase"
+    verified: partial
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/pp/1606-pp003_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 1606-XLE
+    amps: 10
+    current_a: 10
+    power_w: 240
+    mounting: din
+    notes: "1606-PP003 lists 1606-XLE240E as 24…28 V / 240 W / 10 A. W/H/D and heat_w not on that profile page. power_w 240 and current_a 10 are that output rating. output_trip is 1606-SR022 section 25.4 page 17."
+    output_trip:
+      source: https://literature.rockwellautomation.com/idc/groups/literature/documents/sr/1606-sr022_-en-e.pdf
+      publication: 1606-SR022
+      pages: "17"
+      section: "25.4"
+      supply_end:
+        - { curve: A, max_amps: 25, loop_mohm: 20 }
+        - { curve: Z, max_amps: 25, loop_mohm: 20 }
+        - { curve: B, max_amps: 16, loop_mohm: 20 }
+        - { curve: C, max_amps: 13, loop_mohm: 20 }
+      load_end:
+        - { curve: A, max_amps: 16, loop_mohm: 82 }
+        - { curve: Z, max_amps: 16, loop_mohm: 82 }
+        - { curve: B, max_amps: 6, loop_mohm: 180 }
+        - { curve: C, max_amps: 4, loop_mohm: 220 }
+
+  # --- 140M motor circuit protectors ---
+  - catalog: "140M-C2E-B16"
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Bulletin 140M motor protector, frame C 32 A, C2E, B16"
+    verified: partial
+    source: https://www.rockwellautomation.com/en-us/products/details.140m-c2e-b16.html
+    source_date: "2026-10-07"
+    series: 140M
+    poles: 3
+    mounting: din
+    width_mm: 45
+    height_mm: 90
+    depth_mm: 74.5
+    notes: "Product page publishes 45×90×74.5 mm and frame C 32 A. Thermal current range for the B16 suffix was not on that page — amps / amps_min / amps_max left blank."

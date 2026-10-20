@@ -1,0 +1,107 @@
+# Maps PanelCAD library ids to vendor catalog numbers for strip export.
+# Not a symbol file (no devices). Copy into a project library/ folder to override.
+# Component manufacturer + part_number, or properties.vendor_articles, win.
+#
+# Every article below was checked against the vendor product page in the
+# comment (2026-10-07). They are catalog equivalents for the generic IEC
+# symbols, not a claim the drawing already specified that brand.
+
+library: vendor_articles
+version: "0.1"
+
+# One definition per SKU; library ids below alias these.
+_phx_x_2p5: &phx_x_2p5
+  article: "3044076"  # https://www.phoenixcontact.com/en-pc/products/feed-through-terminal-block-ut-25-3044076
+  designation: "UT 2,5"
+_wago_x_2p5: &wago_x_2p5
+  article: "2002-1201"  # https://www.wago.com/global/rail-mount-terminal-blocks/2-conductor-through-terminal-block/p/2002-1201
+  designation: "2-conductor through terminal block 2.5 mm²"
+_wmc_x_2p5: &wmc_x_2p5
+  article: "1020000000"  # https://eshop.weidmueller.com/en/wdu-2-5/p/1020000000
+  designation: "WDU 2.5"
+
+_phx_pe_4: &phx_pe_4
+  article: "3044128"  # https://www.phoenixcontact.com/en-us/products/ground-terminal-block-ut-4-pe-3044128
+  designation: "UT 4-PE"
+_wago_pe_4: &wago_pe_4
+  article: "2004-1207"  # https://www.wago.com/us/rail-chassis-terminal-blocks/topjobs-ground-terminal-block/p/2004-1207
+  designation: "2-conductor ground terminal block 4 mm²"
+_wmc_pe_4: &wmc_pe_4
+  article: "1010100000"  # https://eshop.weidmueller.com/en/wpe-4/p/1010100000
+  designation: "WPE 4"
+
+_phx_end_plate: &phx_end_plate
+  article: "3047028"  # https://www.phoenixcontact.com/en-pc/products/end-cover-d-ut-25-10-3047028
+  designation: "D-UT 2,5/10"
+_wago_end_plate: &wago_end_plate
+  article: "2002-1291"  # https://www.wago.com/gb/rail-mount-terminal-blocks/end-and-intermediate-plate/p/2002-1291
+  designation: "End and intermediate plate, gray"
+_wmc_end_plate: &wmc_end_plate
+  article: "1050000000"  # https://eshop.weidmueller.com/en/wap-25-10/p/1050000000
+  designation: "WAP 2.5-10"
+
+_phx_end_stop: &phx_end_stop
+  article: "3022218"  # https://www.phoenixcontact.com/en-pc/products/end-clamp-clipfix-35-3022218
+  designation: "CLIPFIX 35"
+_wago_end_stop: &wago_end_stop
+  article: "249-116"  # https://www.wago.com/global/accessories/screwless-end-stop/p/249-116
+  designation: "Screwless end stop"
+_wmc_end_stop: &wmc_end_stop
+  article: "1061200000"  # https://eshop.weidmueller.com/en/wew-352/p/1061200000
+  designation: "WEW 35/2"
+
+_phx_partition: &phx_partition
+  article: "3047167"  # https://www.phoenixcontact.com/en-us/products/partition-plate-atp-ut-3047167
+  designation: "ATP-UT"
+_wago_partition: &wago_partition
+  article: "2002-1292"  # https://www.wago.com/au/rail-mount-terminal-blocks/end-and-intermediate-plate/p/2002-1292
+  designation: "End and intermediate plate, orange"
+_wmc_partition: &wmc_partition
+  article: "1050100000"  # https://catalog.weidmueller.com/catalog/Start.do?ObjectID=1050100000
+  designation: "WAP 16+35 WTW 2.5-10"
+
+vendor_articles:
+  iec.terminals.x_2p5:
+    phoenix: *phx_x_2p5
+    wago: *wago_x_2p5
+    weidmueller: *wmc_x_2p5
+  terminals.x_2p5:
+    phoenix: *phx_x_2p5
+    wago: *wago_x_2p5
+    weidmueller: *wmc_x_2p5
+
+  iec.terminals.pe_4:
+    phoenix: *phx_pe_4
+    wago: *wago_pe_4
+    weidmueller: *wmc_pe_4
+  terminals.pe_4:
+    phoenix: *phx_pe_4
+    wago: *wago_pe_4
+    weidmueller: *wmc_pe_4
+
+  iec.accessories.end_plate:
+    phoenix: *phx_end_plate
+    wago: *wago_end_plate
+    weidmueller: *wmc_end_plate
+  accessories.end_plate:
+    phoenix: *phx_end_plate
+    wago: *wago_end_plate
+    weidmueller: *wmc_end_plate
+
+  iec.accessories.end_stop:
+    phoenix: *phx_end_stop
+    wago: *wago_end_stop
+    weidmueller: *wmc_end_stop
+  accessories.end_stop:
+    phoenix: *phx_end_stop
+    wago: *wago_end_stop
+    weidmueller: *wmc_end_stop
+
+  iec.accessories.partition:
+    phoenix: *phx_partition
+    wago: *wago_partition
+    weidmueller: *wmc_partition
+  accessories.partition:
+    phoenix: *phx_partition
+    wago: *wago_partition
+    weidmueller: *wmc_partition

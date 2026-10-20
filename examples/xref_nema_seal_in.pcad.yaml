@@ -1,0 +1,211 @@
+format: panelcad
+version: '0.1'
+name: NEMA seal-in
+properties: {}
+title_block:
+  company: ECS Shop
+  address: ''
+  logo: ''
+  customer: George
+  location: MCC demo
+  drawing_number: E-XREF
+  drawn_by: PanelCAD
+  checked_by: ''
+  approved_by: ''
+  scale: NTS
+  standard: NEMA/ANSI
+  drawing_style: ladder
+  coil_style: circle
+  rail_hot: L1
+  rail_return: L2
+  revisions:
+  - rev: A
+    date: ''
+    description: ''
+    drawn: PanelCAD
+    checked: ''
+    approved: ''
+sheets:
+- id: control
+  title: Control
+  description: Start/stop seal-in with CR cross-reference
+  kind: schematic
+  page:
+    size: A3
+    orientation: landscape
+  components:
+  - id: PB1
+    library_id: nema.operators.pb_nc
+    x: 46.0
+    y: 19.700000000000003
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: PB2
+    library_id: nema.operators.pb_no
+    x: 88.0
+    y: 19.700000000000003
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: M1
+    library_id: nema.contactors.coil
+    x: 210.0
+    y: 29.700000000000003
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: OL1
+    library_id: nema.protection.ol_contact
+    x: 255.0
+    y: 27.700000000000003
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: M1-13
+    library_id: nema.contactors.aux_no
+    x: 88.0
+    y: 59.099999999999994
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: CR1
+    library_id: nema.contactors.coil
+    x: 210.0
+    y: 80.5
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: CR1-13
+    library_id: nema.contactors.aux_no
+    x: 88.0
+    y: 109.89999999999999
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: OP1
+    library_id: iec.connection.offpage
+    x: 155.0
+    y: 113.89999999999999
+    rotation: 0
+    mirror: false
+    properties:
+      dest_sheet: aux
+      dest_ref: CR1-21
+      dest_pin: '1'
+      role: to
+      link: control:OP1.A|aux:CR1-21.1
+  wires:
+  - id: w1
+    from: L1
+    to: PB1.1
+    number: '101'
+    points: []
+  - id: w2
+    from: PB1.2
+    to: PB2.3
+    number: '102'
+    points: []
+  - id: w3
+    from: PB2.4
+    to: M1.A1
+    number: '103'
+    points: []
+  - id: w4
+    from: M1.A2
+    to: OL1.95
+    number: '105'
+    points: []
+  - id: w5
+    from: OL1.96
+    to: L2
+    number: '104'
+    points: []
+  - id: w6
+    from: PB2.3
+    to: M1-13.3
+    number: '102'
+    points: []
+  - id: w7
+    from: M1-13.4
+    to: M1.A1
+    number: '103'
+    points: []
+  - id: w8
+    from: L1
+    to: CR1.A1
+    number: '101'
+    points: []
+  - id: w9
+    from: CR1.A2
+    to: L2
+    number: '104'
+    points: []
+  - id: w10
+    from: L1
+    to: CR1-13.3
+    number: '101'
+    points: []
+  - id: w11
+    from: CR1-13.4
+    to: OP1.A
+    net: OP
+    number: '106'
+    points: []
+  rail_hot: L1
+  rail_return: L2
+  drawing_style: ladder
+- id: aux
+  title: Auxiliary
+  description: CR1 NC continued from sheet 1
+  kind: schematic
+  page:
+    size: A3
+    orientation: landscape
+  components:
+  - id: OP2
+    library_id: iec.connection.offpage_from
+    x: 40.0
+    y: 37.7
+    rotation: 0
+    mirror: false
+    properties:
+      dest_sheet: control
+      dest_ref: CR1-13
+      dest_pin: '4'
+      role: from
+      link: control:CR1-13.4|aux:OP2.A
+  - id: CR1-21
+    library_id: nema.contactors.aux_nc
+    x: 110.0
+    y: 33.7
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: PL1
+    library_id: nema.operators.pilot_light
+    x: 200.0
+    y: 31.700000000000003
+    rotation: 0
+    mirror: false
+    properties: {}
+  wires:
+  - id: w12
+    from: OP2.A
+    to: CR1-21.1
+    net: OP
+    number: '106'
+    points: []
+  - id: w13
+    from: CR1-21.2
+    to: PL1.X1
+    number: '201'
+    points: []
+  - id: w14
+    from: PL1.X2
+    to: L2
+    number: '104'
+    points: []
+  rail_hot: L1
+  rail_return: L2
+  drawing_style: ladder

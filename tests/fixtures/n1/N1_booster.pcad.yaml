@@ -1,0 +1,269 @@
+format: panelcad
+version: '0.1'
+name: Booster Pump Panel
+properties:
+  enclosure_sizing:
+    separate_control_rail: false
+title_block:
+  company: Riverbend Water
+  address: ''
+  logo: ''
+  customer: City
+  location: ''
+  drawing_number: BP-3301
+  drawn_by: QA
+  checked_by: ''
+  approved_by: ''
+  scale: NTS
+  standard: NEMA/ANSI
+  drawing_style: ladder
+  coil_style: circle
+  rail_hot: L1
+  rail_return: L2
+  revisions:
+  - rev: A
+    date: ''
+    description: ''
+    drawn: QA
+    checked: ''
+    approved: ''
+sheets:
+- id: pwr
+  title: Power
+  description: ''
+  kind: schematic
+  page:
+    size: A3
+    orientation: landscape
+  components:
+  - id: CB1
+    library_id: nema.breakers.mcb_3p_32a
+    x: 40.0
+    y: 20.2
+    rotation: 0
+    mirror: false
+    properties:
+      role: breaker
+      sizing_group: MTR1
+      In: 60A
+      sized_by: nec-430
+      ocpd_device: inverse_time_breaker
+      ocpd_max_a: 60.0
+      frame_a: 32.0
+      frame_note: 'CB1 trip 60 A exceeds the 32 A frame of nema.breakers.mcb_3p_32a.
+        Next builtin frame: nema.breakers.mccb_3p_100a (100 A). No catalog breaker
+        covers 60 A.'
+      suggested_library_id: nema.breakers.mccb_3p_100a
+  - id: M1
+    library_id: nema.contactors.ac3_32a
+    x: 37.0
+    y: 79.00000000000001
+    rotation: 0
+    mirror: false
+    properties:
+      role: contactor
+      sizing_group: MTR1
+      frame_a: 32.0
+  - id: OL1
+    library_id: nema.protection.overload
+    x: 40.0
+    y: 157.0
+    rotation: 0
+    mirror: false
+    properties:
+      role: overload
+      sizing_group: MTR1
+      setting: 21A
+      ol_fla: 21.0
+      sized_by: nec-430
+      overload_rule: NEC 430.32(A)(1), all other motors; not verified against an official
+        NFPA text
+      suggested_part: LS Electric MT-32/3K19
+      ol_library_note: 'No overload range is assigned for the 21 A setpoint. Suggested
+        part: LS Electric MT-32/3K19 (16–22 A).'
+  - id: MTR1
+    library_id: nema.loads.motor_3ph
+    x: 40.0
+    y: 211.0
+    rotation: 0
+    mirror: false
+    properties:
+      role: motor
+      sizing_group: MTR1
+      phases: 3
+      hp: 15.0
+      voltage: 480.0
+      FLA: 21.0
+      table_flc: 21.0
+      fla_source: nec-table
+      sizing_summary: '15 hp, 480 V, 3-phase, squirrel-cage (other than Design B energy-efficient).
+
+        480 V: 480 V system uses the 460 V rated-motor column (460 V). Amperes are
+        the published cell, not a ratio.
+
+        Full-load current 21 A from NEC Table 430.250, 460 V column.
+
+        No nameplate current was given. The overload uses the table full-load current
+        as a placeholder. NEC 430.6(A)(2) and 430.32 require the nameplate current
+        before this ships.
+
+        Branch conductors: 21 A × 1.25 = 26.25 A minimum (NEC 430.22).
+
+        UL 508A 29.6 (UL 508A value, not verified against the standard): no termination
+        temperature is marked, and the branch device is 60 A (100 A or less), so the
+        60°C column is used.
+
+        NEC Table 310.16 60°C: 10 AWG copper, 30 A.
+
+        UL 508A Table 28.1 60°C: 10 AWG copper, 30 A. UL 508A value, not verified
+        against the standard.
+
+        Governing conductor: 10 AWG. Both rules require it. UL 508A value, not verified
+        against the standard.
+
+        Branch device: inverse-time breaker, 250% × 21 A = 52.5 A (NEC Table 430.52(C)(1),
+        squirrel-cage (other than Design B energy-efficient)).
+
+        Selected rating 60 A, the next standard rating at or above 52.5 A. NEC 430.52(C)(1)(a):
+        where the table value is not a standard rating in 240.6(A), the next higher
+        standard rating is permitted.
+
+        Overload setting 21 A. Trip not over 24.15 A (115%, NEC 430.32(A)(1), all
+        other motors; not verified against an official NFPA text).
+
+        Contactor continuous rating at least 21 A. Builtin library frame 32 A.
+
+        Breaker rating 60 A is above the 32 A builtin frame. The next builtin frame
+        is the 100 A MCCB. Placing the 32 A frame raises design check breaker_frame_below_rating.
+
+        Control circuit: 16 AWG. Separate protection not over 10 A (Table 430.72(B)
+        Column A; not verified against an official NFPA text). Inside the enclosure
+        the branch device may be up to 40 A (Column B; not verified against an official
+        NFPA text). UL 508A internal control ampacity for 16 AWG is 10 A. UL 508A
+        value, not verified against the standard.'
+      sizing_code: NEC
+      flc_a: 21.0
+      conductor_min_a: 26.25
+      wire_gauge: 10 AWG
+      wire_table: nec_310_16+ul_508a_28_1
+      wire_temp_c: 60
+      wire_governed_by: both
+      termination_c: 60
+      termination_rule: 'UL 508A 29.6 (UL 508A value, not verified against the standard):
+        no termination temperature is marked, and the branch device is 60 A (100 A
+        or less), so the 60°C column is used.'
+      ocpd_max_a: 60.0
+      ocpd_device: inverse_time_breaker
+      ocpd_rating_a: 60.0
+      ol_fla: 21.0
+      ol_setting_a: 21.0
+      ol_trip_max_a: 24.15
+  wires:
+  - id: w1
+    from: CB1.2
+    to: M1.L1
+    net: L1
+    label: 10 AWG
+    number: L1
+    gauge: 10 AWG
+    points: []
+  - id: w2
+    from: CB1.4
+    to: M1.L2
+    net: L2
+    label: 10 AWG
+    number: L2
+    gauge: 10 AWG
+    points: []
+  - id: w3
+    from: CB1.6
+    to: M1.L3
+    net: L3
+    label: 10 AWG
+    number: L3
+    gauge: 10 AWG
+    points: []
+  - id: w4
+    from: M1.T1
+    to: OL1.T1
+    net: T1
+    label: 10 AWG
+    number: '101'
+    gauge: 10 AWG
+    points: []
+  - id: w5
+    from: M1.T2
+    to: OL1.T2
+    net: T2
+    label: 10 AWG
+    number: '102'
+    gauge: 10 AWG
+    points: []
+  - id: w6
+    from: M1.T3
+    to: OL1.T3
+    net: T3
+    label: 10 AWG
+    number: '103'
+    gauge: 10 AWG
+    points: []
+  - id: w7
+    from: OL1.2
+    to: MTR1.T1
+    net: T1
+    label: 10 AWG
+    number: '101'
+    gauge: 10 AWG
+    points: []
+  - id: w8
+    from: OL1.4
+    to: MTR1.T2
+    net: T2
+    label: 10 AWG
+    number: '102'
+    gauge: 10 AWG
+    points: []
+  - id: w9
+    from: OL1.6
+    to: MTR1.T3
+    net: T3
+    label: 10 AWG
+    number: '103'
+    gauge: 10 AWG
+    points: []
+  rail_hot: L1
+  rail_return: L2
+  drawing_style: ladder
+- id: enclosure
+  title: Enclosure
+  description: ''
+  kind: panel_layout
+  page:
+    size: A3
+    orientation: portrait
+  components: []
+  rails:
+  - id: r1
+    x: 38.0
+    y: 68.0
+    length_mm: 221.0
+    height_mm: 35.0
+    type: ts35
+  enclosure:
+    x: 18.0
+    y: 18.0
+    width_mm: 261.0
+    height_mm: 348.0
+    depth_mm: 200.0
+    name: Enclosure
+    draw_scale: 1.0
+last_saved:
+  user: box
+  host: grok-bot-vm-325352636
+  time: '2026-10-17T11:11:03'
+  summary: saved
+activity:
+- user: box
+  host: grok-bot-vm-325352636
+  time: '2026-10-17T11:11:03'
+  summary: saved

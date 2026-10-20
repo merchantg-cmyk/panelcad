@@ -1,0 +1,60 @@
+# Shop device-tag prefixes by drawing standard.
+#
+# IEC projects ignore this file and use each device's library `ref_prefix`
+# (IEC 81346 letters: Q, K, A, X, …).
+#
+# NEMA/ANSI (also ANSI / JIC / NFPA) looks up the device category, then
+# `category.<tag>` for a narrower match. Project `ref_prefixes:` overrides
+# any key. A project-local `library/ref_prefixes.yaml` or
+# `~/.panelcad/library/ref_prefixes.yaml` merges on top of this file.
+#
+# Selector is SEL so it does not clash with SS (soft starter).
+# Pilot light is PL (not LT). Timer is TR (not TD). Transformer is T (not CPT).
+
+kind: ref_prefixes
+version: "0.1"
+
+standards:
+  NEMA/ANSI:
+    protection.breaker: CB
+    protection.fuse: FU
+    protection.disconnect: DISC
+    protection.overload: OL
+    protection.mpcb: MCP
+    switching.contactor: M
+    switching.aux: M
+    switching.relay: CR
+    switching.safety: CR
+    switching.softstarter: SS
+    timing.timer: TR
+    load.motor: MTR
+    load.solenoid: SOL
+    drive.vfd: VFD
+    drive.softstarter: SS
+    operator.pushbutton: PB
+    operator.estop: ES
+    operator.selector: SEL
+    operator.light: PL
+    operator.limit: LS
+    operator.pressure: PRS   # dedicated pressure switch; limit symbols stay LS
+    operator.float: FS
+    operator.level: LEV
+    operator.temperature: TSW
+    operator.flow: FSW
+    operator.foot: FTS
+    operator.horn: HN
+    timing.contact: TR
+    switching.alternating: AR
+    power.transformer: T
+    power.supply: PS
+    power.receptacle: REC
+    power.load: LD
+    connection.terminal: TB
+    connection.terminal.pe: GND
+    connection.terminal.earth: GND
+    connection.terminal.ground: GND
+    connection.ground: GND
+    connection.bus: TB
+    connection.network: NET
+    control.plc: PLC
+    control.hmi: HMI

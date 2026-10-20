@@ -1,0 +1,252 @@
+library: iec
+version: "0.1"
+devices:
+  - id: operators.pb_no
+    name: Pushbutton NO
+    category: operator.pushbutton
+    ref_prefix: S
+    tags: [button, "no"]
+    schematic:
+      width: 24
+      height: 32
+      pins:
+        - { id: "13", x: 0, y: 24, side: left }
+        - { id: "14", x: 24, y: 24, side: right }
+      draw:
+        - circle: [12, 7, 5.5]
+        - line: [12, 12.5, 12, 20]
+        - line: [0, 24, 7, 24]
+        - line: [17, 24, 24, 24]
+        - line: [7, 21, 7, 27]
+        - line: [17, 21, 17, 27]
+        - line: [7, 24, 14, 18]
+    panel: { w: 22, h: 22, d: 50, din: false, in_panel: true, mount: door, dims: generic }
+    props: { contact: "NO", color: green, mounting: 22mm }
+
+  - id: operators.pb_nc
+    name: Pushbutton NC
+    category: operator.pushbutton
+    ref_prefix: S
+    tags: [button, nc]
+    schematic:
+      width: 24
+      height: 32
+      pins:
+        - { id: "11", x: 0, y: 24, side: left }
+        - { id: "12", x: 24, y: 24, side: right }
+      draw:
+        - circle: [12, 7, 5.5]
+        - line: [12, 12.5, 12, 20]
+        - line: [0, 24, 7, 24]
+        - line: [17, 24, 24, 24]
+        - line: [7, 21, 7, 27]
+        - line: [17, 21, 17, 27]
+        - line: [7, 24, 17, 21]
+    panel: { w: 22, h: 22, d: 50, din: false, in_panel: true, mount: door, dims: generic }
+    props: { contact: NC, color: red, mounting: 22mm }
+
+  - id: operators.selector_no
+    name: Selector maintained NO
+    category: operator.selector
+    ref_prefix: S
+    tags: [selector, no, maintained]
+    schematic:
+      width: 24
+      height: 32
+      pins:
+        - { id: "13", x: 0, y: 24, side: left }
+        - { id: "14", x: 24, y: 24, side: right }
+      draw:
+        - circle: [12, 8, 6]
+        - line: [12, 8, 16.4, 4.2]
+        - line: [12, 14, 12, 20]
+        - line: [0, 24, 7, 24]
+        - line: [17, 24, 24, 24]
+        - line: [7, 21, 7, 27]
+        - line: [17, 21, 17, 27]
+        - line: [7, 24, 14, 18]
+    panel: { w: 22, h: 22, d: 50, din: false, in_panel: true, mount: door, dims: generic }
+    props: { contact: "NO", positions: 2, maintained: true, mounting: 22mm }
+
+  - id: operators.estop
+    name: Emergency stop
+    category: operator.estop
+    ref_prefix: S
+    tags: [estop, safety]
+    schematic:
+      width: 28
+      height: 46
+      pins:
+        - { id: "11", x: 0, y: 26, side: left }
+        - { id: "12", x: 28, y: 26, side: right }
+        - { id: "21", x: 0, y: 38, side: left }
+        - { id: "22", x: 28, y: 38, side: right }
+      draw:
+        - circle: [14, 8, 6]
+        - circle: [14, 8, 3]
+        - line: [14, 14, 14, 22]
+        - line: [0, 26, 8, 26]
+        - line: [20, 26, 28, 26]
+        - line: [8, 23, 8, 29]
+        - line: [20, 23, 20, 29]
+        - line: [8, 26, 20, 23]
+        - line: [0, 38, 8, 38]
+        - line: [20, 38, 28, 38]
+        - line: [8, 35, 8, 41]
+        - line: [20, 35, 20, 41]
+        - line: [8, 38, 20, 35]
+    panel: { w: 40, h: 40, d: 60, din: false, in_panel: true, mount: door, dims: generic }
+    props: { contact: 2NC, color: red, mounting: 22mm, twist_release: true }
+
+  - id: operators.pilot_light
+    name: Pilot light
+    category: operator.light
+    ref_prefix: H
+    tags: [lamp, indicator]
+    schematic:
+      width: 24
+      height: 28
+      pins:
+        - { id: X1, x: 0, y: 12, side: left, electrical: input }
+        - { id: X2, x: 24, y: 12, side: right, electrical: input }
+      draw:
+        - circle: [12, 12, 7]
+        - line: [7, 7, 17, 17]
+        - line: [17, 7, 7, 17]
+        - line: [0, 12, 5, 12]
+        - line: [19, 12, 24, 12]
+        - text: [12, 26, "H", 2.5]
+    panel: { w: 22, h: 22, d: 45, din: false, in_panel: true, mount: door, dims: generic }
+    props: { color: white, voltage: 24VDC, mounting: 22mm }
+
+  - id: operators.selector_2pos
+    name: Selector 2-position
+    category: operator.selector
+    ref_prefix: S
+    tags: [selector]
+    schematic:
+      width: 28
+      height: 30
+      pins:
+        - { id: "11", x: 0, y: 12, side: left }
+        - { id: "12", x: 28, y: 8, side: right }
+        - { id: "14", x: 28, y: 16, side: right }
+      draw:
+        - circle: [12, 12, 6]
+        - line: [12, 12, 18, 8]
+        - line: [0, 12, 6, 12]
+        - line: [22, 8, 28, 8]
+        - line: [22, 16, 28, 16]
+        - text: [12, 28, "S", 2.5]
+    panel: { w: 22, h: 22, d: 50, din: false, in_panel: true, mount: door, dims: generic }
+    props: { positions: 2, maintained: true, mounting: 22mm }
+
+  - id: operators.selector_3pos
+    name: Selector 3-position HOA
+    category: operator.selector
+    ref_prefix: S
+    tags: [selector, hoa]
+    schematic:
+      width: 30
+      height: 32
+      pins:
+        - { id: "11", x: 0, y: 14, side: left }
+        - { id: "12", x: 30, y: 8, side: right }
+        - { id: "14", x: 30, y: 20, side: right }
+      draw:
+        - circle: [12, 14, 6]
+        - line: [12, 14, 16.2, 9.8]
+        - line: [12, 14, 16.2, 18.2]
+        - line: [0, 14, 6, 14]
+        - line: [24, 8, 30, 8]
+        - line: [24, 20, 30, 20]
+        - text: [12, 30, "HOA", 2.2]
+    panel: { w: 22, h: 22, d: 50, din: false, in_panel: true, mount: door, dims: generic }
+    props: { positions: 3, maintained: true, mounting: 22mm }
+
+  - id: operators.limit_no
+    name: Limit switch NO
+    category: operator.limit
+    ref_prefix: S
+    tags: [limit, "no", float, pressure]
+    schematic:
+      width: 26
+      height: 26
+      pins:
+        - { id: "13", x: 0, y: 18, side: left }
+        - { id: "14", x: 26, y: 18, side: right }
+      draw:
+        - polyline: [[10, 3], [18, 3], [18, 10]]
+        - line: [0, 18, 8, 18]
+        - line: [18, 18, 26, 18]
+        - line: [8, 15, 8, 21]
+        - line: [18, 15, 18, 21]
+        - line: [8, 18, 15, 12]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: field, dims: generic }
+    props: { contact: "NO", location: field }
+
+  - id: operators.limit_nc
+    name: Limit switch NC
+    category: operator.limit
+    ref_prefix: S
+    tags: [limit, nc, float, pressure]
+    schematic:
+      width: 26
+      height: 26
+      pins:
+        - { id: "11", x: 0, y: 18, side: left }
+        - { id: "12", x: 26, y: 18, side: right }
+      draw:
+        - polyline: [[10, 3], [18, 3], [18, 10]]
+        - line: [0, 18, 8, 18]
+        - line: [18, 18, 26, 18]
+        - line: [8, 15, 8, 21]
+        - line: [18, 15, 18, 21]
+        - line: [8, 18, 18, 15]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: field, dims: generic }
+    props: { contact: NC, location: field }
+
+  - id: operators.pb_illum
+    name: Illuminated pushbutton
+    category: operator.pushbutton
+    ref_prefix: S
+    tags: [button, illuminated, touch]
+    schematic:
+      width: 24
+      height: 36
+      pins:
+        - { id: "13", x: 0, y: 28, side: left }
+        - { id: "14", x: 24, y: 28, side: right }
+      draw:
+        - circle: [12, 8, 6]
+        - line: [8, 4, 16, 12]
+        - line: [16, 4, 8, 12]
+        - line: [12, 14, 12, 24]
+        - line: [0, 28, 7, 28]
+        - line: [17, 28, 24, 28]
+        - line: [7, 25, 7, 31]
+        - line: [17, 25, 17, 31]
+        - line: [7, 28, 14, 22]
+    panel: { w: 22, h: 22, d: 50, din: false, in_panel: true, mount: door, dims: generic }
+    props: { contact: "NO", lamp: true, mounting: 22mm }
+
+  - id: operators.stack_light
+    name: Stack light section
+    category: operator.light
+    ref_prefix: H
+    tags: [stack, beacon, horn, audible]
+    schematic:
+      width: 24
+      height: 28
+      pins:
+        - { id: X1, x: 0, y: 12, side: left, electrical: input }
+        - { id: X2, x: 24, y: 12, side: right, electrical: input }
+      draw:
+        - circle: [12, 12, 8]
+        - circle: [12, 12, 3.2]
+        - line: [6.3, 6.3, 17.7, 17.7]
+        - line: [17.7, 6.3, 6.3, 17.7]
+        - line: [0, 12, 4, 12]
+        - line: [20, 12, 24, 12]
+    panel: { w: 50, h: 40, d: 50, din: false, in_panel: true, mount: field, dims: generic }
+    props: { voltage: 24VDC }

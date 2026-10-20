@@ -1,0 +1,109 @@
+library: iec
+version: "0.1"
+devices:
+  - id: relays.k_4co_24vdc
+    name: Relay 4 C/O 24VDC
+    category: switching.relay
+    ref_prefix: K
+    tags: [relay, ice-cube]
+    schematic:
+      width: 48
+      height: 55
+      pins:
+        - { id: A1, x: 0, y: 18, side: left, electrical: input }
+        - { id: A2, x: 0, y: 36, side: left, electrical: input }
+        - { id: "11", x: 48, y: 10, side: right }
+        - { id: "12", x: 48, y: 16, side: right }
+        - { id: "14", x: 48, y: 22, side: right }
+        - { id: "21", x: 48, y: 30, side: right }
+        - { id: "22", x: 48, y: 36, side: right }
+        - { id: "24", x: 48, y: 42, side: right }
+      draw:
+        - rect: [8, 6, 32, 44]
+        - circle: [16, 27, 5]
+        - text: [16, 29, "K", 2.4]
+        - line: [0, 18, 16, 18]
+        - line: [16, 18, 16, 22]
+        - line: [16, 32, 16, 36]
+        - line: [0, 36, 16, 36]
+        - line: [26, 10, 48, 10]
+        - line: [26, 10, 40, 16]
+        - line: [40, 16, 48, 16]
+        - line: [34, 22, 48, 22]
+        - line: [34, 20, 34, 24]
+        - line: [26, 30, 48, 30]
+        - line: [26, 30, 40, 36]
+        - line: [40, 36, 48, 36]
+        - line: [34, 42, 48, 42]
+        - line: [34, 40, 34, 44]
+    panel: { w: 28, h: 62, d: 70, din: true }
+    props: { contacts: 4CO, coil: 24VDC, Ith: 6A }
+
+  - id: relays.safety_24vdc
+    name: Safety relay 24VDC
+    category: switching.safety
+    ref_prefix: K
+    tags: [safety, relay]
+    schematic:
+      width: 50
+      height: 60
+      pins:
+        - { id: A1, x: 0, y: 16, side: left, electrical: input }
+        - { id: A2, x: 0, y: 28, side: left, electrical: input }
+        - { id: S11, x: 0, y: 40, side: left, electrical: input }
+        - { id: S12, x: 0, y: 48, side: left, electrical: input }
+        - { id: "13", x: 50, y: 16, side: right, electrical: output }
+        - { id: "14", x: 50, y: 24, side: right, electrical: output }
+        - { id: "23", x: 50, y: 32, side: right, electrical: output }
+        - { id: "24", x: 50, y: 40, side: right, electrical: output }
+      draw:
+        - rect: [8, 8, 34, 46]
+        - circle: [16, 22, 4]
+        - text: [16, 23.6, "K", 2.2]
+        - text: [28, 50, "Sfty", 2.2]
+        - line: [0, 16, 16, 16]
+        - line: [16, 16, 16, 18]
+        - line: [16, 26, 16, 28]
+        - line: [0, 28, 16, 28]
+        - line: [0, 40, 8, 40]
+        - line: [0, 48, 8, 48]
+        - line: [32, 16, 50, 16]
+        - line: [32, 14, 32, 18]
+        - line: [32, 16, 38, 20]
+        - line: [30, 24, 50, 24]
+        - line: [30, 22, 30, 26]
+        - line: [32, 32, 50, 32]
+        - line: [32, 30, 32, 34]
+        - line: [32, 32, 38, 36]
+        - line: [30, 40, 50, 40]
+        - line: [30, 38, 30, 42]
+    panel: { w: 22.5, h: 99, d: 114, din: true }
+    props: { category: 4, coil: 24VDC, standard: EN ISO 13849-1 }
+
+  - id: timers.on_delay
+    name: On-delay timer
+    category: timing.timer
+    ref_prefix: K
+    tags: [timer, on-delay]
+    schematic:
+      width: 36
+      height: 40
+      pins:
+        - { id: A1, x: 0, y: 20, side: left, electrical: input }
+        - { id: A2, x: 36, y: 20, side: right, electrical: input }
+        - { id: "15", x: 36, y: 10, side: right, electrical: output }
+        - { id: "18", x: 36, y: 30, side: right, electrical: output }
+      draw:
+        - rect: [6, 6, 24, 28]
+        - circle: [18, 20, 5]
+        - text: [18, 21.6, "K", 2.2]
+        - text: [26, 32, "TON", 2]
+        - line: [0, 20, 13, 20]
+        - line: [23, 20, 36, 20]
+        - line: [22, 10, 36, 10]
+        - line: [22, 8, 22, 12]
+        - line: [22, 10, 27, 16]
+        - line: [22, 30, 36, 30]
+        - line: [22, 28, 22, 32]
+    panel: { w: 22.5, h: 80, d: 70, din: true }
+    props: { function: on-delay, coil: 24VDC }

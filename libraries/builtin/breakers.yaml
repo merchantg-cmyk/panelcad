@@ -1,0 +1,140 @@
+library: iec
+version: "0.1"
+devices:
+  - id: breakers.mcb_1p_16a
+    name: MCB 1P 16A
+    category: protection.breaker
+    ref_prefix: Q
+    tags: [mcb, breaker, 1p]
+    schematic:
+      width: 20
+      height: 50
+      pins:
+        - { id: "1", x: 10, y: 0, side: top, electrical: power }
+        - { id: "2", x: 10, y: 50, side: bottom, electrical: power }
+      draw:
+        - rect: [3, 6, 14, 38]
+        - line: [10, 0, 10, 14]
+        - line: [6, 14, 14, 14]
+        - line: [10, 14, 14, 22]
+        - line: [10, 24, 10, 50]
+        - text: [14, 36, "Q", 2.6]
+    panel: { w: 18, h: 80, d: 70, din: true }
+    props: { poles: 1, In: 16A, Un: 230V, Icu: 6kA, standard: IEC 60898 }
+
+  - id: breakers.mcb_3p_32a
+    name: MCB 3P 32A
+    category: protection.breaker
+    ref_prefix: Q
+    tags: [mcb, breaker, 3p]
+    schematic:
+      width: 36
+      height: 55
+      pins:
+        - { id: "1", x: 8, y: 0, side: top, electrical: power }
+        - { id: "3", x: 18, y: 0, side: top, electrical: power }
+        - { id: "5", x: 28, y: 0, side: top, electrical: power }
+        - { id: "2", x: 8, y: 55, side: bottom, electrical: power }
+        - { id: "4", x: 18, y: 55, side: bottom, electrical: power }
+        - { id: "6", x: 28, y: 55, side: bottom, electrical: power }
+      draw:
+        - rect: [2, 8, 32, 40]
+        - line: [8, 0, 8, 16]
+        - line: [18, 0, 18, 16]
+        - line: [28, 0, 28, 16]
+        - line: [5, 16, 11, 16]
+        - line: [15, 16, 21, 16]
+        - line: [25, 16, 31, 16]
+        - line: [8, 16, 12, 24]
+        - line: [18, 16, 22, 24]
+        - line: [28, 16, 32, 24]
+        - line: [8, 26, 8, 55]
+        - line: [18, 26, 18, 55]
+        - line: [28, 26, 28, 55]
+        - line: [12, 24, 32, 24]
+        - text: [13, 42, "Q", 2.6]
+    panel: { w: 54, h: 80, d: 70, din: true }
+    props: { poles: 3, In: 32A, Un: 400V, Icu: 10kA, standard: IEC 60898 }
+
+  - id: breakers.mccb_3p_100a
+    name: MCCB 3P 100A
+    category: protection.breaker
+    ref_prefix: Q
+    tags: [mccb, breaker, 3p]
+    schematic:
+      width: 42
+      height: 60
+      pins:
+        - { id: "1", x: 9, y: 0, side: top, electrical: power }
+        - { id: "3", x: 21, y: 0, side: top, electrical: power }
+        - { id: "5", x: 33, y: 0, side: top, electrical: power }
+        - { id: "2", x: 9, y: 60, side: bottom, electrical: power }
+        - { id: "4", x: 21, y: 60, side: bottom, electrical: power }
+        - { id: "6", x: 33, y: 60, side: bottom, electrical: power }
+      draw:
+        - rect: [2, 8, 38, 46]
+        - line: [9, 0, 9, 18]
+        - line: [21, 0, 21, 18]
+        - line: [33, 0, 33, 18]
+        - line: [6, 18, 12, 18]
+        - line: [18, 18, 24, 18]
+        - line: [30, 18, 36, 18]
+        - line: [9, 18, 13, 26]
+        - line: [21, 18, 25, 26]
+        - line: [33, 18, 37, 26]
+        - line: [9, 28, 9, 60]
+        - line: [21, 28, 21, 60]
+        - line: [33, 28, 33, 60]
+        - line: [13, 26, 37, 26]
+        - text: [15, 46, "Q", 2.6]
+    panel: { w: 105, h: 130, d: 86, din: true }
+    props: { poles: 3, In: 100A, Un: 415V, Icu: 36kA, standard: IEC 60947-2 }
+
+  - id: breakers.mpcb_3p
+    name: Motor-protector 3P
+    category: protection.mpcb
+    ref_prefix: Q
+    tags: [mpcb, motor-protector, breaker, 3p, thermal, magnetic]
+    schematic:
+      width: 36
+      height: 62
+      pins:
+        - { id: "1", x: 8, y: 0, side: top, electrical: power }
+        - { id: "3", x: 18, y: 0, side: top, electrical: power }
+        - { id: "5", x: 28, y: 0, side: top, electrical: power }
+        - { id: "2", x: 8, y: 62, side: bottom, electrical: power }
+        - { id: "4", x: 18, y: 62, side: bottom, electrical: power }
+        - { id: "6", x: 28, y: 62, side: bottom, electrical: power }
+        - { id: "95", x: 36, y: 20, side: right, electrical: output }
+        - { id: "96", x: 36, y: 28, side: right, electrical: output }
+        - { id: "97", x: 36, y: 36, side: right, electrical: output }
+        - { id: "98", x: 36, y: 44, side: right, electrical: output }
+      draw:
+        - rect: [2, 8, 32, 46]
+        - line: [8, 0, 8, 16]
+        - line: [18, 0, 18, 16]
+        - line: [28, 0, 28, 16]
+        - line: [5, 16, 11, 16]
+        - line: [15, 16, 21, 16]
+        - line: [25, 16, 31, 16]
+        - line: [8, 16, 12, 24]
+        - line: [18, 16, 22, 24]
+        - line: [28, 16, 32, 24]
+        - line: [12, 24, 32, 24]
+        - polyline: [[8, 28], [11, 32], [5, 36], [11, 40], [8, 44]]
+        - polyline: [[18, 28], [21, 32], [15, 36], [21, 40], [18, 44]]
+        - polyline: [[28, 28], [26, 32], [28, 36], [26, 40], [28, 44]]
+        - line: [8, 44, 8, 62]
+        - line: [18, 44, 18, 62]
+        - line: [28, 44, 28, 62]
+        - line: [36, 20, 32, 20]
+        - line: [32, 20, 35, 27]
+        - line: [32, 28, 36, 28]
+        - line: [32, 26, 32, 30]
+        - line: [36, 36, 32, 36]
+        - line: [32, 36, 35, 42]
+        - line: [32, 44, 36, 44]
+        - line: [32, 42, 32, 46]
+        - text: [13, 12, "Q", 2.4]
+    panel: { w: 45, h: 90, d: 80, din: true }
+    props: { poles: 3, range: "", In: "", Icu: "", standard: IEC 60947-2 }

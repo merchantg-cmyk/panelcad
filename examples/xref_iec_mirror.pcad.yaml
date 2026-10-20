@@ -1,0 +1,150 @@
+format: panelcad
+version: '0.1'
+name: IEC contact mirror
+properties: {}
+title_block:
+  company: Acme
+  address: ''
+  logo: ''
+  customer: ''
+  location: ''
+  drawing_number: E-IEC
+  drawn_by: ''
+  checked_by: ''
+  approved_by: ''
+  scale: NTS
+  standard: IEC
+  drawing_style: ladder
+  coil_style: circle
+  rail_hot: L+
+  rail_return: 0V
+  revisions: []
+sheets:
+- id: main
+  title: Control
+  description: Coil with IEC contact mirror
+  kind: schematic
+  page:
+    size: A3
+    orientation: landscape
+  components:
+  - id: S1
+    library_id: iec.operators.pb_no
+    x: 69.0
+    y: 19.700000000000003
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: K1
+    library_id: iec.contactors.coil
+    x: 210.0
+    y: 29.700000000000003
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: K1-14
+    library_id: iec.contactors.aux_no
+    x: 69.0
+    y: 59.099999999999994
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: K1-21
+    library_id: iec.contactors.aux_nc
+    x: 69.0
+    y: 84.5
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: H1
+    library_id: iec.operators.pilot_light
+    x: 210.0
+    y: 82.5
+    rotation: 0
+    mirror: false
+    properties: {}
+  wires:
+  - id: w1
+    from: L+
+    to: S1.13
+    number: '101'
+    points: []
+  - id: w2
+    from: S1.14
+    to: K1.A1
+    number: '102'
+    points: []
+  - id: w3
+    from: K1.A2
+    to: 0V
+    number: '103'
+    points: []
+  - id: w4
+    from: S1.13
+    to: K1-14.13
+    number: '101'
+    points: []
+  - id: w5
+    from: K1-14.14
+    to: K1.A1
+    number: '102'
+    points: []
+  - id: w6
+    from: L+
+    to: K1-21.21
+    number: '101'
+    points: []
+  - id: w7
+    from: K1-21.22
+    to: H1.X1
+    number: '104'
+    points: []
+  - id: w8
+    from: H1.X2
+    to: 0V
+    number: '103'
+    points: []
+  rail_hot: L+
+  rail_return: 0V
+  drawing_style: ladder
+- id: page2
+  title: Contacts
+  description: K1 43-44 feeding H2
+  kind: schematic
+  page:
+    size: A3
+    orientation: landscape
+  components:
+  - id: K1-43
+    library_id: iec.contactors.aux_no
+    x: 69.0
+    y: 33.7
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: H2
+    library_id: iec.operators.pilot_light
+    x: 200.0
+    y: 31.700000000000003
+    rotation: 0
+    mirror: false
+    properties: {}
+  wires:
+  - id: w9
+    from: L+
+    to: K1-43.13
+    number: '101'
+    points: []
+  - id: w10
+    from: K1-43.14
+    to: H2.X1
+    number: '201'
+    points: []
+  - id: w11
+    from: H2.X2
+    to: 0V
+    number: '103'
+    points: []
+  rail_hot: L+
+  rail_return: 0V
+  drawing_style: ladder

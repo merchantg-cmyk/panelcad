@@ -1,0 +1,11 @@
+0.3
+Remark,"CSV-Import-Export"
+TYPE,SCOPE,NAME,DESCRIPTION,DATATYPE,SPECIFIER,ATTRIBUTES
+ALIAS,,S1,"S1, Start, wire 101, sheet main line 104",,Local:1:I.Pt00.Data,
+ALIAS,,Spare_I0_1,spare,,Local:1:I.Pt01.Data,
+ALIAS,,Spare_I0_2,spare,,Local:1:I.Pt02.Data,
+ALIAS,,Spare_I0_3,spare,,Local:1:I.Pt03.Data,
+ALIAS,,CR1,"CR1, Run, wire 102, sheet main line 103",,Local:1:O.Pt00.Data,
+ALIAS,,Spare_Q0_1,spare,,Local:1:O.Pt01.Data,
+ALIAS,,Spare_Q0_2,spare,,Local:1:O.Pt02.Data,
+ALIAS,,Spare_Q0_3,spare,,Local:1:O.Pt03.Data,

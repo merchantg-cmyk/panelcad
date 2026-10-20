@@ -1,0 +1,12 @@
+﻿item,qty,sheet,ref,library_id,description,manufacturer,part_number,catalog,category,notes,x,y
+1,1,power,Q1,iec.breakers.mcb_3p_32a,MCB 3P 32A,,,,protection.breaker,,,
+2,1,power,K1,iec.contactors.ac3_9a,Contactor AC-3 9A,,,,switching.contactor,,,
+3,1,power,F1,iec.protection.overload_9a,Thermal overload 1.6–10A,,,,protection.overload,,,
+4,1,power,M1,iec.loads.motor_3ph,3-phase motor,,,,load.motor,,,
+5,1,power,G1,iec.power.psu_24v_5a,PSU 24VDC 5A,,,,power.supply,,,
+6,1,power,S0,iec.operators.estop,Emergency stop,,,,operator.estop,,,
+7,1,power,S2,iec.operators.pb_nc,Pushbutton NC,,,,operator.pushbutton,,,
+8,1,power,S1,iec.operators.pb_no,Pushbutton NO,,,,operator.pushbutton,,,
+9,1,power,H1,iec.operators.pilot_light,Pilot light,,,,operator.light,,,
+10,1,power,A1,iec.plc.compact_16dio,Compact PLC 16DI / 16DO,,,,control.plc,,,
+11,1,power,P1,iec.hmi.panel_7in,HMI 7 inch,,,,control.hmi,,,

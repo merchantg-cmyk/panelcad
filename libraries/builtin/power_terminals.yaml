@@ -1,0 +1,722 @@
+library: iec
+version: "0.1"
+devices:
+  - id: terminals.x_2p5
+    name: Terminal 2.5 mm²
+    category: connection.terminal
+    ref_prefix: X
+    tags: [terminal]
+    schematic:
+      width: 16
+      height: 24
+      pins:
+        - { id: A, x: 0, y: 12, side: left }
+        - { id: B, x: 16, y: 12, side: right }
+      draw:
+        - rect: [3, 4, 10, 16]
+        - line: [0, 12, 3, 12]
+        - line: [13, 12, 16, 12]
+        - text: [8, 22, "X", 2.4]
+    panel: { w: 5.2, h: 47, d: 48, din: true }
+    props: { section: 2.5mm2, Ith: 24A, Un: 800V, jumper_family: generic, pitch_mm: 5.2 }
+
+  - id: terminals.pe_4
+    name: PE terminal 4 mm²
+    category: connection.terminal
+    ref_prefix: X
+    tags: [terminal, pe, earth]
+    schematic:
+      width: 16
+      height: 26
+      pins:
+        - { id: A, x: 0, y: 12, side: left }
+        - { id: B, x: 16, y: 12, side: right }
+      draw:
+        - rect: [3, 4, 10, 16]
+        - line: [5, 20, 11, 20]
+        - line: [6, 22, 10, 22]
+        - line: [7, 24, 9, 24]
+        - line: [0, 12, 3, 12]
+        - line: [13, 12, 16, 12]
+    panel: { w: 6.2, h: 47, d: 48, din: true }
+    props: { section: 4mm2, type: PE, jumper_family: generic, pitch_mm: 6.2 }
+
+  - id: power.psu_24v_5a
+    name: PSU 24VDC 5A
+    category: power.supply
+    ref_prefix: G
+    tags: [psu, 24v]
+    schematic:
+      width: 50
+      height: 45
+      pins:
+        - { id: L, x: 0, y: 12, side: left, electrical: power }
+        - { id: N, x: 0, y: 22, side: left, electrical: power }
+        - { id: PE, x: 0, y: 32, side: left, electrical: power }
+        - { id: plus, x: 50, y: 16, side: right, electrical: power, label: "+" }
+        - { id: minus, x: 50, y: 28, side: right, electrical: power, label: "-" }
+      draw:
+        - rect: [8, 6, 34, 34]
+        - text: [25, 18, "G", 3]
+        - text: [25, 26, "24V", 2.5]
+        - line: [0, 12, 8, 12]
+        - line: [0, 22, 8, 22]
+        - line: [0, 32, 8, 32]
+        - line: [42, 16, 50, 16]
+        - line: [42, 28, 50, 28]
+    panel: { w: 40, h: 90, d: 110, din: true }
+    props: { Vin: 100-240VAC, Vout: 24VDC, Iout: 5A }
+
+  - id: power.control_transformer
+    name: Control transformer 230/24V
+    category: power.transformer
+    ref_prefix: T
+    tags: [transformer]
+    schematic:
+      width: 40
+      height: 40
+      pins:
+        - { id: "1", x: 0, y: 12, side: left, electrical: power }
+        - { id: "2", x: 0, y: 28, side: left, electrical: power }
+        - { id: "21", x: 40, y: 12, side: right, electrical: power }
+        - { id: "22", x: 40, y: 28, side: right, electrical: power }
+        - { id: H1, x: 0, y: 12, side: left, electrical: power }
+        - { id: H2, x: 0, y: 28, side: left, electrical: power }
+        - { id: X1, x: 40, y: 12, side: right, electrical: power }
+        - { id: X2, x: 40, y: 28, side: right, electrical: power }
+      draw:
+        - circle: [14, 20, 10]
+        - circle: [26, 20, 10]
+        - line: [0, 12, 8, 12]
+        - line: [0, 28, 8, 28]
+        - line: [32, 12, 40, 12]
+        - line: [32, 28, 40, 28]
+        - text: [20, 38, "T", 2.5]
+    panel: { w: 78, h: 72, d: 75, din: true }
+    props: { primary: 230V, secondary: 24V, VA: 100 }
+
+  - id: drives.vfd_1k5
+    name: VFD 1.5 kW
+    category: drive.vfd
+    ref_prefix: U
+    tags: [vfd, drive]
+    schematic:
+      width: 55
+      height: 70
+      pins:
+        - { id: L1, x: 12, y: 0, side: top, electrical: power }
+        - { id: L2, x: 22, y: 0, side: top, electrical: power }
+        - { id: L3, x: 32, y: 0, side: top, electrical: power }
+        - { id: U, x: 12, y: 70, side: bottom, electrical: power }
+        - { id: V, x: 22, y: 70, side: bottom, electrical: power }
+        - { id: W, x: 32, y: 70, side: bottom, electrical: power }
+        - { id: DI1, x: 55, y: 24, side: right, electrical: input }
+        - { id: COM, x: 55, y: 34, side: right, electrical: input }
+      draw:
+        - rect: [6, 10, 36, 50]
+        - text: [24, 28, "U", 3.5]
+        - text: [24, 38, "VFD", 2.5]
+        - line: [12, 0, 12, 10]
+        - line: [22, 0, 22, 10]
+        - line: [32, 0, 32, 10]
+        - line: [12, 60, 12, 70]
+        - line: [22, 60, 22, 70]
+        - line: [32, 60, 32, 70]
+        - line: [42, 24, 55, 24]
+        - line: [42, 34, 55, 34]
+    panel: { w: 72, h: 150, d: 140, din: false, in_panel: true, mount: backplate, dims: generic }
+    props: { Pn: 1.5kW, Vin: 400V, Iout: 4.1A }
+
+  - id: drives.ga500
+    name: Yaskawa GA500
+    category: drive.vfd
+    ref_prefix: U
+    tags: [vfd, drive, ga500, yaskawa]
+    schematic:
+      width: 60
+      height: 112
+      pins:
+        - { id: L1, x: 14, y: 0, side: top, electrical: power }
+        - { id: L2, x: 24, y: 0, side: top, electrical: power }
+        - { id: L3, x: 34, y: 0, side: top, electrical: power }
+        - { id: U, x: 14, y: 112, side: bottom, electrical: power }
+        - { id: V, x: 24, y: 112, side: bottom, electrical: power }
+        - { id: W, x: 34, y: 112, side: bottom, electrical: power }
+        - { id: S1, x: 60, y: 18, side: right, electrical: input }
+        - { id: S2, x: 60, y: 32, side: right, electrical: input }
+        - { id: S5, x: 60, y: 46, side: right, electrical: input }
+        - { id: SN, x: 60, y: 60, side: right, electrical: input }
+        - { id: H1, x: 60, y: 72, side: right, electrical: input }
+        - { id: H2, x: 60, y: 87.79, side: right, electrical: input }
+        - { id: HC, x: 60, y: 101.79, side: right, electrical: input }
+        - { id: SC, x: 0, y: 50, side: left, electrical: input }
+        - { id: SP, x: 0, y: 66, side: left, electrical: input }
+      draw:
+        - rect: [12, 10, 36, 94]
+        - text: [30, 26, "GA500", 2.6]
+        - text: [14, 16, "L1", 2.2]
+        - text: [24, 16, "L2", 2.2]
+        - text: [34, 16, "L3", 2.2]
+        - text: [14, 100, "U", 2.2]
+        - text: [24, 100, "V", 2.2]
+        - text: [34, 100, "W", 2.2]
+        - text: [44, 18.8, "S1", 2.4]
+        - text: [44, 32.8, "S2", 2.4]
+        - text: [44, 46.8, "S5", 2.4]
+        - text: [44, 60.8, "SN", 2.4]
+        - text: [44, 72.8, "H1", 2.4]
+        - text: [44, 88.6, "H2", 2.4]
+        - text: [44, 102.6, "HC", 2.4]
+        - text: [18, 50.8, "SC", 2.4]
+        - text: [18, 66.8, "SP", 2.4]
+        - line: [14, 0, 14, 10]
+        - line: [24, 0, 24, 10]
+        - line: [34, 0, 34, 10]
+        - line: [14, 104, 14, 112]
+        - line: [24, 104, 24, 112]
+        - line: [34, 104, 34, 112]
+        - line: [48, 18, 60, 18]
+        - line: [48, 32, 60, 32]
+        - line: [48, 46, 60, 46]
+        - line: [48, 60, 60, 60]
+        - line: [48, 72, 60, 72]
+        - line: [48, 87.79, 60, 87.79]
+        - line: [48, 101.79, 60, 101.79]
+        - line: [0, 50, 12, 50]
+        - line: [0, 66, 12, 66]
+    panel: { w: 72, h: 150, d: 140, din: false, in_panel: true, mount: backplate, dims: generic }
+    props: { family: GA500 }
+
+  - id: loads.motor_3ph
+    name: 3-phase motor
+    category: load.motor
+    ref_prefix: M
+    tags: [motor]
+    schematic:
+      width: 40
+      height: 40
+      pins:
+        - { id: U1, x: 8, y: 0, side: top, electrical: power }
+        - { id: V1, x: 20, y: 0, side: top, electrical: power }
+        - { id: W1, x: 32, y: 0, side: top, electrical: power }
+      draw:
+        - circle: [20, 24, 14]
+        - text: [20, 26, "M", 4]
+        - line: [8, 0, 8, 16.8]
+        - line: [20, 0, 20, 10]
+        - line: [32, 0, 32, 16.8]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
+    props: { poles: 3, type: induction, location: field }
+
+  - id: loads.motor_3ph_6lead
+    name: 3-phase motor 6-lead
+    category: load.motor
+    ref_prefix: M
+    tags: [motor, star-delta, wye-delta]
+    schematic:
+      width: 46
+      height: 40
+      pins:
+        - { id: U1, x: 8, y: 0, side: top, electrical: power }
+        - { id: V1, x: 18, y: 0, side: top, electrical: power }
+        - { id: W1, x: 28, y: 0, side: top, electrical: power }
+        - { id: W2, x: 46, y: 23, side: right, electrical: power }
+        - { id: U2, x: 46, y: 26, side: right, electrical: power }
+        - { id: V2, x: 46, y: 29, side: right, electrical: power }
+      draw:
+        - circle: [18, 20, 10]
+        - text: [18, 22, "M", 3.4]
+        - line: [8, 0, 12, 4]
+        - line: [12, 4, 12, 12]
+        - line: [18, 0, 18, 10]
+        - line: [28, 0, 24, 4]
+        - line: [24, 4, 24, 12]
+        - line: [27.54, 23, 46, 23]
+        - line: [26.00, 26, 46, 26]
+        - line: [22.36, 29, 46, 29]
+        - text: [15.6, 7.4, "U1", 1.6]
+        - text: [21.4, 7.4, "V1", 1.6]
+        - text: [27.2, 7.4, "W1", 1.6]
+        - text: [36, 22.0, "W2", 1.6]
+        - text: [36, 25.0, "U2", 1.6]
+        - text: [36, 28.0, "V2", 1.6]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
+    props: { poles: 3, leads: 6, type: induction, location: field }
+
+  - id: drives.softstarter
+    name: Soft starter
+    category: drive.softstarter
+    ref_prefix: U
+    tags: [softstarter, ss]
+    schematic:
+      width: 55
+      height: 70
+      pins:
+        - { id: L1, x: 12, y: 0, side: top, electrical: power }
+        - { id: L2, x: 22, y: 0, side: top, electrical: power }
+        - { id: L3, x: 32, y: 0, side: top, electrical: power }
+        - { id: T1, x: 12, y: 70, side: bottom, electrical: power }
+        - { id: T2, x: 22, y: 70, side: bottom, electrical: power }
+        - { id: T3, x: 32, y: 70, side: bottom, electrical: power }
+        - { id: ST, x: 55, y: 20, side: right, electrical: input }
+        - { id: COM, x: 55, y: 30, side: right, electrical: input }
+        - { id: "13", x: 55, y: 42, side: right, electrical: output }
+        - { id: "14", x: 55, y: 50, side: right, electrical: output }
+        - { id: "95", x: 55, y: 58, side: right, electrical: output }
+        - { id: "96", x: 55, y: 66, side: right, electrical: output }
+      draw:
+        - rect: [6, 10, 36, 50]
+        - text: [24, 28, "SS", 3.2]
+        - text: [24, 38, "SOFT", 2.2]
+        - line: [12, 0, 12, 10]
+        - line: [22, 0, 22, 10]
+        - line: [32, 0, 32, 10]
+        - line: [12, 60, 12, 70]
+        - line: [22, 60, 22, 70]
+        - line: [32, 60, 32, 70]
+        - line: [42, 20, 55, 20]
+        - line: [42, 30, 55, 30]
+        - line: [42, 42, 55, 42]
+        - line: [42, 50, 55, 50]
+        - line: [42, 58, 55, 58]
+        - line: [42, 66, 55, 66]
+    panel: { w: 80, h: 160, d: 140, din: false, in_panel: true, mount: backplate, dims: generic }
+    props: { type: softstarter }
+
+  - id: loads.motor_1ph
+    name: 1-phase motor
+    category: load.motor
+    ref_prefix: M
+    tags: [motor, 1ph]
+    schematic:
+      width: 36
+      height: 36
+      pins:
+        - { id: U1, x: 8, y: 0, side: top, electrical: power }
+        - { id: U2, x: 28, y: 0, side: top, electrical: power }
+      draw:
+        - circle: [18, 20, 12]
+        - text: [18, 22, "M", 4]
+        - line: [8, 0, 8, 13.4]
+        - line: [28, 0, 28, 13.4]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
+    props: { poles: 1, type: induction, location: field }
+
+  - id: connection.node
+    name: Schematic node
+    category: connection.node
+    ref_prefix: N
+    tags: [node, junction]
+    schematic:
+      width: 10
+      height: 10
+      pins:
+        - { id: A, x: 0, y: 5, side: left }
+        - { id: B, x: 10, y: 5, side: right }
+      draw:
+        - circle: [5, 5, 2]
+        - line: [0, 5, 3, 5]
+        - line: [7, 5, 10, 5]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
+    props: { location: schematic-only }
+
+  - id: notes.block
+    name: Notes
+    category: connection.notes
+    ref_prefix: NTE
+    tags: [notes, text]
+    schematic:
+      width: 372
+      height: 196
+      pins: []
+      draw:
+        - rect: [0, 0, 372, 196]
+        - text: [8, 6, "NOTES", 2.4]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
+    props: { location: schematic-only }
+
+  - id: layout.photo
+    name: Layout photo
+    category: connection.notes
+    ref_prefix: PIC
+    tags: [photo, layout]
+    schematic:
+      width: 40
+      height: 30
+      pins: []
+      draw:
+        - rect: [0, 0, 40, 30]
+        - text: [20, 16, "PHOTO", 2.2]
+    panel: { w: 80, h: 80, d: 0, din: false, in_panel: false, mount: none, dims: generic }
+    props: { location: layout-only }
+
+  - id: connection.offpage
+    name: Off-page (to)
+    category: connection.offpage
+    ref_prefix: OP
+    tags: [offpage, reference, arrow]
+    schematic:
+      width: 32
+      height: 12
+      pins:
+        - { id: A, x: 0, y: 6, side: left }
+      draw:
+        - line: [0, 6, 14, 6]
+        - polyline: [[14, 2], [28, 6], [14, 10], [14, 2]]
+        - text: [16, 1, "TO", 1.8]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
+    props: { location: schematic-only, role: to }
+
+  - id: connection.offpage_ref
+    name: Off-page reference
+    category: connection.offpage
+    ref_prefix: OP
+    tags: [offpage, reference, arrow]
+    schematic:
+      width: 10
+      height: 5
+      pins:
+        - { id: A, x: 10, y: 2.5, side: right }
+      draw:
+        - line: [3.2, 2.5, 10, 2.5]
+        - polyline: [[3.2, 0.6], [0.4, 2.5], [3.2, 4.4]]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
+    props: { location: schematic-only, role: to }
+
+  - id: connection.offpage_from
+    name: Off-page (from)
+    category: connection.offpage
+    ref_prefix: OP
+    tags: [offpage, reference, arrow]
+    schematic:
+      width: 32
+      height: 12
+      pins:
+        - { id: A, x: 32, y: 6, side: right }
+      draw:
+        - line: [18, 6, 32, 6]
+        - polyline: [[18, 2], [4, 6], [18, 10], [18, 2]]
+        - text: [16, 1, "FROM", 1.8]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
+    props: { location: schematic-only, role: from }
+
+  - id: loads.solenoid
+    name: Solenoid / coil
+    category: load.solenoid
+    ref_prefix: Y
+    tags: [solenoid, coil, valve]
+    schematic:
+      width: 22
+      height: 14
+      pins:
+        - { id: A1, x: 0, y: 7, side: left, electrical: input }
+        - { id: A2, x: 22, y: 7, side: right, electrical: input }
+      draw:
+        - circle: [11, 7, 5]
+        - line: [0, 7, 6, 7]
+        - line: [16, 7, 22, 7]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: field, dims: generic }
+    props: { location: field }
+
+  - id: protection.disconnect_3p
+    name: 3P disconnect
+    category: protection.disconnect
+    ref_prefix: Q
+    tags: [disconnect, isolator]
+    schematic:
+      width: 36
+      height: 50
+      pins:
+        - { id: "1", x: 8, y: 0, side: top, electrical: power }
+        - { id: "3", x: 18, y: 0, side: top, electrical: power }
+        - { id: "5", x: 28, y: 0, side: top, electrical: power }
+        - { id: "2", x: 8, y: 50, side: bottom, electrical: power }
+        - { id: "4", x: 18, y: 50, side: bottom, electrical: power }
+        - { id: "6", x: 28, y: 50, side: bottom, electrical: power }
+      draw:
+        - rect: [4, 8, 28, 34]
+        - line: [8, 0, 8, 16]
+        - line: [18, 0, 18, 16]
+        - line: [28, 0, 28, 16]
+        - line: [5, 16, 11, 16]
+        - line: [15, 16, 21, 16]
+        - line: [25, 16, 31, 16]
+        - line: [8, 16, 12, 26]
+        - line: [18, 16, 22, 26]
+        - line: [28, 16, 31, 26]
+        - line: [8, 28, 8, 50]
+        - line: [18, 28, 18, 50]
+        - line: [28, 28, 28, 50]
+        - line: [12, 26, 31, 26]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
+    props: { poles: 3, location: field }
+
+  - id: protection.fuse_10a
+    name: Fuse 10A
+    category: protection.fuse
+    ref_prefix: F
+    tags: [fuse]
+    schematic:
+      width: 28
+      height: 14
+      pins:
+        - { id: "1", x: 0, y: 7, side: left, electrical: power }
+        - { id: "2", x: 28, y: 7, side: right, electrical: power }
+      draw:
+        - line: [0, 7, 6, 7]
+        - rect: [6, 2, 16, 10]
+        - line: [22, 7, 28, 7]
+        - text: [14, 9, "F", 2.2]
+    panel: { w: 18, h: 80, d: 60, din: true }
+    props: { In: 10A, size: 10x38 }
+
+  - id: connection.ground
+    name: Earth ground
+    category: connection.ground
+    ref_prefix: PE
+    tags: [ground, earth, pe]
+    schematic:
+      width: 16
+      height: 16
+      pins:
+        - { id: A, x: 8, y: 0, side: top, electrical: power }
+      draw:
+        - line: [8, 0, 8, 5]
+        - line: [1, 5, 15, 5]
+        - line: [3, 9, 13, 9]
+        - line: [6, 13, 10, 13]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
+    props: { location: schematic-only }
+
+  - id: power.receptacle
+    name: Duplex receptacle
+    category: power.receptacle
+    ref_prefix: X
+    tags: [receptacle, outlet, duplex]
+    schematic:
+      width: 28
+      height: 22
+      pins:
+        - { id: H, x: 0, y: 8, side: left, electrical: power }
+        - { id: N, x: 28, y: 8, side: right, electrical: power }
+        - { id: PE, x: 14, y: 22, side: bottom, electrical: power }
+      draw:
+        - rect: [4, 1, 20, 16]
+        - line: [10, 4, 10, 12]
+        - line: [16, 4, 16, 12]
+        - line: [0, 8, 4, 8]
+        - line: [24, 8, 28, 8]
+        - line: [14, 17, 14, 22]
+        - circle: [14, 15, 1.4]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: field, dims: generic }
+    props: { location: field }
+
+  - id: power.load_24v
+    name: 24V load
+    category: power.load
+    ref_prefix: U
+    tags: [load, 24v]
+    schematic:
+      width: 44
+      height: 26
+      pins:
+        - { id: P, x: 0, y: 8, side: left, electrical: power }
+        - { id: M, x: 44, y: 18, side: right, electrical: power }
+      draw:
+        - rect: [6, 1, 32, 24]
+        - line: [0, 8, 6, 8]
+        - line: [38, 18, 44, 18]
+        - text: [22, 10, "+24", 2.2]
+        - text: [22, 19, "0V", 2.0]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
+    props: { V: 24VDC, location: field }
+
+  - id: power.plc_24v
+    name: PLC 24V
+    category: power.device
+    ref_prefix: A
+    tags: [plc, 24v]
+    schematic:
+      width: 44
+      height: 26
+      pins:
+        - { id: P, x: 0, y: 8, side: left, electrical: power }
+        - { id: M, x: 44, y: 18, side: right, electrical: power }
+      draw:
+        - rect: [6, 1, 32, 24]
+        - rect: [9, 4, 26, 7]
+        - text: [22, 18, "PLC", 2.8]
+        - line: [0, 8, 6, 8]
+        - line: [38, 18, 44, 18]
+    panel: { w: 70, h: 80, d: 62, din: true, in_panel: true, mount: din_rail, dims: generic }
+    props: { V: 24VDC, location: panel }
+
+  - id: power.hmi_24v
+    name: HMI 24V
+    category: power.device
+    ref_prefix: P
+    tags: [hmi, 24v]
+    schematic:
+      width: 44
+      height: 26
+      pins:
+        - { id: P, x: 0, y: 8, side: left, electrical: power }
+        - { id: M, x: 44, y: 18, side: right, electrical: power }
+      draw:
+        - rect: [6, 1, 32, 24]
+        - rect: [10, 4, 24, 10]
+        - text: [22, 20, "HMI", 2.6]
+        - line: [0, 8, 6, 8]
+        - line: [38, 18, 44, 18]
+    panel: { w: 200, h: 146, d: 34, din: false, in_panel: true, mount: door, dims: generic }
+    props: { V: 24VDC, location: door }
+
+  - id: power.eth_24v
+    name: Ethernet switch 24V
+    category: power.device
+    ref_prefix: SW
+    tags: [ethernet, switch, 24v]
+    schematic:
+      width: 44
+      height: 26
+      pins:
+        - { id: P, x: 0, y: 8, side: left, electrical: power }
+        - { id: M, x: 44, y: 18, side: right, electrical: power }
+      draw:
+        - rect: [6, 1, 32, 24]
+        - rect: [10, 5, 4, 4]
+        - rect: [16, 5, 4, 4]
+        - rect: [22, 5, 4, 4]
+        - rect: [28, 5, 4, 4]
+        - text: [22, 18, "ETH", 2.4]
+        - line: [0, 8, 6, 8]
+        - line: [38, 18, 44, 18]
+    panel: { w: 100, h: 28, d: 70, din: true, in_panel: true, mount: din_rail, dims: generic }
+    props: { V: 24VDC, location: panel }
+
+  - id: protection.fuse
+    name: Fuse
+    category: protection.fuse
+    ref_prefix: F
+    tags: [fuse]
+    schematic:
+      width: 28
+      height: 14
+      pins:
+        - { id: "1", x: 0, y: 7, side: left, electrical: power }
+        - { id: "2", x: 28, y: 7, side: right, electrical: power }
+      draw:
+        - line: [0, 7, 6, 7]
+        - rect: [6, 2, 16, 10]
+        - line: [22, 7, 28, 7]
+        - text: [14, 9, "F", 2.2]
+    panel: { w: 18, h: 80, d: 60, din: true, in_panel: true, mount: din_rail, dims: generic }
+    props: { location: panel }
+
+  - id: protection.fuse_3p
+    name: Fuse 3P
+    category: protection.fuse
+    ref_prefix: F
+    tags: [fuse, 3p]
+    schematic:
+      width: 36
+      height: 50
+      pins:
+        - { id: "1", x: 8, y: 0, side: top, electrical: power }
+        - { id: "3", x: 18, y: 0, side: top, electrical: power }
+        - { id: "5", x: 28, y: 0, side: top, electrical: power }
+        - { id: "2", x: 8, y: 50, side: bottom, electrical: power }
+        - { id: "4", x: 18, y: 50, side: bottom, electrical: power }
+        - { id: "6", x: 28, y: 50, side: bottom, electrical: power }
+      draw:
+        - line: [8, 0, 8, 12]
+        - rect: [4, 12, 8, 16]
+        - line: [8, 28, 8, 50]
+        - line: [18, 0, 18, 12]
+        - rect: [14, 12, 8, 16]
+        - line: [18, 28, 18, 50]
+        - line: [28, 0, 28, 12]
+        - rect: [24, 12, 8, 16]
+        - line: [28, 28, 28, 50]
+    panel: { w: 0, h: 0, d: 0, din: true, in_panel: true, mount: din_rail, dims: generic }
+    props: { poles: 3, location: panel }
+
+  - id: terminals.bus_v
+    name: Vertical bus
+    category: connection.bus
+    ref_prefix: TB
+    tags: [bus, terminal, distribution]
+    schematic:
+      width: 12
+      height: 120
+      pins:
+        - { id: IN, x: 6, y: 0, side: top, electrical: power }
+        - { id: T1, x: 12, y: 24, side: right, electrical: power }
+        - { id: T2, x: 12, y: 52, side: right, electrical: power }
+        - { id: T3, x: 12, y: 80, side: right, electrical: power }
+        - { id: T4, x: 12, y: 108, side: right, electrical: power }
+      draw:
+        - rect: [2, 0, 8, 120]
+        - line: [8, 24, 12, 24]
+        - line: [8, 52, 12, 52]
+        - line: [8, 80, 12, 80]
+        - line: [8, 108, 12, 108]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
+    props: { location: schematic-only }
+
+  - id: accessories.end_plate
+    name: Terminal end plate
+    category: connection.accessory
+    ref_prefix: XP
+    tags: [accessory, end-plate]
+    schematic:
+      width: 8
+      height: 24
+      pins: []
+      draw:
+        - rect: [1, 2, 6, 20]
+    panel: { w: 2.5, h: 47, d: 48, din: true }
+    props: { accessory: end_plate }
+
+  - id: accessories.end_stop
+    name: Terminal end stop
+    category: connection.accessory
+    ref_prefix: XS
+    tags: [accessory, end-stop]
+    schematic:
+      width: 10
+      height: 24
+      pins: []
+      draw:
+        - rect: [1, 2, 8, 20]
+    panel: { w: 9.5, h: 47, d: 48, din: true }
+    props: { accessory: end_stop }
+
+  - id: accessories.partition
+    name: Terminal partition
+    category: connection.accessory
+    ref_prefix: XD
+    tags: [accessory, partition]
+    schematic:
+      width: 6
+      height: 24
+      pins: []
+      draw:
+        - rect: [1, 2, 4, 20]
+    panel: { w: 2, h: 47, d: 48, din: true }
+    props: { accessory: partition }
+
+  - id: wire.duct
+    name: Wire duct
+    category: connection.duct
+    ref_prefix: WD
+    tags: [duct, wireway]
+    schematic:
+      width: 20
+      height: 16
+      pins: []
+      draw:
+        - rect: [2, 2, 16, 12]
+        - text: [10, 10, "WD", 2.2]
+    panel: { w: 40, h: 60, d: 40, din: false, in_panel: true, mount: panel, dims: generic }
+    props: { location: panel }

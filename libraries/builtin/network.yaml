@@ -1,0 +1,45 @@
+library: iec
+version: "0.1"
+devices:
+  - id: network.switch_5p
+    name: Ethernet switch 5-port
+    category: connection.network
+    ref_prefix: SW
+    tags: [ethernet, switch, lan, hub, unmanaged]
+    schematic:
+      width: 72
+      height: 48
+      pins:
+        - { id: P1, x: 0, y: 14, side: left }
+        - { id: P2, x: 0, y: 24, side: left }
+        - { id: P3, x: 0, y: 34, side: left }
+        - { id: P4, x: 72, y: 18, side: right }
+        - { id: P5, x: 72, y: 30, side: right }
+      draw:
+        - rect: [10, 6, 52, 36]
+        - text: [36, 18, "SW", 3.2]
+        - text: [36, 30, "5P ETH", 2.2]
+    ports:
+      - { id: P1, kind: ethernet, medium: "10/100", protocol: Ethernet, connector: RJ45, side: left, label: "P1" }
+      - { id: P2, kind: ethernet, medium: "10/100", protocol: Ethernet, connector: RJ45, side: left, label: "P2" }
+      - { id: P3, kind: ethernet, medium: "10/100", protocol: Ethernet, connector: RJ45, side: left, label: "P3" }
+      - { id: P4, kind: ethernet, medium: "10/100", protocol: Ethernet, connector: RJ45, side: right, label: "P4" }
+      - { id: P5, kind: ethernet, medium: "10/100", protocol: Ethernet, connector: RJ45, side: right, label: "P5" }
+    panel: { w: 100, h: 28, d: 70, din: true, in_panel: true, mount: din_rail, dims: generic }
+    props: { ports: 5, medium: ethernet }
+
+  - id: network.station
+    name: Ethernet station
+    category: connection.network
+    ref_prefix: N
+    tags: [ethernet, node, remote]
+    schematic:
+      width: 56
+      height: 28
+      pins: []
+      draw:
+        - rect: [6, 4, 44, 20]
+        - circle: [16, 14, 3]
+        - text: [34, 16, "ETH", 2.6]
+    panel: { w: 40, h: 28, d: 70, din: true, in_panel: true, mount: din_rail, dims: generic }
+    props: { medium: ethernet }

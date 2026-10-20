@@ -1,0 +1,512 @@
+format: panelcad
+version: '0.1'
+name: DOL Motor Starter
+properties: {}
+title_block:
+  company: Acme Process Controls
+  address: 12 Industrial Way
+  logo: ''
+  customer: Riverside Pump Station
+  location: MCC-1 / Pump 1
+  drawing_number: E-001
+  drawn_by: PanelCAD
+  checked_by: ''
+  approved_by: ''
+  scale: NTS
+  standard: IEC
+  drawing_style: ''
+  coil_style: circle
+  rail_hot: L1
+  rail_return: L2
+  revisions:
+  - rev: C
+    date: '2026-08-19'
+    description: 'Grok 4.6: I/O page — drop A3/A4, add S3 K2 X20'
+    drawn: PanelCAD
+    checked: ''
+    approved: ''
+sheets:
+- id: power
+  title: Power
+  description: Motor power circuit
+  kind: schematic
+  page:
+    size: A3
+    orientation: landscape
+  components:
+  - id: Q1
+    library_id: iec.breakers.mcb_3p_32a
+    x: 40.0
+    y: 22.5
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: K1
+    library_id: iec.contactors.ac3_9a
+    x: 37.5
+    y: 82.5
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: F1
+    library_id: iec.protection.overload_9a
+    x: 40.0
+    y: 155.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: M1
+    library_id: iec.loads.motor_3ph
+    x: 42.5
+    y: 210.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  wires:
+  - id: w1
+    from: Q1.2
+    to: K1.L1
+    net: L1
+    points: []
+  - id: w2
+    from: Q1.4
+    to: K1.L2
+    net: L2
+    points: []
+  - id: w3
+    from: Q1.6
+    to: K1.L3
+    net: L3
+    points: []
+  - id: w4
+    from: K1.T1
+    to: F1.1
+    net: T1
+    points: []
+  - id: w5
+    from: K1.T2
+    to: F1.3
+    net: T2
+    points: []
+  - id: w6
+    from: K1.T3
+    to: F1.5
+    net: T3
+    points: []
+  - id: w7
+    from: F1.2
+    to: M1.U1
+    net: U1
+    points: []
+  - id: w8
+    from: F1.4
+    to: M1.V1
+    net: V1
+    points: []
+  - id: w9
+    from: F1.6
+    to: M1.W1
+    net: W1
+    points: []
+- id: control
+  title: Control
+  description: 24 VDC control, PLC and operator devices
+  kind: schematic
+  page:
+    size: A3
+    orientation: landscape
+  components:
+  - id: G1
+    library_id: iec.power.psu_24v_5a
+    x: 40.0
+    y: 25.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: S0
+    library_id: iec.operators.estop
+    x: 120.0
+    y: 30.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: S2
+    library_id: iec.operators.pb_nc
+    x: 160.0
+    y: 30.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: S1
+    library_id: iec.operators.pb_no
+    x: 200.0
+    y: 30.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: H1
+    library_id: iec.operators.pilot_light
+    x: 250.0
+    y: 30.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: A1
+    library_id: iec.plc.compact_16dio
+    x: 120.0
+    y: 100.0
+    rotation: 0
+    mirror: false
+    properties:
+      ip: 192.168.1.10
+      address: 192.168.1.10
+  - id: P1
+    library_id: iec.hmi.panel_7in
+    x: 250.0
+    y: 110.0
+    rotation: 0
+    mirror: false
+    properties:
+      ip: 192.168.1.11
+      address: 192.168.1.11
+  - id: H2
+    library_id: iec.operators.pilot_light
+    x: 220.0
+    y: 40.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  wires:
+  - id: w10
+    from: G1.plus
+    to: S0.11
+    net: 24V
+    points: []
+  - id: w11
+    from: S0.12
+    to: S2.11
+    net: ES
+    points: []
+  - id: w12
+    from: S2.12
+    to: A1.I0_0
+    net: STOP
+    points: []
+  - id: w13
+    from: S1.14
+    to: A1.I0_1
+    net: START
+    points: []
+  - id: w14
+    from: G1.minus
+    to: A1.M
+    net: 0V
+    points: []
+  - id: w15
+    from: A1.Q0_1
+    to: H1.X1
+    net: RUN_LT
+    points: []
+  - id: w16
+    from: H1.X2
+    to: G1.minus
+    net: 0V
+    points: []
+- id: io
+  title: PLC I/O and VFD
+  description: CLICK stackable I/O and DURApulse GS20
+  kind: io
+  page:
+    size: A3
+    orientation: landscape
+  components:
+  - id: A2
+    library_id: adc.click.c2_03cpu
+    x: 150.0
+    y: 36.0
+    rotation: 0
+    mirror: false
+    properties:
+      ip: 192.168.1.12
+      address: 192.168.1.12
+      node: '1'
+      station: '1'
+  - id: U1
+    library_id: adc.durapulse.gs21_20p5
+    x: 280.0
+    y: 76.0
+    rotation: 0
+    mirror: false
+    properties:
+      node: '2'
+      station: '2'
+  - id: K2
+    library_id: iec.relays.k_4co_24vdc
+    x: 236.0
+    y: 36.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: S4
+    library_id: iec.operators.estop
+    x: 36.0
+    y: 56.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: H3
+    library_id: iec.operators.pilot_light
+    x: 36.0
+    y: 28.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  wires:
+  - id: w21
+    from: U1.DCM
+    to: A2.M
+    net: 0V
+    points: []
+  - id: w3
+    from: A2.Y1
+    to: K2.A1
+    net: RUN_COIL
+    points: []
+  - id: w4
+    from: K2.A2
+    to: A2.M
+    net: 0V
+    points: []
+  - id: w5
+    from: K2.14
+    to: U1.DI1
+    net: RUN
+    points: []
+  - id: w1
+    from: A2.Lplus
+    to: S4.11
+    net: 24V
+    points: []
+  - id: w2
+    from: S4.12
+    to: A2.X1
+    net: ESTOP
+    points: []
+  - id: w6
+    from: A2.Y2
+    to: H3.X1
+    net: RUN_LT
+    points: []
+  - id: w7
+    from: H3.X2
+    to: A2.M
+    net: 0V
+    points: []
+- id: enclosure
+  title: Enclosure
+  description: DIN-rail backplate, millimetres
+  kind: panel_layout
+  page:
+    size: A3
+    orientation: portrait
+  components:
+  - id: Q1
+    library_id: iec.breakers.mcb_3p_32a
+    x: 63.7
+    y: 133.7
+    rotation: 0
+    mirror: false
+    scale: 0.4
+    properties: {}
+  - id: K1
+    library_id: iec.contactors.ac3_9a
+    x: 85.7
+    y: 133.9
+    rotation: 0
+    mirror: false
+    scale: 0.4
+    properties: {}
+  - id: F1
+    library_id: iec.protection.overload_9a
+    x: 104.10000000000001
+    y: 133.7
+    rotation: 0
+    mirror: false
+    scale: 0.4
+    properties: {}
+  - id: G1
+    library_id: iec.power.psu_24v_5a
+    x: 122.5
+    y: 133.7
+    rotation: 0
+    mirror: false
+    scale: 0.4
+    properties: {}
+  - id: A1
+    library_id: iec.plc.compact_16dio
+    x: 138.9
+    y: 133.7
+    rotation: 0
+    mirror: false
+    scale: 0.4
+    properties:
+      ip: 192.168.1.10
+      address: 192.168.1.10
+  - id: A2
+    library_id: adc.click.c2_03cpu
+    x: 167.3
+    y: 133.7
+    rotation: 0
+    mirror: false
+    scale: 0.4
+    properties:
+      ip: 192.168.1.12
+      address: 192.168.1.12
+      node: '1'
+      station: '1'
+  - id: K2
+    library_id: iec.relays.k_4co_24vdc
+    x: 201.70000000000002
+    y: 133.7
+    rotation: 0
+    mirror: false
+    scale: 0.4
+    properties: {}
+  - id: U1
+    library_id: adc.durapulse.gs21_20p5
+    x: 63.7
+    y: 177.5
+    rotation: 0
+    mirror: false
+    scale: 0.4
+    properties:
+      node: '2'
+      station: '2'
+  rails:
+  - id: r1
+    x: 48.5
+    y: 139.7
+    length_mm: 200.0
+    height_mm: 14.0
+    type: ts35
+  trays:
+  - id: wt-top
+    x: 31.7
+    y: 98.7
+    length_mm: 233.60000000000002
+    width_mm: 16.0
+    orientation: h
+  - id: wt-bot
+    x: 31.7
+    y: 272.3
+    length_mm: 233.60000000000002
+    width_mm: 16.0
+    orientation: h
+  - id: wt-left
+    x: 31.7
+    y: 114.7
+    length_mm: 157.60000000000002
+    width_mm: 16.0
+    orientation: v
+  - id: wt-right
+    x: 249.3
+    y: 114.7
+    length_mm: 157.60000000000002
+    width_mm: 16.0
+    orientation: v
+  enclosure:
+    x: 28.5
+    y: 91.5
+    width_mm: 600.0
+    height_mm: 500.0
+    depth_mm: 200.0
+    name: Enclosure 600 × 500 × 200 mm, 8 BOM items in cabinet
+    draw_scale: 0.4
+- id: ethernet
+  title: Ethernet
+  description: ''
+  kind: network
+  page:
+    size: A3
+    orientation: landscape
+  components:
+  - id: A1
+    library_id: iec.plc.compact_16dio
+    x: 36.0
+    y: 36.0
+    rotation: 0
+    mirror: false
+    properties:
+      ip: 192.168.1.10
+      address: 192.168.1.10
+  - id: P1
+    library_id: iec.hmi.panel_7in
+    x: 126.0
+    y: 36.0
+    rotation: 0
+    mirror: false
+    properties:
+      ip: 192.168.1.11
+      address: 192.168.1.11
+  - id: A2
+    library_id: adc.click.c2_03cpu
+    x: 216.0
+    y: 36.0
+    rotation: 0
+    mirror: false
+    properties:
+      ip: 192.168.1.12
+      address: 192.168.1.12
+  wires:
+  - id: w22
+    from: A2.ETH
+    to: P1.ETH
+    net: LAN
+    points: []
+  - id: w23
+    from: A1.ETH
+    to: P1.ETH
+    net: HMI
+    points: []
+  network:
+    name: Plant LAN
+    medium: ethernet
+    protocol: Modbus TCP
+- id: serial
+  title: RS-485
+  description: ''
+  kind: network
+  page:
+    size: A3
+    orientation: landscape
+  components:
+  - id: A2
+    library_id: adc.click.c2_03cpu
+    x: 36.0
+    y: 36.0
+    rotation: 0
+    mirror: false
+    properties:
+      ip: 192.168.1.12
+      address: 192.168.1.12
+      node: '1'
+      station: '1'
+  - id: U1
+    library_id: adc.durapulse.gs21_20p5
+    x: 126.0
+    y: 36.0
+    rotation: 0
+    mirror: false
+    properties:
+      node: '2'
+      station: '2'
+  wires:
+  - id: w24
+    from: A2.COM2
+    to: U1.COM1
+    net: MB-1
+    points: []
+  network:
+    name: Modbus RTU
+    medium: serial
+    protocol: Modbus RTU

@@ -1,0 +1,176 @@
+format: panelcad
+version: '0.1'
+name: Vendor strip sample
+properties: {}
+title_block:
+  company: ''
+  address: ''
+  logo: ''
+  customer: ''
+  location: ''
+  drawing_number: ''
+  drawn_by: ''
+  checked_by: ''
+  approved_by: ''
+  scale: NTS
+  standard: NEMA/ANSI
+  drawing_style: ''
+  coil_style: circle
+  rail_hot: L1
+  rail_return: L2
+  revisions: []
+sheets:
+- id: main
+  title: Vendor strip sample
+  description: ''
+  kind: schematic
+  page:
+    size: A3
+    orientation: landscape
+  components:
+  - id: X1-3
+    library_id: iec.terminals.x_2p5
+    x: 40.0
+    y: 20.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: X1-1
+    library_id: iec.terminals.x_2p5
+    x: 40.0
+    y: 80.0
+    rotation: 0
+    mirror: false
+    properties:
+      jumper: J1
+  - id: X1-2
+    library_id: iec.terminals.x_2p5
+    x: 40.0
+    y: 50.0
+    rotation: 0
+    mirror: false
+    properties:
+      jumper: J1
+  wires:
+  - id: w1
+    from: X1-1.A
+    to: X1-2.A
+    net: INT
+    label: INT
+    number: '10'
+    points: []
+  - id: w2
+    from: X1-1.B
+    to: X1-3.B
+    net: FIELD
+    label: FIELD
+    number: '11'
+    points: []
+- id: strip-x1
+  title: Terminal strip X1
+  description: ''
+  kind: terminal
+  page:
+    size: A3
+    orientation: landscape
+  components: []
+  strip: X1
+- id: panel
+  title: Panel
+  description: ''
+  kind: panel_layout
+  page:
+    size: A3
+    orientation: portrait
+  components:
+  - id: XS1
+    library_id: iec.accessories.end_stop
+    x: 38.0
+    y: 56.25
+    rotation: 0
+    mirror: false
+    properties:
+      strip: X1
+      accessory: end_stop
+      end: left
+  - id: XP1
+    library_id: iec.accessories.end_plate
+    x: 47.5
+    y: 56.25
+    rotation: 0
+    mirror: false
+    properties:
+      strip: X1
+      accessory: end_plate
+      end: left
+  - id: X1-3
+    library_id: iec.terminals.x_2p5
+    x: 50.0
+    y: 56.25
+    rotation: 0
+    mirror: false
+    properties:
+      strip: X1
+  - id: XD1
+    library_id: iec.accessories.partition
+    x: 55.2
+    y: 56.25
+    rotation: 0
+    mirror: false
+    properties:
+      strip: X1
+      accessory: partition
+      after: X1-3
+  - id: X1-2
+    library_id: iec.terminals.x_2p5
+    x: 57.2
+    y: 56.25
+    rotation: 0
+    mirror: false
+    properties:
+      jumper: J1
+      strip: X1
+  - id: X1-1
+    library_id: iec.terminals.x_2p5
+    x: 62.400000000000006
+    y: 56.25
+    rotation: 0
+    mirror: false
+    properties:
+      jumper: J1
+      strip: X1
+  - id: XP2
+    library_id: iec.accessories.end_plate
+    x: 67.60000000000001
+    y: 56.25
+    rotation: 0
+    mirror: false
+    properties:
+      strip: X1
+      accessory: end_plate
+      end: right
+  - id: XS2
+    library_id: iec.accessories.end_stop
+    x: 70.10000000000001
+    y: 56.25
+    rotation: 0
+    mirror: false
+    properties:
+      strip: X1
+      accessory: end_stop
+      end: right
+  rails:
+  - id: r1
+    x: 38.0
+    y: 68.0
+    length_mm: 221.0
+    height_mm: 35.0
+    type: ts35
+  enclosure:
+    x: 18.0
+    y: 18.0
+    width_mm: 261.0
+    height_mm: 348.0
+    depth_mm: 200.0
+    name: Enclosure
+    draw_scale: 1.0

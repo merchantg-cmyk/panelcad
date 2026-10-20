@@ -1,0 +1,45 @@
+# Generic control loads for the power budget. No published wattage on the symbol.
+# Consumption is an estimate until a catalog part or the user supplies a number.
+library: iec
+version: "0.1"
+devices:
+  - id: loads.fan_24v
+    name: Panel fan 24VDC
+    category: load.fan
+    ref_prefix: FAN
+    tags: [fan, load]
+    schematic:
+      width: 36
+      height: 36
+      pins:
+        - { id: Lplus, x: 0, y: 12, side: left, electrical: power }
+        - { id: M, x: 0, y: 24, side: left, electrical: power }
+      draw:
+        - circle: [22, 18, 12]
+        - line: [14, 18, 30, 18]
+        - line: [22, 10, 22, 26]
+        - line: [0, 12, 10, 12]
+        - line: [0, 24, 10, 24]
+        - text: [22, 34, "FAN", 2.4]
+    panel: { w: 80, h: 80, d: 25, din: false, in_panel: true, mount: door, dims: generic }
+    props: { supply: 24VDC }
+
+  - id: sensors.prox_24v
+    name: Proximity sensor 24VDC
+    category: sensor.proximity
+    ref_prefix: PX
+    tags: [sensor, prox]
+    schematic:
+      width: 32
+      height: 28
+      pins:
+        - { id: Lplus, x: 0, y: 8, side: left, electrical: power }
+        - { id: M, x: 0, y: 18, side: left, electrical: power }
+      draw:
+        - rect: [8, 4, 20, 18]
+        - circle: [18, 13, 4]
+        - line: [0, 8, 8, 8]
+        - line: [0, 18, 8, 18]
+        - text: [18, 26, "PX", 2.4]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: field, dims: generic }
+    props: { supply: 24VDC }

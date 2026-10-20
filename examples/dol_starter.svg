@@ -1,0 +1,369 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="420.0mm" height="297.0mm" viewBox="0 0 420.0 297.0">
+<rect width="100%" height="100%" fill="#f7f4ea"/>
+<rect x="8.000" y="8.000" width="404.000" height="281.000" stroke="#1a1a1a" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="15.000" y="15.000" width="390.000" height="234.000" stroke="#888888" stroke-width="0.2" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="41.000" y1="8.000" x2="41.000" y2="15.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="41.000" y1="249.000" x2="41.000" y2="256.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="67.000" y1="8.000" x2="67.000" y2="15.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="67.000" y1="249.000" x2="67.000" y2="256.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="93.000" y1="8.000" x2="93.000" y2="15.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="93.000" y1="249.000" x2="93.000" y2="256.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="119.000" y1="8.000" x2="119.000" y2="15.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="119.000" y1="249.000" x2="119.000" y2="256.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="145.000" y1="8.000" x2="145.000" y2="15.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="145.000" y1="249.000" x2="145.000" y2="256.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="171.000" y1="8.000" x2="171.000" y2="15.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="171.000" y1="249.000" x2="171.000" y2="256.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="197.000" y1="8.000" x2="197.000" y2="15.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="197.000" y1="249.000" x2="197.000" y2="256.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="223.000" y1="8.000" x2="223.000" y2="15.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="223.000" y1="249.000" x2="223.000" y2="256.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="249.000" y1="8.000" x2="249.000" y2="15.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="249.000" y1="249.000" x2="249.000" y2="256.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="275.000" y1="8.000" x2="275.000" y2="15.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="275.000" y1="249.000" x2="275.000" y2="256.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="301.000" y1="8.000" x2="301.000" y2="15.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="301.000" y1="249.000" x2="301.000" y2="256.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="327.000" y1="8.000" x2="327.000" y2="15.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="327.000" y1="249.000" x2="327.000" y2="256.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="353.000" y1="8.000" x2="353.000" y2="15.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="353.000" y1="249.000" x2="353.000" y2="256.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="379.000" y1="8.000" x2="379.000" y2="15.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="379.000" y1="249.000" x2="379.000" y2="256.000" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="8.000" y1="48.429" x2="15.000" y2="48.429" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="405.000" y1="48.429" x2="412.000" y2="48.429" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="8.000" y1="81.857" x2="15.000" y2="81.857" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="405.000" y1="81.857" x2="412.000" y2="81.857" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="8.000" y1="115.286" x2="15.000" y2="115.286" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="405.000" y1="115.286" x2="412.000" y2="115.286" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="8.000" y1="148.714" x2="15.000" y2="148.714" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="405.000" y1="148.714" x2="412.000" y2="148.714" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="8.000" y1="182.143" x2="15.000" y2="182.143" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="405.000" y1="182.143" x2="412.000" y2="182.143" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="8.000" y1="215.571" x2="15.000" y2="215.571" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="405.000" y1="215.571" x2="412.000" y2="215.571" stroke="#b5b09f" stroke-width="0.18" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="28.000" y="12.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">1</text>
+<text x="28.000" y="253.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">1</text>
+<text x="54.000" y="12.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">2</text>
+<text x="54.000" y="253.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">2</text>
+<text x="80.000" y="12.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">3</text>
+<text x="80.000" y="253.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">3</text>
+<text x="106.000" y="12.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">4</text>
+<text x="106.000" y="253.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">4</text>
+<text x="132.000" y="12.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">5</text>
+<text x="132.000" y="253.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">5</text>
+<text x="158.000" y="12.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">6</text>
+<text x="158.000" y="253.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">6</text>
+<text x="184.000" y="12.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">7</text>
+<text x="184.000" y="253.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">7</text>
+<text x="210.000" y="12.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">8</text>
+<text x="210.000" y="253.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">8</text>
+<text x="236.000" y="12.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">9</text>
+<text x="236.000" y="253.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">9</text>
+<text x="262.000" y="12.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">10</text>
+<text x="262.000" y="253.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">10</text>
+<text x="288.000" y="12.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">11</text>
+<text x="288.000" y="253.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">11</text>
+<text x="314.000" y="12.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">12</text>
+<text x="314.000" y="253.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">12</text>
+<text x="340.000" y="12.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">13</text>
+<text x="340.000" y="253.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">13</text>
+<text x="366.000" y="12.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">14</text>
+<text x="366.000" y="253.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">14</text>
+<text x="392.000" y="12.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">15</text>
+<text x="392.000" y="253.800" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">15</text>
+<text x="11.500" y="32.714" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">A</text>
+<text x="408.500" y="32.714" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">A</text>
+<text x="11.500" y="66.143" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">B</text>
+<text x="408.500" y="66.143" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">B</text>
+<text x="11.500" y="99.571" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">C</text>
+<text x="408.500" y="99.571" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">C</text>
+<text x="11.500" y="133.000" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">D</text>
+<text x="408.500" y="133.000" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">D</text>
+<text x="11.500" y="166.429" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">E</text>
+<text x="408.500" y="166.429" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">E</text>
+<text x="11.500" y="199.857" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">F</text>
+<text x="408.500" y="199.857" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">F</text>
+<text x="11.500" y="233.286" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">G</text>
+<text x="408.500" y="233.286" font-size="2.2" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">G</text>
+<rect x="8.000" y="249.000" width="404.000" height="40.000" stroke="#2a2a2a" stroke-width="0.4" fill="#f7f4ea" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="8.000" y="249.000" width="92.000" height="40.000" stroke="#2a2a2a" stroke-width="0.28" fill="#f7f4ea" stroke-linejoin="round" stroke-linecap="round" />
+<text x="10.500" y="253.500" font-size="1.7" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">COMPANY</text>
+<text x="10.500" y="261.500" font-size="3.6" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">Acme Process Controls</text>
+<text x="10.500" y="268.500" font-size="2.3" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">12 Industrial Way</text>
+<text x="10.500" y="285.000" font-size="1.8" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">PanelCAD 0.1.0</text>
+<rect x="100.000" y="249.000" width="144.000" height="40.000" stroke="#2a2a2a" stroke-width="0.28" fill="#f7f4ea" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="100.000" y="249.000" width="144.000" height="8.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<text x="101.600" y="251.800" font-size="1.55" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">PROJECT</text>
+<text x="101.600" y="255.400" font-size="2.6" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">DOL Motor Starter</text>
+<rect x="100.000" y="257.000" width="144.000" height="8.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<text x="101.600" y="259.800" font-size="1.55" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">TITLE</text>
+<text x="101.600" y="263.400" font-size="2.6" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">Power and Control</text>
+<rect x="100.000" y="265.000" width="144.000" height="8.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<text x="101.600" y="267.800" font-size="1.55" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">DESCRIPTION</text>
+<text x="101.600" y="271.400" font-size="2.6" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">Direct-on-line motor starter, 24 VDC control</text>
+<rect x="100.000" y="273.000" width="72.000" height="8.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<text x="101.600" y="275.800" font-size="1.55" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">DWG No.</text>
+<text x="101.600" y="279.400" font-size="2.6" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">E-001</text>
+<rect x="172.000" y="273.000" width="72.000" height="8.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<text x="173.600" y="275.800" font-size="1.55" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">STANDARD</text>
+<text x="173.600" y="279.400" font-size="2.6" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">IEC</text>
+<rect x="100.000" y="281.000" width="72.000" height="8.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<text x="101.600" y="283.800" font-size="1.55" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">CUSTOMER</text>
+<text x="101.600" y="287.400" font-size="2.6" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">Riverside Pump Station</text>
+<rect x="172.000" y="281.000" width="72.000" height="8.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<text x="173.600" y="283.800" font-size="1.55" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">LOCATION</text>
+<text x="173.600" y="287.400" font-size="2.6" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">MCC-1 / Pump 1</text>
+<rect x="244.000" y="249.000" width="168.000" height="40.000" stroke="#2a2a2a" stroke-width="0.28" fill="#f7f4ea" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="244.000" y="249.000" width="16.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#ece8dc" stroke-linejoin="round" stroke-linecap="round" />
+<text x="252.000" y="253.100" font-size="1.7" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">REV</text>
+<rect x="260.000" y="249.000" width="28.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#ece8dc" stroke-linejoin="round" stroke-linecap="round" />
+<text x="274.000" y="253.100" font-size="1.7" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">DATE</text>
+<rect x="288.000" y="249.000" width="54.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#ece8dc" stroke-linejoin="round" stroke-linecap="round" />
+<text x="315.000" y="253.100" font-size="1.7" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">DESCRIPTION</text>
+<rect x="342.000" y="249.000" width="26.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#ece8dc" stroke-linejoin="round" stroke-linecap="round" />
+<text x="355.000" y="253.100" font-size="1.7" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">DRAWN</text>
+<rect x="368.000" y="249.000" width="22.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#ece8dc" stroke-linejoin="round" stroke-linecap="round" />
+<text x="379.000" y="253.100" font-size="1.7" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">CHK</text>
+<rect x="390.000" y="249.000" width="22.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#ece8dc" stroke-linejoin="round" stroke-linecap="round" />
+<text x="401.000" y="253.100" font-size="1.7" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">APP</text>
+<rect x="244.000" y="255.000" width="16.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<text x="252.000" y="259.100" font-size="2.1" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">A</text>
+<rect x="260.000" y="255.000" width="28.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<text x="274.000" y="259.100" font-size="2.1" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">2026-08-19</text>
+<rect x="288.000" y="255.000" width="54.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<text x="315.000" y="259.100" font-size="2.1" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">Initial issue</text>
+<rect x="342.000" y="255.000" width="26.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<text x="355.000" y="259.100" font-size="2.1" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">PanelCAD</text>
+<rect x="368.000" y="255.000" width="22.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="390.000" y="255.000" width="22.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="244.000" y="261.000" width="16.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="260.000" y="261.000" width="28.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="288.000" y="261.000" width="54.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="342.000" y="261.000" width="26.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="368.000" y="261.000" width="22.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="390.000" y="261.000" width="22.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="244.000" y="267.000" width="16.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="260.000" y="267.000" width="28.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="288.000" y="267.000" width="54.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="342.000" y="267.000" width="26.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="368.000" y="267.000" width="22.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="390.000" y="267.000" width="22.000" height="6.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<rect x="244.000" y="273.000" width="56.000" height="8.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<text x="245.600" y="275.800" font-size="1.55" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">SHEET</text>
+<text x="245.600" y="279.400" font-size="2.6" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">1 / 1</text>
+<rect x="300.000" y="273.000" width="56.000" height="8.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<text x="301.600" y="275.800" font-size="1.55" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">SIZE</text>
+<text x="301.600" y="279.400" font-size="2.6" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">A3 LAND</text>
+<rect x="356.000" y="273.000" width="56.000" height="8.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<text x="357.600" y="275.800" font-size="1.55" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">SCALE</text>
+<text x="357.600" y="279.400" font-size="2.6" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">NTS</text>
+<rect x="244.000" y="281.000" width="56.000" height="8.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<text x="245.600" y="283.800" font-size="1.55" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">DRAWN</text>
+<text x="245.600" y="287.400" font-size="2.6" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">PanelCAD</text>
+<rect x="300.000" y="281.000" width="56.000" height="8.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<text x="301.600" y="283.800" font-size="1.55" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">CHECKED</text>
+<rect x="356.000" y="281.000" width="56.000" height="8.000" stroke="#2a2a2a" stroke-width="0.28" fill="#fbfaf3" stroke-linejoin="round" stroke-linecap="round" />
+<text x="357.600" y="283.800" font-size="1.55" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">APPROVED</text>
+<polyline points="42.000,30.000 74.000,30.000 74.000,70.000 42.000,70.000 42.000,30.000" stroke="#111111" stroke-width="0.35" fill="#ffffff" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="48.000" y1="22.000" x2="48.000" y2="36.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="58.000" y1="22.000" x2="58.000" y2="36.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="68.000" y1="22.000" x2="68.000" y2="36.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="48.000" cy="44.000" r="3.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="58.000" cy="44.000" r="3.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="68.000" cy="44.000" r="3.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="48.000" y1="47.000" x2="48.000" y2="77.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="58.000" y1="47.000" x2="58.000" y2="77.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="68.000" y1="47.000" x2="68.000" y2="77.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="48.000" y1="52.000" x2="68.000" y2="52.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="58.000" y="64.000" font-size="3.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">Q</text>
+<text x="40.000" y="19.500" font-size="3.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">Q1</text>
+<circle cx="48.000" cy="22.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="58.000" cy="22.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="68.000" cy="22.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="48.000" cy="77.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="58.000" cy="77.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="68.000" cy="77.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<polyline points="42.000,92.000 74.000,92.000 74.000,142.000 42.000,142.000 42.000,92.000" stroke="#111111" stroke-width="0.35" fill="#ffffff" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="48.000" y1="82.000" x2="48.000" y2="100.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="58.000" y1="82.000" x2="58.000" y2="100.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="68.000" y1="82.000" x2="68.000" y2="100.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="48.000" y1="104.000" x2="48.000" y2="152.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="58.000" y1="104.000" x2="58.000" y2="152.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="68.000" y1="104.000" x2="68.000" y2="152.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="45.000" y1="100.000" x2="51.000" y2="104.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="55.000" y1="100.000" x2="61.000" y2="104.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="65.000" y1="100.000" x2="71.000" y2="104.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="46.000" cy="117.000" r="3.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="60.000" y="118.000" font-size="3.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">K</text>
+<line x1="38.000" y1="110.000" x2="46.000" y2="110.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="38.000" y1="124.000" x2="46.000" y2="124.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="70.000" y1="102.000" x2="78.000" y2="102.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="70.000" y1="110.000" x2="78.000" y2="110.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="38.000" y="79.500" font-size="3.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">K1</text>
+<circle cx="48.000" cy="82.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="58.000" cy="82.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="68.000" cy="82.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="48.000" cy="152.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="58.000" cy="152.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="68.000" cy="152.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="38.000" cy="110.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="38.000" cy="124.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="78.000" cy="102.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="78.000" cy="110.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<polyline points="42.000,163.000 74.000,163.000 74.000,199.000 42.000,199.000 42.000,163.000" stroke="#111111" stroke-width="0.35" fill="#ffffff" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="48.000" y1="155.000" x2="48.000" y2="167.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="58.000" y1="155.000" x2="58.000" y2="167.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="68.000" y1="155.000" x2="68.000" y2="167.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="48.000" y1="195.000" x2="48.000" y2="205.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="58.000" y1="195.000" x2="58.000" y2="205.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="68.000" y1="195.000" x2="68.000" y2="205.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="58.000" y="181.000" font-size="3.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">F</text>
+<line x1="74.000" y1="173.000" x2="76.000" y2="173.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="74.000" y1="181.000" x2="76.000" y2="181.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="74.000" y1="189.000" x2="76.000" y2="189.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="74.000" y1="197.000" x2="76.000" y2="197.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="40.000" y="152.500" font-size="3.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">F1</text>
+<circle cx="48.000" cy="155.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="58.000" cy="155.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="68.000" cy="155.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="48.000" cy="205.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="58.000" cy="205.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="68.000" cy="205.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="76.000" cy="173.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="76.000" cy="181.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="76.000" cy="189.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="76.000" cy="197.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="62.000" cy="232.000" r="12.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="62.000" y="234.000" font-size="4.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">M</text>
+<line x1="50.000" y1="210.000" x2="50.000" y2="220.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="62.000" y1="210.000" x2="62.000" y2="220.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="74.000" y1="210.000" x2="74.000" y2="220.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="50.000" y1="220.000" x2="56.000" y2="224.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="62.000" y1="220.000" x2="62.000" y2="220.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="74.000" y1="220.000" x2="68.000" y2="224.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="42.000" y="207.500" font-size="3.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">M1</text>
+<circle cx="50.000" cy="210.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="62.000" cy="210.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="74.000" cy="210.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<polyline points="168.000,26.000 202.000,26.000 202.000,60.000 168.000,60.000 168.000,26.000" stroke="#111111" stroke-width="0.35" fill="#ffffff" stroke-linejoin="round" stroke-linecap="round" />
+<text x="185.000" y="38.000" font-size="3.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">G</text>
+<text x="185.000" y="46.000" font-size="2.5" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">24V</text>
+<line x1="160.000" y1="32.000" x2="168.000" y2="32.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="160.000" y1="42.000" x2="168.000" y2="42.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="160.000" y1="52.000" x2="168.000" y2="52.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="202.000" y1="36.000" x2="210.000" y2="36.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="202.000" y1="48.000" x2="210.000" y2="48.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="160.000" y="17.500" font-size="3.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">G1</text>
+<circle cx="160.000" cy="32.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="160.000" cy="42.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="160.000" cy="52.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="210.000" cy="36.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="210.000" cy="48.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="230.000" y1="42.000" x2="258.000" y2="42.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="230.000" y1="50.000" x2="258.000" y2="50.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="244.000" cy="38.000" r="6.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="244.000" cy="38.000" r="3.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="244.000" y="60.000" font-size="2.5" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">ES</text>
+<text x="230.000" y="27.500" font-size="3.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">S0</text>
+<circle cx="230.000" cy="42.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="258.000" cy="42.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="230.000" cy="50.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="258.000" cy="50.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="270.000" y1="40.000" x2="294.000" y2="40.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="282.000" y1="36.000" x2="282.000" y2="40.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="282.000" cy="48.000" r="5.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="282.000" y="56.000" font-size="2.5" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">S</text>
+<text x="270.000" y="27.500" font-size="3.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">S2</text>
+<circle cx="270.000" cy="40.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="294.000" cy="40.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="310.000" y1="40.000" x2="318.000" y2="40.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="326.000" y1="40.000" x2="334.000" y2="40.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="318.000" y1="40.000" x2="326.000" y2="36.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="322.000" cy="48.000" r="5.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="322.000" y="56.000" font-size="2.5" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">S</text>
+<text x="310.000" y="27.500" font-size="3.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">S1</text>
+<circle cx="310.000" cy="40.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="334.000" cy="40.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="362.000" cy="42.000" r="7.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="357.000" y1="37.000" x2="367.000" y2="47.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="367.000" y1="37.000" x2="357.000" y2="47.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="350.000" y1="42.000" x2="355.000" y2="42.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="369.000" y1="42.000" x2="374.000" y2="42.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="362.000" y="56.000" font-size="2.5" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">H</text>
+<text x="350.000" y="27.500" font-size="3.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">H1</text>
+<circle cx="350.000" cy="42.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="374.000" cy="42.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<polyline points="228.000,106.000 302.000,106.000 302.000,174.000 228.000,174.000 228.000,106.000" stroke="#111111" stroke-width="0.35" fill="#ffffff" stroke-linejoin="round" stroke-linecap="round" />
+<polyline points="234.000,112.000 296.000,112.000 296.000,126.000 234.000,126.000 234.000,112.000" stroke="#111111" stroke-width="0.35" fill="#ffffff" stroke-linejoin="round" stroke-linecap="round" />
+<text x="265.000" y="122.000" font-size="3.5" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">PLC</text>
+<text x="265.000" y="170.000" font-size="3.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">-A</text>
+<line x1="220.000" y1="112.000" x2="228.000" y2="112.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="220.000" y1="120.000" x2="228.000" y2="120.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="220.000" y1="132.000" x2="228.000" y2="132.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="220.000" y1="140.000" x2="228.000" y2="140.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="220.000" y1="148.000" x2="228.000" y2="148.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="220.000" y1="156.000" x2="228.000" y2="156.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="302.000" y1="132.000" x2="310.000" y2="132.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="302.000" y1="140.000" x2="310.000" y2="140.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="302.000" y1="148.000" x2="310.000" y2="148.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="302.000" y1="156.000" x2="310.000" y2="156.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="220.000" y="97.500" font-size="3.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">A1</text>
+<circle cx="220.000" cy="112.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="220.000" cy="120.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="220.000" cy="132.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="220.000" cy="140.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="220.000" cy="148.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="220.000" cy="156.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="310.000" cy="132.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="310.000" cy="140.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="310.000" cy="148.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="310.000" cy="156.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<polyline points="336.000,126.000 394.000,126.000 394.000,164.000 336.000,164.000 336.000,126.000" stroke="#111111" stroke-width="0.35" fill="#ffffff" stroke-linejoin="round" stroke-linecap="round" />
+<polyline points="342.000,132.000 388.000,132.000 388.000,154.000 342.000,154.000 342.000,132.000" stroke="#111111" stroke-width="0.35" fill="#ffffff" stroke-linejoin="round" stroke-linecap="round" />
+<text x="365.000" y="144.000" font-size="3.5" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">HMI</text>
+<line x1="330.000" y1="134.000" x2="336.000" y2="134.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="330.000" y1="144.000" x2="336.000" y2="144.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<line x1="394.000" y1="140.000" x2="400.000" y2="140.000" stroke="#111111" stroke-width="0.35" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="330.000" y="117.500" font-size="3.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">P1</text>
+<circle cx="330.000" cy="134.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="330.000" cy="144.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="400.000" cy="140.000" r="0.700" stroke="#111111" stroke-width="0.35" fill="#111111" stroke-linejoin="round" stroke-linecap="round" />
+<polyline points="48.000,77.000 48.000,85.000 48.000,79.500 48.000,74.000 48.000,82.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="51.000" y="78.000" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">L1</text>
+<polyline points="58.000,77.000 58.000,85.000 58.000,79.500 58.000,74.000 58.000,82.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="61.000" y="78.000" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">L2</text>
+<polyline points="68.000,77.000 68.000,85.000 68.000,79.500 68.000,74.000 68.000,82.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="71.000" y="78.000" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">L3</text>
+<polyline points="48.000,152.000 48.000,160.000 48.000,153.500 48.000,147.000 48.000,155.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="51.000" y="152.000" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">T1</text>
+<polyline points="58.000,152.000 58.000,160.000 58.000,153.500 58.000,147.000 58.000,155.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="61.000" y="152.000" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">T2</text>
+<polyline points="68.000,152.000 68.000,160.000 68.000,153.500 68.000,147.000 68.000,155.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="71.000" y="152.000" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">T3</text>
+<polyline points="48.000,205.000 48.000,213.000 48.000,207.500 50.000,207.500 50.000,202.000 50.000,210.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="53.000" y="206.000" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">U1</text>
+<polyline points="58.000,205.000 58.000,213.000 58.000,207.500 62.000,207.500 62.000,202.000 62.000,210.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="65.000" y="206.000" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">V1</text>
+<polyline points="68.000,205.000 68.000,213.000 68.000,207.500 74.000,207.500 74.000,202.000 74.000,210.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="77.000" y="206.000" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">W1</text>
+<polyline points="210.000,36.000 218.000,36.000 220.000,36.000 220.000,42.000 222.000,42.000 230.000,42.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="223.000" y="40.500" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">24V</text>
+<polyline points="258.000,42.000 266.000,42.000 264.000,42.000 264.000,40.000 262.000,40.000 270.000,40.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="267.000" y="38.500" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">ES</text>
+<polyline points="294.000,40.000 302.000,40.000 257.000,40.000 257.000,132.000 212.000,132.000 220.000,132.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="260.000" y="130.500" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">STOP</text>
+<polyline points="334.000,40.000 342.000,40.000 277.000,40.000 277.000,140.000 212.000,140.000 220.000,140.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="280.000" y="138.500" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">START</text>
+<polyline points="210.000,48.000 218.000,48.000 215.000,48.000 215.000,120.000 212.000,120.000 220.000,120.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="218.000" y="118.500" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">0V</text>
+<polyline points="310.000,132.000 318.000,132.000 174.000,132.000 174.000,110.000 30.000,110.000 38.000,110.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="177.000" y="108.500" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">RUN</text>
+<polyline points="38.000,124.000 30.000,124.000 124.000,124.000 124.000,48.000 218.000,48.000 210.000,48.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="127.000" y="46.500" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">0V</text>
+<polyline points="310.000,140.000 318.000,140.000 330.000,140.000 330.000,42.000 342.000,42.000 350.000,42.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="333.000" y="40.500" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">RUN_LT</text>
+<polyline points="374.000,42.000 382.000,42.000 300.000,42.000 300.000,48.000 218.000,48.000 210.000,48.000" stroke="#0b4ea2" stroke-width="0.45" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+<text x="303.000" y="46.500" font-size="2.4" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle" fill="#111111">0V</text>
+</svg>

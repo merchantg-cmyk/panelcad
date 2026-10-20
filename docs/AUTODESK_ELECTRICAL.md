@@ -1,0 +1,69 @@
+# PanelCAD and AutoCAD Electrical
+
+AutoCAD Electrical is the electrical toolset shipped inside AutoCAD (the 2026 and 2027 help, and the product page for the 2027 toolset). PanelCAD is a panel-shop drawing program: YAML project, Qt GUI, JSONL agent. This note is the feature comparison, and the tools that close the gap a drafter hits every day.
+
+A 65,000-symbol SQL catalog, native DWG, and vendor configurators are a different product. The table says what PanelCAD does now, and what it still does not do.
+
+## Same job
+
+| AutoCAD Electrical | PanelCAD |
+| --- | --- |
+| IEC and JIC/NFPA symbol libraries | `libraries/builtin` IEC and NEMA/ANSI YAML. Search with `library_search`. Add a part with `save_library_device`. |
+| Project of many drawings | One `*.pcad.yaml` with schematic, I/O, network, terminal, panel, and door sheets. |
+| Automatic wire numbers | Assigned as wires are drawn, connected, or deleted, and after Circuit Builder. Default NEMA scheme is sheet/line (`101`, `102`). `sequential` and IEC (`1-1`) are per-project. Electrically connected segments share one number through junctions; a device pin breaks the network. Locked and conventional names (`L1`/`L2`/`L3`, `24V`/`0V`, power/common) are never overwritten. `number_wires` is a full renumber with undo. Opening a file does not renumber. `set_wire_numbering`. |
+| Wire color, gauge, cable marker | Fields on the wire. Drawn under the number. `set_wire_spec`. |
+| Automatic component tags | `place` takes the next prefix for the sheet's drawing standard (IEC 81346 or JIC / NFPA 79). The map is `libraries/builtin/ref_prefixes.yaml`. `retag` fixes a second coil or breaker that reused a tag, or renumbers a family in reading order. `retag mode=standard` (or `--apply-prefixes`) remaps an existing file to the current standard; load never retags. A contact that shares its coil's tag is left alone. |
+| Parent/child cross-reference | Derived live from the sheet zone grid. NEMA lists line numbers under the coil (NC underlined by default; bar or parentheses are a project setting). IEC draws a NO/NC contact mirror with `/sheet.column`. Each contact shows its coil location. Off-page arrows show the destination sheet and line/zone and stay in sync. Click a reference to jump (same as the Problems dock). Display does not write the YAML; `update_cross_references` / `xref --write` persist `properties.xref`. Checks: `contact_without_coil`, `contact_count_exceeded`, `duplicate_contact_number`. |
+| Reports: BOM, wire from-to | `export_bom`, legacy `export_wire_list` / `wire_list`, and the conductor report `from_to` (Reports → Wire List (From-To)…, print-package section, `wire_list` with `from_to=true`). One row per netlist conductor: wire number, `tag:pin` or `strip:terminal`, sheet/line/column at each end, size, color, type, terminal crossing. A rail is daisy-chained between those pins. Sort by number or device. Wire markers: one per conductor end, File → Export → Wire Markers… and `export_wire_markers`. |
+| Terminal strip table (level, internal, external, jumper, spare) | `terminal_strip_rows`. Pin A is internal, pin B is field. `sequence_terminal_strip` resequences from schematic position (sheet, then top to bottom). `jumper_terminals` marks a jumper span and picks a catalog bridge/comb (family + pitch + poles) for the BOM. |
+| Graphical terminal-strip editor | **Insert → Terminal strip…** and the **Strip** menu draw the DIN rail at catalog block width. Tags are rotated so a 5.2 mm block stays readable. A long strip continues on the next row, then the next sheet. Internal wires are above the block, field wires below. End stops, end plates, and partitions sit on the panel DIN rail with the strip. Reorder moves the schematic symbols, rewrites levels, and retags `STRIP-n`. Sequence uses that same schematic order, so the two agree. Delete in the strip view deletes the schematic terminal too, and undo puts it back. |
+| PLC I/O list from the drawing | `io_rows` / **Reports → PLC I/O List…** / print-package section `plc_io`. Each PLC and I/O module point: address, DI/DO/AI/AO, tag, description (device, function, wire, sheet and line), device, and spares. A contact's device is the parent (`M1`) and the default tag is parent plus function (`M1_RUN_FB`). The line is the rung through the symbol. CSV keeps `module` and `address` (the pin id) so import still matches. **Insert → PLC I/O sheets…** draws one ladder sheet per verified module (two small modules can share a sheet) from the terminal map in `libraries/builtin/io_modules.yaml`. Editing a tag on the sheet updates the I/O list, and the reverse. **File → Export → PLC Tags…** writes Studio 5000 CSV, a TIA Portal `.xlsx` tag table, a generic TIA CSV, Do-more element documentation, a Keyence generic CSV, a Sysmac Studio generic CSV, or a CX-Programmer symbol-table paste file (`export_plc_tags`, `panelcad electrical plc-tags`). TIA analog words use the module `start_address`, the Analog start setting, or the next even word after the digital bytes. |
+| Schematic and panel stay in step | `layout_from_schematic` packs the panel from the schematic. `audit_schematic_panel` lists a schematic device with no footprint, a door operator with no door sheet, and a footprint with no schematic tag. |
+| Wire number, color, and gauge on the panel footprint | `panel_wire_annotations`, and the same text drawn on the panel/door SVG, PDF, and DXF. |
+| Item balloons | `assign_item_numbers` stores the BOM item. The panel footprint draws it. |
+| Cable schedule | Field cables (`project.cables`) from a terminal strip, or from a VFD output (`U`/`V`/`W`), to a motor, sensor, valve, instrument, or remote station. `propose_cables` groups those wires, adds spares, and maps conductors. VFD shields bond at both ends (520-UM001). Instrument shields bond at the panel end only (1756-IN063). Spares are coiled and taped. Conductor colors print `per cable` until typed or taken from a sourced library part; the ground role prints `GND`. The gland stays blank until a cable OD or a typed size exists. Schedule PDF, pull-list CSV, termination list. NEMA tags `W101`; IEC `-W1`. No invented manufacturer part numbers. |
+| Symbol Builder | **Symbol Builder** (File and Insert menus) edits the block: schematic geometry, footprint geometry, wire connections, and attributes (TAG1, TAG2, DESC, MFG, CAT, XREF). Insert fills the attributes. Save writes `library/user.yaml`. |
+| Circuit Builder (motor circuit from a list of options) | **Insert → Circuit Builder…** inserts a DOL, VFD, reversing, star-delta, soft-starter, or PLC-controlled motor circuit onto the open schematic, or onto a new Motor power sheet. New kinds put control on a Motor control sheet. New in-cabinet devices go into free space on the existing panel (or a new Enclosure); operators go on the door. Same tags. Symbols follow the sheet / title-block standard (default NEMA/ANSI; explicit IEC keeps `iec.*`). Options: breaker or disconnect, motor kW/hp/voltage/FLA (NEC Table 430.250), pilot lights, and per-kind extras (VFD drive + line contactor, star-delta timer setting and windings/line overload placement, soft-starter bypass and 2-wire/3-wire, PLC HOA + PLC model + I/O addresses + DOL/VFD starter). `insert_circuit` (JSONL `help` returns `schemas.insert_circuit`). One undo removes the circuit. It does not replace the project. |
+| Real-time checks | Live design checks in the GUI **Problems** dock (debounced, background). Same engine as `validate`, `design_checks`, and `panelcad electrical checks`: duplicate tags, dangling/unconnected wires, schematic vs panel/door, terminals not on a strip, missing part numbers, protection vs downstream, overload vs FLA, coil voltage, enclosure fit, heat rise over the limit, internal air above a component's max ambient, closed-loop cooling when the enclosure is NEMA 4/4X/6 or IP65 or tighter, missing footprints, a shielded cable grounded at neither end, an instrument shield grounded at both ends, control power (steady load vs supply margin, transformer inrush, PSU output fuse), plus the original structural validate/audit rules. `compute_heat_load` / **Tools → Panel → Thermal…** / `panelcad electrical thermal` report watt loss and cooling without changing the box size. Severity error/warning/info. Ignore a finding; it is stored on `properties.suppressed_checks`. Canvas markers jump to the part. The **Power** dock lists each supply's loads. |
+| Title block, revisions, off-page arrows | Title block on every sheet. `wire(..., to_sheet=)` places TO/FROM arrows. |
+| Panel layout from the schematic, BOM, enclosure size | `layout_from_schematic`, `recommend_cabinet`, `size_enclosure` / `recommend_enclosure` / `apply_enclosure` (standard NEMA box, duct, spare, heat). DIN rails, wire duct. |
+
+GUI: **Tools → Panel → Size Enclosure…**, **Reports** menu (Wire List (From-To)…, PLC I/O List…, Field cables…, net wire defaults, Phoenix / WAGO / Weidmüller CSV plus Phoenix CLIPX XML and WAGO smartDESIGNER XML, and **Design checks…**; Field cables also exports the cable schedule, pull list, and terminations), **File → Export → Wire Markers…** and **File → Export → PLC Tags…**, the **Problems** dock (View → Problems), **Insert → Circuit Builder…**, **Insert → PLC I/O sheets…**, and **Insert → Terminal strip…** (the **Strip** menu adds, reorders, jumpers, and retags). CLI: `panelcad electrical` (`number-wires`, `numbering`, `wire-list`, `from-to`, `net-spec`, `wire-markers`, `retag`, `xref`, `terminals`, `strip-open`, `strip-list`, `strip-add`, `strip-reorder`, `strip-move`, `strip-retag`, `strip-accessory`, `strip-jumper`, `strip-export`, `strip-delete`, `audit`, `checks`, `io`, `plc-io`, `plc-tags`, `cables`, `items`, `circuit`) and `panelcad io` (`modules`, `generate`). JSONL: the same names (`number_wires`, `set_wire_numbering`, `wire_numbering`, `set_net_wire_spec`, `wire_list`, `export_wire_markers`, `retag`, `cross_reference`, `terminal_strips`, `sequence_terminals`, `jumper_terminals`, `clear_terminal_jumpers`, `open_terminal_strip`, `list_terminal_strips`, `add_terminal`, `reorder_terminals`, `move_terminal`, `retag_terminal_strip`, `add_strip_accessory`, `delete_strip_component`, `export_terminal_strip`, `audit_panel`, `design_checks`, `export_checks`, `suppress_check`, `unsuppress_check`, `io_list`, `io_add_module`, `io_assign_point`, `io_generate_sheets`, `plc_io_list`, `export_plc_tags`, `import_io`, `assign_item_numbers`, `cable_schedule`, `propose_cables`, `add_cable`, `update_cable`, `assign_cable_conductors`, `export_cable_schedule`, `panel_wire_annotation`, `insert_circuit`). `help` returns `schemas.wire_list`, `schemas.export_wire_markers`, `schemas.plc_io_list`, `schemas.export_plc_tags`, `schemas.io_add_module`, `schemas.io_assign_point`, and `schemas.io_generate_sheets`.
+
+A new wire gets a number as it is drawn. A traced print that left numbers blank stays blank until you draw, connect, delete, run `number_wires`, or `set_wire_spec`. Opening the file does not fill them in.
+
+## Not the same
+
+These are still Autodesk Electrical, not PanelCAD:
+
+| AutoCAD Electrical | Why it is not in this build |
+| --- | --- |
+| 65,000+ symbols, manufacturer SQL catalog, Schneider catalog, ECLASS import | The library is YAML you can extend. It is not their catalog and it does not download manufacturer tables. |
+| Native DWG, plus per-component STEP/IPT | Prints are SVG, PDF, and AutoCAD-compatible DXF (R2010, mm, one file per sheet). Native DWG and per-component STEP/IPT are not written. The project file is YAML. |
+| Phoenix CLIPX / PROJECT complete native XML, WAGO smartDESIGNER CAE rail import | **clipx ENGINEER and smartDESIGNER do not publish a generic rail XML/CAE schema.** PanelCAD writes a field-complete interchange XML (`vendor=clipx` or `wagoxml`, or a `.xml` path) plus the CSV fallback. Weidmüller WMC's documented import **is** the semicolon CSV (`article;designation;marker`). Articles come from `libraries/builtin/terminal_vendor_articles.yaml` or `manufacturer`/`part_number` / `vendor_articles` on the symbol. Jumpers land as accessory rows (Phoenix UT 2,5 is 3044076; FBS 3-5 is 3030174). Unmapped items are warned. See `docs/VENDOR_STRIP_EXPORT.md`. `export_terminal_strip`. |
+| Project-wide update through a SQL catalog, installation/location codes, and their drawing-list project manager | Tags are the component id. The project is one YAML file, not a folder of DWGs. |
+| Surfer, and Autodesk's exact error browser | PanelCAD's **Problems** dock is the live check list (not their Surfer). Findings update after the drawing settles, not on every mouse pixel. |
+
+## Commands
+
+```powershell
+panelcad electrical number-wires job.pcad.yaml
+panelcad electrical numbering job.pcad.yaml --scheme sheet_line --auto
+panelcad electrical wire-list job.pcad.yaml --out wires.csv
+panelcad electrical xref job.pcad.yaml --out xref.csv
+panelcad electrical xref job.pcad.yaml --write --nc-mark underline
+panelcad electrical xref-settings job.pcad.yaml --nc-mark bar
+panelcad electrical terminals job.pcad.yaml --out strips.csv --strip X1
+panelcad electrical strip-open job.pcad.yaml --strip X1
+panelcad electrical strip-add job.pcad.yaml --strip X1 --after X1-1
+panelcad electrical strip-reorder job.pcad.yaml --strip X1 --refs X1-2,X1-1,X1-3
+panelcad electrical strip-jumper job.pcad.yaml --refs X1-1,X1-2
+panelcad electrical audit job.pcad.yaml
+panelcad electrical checks job.pcad.yaml
+panelcad validate job.pcad.yaml --design
+panelcad electrical io job.pcad.yaml --out io.csv --import io.csv
+panelcad electrical cables job.pcad.yaml --propose --out cables.csv --pull pull.csv --terminations terms.csv --pdf cables.pdf
+panelcad electrical items job.pcad.yaml
+panelcad electrical circuit job.pcad.yaml --kind dol
+panelcad electrical circuit job.pcad.yaml --kind vfd --drive gs20_0p5 --branch disconnect --control local
+```

@@ -1,0 +1,128 @@
+# Schneider Electric / Square D. Official se.com product pages and Digest Plus.
+# Schneider HTML pages often omit the dimension table in the public fetch;
+# those SKUs are verified: partial with ratings only.
+kind: manufacturer_parts
+manufacturer: Schneider Electric
+version: "0.1"
+
+parts:
+  - catalog: "LC1D09BD"
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "TeSys Deca / TeSys D contactor, 3 NO, AC-3 9 A, 24 V DC coil"
+    verified: partial
+    source: https://www.se.com/us/en/product/LC1D09BD/iec-contactor-tesys-deca-nonreversing-9a-5hp-at-480vac-up-to-100ka-sccr-3-phase-3-no-24vdc-coil-open-style/
+    source_date: "2026-10-07"
+    series: TeSys D
+    amps: 9
+    poles: 3
+    coil_voltage: "24VDC"
+    contact_config: 3NO
+    sccr: "100kA"
+    mounting: din
+    notes: "US product page: 9 A, 5 HP at 480 V AC, up to 100 kA SCCR, 3 NO, 24 V DC. W×H×D not in the public HTML."
+
+  - catalog: "LC1D09BNE"
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "TeSys Deca contactor, 3 NO, AC-3/3e 9 A, 24–60 V AC/DC electronic coil, screw clamp"
+    verified: partial
+    source: https://www.se.com/ca/en/product/LC1D09BNE/contactor-tesys-deca-3p3no-ac3-3e-440v-9a-24-60v-ac-dc-coil-screw-clamp-terminals/
+    source_date: "2026-10-07"
+    series: TeSys D
+    amps: 9
+    poles: 3
+    coil_voltage: "24-60VAC/DC"
+    contact_config: 3NO
+    mounting: din
+    notes: "Canada product page re-checked 2026-10-07: 9 A, 3 NO, 24…60 V AC/DC, screw clamp. W×H×D not in the public HTML this pass — dims blanked and demoted from full."
+
+  - catalog: "LC1D18BD"
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "TeSys D contactor, 3 NO, AC-3 18 A, 24 V DC coil"
+    verified: partial
+    source: https://www.se.com/us/en/product/LC1D18BD/iec-contactor-tesys-deca-nonreversing-18a-10hp-at-480vac-up-to-100ka-sccr-3-phase-3-no-24vdc-coil-open-style/
+    source_date: "2026-10-07"
+    series: TeSys D
+    amps: 18
+    poles: 3
+    coil_voltage: "24VDC"
+    contact_config: 3NO
+    mounting: din
+    notes: "US product page confirmed 2026-10-07: 18 A, 10 HP at 480 V AC, up to 100 kA SCCR, 3 NO, 24 V DC. W×H×D not in the public HTML."
+
+  - catalog: "A9F44116"
+    library_id: iec.breakers.mcb_1p_16a
+    category: protection.breaker
+    description: "Acti9 iC60N MCB, 1 pole, 16 A, C-curve"
+    verified: partial
+    source: https://www.se.com/uk/en/product/A9F44116/acti9-ic60n-1p-16a-c-miniature-circuit-breaker/
+    source_date: "2026-10-07"
+    series: iC60N
+    amps: 16
+    poles: 1
+    mounting: din
+    width_mm: 18
+    notes: "UK product page: Acti9 iC60N 1P 16A C. Width 2 × 9 mm modules (18 mm). Height/depth left blank."
+
+  - catalog: "A9F44316"
+    library_id: iec.breakers.mcb_3p_32a
+    category: protection.breaker
+    description: "Acti9 iC60N MCB, 3 pole, 16 A, C-curve"
+    verified: partial
+    source: https://www.se.com/uk/en/product/A9F44316/acti9-ic60n-3p-16a-c-miniature-circuit-breaker/
+    source_date: "2026-10-07"
+    series: iC60N
+    amps: 16
+    poles: 3
+    mounting: din
+    width_mm: 54
+    notes: "UK product page + iC60N catalog. Width 6 × 9 mm modules (54 mm). Height/depth left blank."
+
+  - catalog: "A9F44332"
+    library_id: iec.breakers.mcb_3p_32a
+    category: protection.breaker
+    description: "Acti9 iC60N MCB, 3 pole, 32 A, C-curve"
+    verified: partial
+    source: https://download.se.com/files?amp%3Bp_enDocType=Catalog&p_Doc_Ref=DB123060_Acti9_IC60N_Katalog
+    source_date: "2026-10-07"
+    series: iC60N
+    amps: 32
+    poles: 3
+    mounting: din
+    width_mm: 54
+    notes: "iC60N catalog table curve C, 3P, 32 A. Width 6 × 9 mm modules."
+
+  - catalog: "QO120"
+    library_id: iec.breakers.mcb_1p_16a
+    category: protection.breaker
+    description: "Square D QO plug-on MCB, 1 pole, 20 A, 120/240 V AC, 10 kA"
+    verified: partial
+    source: https://www.se.com/us/en/product/QO120/mini-circuit-breaker-qo-20a-1-pole-120-240vac-10ka-plug-in/
+    source_date: "2026-10-07"
+    series: QO
+    amps: 20
+    poles: 1
+    ka: 10
+    mounting: plug_on
+    notes: >
+      US product page re-checked 2026-10-07: 20 A, 1 pole, 120/240 V AC, 10 kA, plug-in.
+      Millimetre envelope is not on that page (Digest inches were a conversion) — W×H×D blanked and demoted from full.
+
+  - catalog: "QO220"
+    library_id: iec.breakers.mcb_3p_32a
+    category: protection.breaker
+    description: "Square D QO plug-on MCB, 2 pole, 20 A (same QO family as QO120)"
+    verified: partial
+    source: https://productinfo.se.com/nadigest/viewer?filename=QO+Plug-On+Circuit+Breakers+%28CPT%29_0000056456.xml
+    source_date: "2026-10-07"
+    series: QO
+    amps: 20
+    poles: 2
+    ka: 10
+    mounting: plug_on
+    width_mm: 38.1
+    height_mm: 76.2
+    depth_mm: 58.67
+    notes: "Digest Plus 2-pole QO envelope 1.50 × 3.00 × 2.31 in. Confirm the QO220 SKU on a product page before treating as full."

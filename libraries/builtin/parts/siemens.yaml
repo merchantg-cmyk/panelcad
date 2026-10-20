@@ -1,0 +1,105 @@
+# Siemens SIRIUS. Numbers from official Siemens Industry datasheets
+# (mall.industry.siemens.com / support.industry.siemens.com teddatasheet).
+# Do not invent fields.
+kind: manufacturer_parts
+manufacturer: Siemens
+version: "0.1"
+
+parts:
+  - catalog: "3RT2015-1BB42"
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "SIRIUS 3RT2 power contactor, AC-3e/AC-3 7 A / 3 kW 400 V, 24 V DC, 1 NC, screw, S00"
+    verified: full
+    source: https://support.industry.siemens.com/teddatasheet/?caller=SIOS&format=pdf&language=en&mlfbs=3RT2015-1BB42
+    source_date: "2026-10-07"
+    series: 3RT2
+    amps: 7
+    poles: 3
+    coil_voltage: "24VDC"
+    contact_config: 1NC
+    heat_w: 4.6
+    mounting: din
+    width_mm: 45
+    height_mm: 58
+    depth_mm: 73
+    notes: "Datasheet W×H×D 45×58×73 mm, DIN 35 mm, screw-type terminals. heat_w = 0.6 W load + 4 W typical no-load (both published)."
+
+  - catalog: "3RT2015-1BB41"
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "SIRIUS 3RT2 power contactor, AC-3e/AC-3 7 A / 3 kW 400 V, 24 V DC, 1 NO, screw, S00"
+    verified: full
+    source: https://mall.industry.siemens.com/teddatasheet/?caller=Mall&format=PDF&language=en&mlfbs=3RT20151BB41
+    source_date: "2026-10-07"
+    series: 3RT2
+    amps: 7
+    poles: 3
+    coil_voltage: "24VDC"
+    contact_config: 1NO
+    heat_w: 4.6
+    mounting: din
+    width_mm: 45
+    height_mm: 58
+    depth_mm: 73
+    notes: "Datasheet W×H×D 45×58×73 mm, screw-type terminals. heat_w = 0.6 W load + 4 W typical no-load (both published)."
+
+  - catalog: "3RT2015-1AP02"
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "SIRIUS 3RT2 power contactor, AC-3e/AC-3 7 A / 3 kW 400 V, 230 V AC 50/60 Hz, 1 NC, screw, S00"
+    verified: full
+    source: https://support.industry.siemens.com/teddatasheet/?caller=SIOS&format=pdf&language=en&mlfbs=3RT20151AP02
+    source_date: "2026-10-07"
+    series: 3RT2
+    amps: 7
+    poles: 3
+    coil_voltage: "230VAC"
+    contact_config: 1NC
+    heat_w: 1.7
+    mounting: din
+    width_mm: 45
+    height_mm: 58
+    depth_mm: 73
+    notes: "Datasheet 45×58×73 mm, screw-type terminals, 230 V AC 50/60 Hz coil. heat_w = 0.6 W load + 1.1 W typical no-load (both published)."
+
+  - catalog: "3RV2011-1BA10"
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "SIRIUS 3RV2 motor starter protector S00, CLASS 10, 1.4–2 A, screw, no built-in aux"
+    verified: full
+    source: https://mall.industry.siemens.com/teddatasheet/?caller=Mall&format=PDF&language=en&mlfbs=3RV2011-1BA10
+    source_date: "2026-10-07"
+    series: 3RV2
+    amps: 2
+    amps_min: 1.4
+    amps_max: 2
+    poles: 3
+    ka: 100
+    heat_w: 7.25
+    mounting: din
+    width_mm: 45
+    height_mm: 97
+    depth_mm: 97
+    notes: "Datasheet A-release 1.4…2 A, N-release 26 A, screw-type terminals, 0 aux contacts. Icu 100 kA at 400 V. W×H×D 45×97×97 mm, DIN 35 mm. heat_w 7.25 W published."
+
+  - catalog: "3RV2011-1DA25"
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "SIRIUS 3RV2 motor starter protector S00, CLASS 10, 2.2–3.2 A, spring-loaded, transverse aux 1NO+1NC"
+    verified: full
+    source: https://mall.industry.siemens.com/teddatasheet/?caller=Mall&format=PDF&language=en&mlfbs=3RV2011-1DA25
+    source_date: "2026-10-07"
+    series: 3RV2
+    amps: 3.2
+    amps_min: 2.2
+    amps_max: 3.2
+    poles: 3
+    contact_config: 1NO1NC
+    ka: 100
+    heat_w: 7.25
+    mounting: din
+    width_mm: 45
+    height_mm: 106
+    depth_mm: 97
+    notes: "Datasheet spring-loaded terminals, transverse aux 1 NO+1 NC, setting 2.2…3.2 A, N-release 42 A, Icu 100 kA at 400 V. W×H×D 45×106×97 mm. heat_w 7.25 W published."

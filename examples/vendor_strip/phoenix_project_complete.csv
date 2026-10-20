@@ -1,0 +1,9 @@
+Strip,Position,Tag,Article,Internal,External,Jumper,Accessory
+X1,1,XS1,3022218,,,,end_stop
+X1,2,XP1,3047028,,,,end_plate
+X1,3,X1-3,3044076,,11,,
+X1,4,XD1,3047167,,,,partition
+X1,5,X1-2,3044076,10,,J1,
+X1,6,X1-1,3044076,10,11,J1,
+X1,7,XP2,3047028,,,,end_plate
+X1,8,XS2,3022218,,,,end_stop

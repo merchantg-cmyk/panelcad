@@ -1,0 +1,470 @@
+format: panelcad
+version: '0.1'
+name: Sample catalog starter
+properties:
+  enclosure_sizing:
+    spare_pct: 0.25
+    duct_face_in: 2.0
+    duct_depth_in: 3.0
+    rail_to_duct_in: 1.0
+    wall_gutter_in: 0.5
+    airflow_gap_in: 1.0
+    side_ducts: true
+    ambient_c: 40.0
+    max_internal_c: 50.0
+    vfd_efficiency: 0.97
+    psu_efficiency: 0.88
+    transformer_efficiency: 0.95
+    nema: '12'
+    material: steel
+    mount: any
+    separate_control_rail: false
+title_block:
+  company: PanelCAD
+  address: ''
+  logo: ''
+  customer: ''
+  location: ''
+  drawing_number: SAMPLE-001
+  drawn_by: PanelCAD
+  checked_by: ''
+  approved_by: ''
+  scale: NTS
+  standard: IEC
+  drawing_style: ''
+  coil_style: circle
+  rail_hot: L1
+  rail_return: L2
+  revisions:
+  - rev: A
+    date: '2026-10-14'
+    description: Catalog-only sample
+    drawn: PanelCAD
+    checked: ''
+    approved: ''
+sheets:
+- id: power
+  title: Power
+  description: 'Power: catalog breaker, contactor, and overload'
+  kind: schematic
+  page:
+    size: A3
+    orientation: landscape
+  components:
+  - id: Q1
+    library_id: iec.breakers.mcb_3p_32a
+    x: 40.0
+    y: 22.0
+    rotation: 0
+    mirror: false
+    properties:
+      manufacturer: AutomationDirect
+      part_number: FAZ-C6-3-NA-L
+      catalog: FAZ-C6-3-NA-L
+      description: Eaton FAZ-NA-L miniature breaker, 6 A, 3-pole, C curve, UL 489,
+        10 kA at 240 VAC
+      catalog_verified: partial
+      catalog_source: https://cdn.automationdirect.com/static/specs/cutsheet/FAZ-C6-3-NA-L_cutsheet.pdf
+      catalog_key: AutomationDirect|faz-c6-3-na-l
+      amps: 6.0
+      In: 6A
+      poles: 3
+      ka: 10.0
+      Icu: 10kA
+      width_mm: 53.1
+      height_mm: 105.0
+      depth_mm: 60.0
+      dim_source: catalog
+      mounting: din
+      mount: din_rail
+      din_rail: true
+  - id: K1
+    library_id: iec.contactors.ac3_9a
+    x: 38.0
+    y: 82.0
+    rotation: 0
+    mirror: false
+    properties:
+      manufacturer: AutomationDirect
+      part_number: GH15BN-3-10A
+      catalog: GH15BN-3-10A
+      description: GH15 IEC contactor, AC-3 9 A at 440 V, 3 poles, 1 NO aux, 110-120
+        VAC coil, 45 mm frame
+      catalog_verified: full
+      catalog_source: https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf
+      catalog_key: AutomationDirect|gh15bn-3-10a
+      amps: 9.0
+      Ie: 9A
+      poles: 3
+      coil_voltage: 110-120VAC
+      coil: 110-120VAC
+      contact_config: 1NO
+      ka: 5.0
+      Icu: 5kA
+      sccr: 5kA
+      width_mm: 45.0
+      height_mm: 80.0
+      depth_mm: 85.0
+      dim_source: catalog
+      mounting: din
+      mount: din_rail
+      din_rail: true
+  - id: F1
+    library_id: iec.protection.overload_9a
+    x: 40.0
+    y: 155.0
+    rotation: 0
+    mirror: false
+    properties:
+      manufacturer: LS Electric
+      part_number: MT-32/3K7.5
+      catalog: MT-32/3K7.5
+      description: Metasol MT-32 differential overload, screw, IP20, 6-9 A
+      catalog_verified: full
+      catalog_source: https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf
+      catalog_key: LS Electric|mt-32/3k7.5
+      amps_min: 6.0
+      amps_max: 9.0
+      range: 6-9A
+      amps: 9.0
+      poles: 3
+      width_mm: 45.0
+      height_mm: 74.55
+      depth_mm: 86.3
+      dim_source: catalog
+      mounting: plug_on
+      mount: none
+      din_rail: false
+  wires:
+  - id: w1
+    from: Q1.2
+    to: K1.L1
+    net: L1
+    label: L1
+    number: L1
+    points: []
+  - id: w2
+    from: Q1.4
+    to: K1.L2
+    net: L2
+    label: L2
+    number: L2
+    points: []
+  - id: w3
+    from: Q1.6
+    to: K1.L3
+    net: L3
+    label: L3
+    number: L3
+    points: []
+  - id: w4
+    from: K1.T1
+    to: F1.1
+    net: T1
+    label: T1
+    number: '101'
+    points: []
+  - id: w5
+    from: K1.T2
+    to: F1.3
+    net: T2
+    label: T2
+    number: '102'
+    points: []
+  - id: w6
+    from: K1.T3
+    to: F1.5
+    net: T3
+    label: T3
+    number: '103'
+    points: []
+- id: control
+  title: Control
+  description: 24 V supply, PLC, and pilot light — catalog outlines
+  kind: schematic
+  page:
+    size: A3
+    orientation: landscape
+  components:
+  - id: G1
+    library_id: iec.power.psu_24v_5a
+    x: 40.0
+    y: 24.0
+    rotation: 0
+    mirror: false
+    properties:
+      manufacturer: AutomationDirect
+      part_number: PSP24-120S
+      catalog: PSP24-120S
+      description: Rhino PSP 24 VDC 5 A / 120 W power supply, 85-264 VAC input, IP20,
+        DIN or chassis
+      catalog_verified: partial
+      catalog_source: https://cdn.automationdirect.com/static/specs/cutsheet/PSP24-120S_cutsheet.pdf
+      catalog_key: AutomationDirect|psp24-120s
+      amps: 5.0
+      width_mm: 85.0
+      height_mm: 75.0
+      depth_mm: 100.0
+      dim_source: catalog
+      mounting: din
+      mount: din_rail
+      din_rail: true
+  - id: A1
+    library_id: iec.plc.compact_16dio
+    x: 120.0
+    y: 80.0
+    rotation: 0
+    mirror: false
+    properties:
+      manufacturer: AutomationDirect
+      part_number: C0-00DD1-D
+      catalog: C0-00DD1-D
+      description: CLICK Basic PLC, 24 VDC, 8 DC inputs, 6 sinking DC outputs, 2 RS-232
+      catalog_verified: partial
+      catalog_source: https://cdn.automationdirect.com/static/specs/cutsheet/C0-00DD1-D_cutsheet.pdf
+      catalog_key: AutomationDirect|c0-00dd1-d
+      width_mm: 53.5
+      height_mm: 102.1
+      depth_mm: 75.0
+      dim_source: catalog
+      mounting: din
+      mount: din_rail
+      din_rail: true
+  - id: H1
+    library_id: iec.operators.pilot_light
+    x: 250.0
+    y: 30.0
+    rotation: 0
+    mirror: false
+    properties:
+      manufacturer: AutomationDirect
+      part_number: GCX1232-24L
+      catalog: GCX1232-24L
+      description: GCX 22 mm metal LED indicating light, green, 24 VAC/VDC, full voltage,
+        IP65
+      catalog_verified: partial
+      catalog_source: https://cdn.automationdirect.com/static/specs/cutsheet/GCX1232-24L_cutsheet.pdf
+      catalog_key: AutomationDirect|gcx1232-24l
+      width_mm: 40.0
+      height_mm: 29.8
+      depth_mm: 38.8
+      dim_source: catalog
+      mounting: door
+      mount: door
+      din_rail: false
+  wires:
+  - id: w7
+    from: G1.plus
+    to: A1.Lplus
+    net: 24V
+    label: 24V
+    number: 24V
+    points: []
+  - id: w8
+    from: G1.minus
+    to: A1.M
+    net: 0V
+    label: 0V
+    number: 0V
+    points: []
+  - id: w9
+    from: A1.Q0_1
+    to: H1.X1
+    net: RUN_LT
+    label: RUN_LT
+    number: '201'
+    points: []
+  - id: w10
+    from: H1.X2
+    to: G1.minus
+    net: 0V
+    label: 0V
+    number: 0V
+    points: []
+- id: enclosure
+  title: Enclosure
+  description: Listed enclosure. Devices use published catalog sizes.
+  kind: panel_layout
+  page:
+    size: A3
+    orientation: portrait
+  components:
+  - id: K1
+    library_id: iec.contactors.ac3_9a
+    x: 78.45
+    y: 104.6
+    rotation: 0
+    mirror: false
+    scale: 0.5
+    properties:
+      manufacturer: AutomationDirect
+      part_number: GH15BN-3-10A
+      catalog: GH15BN-3-10A
+      description: GH15 IEC contactor, AC-3 9 A at 440 V, 3 poles, 1 NO aux, 110-120
+        VAC coil, 45 mm frame
+      catalog_verified: full
+      catalog_source: https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf
+      catalog_key: AutomationDirect|gh15bn-3-10a
+      amps: 9.0
+      Ie: 9A
+      poles: 3
+      coil_voltage: 110-120VAC
+      coil: 110-120VAC
+      contact_config: 1NO
+      ka: 5.0
+      Icu: 5kA
+      sccr: 5kA
+      width_mm: 45.0
+      height_mm: 80.0
+      depth_mm: 85.0
+      dim_source: catalog
+      mounting: din
+      mount: din_rail
+      din_rail: true
+  - id: F1
+    library_id: iec.protection.overload_9a
+    x: 72.3
+    y: 144.6
+    rotation: 0
+    mirror: false
+    scale: 0.5
+    properties:
+      manufacturer: LS Electric
+      part_number: MT-32/3K7.5
+      catalog: MT-32/3K7.5
+      description: Metasol MT-32 differential overload, screw, IP20, 6-9 A
+      catalog_verified: full
+      catalog_source: https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf
+      catalog_key: LS Electric|mt-32/3k7.5
+      amps_min: 6.0
+      amps_max: 9.0
+      range: 6-9A
+      amps: 9.0
+      poles: 3
+      width_mm: 45.0
+      height_mm: 74.55
+      depth_mm: 86.3
+      dim_source: catalog
+      mounting: plug_on
+      mount: none
+      din_rail: false
+  - id: A1
+    library_id: iec.plc.compact_16dio
+    x: 101.45
+    y: 104.6
+    rotation: 0
+    mirror: false
+    scale: 0.5
+    properties:
+      manufacturer: AutomationDirect
+      part_number: C0-00DD1-D
+      catalog: C0-00DD1-D
+      description: CLICK Basic PLC, 24 VDC, 8 DC inputs, 6 sinking DC outputs, 2 RS-232
+      catalog_verified: partial
+      catalog_source: https://cdn.automationdirect.com/static/specs/cutsheet/C0-00DD1-D_cutsheet.pdf
+      catalog_key: AutomationDirect|c0-00dd1-d
+      width_mm: 53.5
+      height_mm: 102.1
+      depth_mm: 75.0
+      dim_source: catalog
+      mounting: din
+      mount: din_rail
+      din_rail: true
+  - id: Q1
+    library_id: iec.breakers.mcb_3p_32a
+    x: 128.7
+    y: 104.6
+    rotation: 0
+    mirror: false
+    scale: 0.5
+    properties:
+      manufacturer: AutomationDirect
+      part_number: FAZ-C6-3-NA-L
+      catalog: FAZ-C6-3-NA-L
+      description: Eaton FAZ-NA-L miniature breaker, 6 A, 3-pole, C curve, UL 489,
+        10 kA at 240 VAC
+      catalog_verified: partial
+      catalog_source: https://cdn.automationdirect.com/static/specs/cutsheet/FAZ-C6-3-NA-L_cutsheet.pdf
+      catalog_key: AutomationDirect|faz-c6-3-na-l
+      amps: 6.0
+      In: 6A
+      poles: 3
+      ka: 10.0
+      Icu: 10kA
+      width_mm: 53.1
+      height_mm: 105.0
+      depth_mm: 60.0
+      dim_source: catalog
+      mounting: din
+      mount: din_rail
+      din_rail: true
+  - id: G1
+    library_id: iec.power.psu_24v_5a
+    x: 161.8
+    y: 104.6
+    rotation: 0
+    mirror: false
+    scale: 0.5
+    properties:
+      manufacturer: AutomationDirect
+      part_number: PSP24-120S
+      catalog: PSP24-120S
+      description: Rhino PSP 24 VDC 5 A / 120 W power supply, 85-264 VAC input, IP20,
+        DIN or chassis
+      catalog_verified: partial
+      catalog_source: https://cdn.automationdirect.com/static/specs/cutsheet/PSP24-120S_cutsheet.pdf
+      catalog_key: AutomationDirect|psp24-120s
+      amps: 5.0
+      width_mm: 85.0
+      height_mm: 75.0
+      depth_mm: 100.0
+      dim_source: catalog
+      mounting: din
+      mount: din_rail
+      din_rail: true
+  rails:
+  - id: r-din-1
+    x: 73.7
+    y: 112.1
+    length_mm: 86.3
+    height_mm: 17.5
+    type: ts35
+  trays:
+  - id: wt-top
+    x: 46.9
+    y: 66.5
+    length_mm: 203.2
+    width_mm: 25.4
+    orientation: h
+  - id: wt-bot
+    x: 46.9
+    y: 295.1
+    length_mm: 203.2
+    width_mm: 25.4
+    orientation: h
+  - id: wt-left
+    x: 46.9
+    y: 92.0
+    length_mm: 203.0
+    width_mm: 25.4
+    orientation: v
+  - id: wt-right
+    x: 224.7
+    y: 92.0
+    length_mm: 203.0
+    width_mm: 25.4
+    orientation: v
+  enclosure:
+    x: 21.5
+    y: 41.099999999999994
+    width_mm: 508.0
+    height_mm: 609.6
+    depth_mm: 226.57
+    name: 24 × 20 × 8.92 in NEMA 12 steel (N412242008C)
+    draw_scale: 0.5
+    nema_type: '12'
+    material: steel
+    catalog: N412242008C
+    mount: wall
+    panel_width_mm: 462.28
+    panel_height_mm: 563.88

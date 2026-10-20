@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="https://panelcad.dev/ns/wago-smartdesigner"
+           xmlns="https://panelcad.dev/ns/wago-smartdesigner"
+           elementFormDefault="qualified">
+  <xs:annotation>
+    <xs:documentation>
+      PanelCAD interchange schema for a WAGO terminal strip.
+      smartDESIGNER does not publish a generic rail XML schema.
+      This XSD validates PanelCAD output only. Vendor import is unconfirmed.
+    </xs:documentation>
+  </xs:annotation>
+  <xs:element name="WagoSmartDesignerProject">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="Header">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="ProjectName" type="xs:string"/>
+              <xs:element name="Strip" type="xs:string"/>
+              <xs:element name="Note" type="xs:string" minOccurs="0"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="TerminalStrip">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="Item" maxOccurs="unbounded">
+                <xs:complexType>
+                  <xs:all>
+                    <xs:element name="Kind" type="xs:string"/>
+                    <xs:element name="Article" type="xs:string"/>
+                    <xs:element name="Designation" type="xs:string"/>
+                    <xs:element name="Tag" type="xs:string"/>
+                    <xs:element name="TerminalNumber" type="xs:string"/>
+                    <xs:element name="InternalWire" type="xs:string"/>
+                    <xs:element name="ExternalWire" type="xs:string"/>
+                    <xs:element name="Jumper" type="xs:string"/>
+                    <xs:element name="Accessory" type="xs:string"/>
+                    <xs:element name="Spare" type="xs:string"/>
+                    <xs:element name="LibraryId" type="xs:string"/>
+                    <xs:element name="Mapped" type="xs:string"/>
+                  </xs:all>
+                  <xs:attribute name="position" type="xs:positiveInteger" use="required"/>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+            <xs:attribute name="name" type="xs:string" use="required"/>
+            <xs:attribute name="sequence" type="xs:string"/>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="Warnings">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="Warning" minOccurs="0" maxOccurs="unbounded">
+                <xs:complexType>
+                  <xs:simpleContent>
+                    <xs:extension base="xs:string">
+                      <xs:attribute name="ref" type="xs:string"/>
+                      <xs:attribute name="library_id" type="xs:string"/>
+                      <xs:attribute name="reason" type="xs:string"/>
+                    </xs:extension>
+                  </xs:simpleContent>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="generator" type="xs:string"/>
+      <xs:attribute name="version" type="xs:string"/>
+      <xs:attribute name="product" type="xs:string"/>
+      <xs:attribute name="confidence" type="xs:string"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

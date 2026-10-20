@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Run the full PanelCAD pytest suite headless (Qt offscreen).
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-offscreen}"
+export PYDANTIC_AI_NO_BANNER="${PYDANTIC_AI_NO_BANNER:-1}"
+
+if [[ -x "$ROOT/.venv/bin/python" ]]; then
+  PY="$ROOT/.venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+  PY="python3"
+else
+  PY="python"
+fi
+
+echo "Using $PY"
+"$PY" -c "import pytest, PySide6" >/dev/null
+exec "$PY" -m pytest -q "$@"

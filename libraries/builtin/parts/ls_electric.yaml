@@ -1,0 +1,996 @@
+# LS Electric (formerly LSIS). Filled fields on a verified:full row are in the cited PDF.
+# S100 amps stay on the watt-loss bulletin. Outlines are section 7.3 of the simple manual, so those rows stay partial.
+# MMS-32H is the 2023 catalog spelling. MMS-32S is not a row.
+# BKN 3P C6A is the C-curve 3-pole 6 A row in the LSIS MCB catalog on ls-electric.com.
+# 17.8 mm per pole is not stored as an outline (the page does not print a 3-pole W×H×D).
+# source_date is the day these pages were read.
+kind: manufacturer_parts
+manufacturer: LS Electric
+version: "0.1"
+
+parts:
+  - catalog: BKN 3P C6A
+    library_id: iec.breakers.mcb_3p_32a
+    category: protection.breaker
+    description: "BKN miniature circuit breaker, 3-pole, C curve, 6 A, 6 kA at 400 VAC"
+    verified: partial
+    source: "https://www.ls-electric.com/upload/customer/download/1483/MCB_E_180131.pdf"
+    source_date: "2026-10-08"
+    series: BKN
+    amps: 6
+    poles: 3
+    ka: 6
+    mounting: din
+    notes: "MCB catalog on ls-electric.com. BKN type technical data: 2, 3, 4 pole rated 400 VAC, breaking capacity 6 kA, poles include 3P, mounting on 35 mm DIN rail, width 17.8 mm per pole. Series table: BKN poles include 3P and the C curve, mount on 35 mm DIN rail, 2-4 pole breaking capacity 6 kA at 400 VAC. Order table heading BKN type, C curve, 6 kA at 400 VAC, model column BKN 3P C6A, In 6 A, order No. 06130054R0. 17.8 mm per pole is not a 3-pole outline, so width_mm, height_mm, and depth_mm stay blank and verified stays partial."
+
+  - catalog: MC-9b
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "Metasol MC-9b contactor, AC-3 9 A / 4 kW at 380/440 V"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps: 9
+    poles: 3
+    coil_voltage: "120V 60Hz"
+    contact_config: 1NO1NC
+    mounting: din
+    width_mm: 45
+    height_mm: 73.5
+    depth_mm: 87.4
+    notes: "Same 2023 Metasol PDF. AC-3 amps at 380/440 V. DIN rail and screw mountable up to 150AF (catalog page 6). Dimension page 142, heading MC-9b~22b AC 1NO1NC: width 45 mm, height 73.5 mm, overall depth 87.4 mm, 0.3 kg. The parenthetical 64.7 (65.5) is marked *( ) MC-18b, 22b and is not the outline depth. Control coil characteristics page 24, 22AF column (MC-9b, MC-12b, MC-18b, MC-22b), 60 Hz list includes 120 V. coil_voltage stores 120V 60Hz, one published voltage. Type numbering system page 20 prints the blocks MC-6a / R / 220V 60Hz SCREW 1a1b. That combined order string is not one catalog cell for MC-9b, so the catalog stays MC-9b. Coil heat at AC 220 V 60 Hz is 2.3 W and is not stored as heat_w. AC-3 9 A."
+
+  - catalog: MC-12b
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "Metasol MC-12b contactor, AC-3 12 A / 5.5 kW at 380/440 V"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps: 12
+    poles: 3
+    coil_voltage: "120V 60Hz"
+    contact_config: 1NO1NC
+    mounting: din
+    width_mm: 45
+    height_mm: 73.5
+    depth_mm: 87.4
+    notes: "Same 2023 Metasol PDF. AC-3 amps at 380/440 V. DIN rail and screw mountable up to 150AF (catalog page 6). Dimension page 142, heading MC-9b~22b AC 1NO1NC: width 45 mm, height 73.5 mm, overall depth 87.4 mm, 0.3 kg. The parenthetical 64.7 (65.5) is marked *( ) MC-18b, 22b and is not the outline depth. Control coil characteristics page 24, 22AF column (MC-9b, MC-12b, MC-18b, MC-22b), 60 Hz list includes 120 V. coil_voltage stores 120V 60Hz, one published voltage. Type numbering system page 20 prints the blocks MC-6a / R / 220V 60Hz SCREW 1a1b. That combined order string is not one catalog cell for MC-9b, so the catalog stays MC-9b. Coil heat at AC 220 V 60 Hz is 2.3 W and is not stored as heat_w. AC-3 12 A."
+
+  - catalog: MC-18b
+    library_id: iec.contactors.ac3_32a
+    category: switching.contactor
+    description: "Metasol MC-18b contactor, AC-3 18 A / 7.5 kW at 380/440 V"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps: 18
+    poles: 3
+    coil_voltage: "120V 60Hz"
+    contact_config: 1NO1NC
+    mounting: din
+    width_mm: 45
+    height_mm: 73.5
+    depth_mm: 87.4
+    notes: "Same 2023 Metasol PDF. AC-3 amps at 380/440 V. DIN rail and screw mountable up to 150AF (catalog page 6). Dimension page 142, heading MC-9b~22b AC 1NO1NC: width 45 mm, height 73.5 mm, overall depth 87.4 mm, 0.3 kg. The parenthetical 64.7 (65.5) is marked *( ) MC-18b, 22b and is not the outline depth. Control coil characteristics page 24, 22AF column (MC-9b, MC-12b, MC-18b, MC-22b), 60 Hz list includes 120 V. coil_voltage stores 120V 60Hz, one published voltage. Type numbering system page 20 prints the blocks MC-6a / R / 220V 60Hz SCREW 1a1b. That combined order string is not one catalog cell for MC-9b, so the catalog stays MC-9b. Coil heat at AC 220 V 60 Hz is 2.3 W and is not stored as heat_w. AC-3 18 A."
+
+  - catalog: MC-22b
+    library_id: iec.contactors.ac3_32a
+    category: switching.contactor
+    description: "Metasol MC-22b contactor, AC-3 22 A / 11 kW at 380/440 V"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps: 22
+    poles: 3
+    coil_voltage: "120V 60Hz"
+    contact_config: 1NO1NC
+    mounting: din
+    width_mm: 45
+    height_mm: 73.5
+    depth_mm: 87.4
+    notes: "Same 2023 Metasol PDF. AC-3 amps at 380/440 V. DIN rail and screw mountable up to 150AF (catalog page 6). Dimension page 142, heading MC-9b~22b AC 1NO1NC: width 45 mm, height 73.5 mm, overall depth 87.4 mm, 0.3 kg. The parenthetical 64.7 (65.5) is marked *( ) MC-18b, 22b and is not the outline depth. Control coil characteristics page 24, 22AF column (MC-9b, MC-12b, MC-18b, MC-22b), 60 Hz list includes 120 V. coil_voltage stores 120V 60Hz, one published voltage. Type numbering system page 20 prints the blocks MC-6a / R / 220V 60Hz SCREW 1a1b. That combined order string is not one catalog cell for MC-9b, so the catalog stays MC-9b. Coil heat at AC 220 V 60 Hz is 2.3 W and is not stored as heat_w. AC-3 22 A."
+
+  - catalog: MT-32/3K0.14
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 0.1-0.16 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 0.1
+    amps_max: 0.16
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MT-32/3K0.21
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 0.16-0.25 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 0.16
+    amps_max: 0.25
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MT-32/3K0.33
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 0.25-0.4 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 0.25
+    amps_max: 0.4
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MT-32/3K0.52
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 0.4-0.63 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 0.4
+    amps_max: 0.63
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MT-32/3K0.82
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 0.63-1 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 0.63
+    amps_max: 1
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MT-32/3K1.3
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 1-1.6 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 1
+    amps_max: 1.6
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MT-32/3K2.1
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 1.6-2.5 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 1.6
+    amps_max: 2.5
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MT-32/3K3.3
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 2.5-4 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 2.5
+    amps_max: 4
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MT-32/3K5
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 4-6 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 4
+    amps_max: 6
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MT-32/3K6.5
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 5-8 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 5
+    amps_max: 8
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MT-32/3K7.5
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 6-9 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 6
+    amps_max: 9
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MT-32/3K8.5
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 7-10 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 7
+    amps_max: 10
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MT-32/3K11
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 9-13 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 9
+    amps_max: 13
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MT-32/3K15
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 12-18 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 12
+    amps_max: 18
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MT-32/3K19
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 16-22 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 16
+    amps_max: 22
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MT-32/3K21.5
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 18-25 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 18
+    amps_max: 25
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MT-32/3K27
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 22-32 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 22
+    amps_max: 32
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MT-32/3K34
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "Metasol MT-32 differential overload, screw, IP20, 28-40 A"
+    verified: full
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: Metasol
+    amps_min: 28
+    amps_max: 40
+    poles: 3
+    mounting: plug_on
+    width_mm: 45
+    height_mm: 74.55
+    depth_mm: 86.3
+    notes: "Ordering type in the MT-32 screw / IP20 table (differential column). Direct-mount. Separate-mount unit named on the same table is UZ-32. A combination table in this catalog heads thermal overload relays as Class 10. Dimension page 175, MT-32: width 45 mm, front height 74.55 mm, side depth 86.3 mm. The 3.7 mm callout is not added to the depth."
+
+  - catalog: MMS-32H-0.16
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Metasol MMS-32H manual motor starter, 0.1-0.16 A"
+    verified: partial
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: MMS-32H
+    amps_min: 0.1
+    amps_max: 0.16
+    poles: 3
+    ka: 65
+    sccr: "100 kA at 240 V, 65 kA at 480Y/277 V, 25 kA at 600Y/347 V"
+    notes: "ka is the 480Y/277 V column. Applied contactor column: MC-9 / MC-6a/MC-9a/MC-9b. The 2023 Metasol extract prints MMS-32H, not MMS-32S. The 2023 catalog prints MMS-32H and does not print MMS-32S. Dimension pages through 177 do not print an MMS-32H outline, so width, height, and depth stay blank."
+
+  - catalog: MMS-32H-0.25
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Metasol MMS-32H manual motor starter, 0.16-0.25 A"
+    verified: partial
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: MMS-32H
+    amps_min: 0.16
+    amps_max: 0.25
+    poles: 3
+    ka: 65
+    sccr: "100 kA at 240 V, 65 kA at 480Y/277 V, 25 kA at 600Y/347 V"
+    notes: "ka is the 480Y/277 V column. Applied contactor column: MC-9 / MC-6a/MC-9a/MC-9b. The 2023 Metasol extract prints MMS-32H, not MMS-32S. The 2023 catalog prints MMS-32H and does not print MMS-32S. Dimension pages through 177 do not print an MMS-32H outline, so width, height, and depth stay blank."
+
+  - catalog: MMS-32H-0.4
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Metasol MMS-32H manual motor starter, 0.25-0.4 A"
+    verified: partial
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: MMS-32H
+    amps_min: 0.25
+    amps_max: 0.4
+    poles: 3
+    ka: 65
+    sccr: "100 kA at 240 V, 65 kA at 480Y/277 V, 25 kA at 600Y/347 V"
+    notes: "ka is the 480Y/277 V column. Applied contactor column: MC-9 / MC-6a/MC-9a/MC-9b. The 2023 Metasol extract prints MMS-32H, not MMS-32S. The 2023 catalog prints MMS-32H and does not print MMS-32S. Dimension pages through 177 do not print an MMS-32H outline, so width, height, and depth stay blank."
+
+  - catalog: MMS-32H-0.63
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Metasol MMS-32H manual motor starter, 0.4-0.63 A"
+    verified: partial
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: MMS-32H
+    amps_min: 0.4
+    amps_max: 0.63
+    poles: 3
+    ka: 65
+    sccr: "100 kA at 240 V, 65 kA at 480Y/277 V, 25 kA at 600Y/347 V"
+    notes: "ka is the 480Y/277 V column. Applied contactor column: MC-9 / MC-6a/MC-9a/MC-9b. The 2023 Metasol extract prints MMS-32H, not MMS-32S. The 2023 catalog prints MMS-32H and does not print MMS-32S. Dimension pages through 177 do not print an MMS-32H outline, so width, height, and depth stay blank."
+
+  - catalog: MMS-32H-1
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Metasol MMS-32H manual motor starter, 0.63-1 A"
+    verified: partial
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: MMS-32H
+    amps_min: 0.63
+    amps_max: 1
+    poles: 3
+    ka: 65
+    sccr: "100 kA at 240 V, 65 kA at 480Y/277 V, 25 kA at 600Y/347 V"
+    notes: "ka is the 480Y/277 V column. Applied contactor column: MC-9 / MC-6a/MC-9a/MC-9b. The 2023 Metasol extract prints MMS-32H, not MMS-32S. The 2023 catalog prints MMS-32H and does not print MMS-32S. Dimension pages through 177 do not print an MMS-32H outline, so width, height, and depth stay blank."
+
+  - catalog: MMS-32H-1.6
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Metasol MMS-32H manual motor starter, 1-1.6 A"
+    verified: partial
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: MMS-32H
+    amps_min: 1
+    amps_max: 1.6
+    poles: 3
+    ka: 65
+    sccr: "100 kA at 240 V, 65 kA at 480Y/277 V, 25 kA at 600Y/347 V"
+    notes: "ka is the 480Y/277 V column. Applied contactor column: MC-9 / MC-6a/MC-9a/MC-9b. The 2023 Metasol extract prints MMS-32H, not MMS-32S. The 2023 catalog prints MMS-32H and does not print MMS-32S. Dimension pages through 177 do not print an MMS-32H outline, so width, height, and depth stay blank."
+
+  - catalog: MMS-32H-2.5
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Metasol MMS-32H manual motor starter, 1.6-2.5 A"
+    verified: partial
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: MMS-32H
+    amps_min: 1.6
+    amps_max: 2.5
+    poles: 3
+    ka: 65
+    sccr: "100 kA at 240 V, 65 kA at 480Y/277 V, 25 kA at 600Y/347 V"
+    notes: "ka is the 480Y/277 V column. Applied contactor column: MC-12 / MC-12a/MC-12b. The 2023 Metasol extract prints MMS-32H, not MMS-32S. The 2023 catalog prints MMS-32H and does not print MMS-32S. Dimension pages through 177 do not print an MMS-32H outline, so width, height, and depth stay blank."
+
+  - catalog: MMS-32H-4
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Metasol MMS-32H manual motor starter, 2.5-4 A"
+    verified: partial
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: MMS-32H
+    amps_min: 2.5
+    amps_max: 4
+    poles: 3
+    ka: 65
+    sccr: "100 kA at 240 V, 65 kA at 480Y/277 V, 25 kA at 600Y/347 V"
+    notes: "ka is the 480Y/277 V column. Applied contactor column: MC-12 / MC-12a/MC-12b. The 2023 Metasol extract prints MMS-32H, not MMS-32S. The 2023 catalog prints MMS-32H and does not print MMS-32S. Dimension pages through 177 do not print an MMS-32H outline, so width, height, and depth stay blank."
+
+  - catalog: MMS-32H-6
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Metasol MMS-32H manual motor starter, 4-6 A"
+    verified: partial
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: MMS-32H
+    amps_min: 4
+    amps_max: 6
+    poles: 3
+    ka: 65
+    sccr: "100 kA at 240 V, 65 kA at 480Y/277 V, 25 kA at 600Y/347 V"
+    notes: "ka is the 480Y/277 V column. Applied contactor column: MC-18 / MC-18a/MC-18b. The 2023 Metasol extract prints MMS-32H, not MMS-32S. The 2023 catalog prints MMS-32H and does not print MMS-32S. Dimension pages through 177 do not print an MMS-32H outline, so width, height, and depth stay blank."
+
+  - catalog: MMS-32H-8
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Metasol MMS-32H manual motor starter, 5-8 A"
+    verified: partial
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: MMS-32H
+    amps_min: 5
+    amps_max: 8
+    poles: 3
+    ka: 65
+    sccr: "100 kA at 240 V, 65 kA at 480Y/277 V, 10 kA at 600Y/347 V"
+    notes: "ka is the 480Y/277 V column. Applied contactor column: MC-18 / MC-18a/MC-18b. The 2023 Metasol extract prints MMS-32H, not MMS-32S. The 2023 catalog prints MMS-32H and does not print MMS-32S. Dimension pages through 177 do not print an MMS-32H outline, so width, height, and depth stay blank."
+
+  - catalog: MMS-32H-10
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Metasol MMS-32H manual motor starter, 6-10 A"
+    verified: partial
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: MMS-32H
+    amps_min: 6
+    amps_max: 10
+    poles: 3
+    ka: 65
+    sccr: "100 kA at 240 V, 65 kA at 480Y/277 V, 10 kA at 600Y/347 V"
+    notes: "ka is the 480Y/277 V column. Applied contactor column: MC-18 / MC-18a/MC-18b. The 2023 Metasol extract prints MMS-32H, not MMS-32S. The 2023 catalog prints MMS-32H and does not print MMS-32S. Dimension pages through 177 do not print an MMS-32H outline, so width, height, and depth stay blank."
+
+  - catalog: MMS-32H-13
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Metasol MMS-32H manual motor starter, 9-13 A"
+    verified: partial
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: MMS-32H
+    amps_min: 9
+    amps_max: 13
+    poles: 3
+    ka: 65
+    sccr: "100 kA at 240 V, 65 kA at 480Y/277 V, 10 kA at 600Y/347 V"
+    notes: "ka is the 480Y/277 V column. Applied contactor column: MC-25 / MC-22b/MC-25a. The 2023 Metasol extract prints MMS-32H, not MMS-32S. The 2023 catalog prints MMS-32H and does not print MMS-32S. Dimension pages through 177 do not print an MMS-32H outline, so width, height, and depth stay blank."
+
+  - catalog: MMS-32H-17
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Metasol MMS-32H manual motor starter, 11-17 A"
+    verified: partial
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: MMS-32H
+    amps_min: 11
+    amps_max: 17
+    poles: 3
+    ka: 30
+    sccr: "100 kA at 240 V, 30 kA at 480Y/277 V, 10 kA at 600Y/347 V"
+    notes: "ka is the 480Y/277 V column. Applied contactor column: MC-25 / MC-22b/MC-25a. The 2023 Metasol extract prints MMS-32H, not MMS-32S. The 2023 catalog prints MMS-32H and does not print MMS-32S. Dimension pages through 177 do not print an MMS-32H outline, so width, height, and depth stay blank."
+
+  - catalog: MMS-32H-22
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Metasol MMS-32H manual motor starter, 14-22 A"
+    verified: partial
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: MMS-32H
+    amps_min: 14
+    amps_max: 22
+    poles: 3
+    ka: 30
+    sccr: "100 kA at 240 V, 30 kA at 480Y/277 V, 10 kA at 600Y/347 V"
+    notes: "ka is the 480Y/277 V column. Applied contactor column: MC-25 / MC-22b/MC-25a. The 2023 Metasol extract prints MMS-32H, not MMS-32S. The 2023 catalog prints MMS-32H and does not print MMS-32S. Dimension pages through 177 do not print an MMS-32H outline, so width, height, and depth stay blank."
+
+  - catalog: MMS-32H-26
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Metasol MMS-32H manual motor starter, 18-26 A"
+    verified: partial
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: MMS-32H
+    amps_min: 18
+    amps_max: 26
+    poles: 3
+    ka: 30
+    sccr: "100 kA at 240 V, 30 kA at 480Y/277 V, 10 kA at 600Y/347 V"
+    notes: "ka is the 480Y/277 V column. Applied contactor column: MC-32 / MC-32a. The 2023 Metasol extract prints MMS-32H, not MMS-32S. The 2023 catalog prints MMS-32H and does not print MMS-32S. Dimension pages through 177 do not print an MMS-32H outline, so width, height, and depth stay blank."
+
+  - catalog: MMS-32H-32
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Metasol MMS-32H manual motor starter, 22-32 A"
+    verified: partial
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: MMS-32H
+    amps_min: 22
+    amps_max: 32
+    poles: 3
+    ka: 30
+    sccr: "100 kA at 240 V, 30 kA at 480Y/277 V, 10 kA at 600Y/347 V"
+    notes: "ka is the 480Y/277 V column. Applied contactor column: MC-32 / MC-32a. The 2023 Metasol extract prints MMS-32H, not MMS-32S. The 2023 catalog prints MMS-32H and does not print MMS-32S. Dimension pages through 177 do not print an MMS-32H outline, so width, height, and depth stay blank."
+
+  - catalog: MMS-32H-40
+    library_id: iec.breakers.mpcb_3p
+    category: protection.mpcb
+    description: "Metasol MMS-32H manual motor starter, 28-40 A"
+    verified: partial
+    source: "https://tbs.ls-electric.com/tbsdata/FileRepository/CTLG/%5BMetasol_MS%5D_EN_C04002-32-202304.pdf"
+    source_date: "2026-10-08"
+    series: MMS-32H
+    amps_min: 28
+    amps_max: 40
+    poles: 3
+    ka: 30
+    sccr: "100 kA at 240 V, 30 kA at 480Y/277 V, 10 kA at 600Y/347 V"
+    notes: "ka is the 480Y/277 V column. Applied contactor column: MC-35a/MC-40a. The 2023 Metasol extract prints MMS-32H, not MMS-32S. The 2023 catalog prints MMS-32H and does not print MMS-32S. Dimension pages through 177 do not print an MMS-32H outline, so width, height, and depth stay blank."
+
+  - catalog: XBC-DN32H
+    library_id: iec.plc.compact_16dio
+    category: control.plc
+    description: "XGB XBC-DN32H, AC 100-240 V supply, DC 24 V input 16 point, transistor output 16 point"
+    verified: partial
+    source: "https://www.ls-electric.com/upload/customer/download/9f2ada3f-cd60-4e03-8a42-b0abe15fcc09/10310001563_Users%20Manual_XBC-DN32H_V1.0_EN_161212.pdf"
+    source_date: "2026-10-08"
+    series: XGB
+    notes: "Specification table in the XBC-DN32H user manual, which also lists XBC-DR32H. Current draw is not stored as amps. Outline millimetres were not in that table."
+
+  - catalog: XBC-DR32H
+    library_id: iec.plc.compact_16dio
+    category: control.plc
+    description: "XGB XBC-DR32H, AC 100-240 V supply, DC 24 V input 16 point, relay output 16 point"
+    verified: partial
+    source: "https://www.ls-electric.com/upload/customer/download/9f2ada3f-cd60-4e03-8a42-b0abe15fcc09/10310001563_Users%20Manual_XBC-DN32H_V1.0_EN_161212.pdf"
+    source_date: "2026-10-08"
+    series: XGB
+    notes: "Specification table in the XBC-DN32H user manual, which also lists XBC-DR32H. Current draw is not stored as amps. Outline millimetres were not in that table."
+
+  - catalog: LSLV0004S100-4
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 480 V, 0.4 kW, rated current 1.25 A, frame A-1"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 1.25
+    width_mm: 68
+    height_mm: 128
+    depth_mm: 123
+    notes: "Watt-loss bulletin row. Voltage column 480. kW 0.4. Currents printed beside the kW are 1.25 then 1.56; amps stores the first. Frame A-1. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0004S100-4: W1 68 mm, H1 128 mm, D1 123 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0008S100-4
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 480 V, 0.8 kW, rated current 2.5 A, frame A-2"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 2.5
+    width_mm: 68
+    height_mm: 128
+    depth_mm: 128
+    notes: "Watt-loss bulletin row. Voltage column 480. kW 0.8. Currents printed beside the kW are 2.5 then 3.1; amps stores the first. Frame A-2. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0008S100-4: W1 68 mm, H1 128 mm, D1 128 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0015S100-4
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 480 V, 1.5 kW, rated current 4 A, frame B-1"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 4
+    width_mm: 100
+    height_mm: 128
+    depth_mm: 130
+    notes: "Watt-loss bulletin row. Voltage column 480. kW 1.5. Currents printed beside the kW are 4 then 5; amps stores the first. Frame B-1. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0015S100-4: W1 100 mm, H1 128 mm, D1 130 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0022S100-4
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 480 V, 2.2 kW, rated current 5.5 A, frame B-2"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 5.5
+    width_mm: 100
+    height_mm: 128
+    depth_mm: 145
+    notes: "Watt-loss bulletin row. Voltage column 480. kW 2.2. Currents printed beside the kW are 5.5 then 6.9; amps stores the first. Frame B-2. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0022S100-4: W1 100 mm, H1 128 mm, D1 145 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0037S100-4
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 480 V, 3.7 kW, rated current 8 A, frame C"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 8
+    width_mm: 140
+    height_mm: 128
+    depth_mm: 145
+    notes: "Watt-loss bulletin row. Voltage column 480. kW 3.7. Currents printed beside the kW are 8 then 10; amps stores the first. Frame C. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0037S100-4: W1 140 mm, H1 128 mm, D1 145 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0040S100-4
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 480 V, 4 kW, rated current 9 A, frame C"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 9
+    width_mm: 140
+    height_mm: 128
+    depth_mm: 145
+    notes: "Watt-loss bulletin row. Voltage column 480. kW 4. Currents printed beside the kW are 9 then 10; amps stores the first. Frame C. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0040S100-4: W1 140 mm, H1 128 mm, D1 145 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0055S100-4
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 480 V, 5.5 kW, rated current 12 A, frame D"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 12
+    width_mm: 160
+    height_mm: 232
+    depth_mm: 140
+    notes: "Watt-loss bulletin row. Voltage column 480. kW 5.5. Currents printed beside the kW are 12 then 16; amps stores the first. Frame D. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0055S100-4: W1 160 mm, H1 232 mm, D1 140 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0075S100-4
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 480 V, 7.5 kW, rated current 16 A, frame D"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 16
+    width_mm: 160
+    height_mm: 232
+    depth_mm: 140
+    notes: "Watt-loss bulletin row. Voltage column 480. kW 7.5. Currents printed beside the kW are 16 then 23; amps stores the first. Frame D. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0075S100-4: W1 160 mm, H1 232 mm, D1 140 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0110S100-4
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 480 V, 11 kW, rated current 24 A, frame E"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 24
+    width_mm: 180
+    height_mm: 290
+    depth_mm: 163
+    notes: "Watt-loss bulletin row. Voltage column 480. kW 11. Currents printed beside the kW are 24 then 30; amps stores the first. Frame E. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0110S100-4: W1 180 mm, H1 290 mm, D1 163 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0150S100-4
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 480 V, 15 kW, rated current 30 A, frame E"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 30
+    width_mm: 180
+    height_mm: 290
+    depth_mm: 163
+    notes: "Watt-loss bulletin row. Voltage column 480. kW 15. Currents printed beside the kW are 30 then 38; amps stores the first. Frame E. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0150S100-4: W1 180 mm, H1 290 mm, D1 163 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0185S100-4
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 480 V, 18.5 kW, rated current 39 A, frame F"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 39
+    width_mm: 220
+    height_mm: 350
+    depth_mm: 187
+    notes: "Watt-loss bulletin row. Voltage column 480. kW 18.5. Currents printed beside the kW are 39 then 44; amps stores the first. Frame F. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0185S100-4: W1 220 mm, H1 350 mm, D1 187 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0220S100-4
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 480 V, 22 kW, rated current 45 A, frame F"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 45
+    width_mm: 220
+    height_mm: 350
+    depth_mm: 187
+    notes: "Watt-loss bulletin row. Voltage column 480. kW 22. Currents printed beside the kW are 45 then 58; amps stores the first. Frame F. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0220S100-4: W1 220 mm, H1 350 mm, D1 187 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0300S100-4
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 480 V, 30 kW, rated current 61 A, frame G"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 61
+    width_mm: 275
+    height_mm: 450
+    depth_mm: 284
+    notes: "Watt-loss bulletin row. Voltage column 480. kW 30. Currents printed beside the kW are 61 then 75; amps stores the first. Frame G. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0300S100-4: W1 275 mm, H1 450 mm, D1 284 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0004S100-2
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 240 V, 0.4 kW, rated current 2.5 A, frame A-1"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 2.5
+    width_mm: 68
+    height_mm: 128
+    depth_mm: 123
+    notes: "Watt-loss bulletin row. Voltage column 240. kW 0.4. Currents printed beside the kW are 2.5 then 3.1; amps stores the first. Frame A-1. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0004S100-2: W1 68 mm, H1 128 mm, D1 123 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0008S100-2
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 240 V, 0.8 kW, rated current 5 A, frame A-2"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 5
+    width_mm: 68
+    height_mm: 128
+    depth_mm: 128
+    notes: "Watt-loss bulletin row. Voltage column 240. kW 0.8. Currents printed beside the kW are 5 then 6; amps stores the first. Frame A-2. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0008S100-2: W1 68 mm, H1 128 mm, D1 128 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0015S100-2
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 240 V, 1.5 kW, rated current 8 A, frame B-1"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 8
+    width_mm: 100
+    height_mm: 128
+    depth_mm: 130
+    notes: "Watt-loss bulletin row. Voltage column 240. kW 1.5. Currents printed beside the kW are 8 then 9.6; amps stores the first. Frame B-1. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0015S100-2: W1 100 mm, H1 128 mm, D1 130 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0022S100-2
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 240 V, 2.2 kW, rated current 11 A, frame B-2"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 11
+    width_mm: 100
+    height_mm: 128
+    depth_mm: 145
+    notes: "Watt-loss bulletin row. Voltage column 240. kW 2.2. Currents printed beside the kW are 11 then 12; amps stores the first. Frame B-2. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0022S100-2: W1 100 mm, H1 128 mm, D1 145 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0037S100-2
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 240 V, 3.7 kW, rated current 16 A, frame C"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 16
+    width_mm: 140
+    height_mm: 128
+    depth_mm: 145
+    notes: "Watt-loss bulletin row. Voltage column 240. kW 3.7. Currents printed beside the kW are 16 then 18; amps stores the first. Frame C. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0037S100-2: W1 140 mm, H1 128 mm, D1 145 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0040S100-2
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 240 V, 4 kW, rated current 17 A, frame C"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 17
+    width_mm: 140
+    height_mm: 128
+    depth_mm: 145
+    notes: "Watt-loss bulletin row. Voltage column 240. kW 4. Currents printed beside the kW are 17 then 18; amps stores the first. Frame C. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0040S100-2: W1 140 mm, H1 128 mm, D1 145 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0055S100-2
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 240 V, 5.5 kW, rated current 24 A, frame D"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 24
+    width_mm: 160
+    height_mm: 232
+    depth_mm: 140
+    notes: "Watt-loss bulletin row. Voltage column 240. kW 5.5. Currents printed beside the kW are 24 then 30; amps stores the first. Frame D. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0055S100-2: W1 160 mm, H1 232 mm, D1 140 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0075S100-2
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 240 V, 7.5 kW, rated current 32 A, frame D"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 32
+    notes: "Watt-loss bulletin row. Voltage column 240. kW 7.5. Currents printed beside the kW are 32 then 40; amps stores the first. Frame D. Model string has no EOFNS suffix. Section 7.3 leaves the 0075S100-2 dimension cells empty, so width, height, and depth stay blank. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf"
+
+  - catalog: LSLV0110S100-2
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 240 V, 11 kW, rated current 46 A, frame E"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 46
+    width_mm: 180
+    height_mm: 290
+    depth_mm: 163
+    notes: "Watt-loss bulletin row. Voltage column 240. kW 11. Currents printed beside the kW are 46 then 56; amps stores the first. Frame E. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0110S100-2: W1 180 mm, H1 290 mm, D1 163 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."
+
+  - catalog: LSLV0150S100-2
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "S100 240 V, 15 kW, rated current 60 A, frame F"
+    verified: partial
+    source: "https://www.lselectricamerica.com/wp-content/uploads/2021/08/LSISVFDWattLossandEfficiencyBulletinRevF.pdf"
+    source_date: "2026-10-08"
+    series: S100
+    amps: 60
+    width_mm: 220
+    height_mm: 350
+    depth_mm: 187
+    notes: "Watt-loss bulletin row. Voltage column 240. kW 15. Currents printed beside the kW are 60 then 69; amps stores the first. Frame F. Model string has no EOFNS suffix. Standard (not EMC, not IP66) outline in S100 simple manual section 7.3, printed page 213, row 0150S100-2: W1 220 mm, H1 350 mm, D1 187 mm. https://ssq.ls-electric.com/uploads/document/17250045619710/S100_Simple_Manual_English_V3.7_240830.pdf. Amps stay on the watt-loss bulletin, so verified stays partial."

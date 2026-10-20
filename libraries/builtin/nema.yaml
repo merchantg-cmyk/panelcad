@@ -1,0 +1,1535 @@
+library: nema
+version: "0.1"
+# North American generic symbols (NEMA / ANSI / JIC). One group.
+devices:
+  - id: operators.pb_no
+    name: Pushbutton NO
+    category: operator.pushbutton
+    ref_prefix: PB
+    tags: [button, "no"]
+    schematic:
+      width: 24
+      height: 32
+      pins:
+        - { id: "3", x: 0, y: 24, side: left }
+        - { id: "4", x: 24, y: 24, side: right }
+      draw:
+        - circle: [12, 7, 5.5]
+        - line: [12, 12.5, 12, 20]
+        - line: [0, 24, 7, 24]
+        - line: [17, 24, 24, 24]
+        - line: [7, 21, 7, 27]
+        - line: [17, 21, 17, 27]
+        - line: [7, 24, 14, 18]
+    panel: { w: 22, h: 22, d: 50, din: false, in_panel: true, mount: door, dims: generic }
+    props: { contact: "NO", mounting: 22mm }
+
+  - id: operators.pb_nc
+    name: Pushbutton NC
+    category: operator.pushbutton
+    ref_prefix: PB
+    tags: [button, nc]
+    schematic:
+      width: 24
+      height: 32
+      pins:
+        - { id: "1", x: 0, y: 24, side: left }
+        - { id: "2", x: 24, y: 24, side: right }
+      draw:
+        - circle: [12, 7, 5.5]
+        - line: [12, 12.5, 12, 20]
+        - line: [0, 24, 7, 24]
+        - line: [17, 24, 24, 24]
+        - line: [7, 21, 7, 27]
+        - line: [17, 21, 17, 27]
+        - line: [7, 24, 17, 21]
+    panel: { w: 22, h: 22, d: 50, din: false, in_panel: true, mount: door, dims: generic }
+    props: { contact: NC, mounting: 22mm }
+
+  - id: operators.estop
+    name: Emergency stop
+    category: operator.estop
+    ref_prefix: ES
+    tags: [estop, safety]
+    schematic:
+      width: 28
+      height: 34
+      pins:
+        - { id: "1", x: 0, y: 26, side: left }
+        - { id: "2", x: 28, y: 26, side: right }
+      draw:
+        - circle: [14, 8, 6]
+        - circle: [14, 8, 3]
+        - line: [14, 14, 14, 22]
+        - line: [0, 26, 8, 26]
+        - line: [20, 26, 28, 26]
+        - line: [8, 23, 8, 29]
+        - line: [20, 23, 20, 29]
+        - line: [8, 26, 20, 23]
+    panel: { w: 40, h: 40, d: 60, din: false, in_panel: true, mount: door, dims: generic }
+    props: { contact: NC, color: red, mounting: 22mm }
+
+  - id: operators.estop_2nc
+    name: Emergency stop 2NC
+    category: operator.estop
+    ref_prefix: ES
+    tags: [estop, safety, 2nc]
+    schematic:
+      width: 28
+      height: 46
+      pins:
+        - { id: "11", x: 0, y: 26, side: left }
+        - { id: "12", x: 28, y: 26, side: right }
+        - { id: "21", x: 0, y: 38, side: left }
+        - { id: "22", x: 28, y: 38, side: right }
+      draw:
+        - circle: [14, 8, 6]
+        - circle: [14, 8, 3]
+        - line: [14, 14, 14, 22]
+        - line: [0, 26, 8, 26]
+        - line: [20, 26, 28, 26]
+        - line: [8, 23, 8, 29]
+        - line: [20, 23, 20, 29]
+        - line: [8, 26, 20, 23]
+        - line: [0, 38, 8, 38]
+        - line: [20, 38, 28, 38]
+        - line: [8, 35, 8, 41]
+        - line: [20, 35, 20, 41]
+        - line: [8, 38, 20, 35]
+    panel: { w: 40, h: 40, d: 60, din: false, in_panel: true, mount: door, dims: generic }
+    props: { contact: 2NC, color: red, mounting: 22mm, twist_release: true }
+
+  - id: operators.pilot_light
+    name: Pilot light
+    category: operator.light
+    ref_prefix: PL
+    tags: [lamp, indicator]
+    schematic:
+      width: 24
+      height: 28
+      pins:
+        - { id: X1, x: 0, y: 12, side: left, electrical: input }
+        - { id: X2, x: 24, y: 12, side: right, electrical: input }
+      draw:
+        - circle: [12, 12, 7]
+        - line: [7, 7, 17, 17]
+        - line: [17, 7, 7, 17]
+        - line: [0, 12, 5, 12]
+        - line: [19, 12, 24, 12]
+        - text: [12, 26, "LT", 2.5]
+    panel: { w: 22, h: 22, d: 45, din: false, in_panel: true, mount: door, dims: generic }
+    props: { voltage: 120VAC, mounting: 22mm }
+
+  - id: operators.selector_3pos
+    name: Selector 3-position HOA
+    category: operator.selector
+    ref_prefix: SEL
+    tags: [selector, hoa]
+    schematic:
+      width: 30
+      height: 32
+      pins:
+        - { id: "1", x: 0, y: 14, side: left }
+        - { id: "2", x: 30, y: 8, side: right }
+        - { id: "3", x: 30, y: 20, side: right }
+      draw:
+        - circle: [12, 14, 6]
+        - line: [12, 14, 16.2, 9.8]
+        - line: [12, 14, 16.2, 18.2]
+        - line: [0, 14, 6, 14]
+        - line: [24, 8, 30, 8]
+        - line: [24, 20, 30, 20]
+        - text: [12, 30, "HOA", 2.2]
+    panel: { w: 22, h: 22, d: 50, din: false, in_panel: true, mount: door, dims: generic }
+    props: { positions: 3, maintained: true, mounting: 22mm }
+
+  - id: operators.selector_no
+    name: Selector maintained NO
+    category: operator.selector
+    ref_prefix: SS
+    tags: [selector, no, maintained]
+    schematic:
+      width: 24
+      height: 32
+      pins:
+        - { id: "3", x: 0, y: 24, side: left }
+        - { id: "4", x: 24, y: 24, side: right }
+      draw:
+        - circle: [12, 8, 6]
+        - line: [12, 8, 16.4, 4.2]
+        - line: [12, 14, 12, 20]
+        - line: [0, 24, 7, 24]
+        - line: [17, 24, 24, 24]
+        - line: [7, 21, 7, 27]
+        - line: [17, 21, 17, 27]
+        - line: [7, 24, 14, 18]
+    panel: { w: 22, h: 22, d: 50, din: false, in_panel: true, mount: door, dims: generic }
+    props: { contact: "NO", positions: 2, maintained: true, mounting: 22mm }
+
+  - id: operators.limit_no
+    name: Limit switch NO
+    category: operator.limit
+    ref_prefix: LS
+    tags: [limit, "no"]
+    schematic:
+      width: 26
+      height: 26
+      pins:
+        - { id: "3", x: 0, y: 18, side: left }
+        - { id: "4", x: 26, y: 18, side: right }
+      draw:
+        - polyline: [[10, 3], [18, 3], [18, 10]]
+        - line: [0, 18, 8, 18]
+        - line: [18, 18, 26, 18]
+        - line: [8, 15, 8, 21]
+        - line: [18, 15, 18, 21]
+        - line: [8, 18, 15, 12]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: field, dims: generic }
+    props: { contact: "NO", location: field }
+
+  - id: operators.limit_nc
+    name: Limit switch NC
+    category: operator.limit
+    ref_prefix: LS
+    tags: [limit, nc]
+    schematic:
+      width: 26
+      height: 26
+      pins:
+        - { id: "1", x: 0, y: 18, side: left }
+        - { id: "2", x: 26, y: 18, side: right }
+      draw:
+        - polyline: [[10, 3], [18, 3], [18, 10]]
+        - line: [0, 18, 8, 18]
+        - line: [18, 18, 26, 18]
+        - line: [8, 15, 8, 21]
+        - line: [18, 15, 18, 21]
+        - line: [8, 18, 18, 15]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: field, dims: generic }
+    props: { contact: NC, location: field }
+
+  - id: contactors.coil
+    name: Contactor coil
+    category: switching.contactor
+    ref_prefix: M
+    tags: [coil, contactor]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: A1, x: 0, y: 14, side: left, electrical: input }
+        - { id: A2, x: 28, y: 14, side: right, electrical: input }
+      draw:
+        - circle: [14, 14, 8]
+        - line: [0, 14, 6, 14]
+        - line: [22, 14, 28, 14]
+    panel: { w: 45, h: 58, d: 57, din: true }
+    props: { coil: 120VAC, contacts: 1NO }
+
+  - id: contactors.aux_no
+    name: Auxiliary contact NO
+    category: switching.aux
+    ref_prefix: M
+    tags: [aux, "no"]
+    schematic:
+      width: 28
+      height: 16
+      pins:
+        - { id: "3", x: 0, y: 10, side: left }
+        - { id: "4", x: 28, y: 10, side: right }
+      draw:
+        - line: [0, 10, 8, 10]
+        - line: [20, 10, 28, 10]
+        - line: [8, 7, 8, 13]
+        - line: [20, 7, 20, 13]
+        - line: [8, 10, 16, 4]
+    panel: { w: 9, h: 45, d: 70, din: true }
+    props: { contact: "NO" }
+
+  - id: contactors.aux_nc
+    name: Auxiliary contact NC
+    category: switching.aux
+    ref_prefix: M
+    tags: [aux, nc]
+    schematic:
+      width: 28
+      height: 16
+      pins:
+        - { id: "1", x: 0, y: 10, side: left }
+        - { id: "2", x: 28, y: 10, side: right }
+      draw:
+        - line: [0, 10, 8, 10]
+        - line: [20, 10, 28, 10]
+        - line: [8, 7, 8, 13]
+        - line: [20, 7, 20, 13]
+        - line: [8, 10, 20, 7]
+    panel: { w: 9, h: 45, d: 70, din: true }
+    props: { contact: NC }
+
+  - id: contactors.mech_interlock
+    name: Mechanical interlock
+    category: switching.interlock
+    ref_prefix: MI
+    tags: [interlock, mechanical, accessory]
+    schematic:
+      width: 18
+      height: 12
+      pins: []
+      draw:
+        - rect: [1, 2, 16, 8]
+        - text: [9, 8, "MI", 2.2]
+    panel: { w: 9, h: 45, d: 50, din: true, in_panel: true, mount: din_rail, dims: generic }
+    props: { accessory: mechanical_interlock }
+
+  - id: timers.on_delay
+    name: On-delay timer
+    category: timing.timer
+    ref_prefix: TR
+    tags: [timer, on-delay]
+    schematic:
+      width: 36
+      height: 40
+      pins:
+        - { id: A1, x: 0, y: 20, side: left, electrical: input }
+        - { id: A2, x: 36, y: 20, side: right, electrical: input }
+        - { id: "1", x: 36, y: 10, side: right, electrical: output }
+        - { id: "3", x: 36, y: 30, side: right, electrical: output }
+      draw:
+        - rect: [6, 6, 24, 28]
+        - circle: [18, 20, 5]
+        - text: [26, 32, "TR", 2.2]
+        - line: [0, 20, 13, 20]
+        - line: [23, 20, 36, 20]
+        - line: [22, 10, 36, 10]
+        - line: [22, 8, 22, 12]
+        - line: [22, 10, 27, 16]
+        - line: [22, 30, 36, 30]
+        - line: [22, 28, 22, 32]
+    panel: { w: 22.5, h: 80, d: 70, din: true }
+    props: { function: on-delay, coil: 120VAC }
+
+  - id: power.control_transformer
+    name: Control transformer
+    category: power.transformer
+    ref_prefix: T
+    tags: [transformer]
+    schematic:
+      width: 40
+      height: 40
+      pins:
+        - { id: H1, x: 0, y: 12, side: left, electrical: power }
+        - { id: H2, x: 0, y: 28, side: left, electrical: power }
+        - { id: X1, x: 40, y: 12, side: right, electrical: power }
+        - { id: X2, x: 40, y: 28, side: right, electrical: power }
+      draw:
+        - circle: [14, 20, 10]
+        - circle: [26, 20, 10]
+        - line: [0, 12, 8, 12]
+        - line: [0, 28, 8, 28]
+        - line: [32, 12, 40, 12]
+        - line: [32, 28, 40, 28]
+        - text: [8, 8, "H1", 2]
+        - text: [32, 8, "X1", 2]
+        - text: [20, 38, "T", 2.5]
+    panel: { w: 78, h: 72, d: 75, din: true }
+    props: { primary: 480V, secondary: 120V, VA: 150 }
+
+  - id: loads.motor_1ph
+    name: 1-phase motor
+    category: load.motor
+    ref_prefix: MTR
+    tags: [motor, 1ph]
+    schematic:
+      width: 36
+      height: 36
+      pins:
+        - { id: T1, x: 8, y: 0, side: top, electrical: power }
+        - { id: T2, x: 28, y: 0, side: top, electrical: power }
+      draw:
+        - circle: [18, 20, 12]
+        - text: [18, 22, "M", 4]
+        - line: [8, 0, 8, 13.4]
+        - line: [28, 0, 28, 13.4]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
+    props: { poles: 1, type: induction, location: field }
+
+  - id: loads.motor_3ph
+    name: 3-phase motor
+    category: load.motor
+    ref_prefix: MTR
+    tags: [motor]
+    schematic:
+      width: 40
+      height: 38
+      pins:
+        - { id: T1, x: 8, y: 0, side: top, electrical: power }
+        - { id: T2, x: 18, y: 0, side: top, electrical: power }
+        - { id: T3, x: 28, y: 0, side: top, electrical: power }
+      draw:
+        - circle: [18, 24, 14]
+        - text: [18, 26, "M", 4]
+        - line: [8, 0, 8, 14.2]
+        - line: [18, 0, 18, 10]
+        - line: [28, 0, 28, 14.2]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
+    props: { poles: 3, type: induction, location: field }
+
+  - id: loads.motor_3ph_6lead
+    name: 3-phase motor 6-lead
+    category: load.motor
+    ref_prefix: MTR
+    tags: [motor, star-delta, wye-delta]
+    schematic:
+      width: 46
+      height: 40
+      pins:
+        - { id: T1, x: 8, y: 0, side: top, electrical: power }
+        - { id: T2, x: 18, y: 0, side: top, electrical: power }
+        - { id: T3, x: 28, y: 0, side: top, electrical: power }
+        - { id: T6, x: 46, y: 23, side: right, electrical: power }
+        - { id: T4, x: 46, y: 26, side: right, electrical: power }
+        - { id: T5, x: 46, y: 29, side: right, electrical: power }
+      draw:
+        - circle: [18, 20, 10]
+        - text: [18, 22, "M", 3.4]
+        - line: [8, 0, 12, 4]
+        - line: [12, 4, 12, 12]
+        - line: [18, 0, 18, 10]
+        - line: [28, 0, 24, 4]
+        - line: [24, 4, 24, 12]
+        - line: [27.54, 23, 46, 23]
+        - line: [26.00, 26, 46, 26]
+        - line: [22.36, 29, 46, 29]
+        - text: [13.2, 6, "T1", 1.6]
+        - text: [19.2, 6, "T2", 1.6]
+        - text: [25.2, 6, "T3", 1.6]
+        - text: [36, 22.0, "T6", 1.6]
+        - text: [36, 25.0, "T4", 1.6]
+        - text: [36, 28.0, "T5", 1.6]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
+    props: { poles: 3, leads: 6, type: induction, location: field }
+
+  - id: protection.fuse_10a
+    name: Fuse 10A
+    category: protection.fuse
+    ref_prefix: FU
+    tags: [fuse]
+    schematic:
+      width: 28
+      height: 14
+      pins:
+        - { id: "1", x: 0, y: 7, side: left, electrical: power }
+        - { id: "2", x: 28, y: 7, side: right, electrical: power }
+      draw:
+        - line: [0, 7, 6, 7]
+        - rect: [6, 2, 16, 10]
+        - line: [22, 7, 28, 7]
+        - text: [14, 9, "FU", 2.0]
+    panel: { w: 18, h: 80, d: 60, din: true }
+    props: { In: 10A }
+
+  - id: protection.fuse_3p
+    name: Fuse 3P
+    category: protection.fuse
+    ref_prefix: FU
+    tags: [fuse, 3p]
+    schematic:
+      width: 36
+      height: 50
+      pins:
+        - { id: "1", x: 8, y: 0, side: top, electrical: power }
+        - { id: "3", x: 18, y: 0, side: top, electrical: power }
+        - { id: "5", x: 28, y: 0, side: top, electrical: power }
+        - { id: "2", x: 8, y: 50, side: bottom, electrical: power }
+        - { id: "4", x: 18, y: 50, side: bottom, electrical: power }
+        - { id: "6", x: 28, y: 50, side: bottom, electrical: power }
+      draw:
+        - line: [8, 0, 8, 12]
+        - rect: [4, 12, 8, 16]
+        - line: [8, 28, 8, 50]
+        - line: [18, 0, 18, 12]
+        - rect: [14, 12, 8, 16]
+        - line: [18, 28, 18, 50]
+        - line: [28, 0, 28, 12]
+        - rect: [24, 12, 8, 16]
+        - line: [28, 28, 28, 50]
+    panel: { w: 0, h: 0, d: 0, din: true, in_panel: true, mount: din_rail, dims: generic }
+    props: { poles: 3 }
+
+  - id: protection.overload
+    name: Overload relay
+    category: protection.overload
+    ref_prefix: OL
+    tags: [overload, thermal]
+    schematic:
+      width: 36
+      height: 50
+      pins:
+        - { id: T1, x: 8, y: 0, side: top, electrical: power }
+        - { id: T2, x: 18, y: 0, side: top, electrical: power }
+        - { id: T3, x: 28, y: 0, side: top, electrical: power }
+        - { id: "2", x: 8, y: 50, side: bottom, electrical: power }
+        - { id: "4", x: 18, y: 50, side: bottom, electrical: power }
+        - { id: "6", x: 28, y: 50, side: bottom, electrical: power }
+        - { id: "95", x: 36, y: 22, side: right, electrical: output }
+        - { id: "96", x: 36, y: 34, side: right, electrical: output }
+      draw:
+        - rect: [2, 8, 28, 34]
+        - line: [8, 0, 8, 12]
+        - line: [18, 0, 18, 12]
+        - line: [28, 0, 28, 12]
+        - polyline: [[8, 12], [11, 16], [5, 20], [11, 24], [8, 28]]
+        - polyline: [[18, 12], [21, 16], [15, 20], [21, 24], [18, 28]]
+        - polyline: [[28, 12], [26, 16], [28, 20], [26, 24], [28, 28]]
+        - line: [8, 28, 8, 50]
+        - line: [18, 28, 18, 50]
+        - line: [28, 28, 28, 50]
+        - line: [36, 22, 32, 22]
+        - line: [32, 22, 35, 32]
+        - line: [32, 34, 36, 34]
+        - line: [32, 32, 32, 36]
+    panel: { w: 45, h: 70, d: 80, din: true }
+    props: { class: 10 }
+
+  - id: protection.ol_contact
+    name: Overload contact NC
+    category: protection.overload
+    ref_prefix: OL
+    tags: [overload, thermal, contact]
+    schematic:
+      width: 28
+      height: 22
+      pins:
+        - { id: "95", x: 0, y: 16, side: left, electrical: output }
+        - { id: "96", x: 28, y: 16, side: right, electrical: output }
+      draw:
+        - polyline: [[10, 4], [14, 8], [18, 4], [22, 8]]
+        - line: [0, 16, 8, 16]
+        - line: [20, 16, 28, 16]
+        - line: [8, 13, 8, 19]
+        - line: [20, 13, 20, 19]
+        - line: [8, 16, 20, 13]
+    panel: { w: 45, h: 70, d: 80, din: true }
+    props: { contact: NC }
+
+  - id: protection.disconnect_3p
+    name: 3P disconnect
+    category: protection.disconnect
+    ref_prefix: DISC
+    tags: [disconnect, isolator]
+    schematic:
+      width: 36
+      height: 50
+      pins:
+        - { id: L1, x: 8, y: 0, side: top, electrical: power }
+        - { id: L2, x: 18, y: 0, side: top, electrical: power }
+        - { id: L3, x: 28, y: 0, side: top, electrical: power }
+        - { id: T1, x: 8, y: 50, side: bottom, electrical: power }
+        - { id: T2, x: 18, y: 50, side: bottom, electrical: power }
+        - { id: T3, x: 28, y: 50, side: bottom, electrical: power }
+      draw:
+        - rect: [4, 8, 28, 34]
+        - line: [8, 0, 8, 16]
+        - line: [18, 0, 18, 16]
+        - line: [28, 0, 28, 16]
+        - line: [5, 16, 11, 16]
+        - line: [15, 16, 21, 16]
+        - line: [25, 16, 31, 16]
+        - line: [8, 16, 12, 26]
+        - line: [18, 16, 22, 26]
+        - line: [28, 16, 31, 26]
+        - line: [8, 28, 8, 50]
+        - line: [18, 28, 18, 50]
+        - line: [28, 28, 28, 50]
+        - line: [12, 26, 31, 26]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
+    props: { poles: 3, location: field }
+
+  - id: terminals.pe
+    name: Ground / PE
+    category: connection.terminal
+    ref_prefix: GND
+    tags: [terminal, pe, earth, ground]
+    schematic:
+      width: 16
+      height: 26
+      pins:
+        - { id: A, x: 0, y: 12, side: left }
+        - { id: B, x: 16, y: 12, side: right }
+      draw:
+        - line: [5, 16, 11, 16]
+        - line: [6, 19, 10, 19]
+        - line: [7, 22, 9, 22]
+        - line: [8, 12, 8, 16]
+        - line: [0, 12, 8, 12]
+        - line: [8, 12, 16, 12]
+    panel: { w: 6.2, h: 47, d: 48, din: true }
+    props: { type: PE }
+
+  - id: operators.pb_illum
+    name: Illuminated pushbutton
+    category: operator.pushbutton
+    ref_prefix: PB
+    tags: [button, illuminated, touch]
+    schematic:
+      width: 24
+      height: 36
+      pins:
+        - { id: "3", x: 0, y: 28, side: left }
+        - { id: "4", x: 24, y: 28, side: right }
+      draw:
+        - circle: [12, 8, 6]
+        - line: [8, 4, 16, 12]
+        - line: [16, 4, 8, 12]
+        - line: [12, 14, 12, 24]
+        - line: [0, 28, 7, 28]
+        - line: [17, 28, 24, 28]
+        - line: [7, 25, 7, 31]
+        - line: [17, 25, 17, 31]
+        - line: [7, 28, 14, 22]
+    panel: { w: 22, h: 22, d: 50, din: false, in_panel: true, mount: door, dims: generic }
+    props: { contact: "NO", lamp: true, mounting: 22mm }
+
+  - id: operators.stack_light
+    name: Stack light section
+    category: operator.light
+    ref_prefix: PL
+    tags: [stack, beacon, horn, audible]
+    schematic:
+      width: 24
+      height: 28
+      pins:
+        - { id: X1, x: 0, y: 12, side: left, electrical: input }
+        - { id: X2, x: 24, y: 12, side: right, electrical: input }
+      draw:
+        - circle: [12, 12, 8]
+        - circle: [12, 12, 3.2]
+        - line: [6.3, 6.3, 17.7, 17.7]
+        - line: [17.7, 6.3, 6.3, 17.7]
+        - line: [0, 12, 4, 12]
+        - line: [20, 12, 24, 12]
+    panel: { w: 50, h: 40, d: 50, din: false, in_panel: true, mount: field, dims: generic }
+    props: { voltage: 24VDC }
+
+  # Power-circuit twins for Circuit Builder. Pins match the IEC power stack
+  # (1/2/4/6, L1/T1, plus/minus) so a NEMA DOL/VFD can be wired the same way.
+  # Overload, motor, disconnect, and operators above keep NEMA pin names.
+  - id: breakers.mcb_1p_16a
+    name: Circuit breaker 1P 16A
+    category: protection.breaker
+    ref_prefix: CB
+    tags: [breaker, 1p, mcb]
+    schematic:
+      width: 20
+      height: 50
+      pins:
+        - { id: "1", x: 10, y: 0, side: top, electrical: power }
+        - { id: "2", x: 10, y: 50, side: bottom, electrical: power }
+      draw:
+        - rect: [3, 6, 14, 38]
+        - line: [10, 0, 10, 14]
+        - line: [6, 14, 14, 14]
+        - line: [10, 14, 14, 22]
+        - line: [10, 24, 10, 50]
+        - text: [14, 36, "CB", 2.2]
+    panel: { w: 18, h: 80, d: 70, din: true }
+    props: { poles: 1, In: 16A, Un: 120V }
+
+  - id: breakers.mcb_3p_32a
+    name: Circuit breaker 3P 32A
+    category: protection.breaker
+    ref_prefix: CB
+    tags: [breaker, 3p, mcb]
+    schematic:
+      width: 36
+      height: 55
+      pins:
+        - { id: "1", x: 8, y: 0, side: top, electrical: power }
+        - { id: "3", x: 18, y: 0, side: top, electrical: power }
+        - { id: "5", x: 28, y: 0, side: top, electrical: power }
+        - { id: "2", x: 8, y: 55, side: bottom, electrical: power }
+        - { id: "4", x: 18, y: 55, side: bottom, electrical: power }
+        - { id: "6", x: 28, y: 55, side: bottom, electrical: power }
+      draw:
+        - rect: [2, 8, 32, 40]
+        - line: [8, 0, 8, 16]
+        - line: [18, 0, 18, 16]
+        - line: [28, 0, 28, 16]
+        - line: [5, 16, 11, 16]
+        - line: [15, 16, 21, 16]
+        - line: [25, 16, 31, 16]
+        - line: [8, 16, 12, 24]
+        - line: [18, 16, 22, 24]
+        - line: [28, 16, 32, 24]
+        - line: [8, 26, 8, 55]
+        - line: [18, 26, 18, 55]
+        - line: [28, 26, 28, 55]
+        - line: [12, 24, 32, 24]
+        - text: [13, 42, "CB", 2.4]
+    panel: { w: 54, h: 80, d: 70, din: true }
+    props: { poles: 3, In: 32A, Un: 480V }
+
+  - id: breakers.mccb_3p_100a
+    name: Circuit breaker 3P 100A
+    category: protection.breaker
+    ref_prefix: CB
+    tags: [breaker, 3p, mccb]
+    schematic:
+      width: 42
+      height: 60
+      pins:
+        - { id: "1", x: 9, y: 0, side: top, electrical: power }
+        - { id: "3", x: 21, y: 0, side: top, electrical: power }
+        - { id: "5", x: 33, y: 0, side: top, electrical: power }
+        - { id: "2", x: 9, y: 60, side: bottom, electrical: power }
+        - { id: "4", x: 21, y: 60, side: bottom, electrical: power }
+        - { id: "6", x: 33, y: 60, side: bottom, electrical: power }
+      draw:
+        - rect: [2, 8, 38, 46]
+        - line: [9, 0, 9, 18]
+        - line: [21, 0, 21, 18]
+        - line: [33, 0, 33, 18]
+        - line: [6, 18, 12, 18]
+        - line: [18, 18, 24, 18]
+        - line: [30, 18, 36, 18]
+        - line: [9, 18, 13, 26]
+        - line: [21, 18, 25, 26]
+        - line: [33, 18, 37, 26]
+        - line: [9, 28, 9, 60]
+        - line: [21, 28, 21, 60]
+        - line: [33, 28, 33, 60]
+        - line: [13, 26, 37, 26]
+        - text: [15, 46, "CB", 2.4]
+    panel: { w: 105, h: 130, d: 86, din: true }
+    props: { poles: 3, In: 100A, Un: 480V }
+
+  - id: breakers.mpcb_3p
+    name: Motor circuit protector 3P
+    category: protection.mpcb
+    ref_prefix: MCP
+    tags: [mpcb, motor-protector, breaker, 3p, thermal, magnetic]
+    schematic:
+      width: 36
+      height: 62
+      pins:
+        - { id: "1", x: 8, y: 0, side: top, electrical: power }
+        - { id: "3", x: 18, y: 0, side: top, electrical: power }
+        - { id: "5", x: 28, y: 0, side: top, electrical: power }
+        - { id: "2", x: 8, y: 62, side: bottom, electrical: power }
+        - { id: "4", x: 18, y: 62, side: bottom, electrical: power }
+        - { id: "6", x: 28, y: 62, side: bottom, electrical: power }
+        - { id: "95", x: 36, y: 22, side: right, electrical: output }
+        - { id: "96", x: 36, y: 34, side: right, electrical: output }
+      draw:
+        - rect: [2, 8, 32, 46]
+        - line: [8, 0, 8, 16]
+        - line: [18, 0, 18, 16]
+        - line: [28, 0, 28, 16]
+        - line: [5, 16, 11, 16]
+        - line: [15, 16, 21, 16]
+        - line: [25, 16, 31, 16]
+        - line: [8, 16, 12, 24]
+        - line: [18, 16, 22, 24]
+        - line: [28, 16, 32, 24]
+        - line: [12, 24, 32, 24]
+        - polyline: [[8, 28], [11, 32], [5, 36], [11, 40], [8, 44]]
+        - polyline: [[18, 28], [21, 32], [15, 36], [21, 40], [18, 44]]
+        - polyline: [[28, 28], [26, 32], [28, 36], [26, 40], [28, 44]]
+        - line: [8, 44, 8, 62]
+        - line: [18, 44, 18, 62]
+        - line: [28, 44, 28, 62]
+        - line: [36, 22, 32, 22]
+        - line: [32, 22, 35, 33]
+        - line: [32, 34, 36, 34]
+        - line: [32, 32, 32, 36]
+        - text: [12, 12, "MCP", 2.2]
+    panel: { w: 45, h: 90, d: 80, din: true }
+    props: { poles: 3, range: "", In: "" }
+
+  - id: contactors.ac3_9a
+    name: Contactor 9A
+    category: switching.contactor
+    ref_prefix: M
+    tags: [contactor, motor]
+    schematic:
+      width: 40
+      height: 70
+      pins:
+        - { id: L1, x: 10, y: 0, side: top, electrical: power }
+        - { id: L2, x: 20, y: 0, side: top, electrical: power }
+        - { id: L3, x: 30, y: 0, side: top, electrical: power }
+        - { id: T1, x: 10, y: 70, side: bottom, electrical: power }
+        - { id: T2, x: 20, y: 70, side: bottom, electrical: power }
+        - { id: T3, x: 30, y: 70, side: bottom, electrical: power }
+        - { id: A1, x: 0, y: 28, side: left, electrical: input }
+        - { id: A2, x: 0, y: 42, side: left, electrical: input }
+      draw:
+        - rect: [4, 8, 32, 54]
+        - line: [10, 0, 10, 16]
+        - line: [20, 0, 20, 16]
+        - line: [30, 0, 30, 16]
+        - line: [7, 16, 13, 16]
+        - line: [17, 16, 23, 16]
+        - line: [27, 16, 33, 16]
+        - line: [10, 16, 14, 22]
+        - line: [20, 16, 24, 22]
+        - line: [30, 16, 33, 22]
+        - line: [10, 26, 10, 70]
+        - line: [20, 26, 20, 70]
+        - line: [30, 26, 30, 70]
+        - line: [14, 22, 33, 22]
+        - rect: [5, 31, 4.2, 10]
+        - line: [0, 28, 5, 28]
+        - line: [5, 28, 5, 41]
+        - line: [0, 42, 5, 42]
+        - text: [26, 40, "M", 2.8]
+    panel: { w: 45, h: 58, d: 57, din: true }
+    props: { poles: 3, Ie: 9A, coil: 120VAC }
+
+  - id: contactors.ac3_32a
+    name: Contactor 32A
+    category: switching.contactor
+    ref_prefix: M
+    tags: [contactor, motor]
+    schematic:
+      width: 44
+      height: 74
+      pins:
+        - { id: L1, x: 11, y: 0, side: top, electrical: power }
+        - { id: L2, x: 22, y: 0, side: top, electrical: power }
+        - { id: L3, x: 33, y: 0, side: top, electrical: power }
+        - { id: T1, x: 11, y: 74, side: bottom, electrical: power }
+        - { id: T2, x: 22, y: 74, side: bottom, electrical: power }
+        - { id: T3, x: 33, y: 74, side: bottom, electrical: power }
+        - { id: A1, x: 0, y: 30, side: left, electrical: input }
+        - { id: A2, x: 0, y: 44, side: left, electrical: input }
+      draw:
+        - rect: [4, 8, 36, 58]
+        - line: [11, 0, 11, 16]
+        - line: [22, 0, 22, 16]
+        - line: [33, 0, 33, 16]
+        - line: [8, 16, 14, 16]
+        - line: [19, 16, 25, 16]
+        - line: [30, 16, 36, 16]
+        - line: [11, 16, 15, 22]
+        - line: [22, 16, 26, 22]
+        - line: [33, 16, 37, 22]
+        - line: [11, 26, 11, 74]
+        - line: [22, 26, 22, 74]
+        - line: [33, 26, 33, 74]
+        - line: [15, 22, 37, 22]
+        - rect: [5.5, 33, 4.6, 10]
+        - line: [0, 30, 5.5, 30]
+        - line: [5.5, 30, 5.5, 43]
+        - line: [0, 44, 5.5, 44]
+        - text: [28, 42, "M", 2.8]
+    panel: { w: 45, h: 85, d: 90, din: true }
+    props: { poles: 3, Ie: 32A, coil: 120VAC }
+
+  - id: drives.vfd_1k5
+    name: VFD 1.5 kW
+    category: drive.vfd
+    ref_prefix: VFD
+    tags: [vfd, drive]
+    schematic:
+      width: 55
+      height: 70
+      pins:
+        - { id: L1, x: 12, y: 0, side: top, electrical: power }
+        - { id: L2, x: 22, y: 0, side: top, electrical: power }
+        - { id: L3, x: 32, y: 0, side: top, electrical: power }
+        - { id: U, x: 12, y: 70, side: bottom, electrical: power }
+        - { id: V, x: 22, y: 70, side: bottom, electrical: power }
+        - { id: W, x: 32, y: 70, side: bottom, electrical: power }
+        - { id: DI1, x: 55, y: 24, side: right, electrical: input }
+        - { id: COM, x: 55, y: 34, side: right, electrical: input }
+      draw:
+        - rect: [6, 10, 36, 50]
+        - text: [24, 28, "VFD", 2.8]
+        - text: [24, 38, "1.5kW", 2.2]
+        - line: [12, 0, 12, 10]
+        - line: [22, 0, 22, 10]
+        - line: [32, 0, 32, 10]
+        - line: [12, 60, 12, 70]
+        - line: [22, 60, 22, 70]
+        - line: [32, 60, 32, 70]
+        - line: [42, 24, 55, 24]
+        - line: [42, 34, 55, 34]
+    panel: { w: 72, h: 150, d: 140, din: false, in_panel: true, mount: backplate, dims: generic }
+    props: { Pn: 1.5kW, Vin: 480V, Iout: 4.1A }
+
+  - id: drives.ga500
+    name: Yaskawa GA500
+    category: drive.vfd
+    ref_prefix: VFD
+    tags: [vfd, drive, ga500, yaskawa]
+    schematic:
+      width: 60
+      height: 112
+      pins:
+        - { id: L1, x: 14, y: 0, side: top, electrical: power }
+        - { id: L2, x: 24, y: 0, side: top, electrical: power }
+        - { id: L3, x: 34, y: 0, side: top, electrical: power }
+        - { id: U, x: 14, y: 112, side: bottom, electrical: power }
+        - { id: V, x: 24, y: 112, side: bottom, electrical: power }
+        - { id: W, x: 34, y: 112, side: bottom, electrical: power }
+        - { id: S1, x: 60, y: 18, side: right, electrical: input }
+        - { id: S2, x: 60, y: 32, side: right, electrical: input }
+        - { id: S5, x: 60, y: 46, side: right, electrical: input }
+        - { id: SN, x: 60, y: 60, side: right, electrical: input }
+        - { id: H1, x: 60, y: 72, side: right, electrical: input }
+        - { id: H2, x: 60, y: 87.79, side: right, electrical: input }
+        - { id: HC, x: 60, y: 101.79, side: right, electrical: input }
+        - { id: SC, x: 0, y: 50, side: left, electrical: input }
+        - { id: SP, x: 0, y: 66, side: left, electrical: input }
+      draw:
+        - rect: [12, 10, 36, 94]
+        - text: [30, 26, "GA500", 2.6]
+        - text: [14, 16, "L1", 2.2]
+        - text: [24, 16, "L2", 2.2]
+        - text: [34, 16, "L3", 2.2]
+        - text: [14, 100, "U", 2.2]
+        - text: [24, 100, "V", 2.2]
+        - text: [34, 100, "W", 2.2]
+        - text: [44, 18.8, "S1", 2.4]
+        - text: [44, 32.8, "S2", 2.4]
+        - text: [44, 46.8, "S5", 2.4]
+        - text: [44, 60.8, "SN", 2.4]
+        - text: [44, 72.8, "H1", 2.4]
+        - text: [44, 88.6, "H2", 2.4]
+        - text: [44, 102.6, "HC", 2.4]
+        - text: [18, 50.8, "SC", 2.4]
+        - text: [18, 66.8, "SP", 2.4]
+        - line: [14, 0, 14, 10]
+        - line: [24, 0, 24, 10]
+        - line: [34, 0, 34, 10]
+        - line: [14, 104, 14, 112]
+        - line: [24, 104, 24, 112]
+        - line: [34, 104, 34, 112]
+        - line: [48, 18, 60, 18]
+        - line: [48, 32, 60, 32]
+        - line: [48, 46, 60, 46]
+        - line: [48, 60, 60, 60]
+        - line: [48, 72, 60, 72]
+        - line: [48, 87.79, 60, 87.79]
+        - line: [48, 101.79, 60, 101.79]
+        - line: [0, 50, 12, 50]
+        - line: [0, 66, 12, 66]
+    panel: { w: 72, h: 150, d: 140, din: false, in_panel: true, mount: backplate, dims: generic }
+    props: { family: GA500 }
+
+  - id: power.psu_24v_5a
+    name: Power supply 24VDC 5A
+    category: power.supply
+    ref_prefix: PS
+    tags: [psu, 24v]
+    schematic:
+      width: 50
+      height: 45
+      pins:
+        - { id: L, x: 0, y: 12, side: left, electrical: power }
+        - { id: N, x: 0, y: 22, side: left, electrical: power }
+        - { id: PE, x: 0, y: 32, side: left, electrical: power }
+        - { id: plus, x: 50, y: 16, side: right, electrical: power, label: "+" }
+        - { id: minus, x: 50, y: 28, side: right, electrical: power, label: "-" }
+      draw:
+        - rect: [8, 6, 34, 34]
+        - text: [25, 18, "PS", 3]
+        - text: [25, 26, "24V", 2.5]
+        - line: [0, 12, 8, 12]
+        - line: [0, 22, 8, 22]
+        - line: [0, 32, 8, 32]
+        - line: [42, 16, 50, 16]
+        - line: [42, 28, 50, 28]
+    panel: { w: 40, h: 90, d: 110, din: true }
+    props: { Vin: 120-240VAC, Vout: 24VDC, Iout: 5A }
+
+  - id: drives.softstarter
+    name: Soft starter
+    category: drive.softstarter
+    ref_prefix: SS
+    tags: [softstarter, ss]
+    schematic:
+      width: 55
+      height: 70
+      pins:
+        - { id: L1, x: 12, y: 0, side: top, electrical: power }
+        - { id: L2, x: 22, y: 0, side: top, electrical: power }
+        - { id: L3, x: 32, y: 0, side: top, electrical: power }
+        - { id: T1, x: 12, y: 70, side: bottom, electrical: power }
+        - { id: T2, x: 22, y: 70, side: bottom, electrical: power }
+        - { id: T3, x: 32, y: 70, side: bottom, electrical: power }
+        - { id: ST, x: 55, y: 20, side: right, electrical: input }
+        - { id: COM, x: 55, y: 30, side: right, electrical: input }
+        - { id: "13", x: 55, y: 42, side: right, electrical: output }
+        - { id: "14", x: 55, y: 50, side: right, electrical: output }
+        - { id: "95", x: 55, y: 58, side: right, electrical: output }
+        - { id: "96", x: 55, y: 66, side: right, electrical: output }
+      draw:
+        - rect: [6, 10, 36, 50]
+        - text: [24, 28, "SS", 3.2]
+        - text: [24, 38, "SOFT", 2.2]
+        - line: [12, 0, 12, 10]
+        - line: [22, 0, 22, 10]
+        - line: [32, 0, 32, 10]
+        - line: [12, 60, 12, 70]
+        - line: [22, 60, 22, 70]
+        - line: [32, 60, 32, 70]
+        - line: [42, 20, 55, 20]
+        - line: [42, 30, 55, 30]
+        - line: [42, 42, 55, 42]
+        - line: [42, 50, 55, 50]
+        - line: [42, 58, 55, 58]
+        - line: [42, 66, 55, 66]
+    panel: { w: 80, h: 160, d: 140, din: false, in_panel: true, mount: backplate, dims: generic }
+    props: { type: softstarter }
+
+  - id: relays.k_4co_24vdc
+    name: Relay 4 C/O 24VDC
+    category: switching.relay
+    ref_prefix: CR
+    tags: [relay, ice-cube]
+    schematic:
+      width: 48
+      height: 55
+      pins:
+        - { id: A1, x: 0, y: 18, side: left, electrical: input }
+        - { id: A2, x: 0, y: 36, side: left, electrical: input }
+        - { id: "11", x: 48, y: 10, side: right }
+        - { id: "12", x: 48, y: 16, side: right }
+        - { id: "14", x: 48, y: 22, side: right }
+        - { id: "21", x: 48, y: 30, side: right }
+        - { id: "22", x: 48, y: 36, side: right }
+        - { id: "24", x: 48, y: 42, side: right }
+      draw:
+        - rect: [8, 6, 32, 44]
+        - circle: [16, 27, 5]
+        - text: [16, 29, "CR", 2.2]
+        - line: [0, 18, 16, 18]
+        - line: [16, 18, 16, 22]
+        - line: [16, 32, 16, 36]
+        - line: [0, 36, 16, 36]
+        - line: [26, 10, 48, 10]
+        - line: [26, 10, 40, 16]
+        - line: [40, 16, 48, 16]
+        - line: [34, 22, 48, 22]
+        - line: [34, 20, 34, 24]
+        - line: [26, 30, 48, 30]
+        - line: [26, 30, 40, 36]
+        - line: [40, 36, 48, 36]
+        - line: [34, 42, 48, 42]
+        - line: [34, 40, 34, 44]
+    panel: { w: 28, h: 62, d: 70, din: true }
+    props: { contacts: 4CO, coil: 24VDC, Ith: 6A }
+
+  - id: plc.compact_16dio
+    name: Compact PLC 16DI / 16DO
+    category: control.plc
+    ref_prefix: PLC
+    tags: [plc, cpu]
+    schematic:
+      width: 90
+      height: 80
+      pins:
+        - { id: Lplus, x: 0, y: 12, side: left, electrical: power }
+        - { id: M, x: 0, y: 20, side: left, electrical: power }
+        - { id: I0_0, x: 0, y: 32, side: left, electrical: input }
+        - { id: I0_1, x: 0, y: 40, side: left, electrical: input }
+        - { id: I0_2, x: 0, y: 48, side: left, electrical: input }
+        - { id: I0_3, x: 0, y: 56, side: left, electrical: input }
+        - { id: Q0_0, x: 90, y: 32, side: right, electrical: output }
+        - { id: Q0_1, x: 90, y: 40, side: right, electrical: output }
+        - { id: Q0_2, x: 90, y: 48, side: right, electrical: output }
+        - { id: Q0_3, x: 90, y: 56, side: right, electrical: output }
+      draw:
+        - rect: [8, 6, 74, 68]
+        - rect: [14, 12, 62, 14]
+        - text: [45, 22, "PLC", 3.5]
+        - line: [0, 12, 8, 12]
+        - line: [0, 20, 8, 20]
+        - line: [0, 32, 8, 32]
+        - line: [0, 40, 8, 40]
+        - line: [0, 48, 8, 48]
+        - line: [0, 56, 8, 56]
+        - line: [82, 32, 90, 32]
+        - line: [82, 40, 90, 40]
+        - line: [82, 48, 90, 48]
+        - line: [82, 56, 90, 56]
+    ports:
+      - { id: ETH, kind: ethernet, medium: "10/100", protocol: Ethernet, connector: RJ45, side: right }
+    panel: { w: 70, h: 80, d: 62, din: true }
+    props: { DI: 16, DO: 16, supply: 24VDC, comms: Ethernet }
+
+  - id: plc.analog_1ai_1ao
+    name: PLC analog 1AI / 1AO
+    category: control.plc
+    ref_prefix: A
+    tags: [plc, analog, io]
+    schematic:
+      width: 50
+      height: 48
+      pins:
+        - { id: Lplus, x: 0, y: 10, side: left, electrical: power }
+        - { id: M, x: 0, y: 18, side: left, electrical: power }
+        - { id: AI0, x: 0, y: 30, side: left, electrical: input }
+        - { id: AO0, x: 50, y: 30, side: right, electrical: output }
+      draw:
+        - rect: [8, 6, 34, 36]
+        - text: [25, 18, "AI/AO", 3]
+        - line: [0, 10, 8, 10]
+        - line: [0, 18, 8, 18]
+        - line: [0, 30, 8, 30]
+        - line: [42, 30, 50, 30]
+    panel: { w: 25, h: 80, d: 70, din: true }
+    props: { AI: 1, AO: 1, supply: 24VDC }
+
+  # Schematic symbols only. No millimetres: a catalog part supplies the size.
+  - id: terminals.feed_through
+    name: Feed-through terminal
+    category: connection.terminal
+    ref_prefix: TB
+    tags: [terminal, feed-through, feedthrough]
+    schematic:
+      width: 16
+      height: 20
+      pins:
+        - { id: A, x: 0, y: 10, side: left }
+        - { id: B, x: 16, y: 10, side: right }
+      draw:
+        - rect: [4, 4, 8, 12]
+        - line: [0, 10, 4, 10]
+        - line: [12, 10, 16, 10]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { type: feed-through, passthrough: yes }
+
+  - id: operators.float_no
+    name: Float switch NO
+    category: operator.float
+    ref_prefix: FS
+    tags: [float, switch, "no"]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "3", x: 0, y: 20, side: left }
+        - { id: "4", x: 28, y: 20, side: right }
+      draw:
+        - circle: [14, 6, 4]
+        - line: [14, 10, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 17, 8, 23]
+        - line: [20, 17, 20, 23]
+        - line: [8, 20, 16, 14]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: "NO", location: field }
+
+  - id: operators.float_nc
+    name: Float switch NC
+    category: operator.float
+    ref_prefix: FS
+    tags: [float, switch, nc]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "1", x: 0, y: 20, side: left }
+        - { id: "2", x: 28, y: 20, side: right }
+      draw:
+        - circle: [14, 6, 4]
+        - line: [14, 10, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 17, 8, 23]
+        - line: [20, 17, 20, 23]
+        - line: [8, 20, 20, 17]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NC, location: field }
+
+  - id: operators.level_no
+    name: Level switch NO
+    category: operator.level
+    ref_prefix: LEV
+    tags: [level, switch, "no"]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "3", x: 0, y: 20, side: left }
+        - { id: "4", x: 28, y: 20, side: right }
+      draw:
+        - polyline: [[8, 2], [20, 2], [14, 10]]
+        - line: [14, 10, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 17, 8, 23]
+        - line: [20, 17, 20, 23]
+        - line: [8, 20, 16, 14]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: "NO", location: field }
+
+  - id: operators.level_nc
+    name: Level switch NC
+    category: operator.level
+    ref_prefix: LEV
+    tags: [level, switch, nc]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "1", x: 0, y: 20, side: left }
+        - { id: "2", x: 28, y: 20, side: right }
+      draw:
+        - polyline: [[8, 2], [20, 2], [14, 10]]
+        - line: [14, 10, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 17, 8, 23]
+        - line: [20, 17, 20, 23]
+        - line: [8, 20, 20, 17]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NC, location: field }
+
+  - id: operators.pressure_no
+    name: Pressure switch NO
+    category: operator.pressure
+    ref_prefix: PRS
+    tags: [pressure, switch, "no"]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "3", x: 0, y: 20, side: left }
+        - { id: "4", x: 28, y: 20, side: right }
+      draw:
+        - circle: [14, 7, 5]
+        - line: [11, 7, 17, 7]
+        - line: [14, 12, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 17, 8, 23]
+        - line: [20, 17, 20, 23]
+        - line: [8, 20, 16, 14]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: "NO", location: field }
+
+  - id: operators.pressure_nc
+    name: Pressure switch NC
+    category: operator.pressure
+    ref_prefix: PRS
+    tags: [pressure, switch, nc]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "1", x: 0, y: 20, side: left }
+        - { id: "2", x: 28, y: 20, side: right }
+      draw:
+        - circle: [14, 7, 5]
+        - line: [11, 7, 17, 7]
+        - line: [14, 12, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 17, 8, 23]
+        - line: [20, 17, 20, 23]
+        - line: [8, 20, 20, 17]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NC, location: field }
+
+  - id: operators.temperature_no
+    name: Temperature switch NO
+    category: operator.temperature
+    ref_prefix: TSW
+    tags: [temperature, switch, "no"]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "3", x: 0, y: 20, side: left }
+        - { id: "4", x: 28, y: 20, side: right }
+      draw:
+        - line: [10, 2, 18, 2]
+        - line: [14, 2, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 17, 8, 23]
+        - line: [20, 17, 20, 23]
+        - line: [8, 20, 16, 14]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: "NO", location: field }
+
+  - id: operators.temperature_nc
+    name: Temperature switch NC
+    category: operator.temperature
+    ref_prefix: TSW
+    tags: [temperature, switch, nc]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "1", x: 0, y: 20, side: left }
+        - { id: "2", x: 28, y: 20, side: right }
+      draw:
+        - line: [10, 2, 18, 2]
+        - line: [14, 2, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 17, 8, 23]
+        - line: [20, 17, 20, 23]
+        - line: [8, 20, 20, 17]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NC, location: field }
+
+  - id: operators.flow_no
+    name: Flow switch NO
+    category: operator.flow
+    ref_prefix: FSW
+    tags: [flow, switch, "no"]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "3", x: 0, y: 20, side: left }
+        - { id: "4", x: 28, y: 20, side: right }
+      draw:
+        - polyline: [[8, 4], [14, 8], [8, 12]]
+        - line: [14, 8, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 17, 8, 23]
+        - line: [20, 17, 20, 23]
+        - line: [8, 20, 16, 14]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: "NO", location: field }
+
+  - id: operators.flow_nc
+    name: Flow switch NC
+    category: operator.flow
+    ref_prefix: FSW
+    tags: [flow, switch, nc]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "1", x: 0, y: 20, side: left }
+        - { id: "2", x: 28, y: 20, side: right }
+      draw:
+        - polyline: [[8, 4], [14, 8], [8, 12]]
+        - line: [14, 8, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 17, 8, 23]
+        - line: [20, 17, 20, 23]
+        - line: [8, 20, 20, 17]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NC, location: field }
+
+  - id: operators.foot_no
+    name: Foot switch NO
+    category: operator.foot
+    ref_prefix: FTS
+    tags: [foot, switch, "no"]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "3", x: 0, y: 20, side: left }
+        - { id: "4", x: 28, y: 20, side: right }
+      draw:
+        - polyline: [[8, 8], [14, 3], [20, 8]]
+        - line: [14, 8, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 17, 8, 23]
+        - line: [20, 17, 20, 23]
+        - line: [8, 20, 16, 14]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: "NO", location: field }
+
+  - id: operators.foot_nc
+    name: Foot switch NC
+    category: operator.foot
+    ref_prefix: FTS
+    tags: [foot, switch, nc]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "1", x: 0, y: 20, side: left }
+        - { id: "2", x: 28, y: 20, side: right }
+      draw:
+        - polyline: [[8, 8], [14, 3], [20, 8]]
+        - line: [14, 8, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 17, 8, 23]
+        - line: [20, 17, 20, 23]
+        - line: [8, 20, 20, 17]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NC, location: field }
+
+  - id: timers.off_delay
+    name: Off-delay timer
+    category: timing.timer
+    ref_prefix: TR
+    tags: [timer, off-delay]
+    schematic:
+      width: 36
+      height: 40
+      pins:
+        - { id: A1, x: 0, y: 20, side: left, electrical: input }
+        - { id: A2, x: 36, y: 20, side: right, electrical: input }
+      draw:
+        - rect: [6, 6, 24, 28]
+        - circle: [18, 20, 5]
+        - text: [18, 38, "OFF", 2.2]
+        - line: [0, 20, 13, 20]
+        - line: [23, 20, 36, 20]
+        - line: [18, 15, 22, 20]
+        - line: [18, 25, 22, 20]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { function: off-delay }
+
+  - id: timers.contact_notc
+    name: Timer contact NOTC
+    category: timing.contact
+    ref_prefix: TR
+    tags: [timer, contact, notc, "no"]
+    schematic:
+      width: 28
+      height: 18
+      pins:
+        - { id: "3", x: 0, y: 10, side: left }
+        - { id: "4", x: 28, y: 10, side: right }
+      draw:
+        - line: [0, 10, 8, 10]
+        - line: [20, 10, 28, 10]
+        - line: [8, 7, 8, 13]
+        - line: [20, 7, 20, 13]
+        - line: [8, 10, 16, 4]
+        - line: [18, 2, 22, 6]
+        - text: [14, 17, "NOTC", 1.8]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NOTC, timing: on-delay }
+
+  - id: timers.contact_ncto
+    name: Timer contact NCTO
+    category: timing.contact
+    ref_prefix: TR
+    tags: [timer, contact, ncto, nc]
+    schematic:
+      width: 28
+      height: 18
+      pins:
+        - { id: "1", x: 0, y: 10, side: left }
+        - { id: "2", x: 28, y: 10, side: right }
+      draw:
+        - line: [0, 10, 8, 10]
+        - line: [20, 10, 28, 10]
+        - line: [8, 7, 8, 13]
+        - line: [20, 7, 20, 13]
+        - line: [8, 10, 20, 7]
+        - line: [18, 2, 22, 6]
+        - text: [14, 17, "NCTO", 1.8]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NCTO, timing: on-delay }
+
+  - id: timers.contact_noto
+    name: Timer contact NOTO
+    category: timing.contact
+    ref_prefix: TR
+    tags: [timer, contact, noto, "no"]
+    schematic:
+      width: 28
+      height: 18
+      pins:
+        - { id: "3", x: 0, y: 10, side: left }
+        - { id: "4", x: 28, y: 10, side: right }
+      draw:
+        - line: [0, 10, 8, 10]
+        - line: [20, 10, 28, 10]
+        - line: [8, 7, 8, 13]
+        - line: [20, 7, 20, 13]
+        - line: [8, 10, 16, 4]
+        - line: [6, 2, 10, 6]
+        - text: [14, 17, "NOTO", 1.8]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NOTO, timing: off-delay }
+
+  - id: timers.contact_nctc
+    name: Timer contact NCTC
+    category: timing.contact
+    ref_prefix: TR
+    tags: [timer, contact, nctc, nc]
+    schematic:
+      width: 28
+      height: 18
+      pins:
+        - { id: "1", x: 0, y: 10, side: left }
+        - { id: "2", x: 28, y: 10, side: right }
+      draw:
+        - line: [0, 10, 8, 10]
+        - line: [20, 10, 28, 10]
+        - line: [8, 7, 8, 13]
+        - line: [20, 7, 20, 13]
+        - line: [8, 10, 20, 7]
+        - line: [6, 2, 10, 6]
+        - text: [14, 17, "NCTC", 1.8]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NCTC, timing: off-delay }
+
+  - id: operators.horn
+    name: Horn
+    category: operator.horn
+    ref_prefix: HN
+    tags: [horn, buzzer, audible]
+    schematic:
+      width: 28
+      height: 24
+      pins:
+        - { id: X1, x: 0, y: 12, side: left, electrical: input }
+        - { id: X2, x: 28, y: 12, side: right, electrical: input }
+      draw:
+        - polyline: [[6, 6], [14, 6], [20, 2], [20, 22], [14, 18], [6, 18]]
+        - line: [0, 12, 6, 12]
+        - line: [20, 12, 28, 12]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { type: horn }
+
+  - id: relays.alternating
+    name: Alternating relay
+    category: switching.alternating
+    ref_prefix: AR
+    tags: [alternating, relay]
+    schematic:
+      width: 36
+      height: 32
+      pins:
+        - { id: A1, x: 0, y: 16, side: left, electrical: input }
+        - { id: A2, x: 36, y: 16, side: right, electrical: input }
+      draw:
+        - rect: [8, 6, 20, 20]
+        - text: [18, 18, "AR", 3]
+        - line: [0, 16, 8, 16]
+        - line: [28, 16, 36, 16]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { type: alternating }
+
+  - id: relays.cr
+    name: Control relay
+    category: switching.relay
+    ref_prefix: CR
+    tags: [relay, coil]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: A1, x: 0, y: 14, side: left, electrical: input }
+        - { id: A2, x: 28, y: 14, side: right, electrical: input }
+      draw:
+        - circle: [14, 14, 8]
+        - text: [14, 16, "CR", 2.4]
+        - line: [0, 14, 6, 14]
+        - line: [22, 14, 28, 14]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { type: relay }

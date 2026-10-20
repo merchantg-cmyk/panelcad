@@ -1,0 +1,225 @@
+library: iec
+version: "0.1"
+devices:
+  - id: contactors.ac3_9a
+    name: Contactor AC-3 9A
+    category: switching.contactor
+    ref_prefix: K
+    tags: [contactor, motor]
+    schematic:
+      width: 40
+      height: 70
+      pins:
+        - { id: L1, x: 10, y: 0, side: top, electrical: power }
+        - { id: L2, x: 20, y: 0, side: top, electrical: power }
+        - { id: L3, x: 30, y: 0, side: top, electrical: power }
+        - { id: T1, x: 10, y: 70, side: bottom, electrical: power }
+        - { id: T2, x: 20, y: 70, side: bottom, electrical: power }
+        - { id: T3, x: 30, y: 70, side: bottom, electrical: power }
+        - { id: A1, x: 0, y: 28, side: left, electrical: input }
+        - { id: A2, x: 0, y: 42, side: left, electrical: input }
+        - { id: "13", x: 40, y: 20, side: right, electrical: output }
+        - { id: "14", x: 40, y: 28, side: right, electrical: output }
+      draw:
+        - rect: [4, 8, 30, 54]
+        - line: [10, 0, 10, 16]
+        - line: [20, 0, 20, 16]
+        - line: [30, 0, 30, 16]
+        - line: [7, 16, 13, 16]
+        - line: [17, 16, 23, 16]
+        - line: [27, 16, 33, 16]
+        - line: [10, 16, 14, 22]
+        - line: [20, 16, 24, 22]
+        - line: [30, 16, 33, 22]
+        - line: [10, 26, 10, 70]
+        - line: [20, 26, 20, 70]
+        - line: [30, 26, 30, 70]
+        - line: [14, 22, 32, 22]
+        - circle: [7, 35, 2.5]
+        - line: [0, 28, 7, 28]
+        - line: [7, 28, 7, 32.5]
+        - line: [7, 37.5, 7, 42]
+        - line: [0, 42, 7, 42]
+        - line: [36, 20, 40, 20]
+        - line: [36, 28, 40, 28]
+        - line: [36, 20, 39, 24]
+        - text: [26, 40, "K", 2.8]
+    panel: { w: 45, h: 58, d: 57, din: true }
+    props: { poles: 3, Ie: 9A, AC3: 4kW, coil: 24VDC, standard: IEC 60947-4-1 }
+
+  - id: contactors.ac3_32a
+    name: Contactor AC-3 32A
+    category: switching.contactor
+    ref_prefix: K
+    tags: [contactor, motor]
+    schematic:
+      width: 44
+      height: 74
+      pins:
+        - { id: L1, x: 11, y: 0, side: top, electrical: power }
+        - { id: L2, x: 22, y: 0, side: top, electrical: power }
+        - { id: L3, x: 33, y: 0, side: top, electrical: power }
+        - { id: T1, x: 11, y: 74, side: bottom, electrical: power }
+        - { id: T2, x: 22, y: 74, side: bottom, electrical: power }
+        - { id: T3, x: 33, y: 74, side: bottom, electrical: power }
+        - { id: A1, x: 0, y: 30, side: left, electrical: input }
+        - { id: A2, x: 0, y: 44, side: left, electrical: input }
+      draw:
+        - rect: [4, 8, 36, 58]
+        - line: [11, 0, 11, 16]
+        - line: [22, 0, 22, 16]
+        - line: [33, 0, 33, 16]
+        - line: [8, 16, 14, 16]
+        - line: [19, 16, 25, 16]
+        - line: [30, 16, 36, 16]
+        - line: [11, 16, 15, 22]
+        - line: [22, 16, 26, 22]
+        - line: [33, 16, 37, 22]
+        - line: [11, 26, 11, 74]
+        - line: [22, 26, 22, 74]
+        - line: [33, 26, 33, 74]
+        - line: [15, 22, 37, 22]
+        - circle: [7.5, 37, 2.5]
+        - line: [0, 30, 7.5, 30]
+        - line: [7.5, 30, 7.5, 34.5]
+        - line: [7.5, 39.5, 7.5, 44]
+        - line: [0, 44, 7.5, 44]
+        - text: [28, 42, "K", 2.8]
+    panel: { w: 45, h: 85, d: 90, din: true }
+    props: { poles: 3, Ie: 32A, AC3: 15kW, coil: 24VDC, standard: IEC 60947-4-1 }
+
+  - id: protection.overload_9a
+    name: Thermal overload 1.6–10A
+    category: protection.overload
+    ref_prefix: F
+    tags: [overload, thermal]
+    schematic:
+      width: 36
+      height: 50
+      pins:
+        - { id: "1", x: 8, y: 0, side: top, electrical: power }
+        - { id: "3", x: 18, y: 0, side: top, electrical: power }
+        - { id: "5", x: 28, y: 0, side: top, electrical: power }
+        - { id: "2", x: 8, y: 50, side: bottom, electrical: power }
+        - { id: "4", x: 18, y: 50, side: bottom, electrical: power }
+        - { id: "6", x: 28, y: 50, side: bottom, electrical: power }
+        - { id: "95", x: 36, y: 18, side: right, electrical: output }
+        - { id: "96", x: 36, y: 26, side: right, electrical: output }
+        - { id: "97", x: 36, y: 34, side: right, electrical: output }
+        - { id: "98", x: 36, y: 42, side: right, electrical: output }
+      draw:
+        - rect: [2, 8, 28, 34]
+        - line: [8, 0, 8, 12]
+        - line: [18, 0, 18, 12]
+        - line: [28, 0, 28, 12]
+        - polyline: [[8, 12], [11, 16], [5, 20], [11, 24], [8, 28]]
+        - polyline: [[18, 12], [21, 16], [15, 20], [21, 24], [18, 28]]
+        - polyline: [[28, 12], [26, 16], [28, 20], [26, 24], [28, 28]]
+        - line: [8, 28, 8, 50]
+        - line: [18, 28, 18, 50]
+        - line: [28, 28, 28, 50]
+        - line: [36, 18, 32, 18]
+        - line: [32, 18, 35, 24]
+        - line: [32, 26, 36, 26]
+        - line: [32, 24, 32, 28]
+        - line: [36, 34, 32, 34]
+        - line: [32, 34, 35, 40]
+        - line: [32, 42, 36, 42]
+        - line: [32, 40, 32, 44]
+    panel: { w: 45, h: 70, d: 80, din: true }
+    props: { range: 1.6-10A, class: 10A, standard: IEC 60947-4-1 }
+
+  - id: protection.ol_contact
+    name: Overload contact NC
+    category: protection.overload
+    ref_prefix: F
+    tags: [overload, thermal, contact]
+    schematic:
+      width: 28
+      height: 22
+      pins:
+        - { id: "95", x: 0, y: 16, side: left, electrical: output }
+        - { id: "96", x: 28, y: 16, side: right, electrical: output }
+      draw:
+        - polyline: [[10, 4], [14, 8], [18, 4], [22, 8]]
+        - line: [0, 16, 8, 16]
+        - line: [20, 16, 28, 16]
+        - line: [8, 13, 8, 19]
+        - line: [20, 13, 20, 19]
+        - line: [8, 16, 20, 13]
+    panel: { w: 45, h: 70, d: 80, din: true }
+    props: { contact: NC }
+
+  - id: contactors.coil
+    name: Contactor coil
+    category: switching.contactor
+    ref_prefix: K
+    tags: [coil, contactor]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: A1, x: 0, y: 14, side: left, electrical: input }
+        - { id: A2, x: 28, y: 14, side: right, electrical: input }
+      draw:
+        - circle: [14, 14, 8]
+        - text: [14, 16, "K", 3]
+        - line: [0, 14, 6, 14]
+        - line: [22, 14, 28, 14]
+    panel: { w: 45, h: 58, d: 57, din: true }
+    props: { coil: 24VDC, contacts: 1NO }
+
+  - id: contactors.aux_no
+    name: Auxiliary contact NO
+    category: switching.aux
+    ref_prefix: K
+    tags: [aux, "no"]
+    schematic:
+      width: 28
+      height: 16
+      pins:
+        - { id: "13", x: 0, y: 10, side: left }
+        - { id: "14", x: 28, y: 10, side: right }
+      draw:
+        - line: [0, 10, 8, 10]
+        - line: [20, 10, 28, 10]
+        - line: [8, 7, 8, 13]
+        - line: [20, 7, 20, 13]
+        - line: [8, 10, 16, 4]
+    panel: { w: 9, h: 45, d: 70, din: true }
+    props: { contact: "NO" }
+
+  - id: contactors.aux_nc
+    name: Auxiliary contact NC
+    category: switching.aux
+    ref_prefix: K
+    tags: [aux, nc]
+    schematic:
+      width: 28
+      height: 16
+      pins:
+        - { id: "21", x: 0, y: 10, side: left }
+        - { id: "22", x: 28, y: 10, side: right }
+      draw:
+        - line: [0, 10, 8, 10]
+        - line: [20, 10, 28, 10]
+        - line: [8, 7, 8, 13]
+        - line: [20, 7, 20, 13]
+        - line: [8, 10, 20, 7]
+    panel: { w: 9, h: 45, d: 70, din: true }
+    props: { contact: NC }
+
+  - id: contactors.mech_interlock
+    name: Mechanical interlock
+    category: switching.interlock
+    ref_prefix: MI
+    tags: [interlock, mechanical, accessory]
+    schematic:
+      width: 18
+      height: 12
+      pins: []
+      draw:
+        - rect: [1, 2, 16, 8]
+        - text: [9, 8, "MI", 2.2]
+    panel: { w: 9, h: 45, d: 50, din: true, in_panel: true, mount: din_rail, dims: generic }
+    props: { accessory: mechanical_interlock }

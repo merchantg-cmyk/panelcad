@@ -1,0 +1,476 @@
+# PLC I/O modules PanelCAD can draw. verified: true only when the terminal
+# list below was read from the cited installation manual or wiring diagram.
+# Unverified rows are listed so the wizard can say why they will not draw.
+# Panel width/height/depth are omitted unless the cited page states them.
+# A generic footprint is not a catalog dimension.
+kind: io_modules
+library: io
+modules:
+  # https://cdn.automationdirect.com/static/manuals/brxuserm/inserts/modules/bx-xxnd3.pdf
+  # BRX discrete input insert, 1st Ed. Rev F, 2020-11-03.
+  # BX-08ND3: 8-point 12–24 VDC sink/source, 2 isolated commons, 4 points each.
+  # 1C with terminals 0–3, 2C with 4–7. Existing symbol adc.brx.bx_08nd3 matches.
+  # Cut sheet: https://cdn.automationdirect.com/static/specs/cutsheet/BX-08ND3_cutsheet.pdf
+  # Product: https://www.automationdirect.com/pn/BX-08ND3
+  - id: brx.bx_08nd3
+    catalog: BX-08ND3
+    manufacturer: AutomationDirect
+    platform: brx
+    series: BRX
+    library_id: adc.brx.bx_08nd3
+    verified: true
+    point_type: di_sink_source
+    supply: 24VDC
+    address_style: domore
+    address_base: 0
+    source: https://cdn.automationdirect.com/static/manuals/brxuserm/inserts/modules/bx-xxnd3.pdf
+    points:
+      - { pin: "0", terminal: "0", index: 0 }
+      - { pin: "1", terminal: "1", index: 1 }
+      - { pin: "2", terminal: "2", index: 2 }
+      - { pin: "3", terminal: "3", index: 3 }
+      - { pin: "4", terminal: "4", index: 4 }
+      - { pin: "5", terminal: "5", index: 5 }
+      - { pin: "6", terminal: "6", index: 6 }
+      - { pin: "7", terminal: "7", index: 7 }
+    groups:
+      - { common: "1C", points: ["0", "1", "2", "3"] }
+      - { common: "2C", points: ["4", "5", "6", "7"] }
+    power:
+      - { pin: "1C", terminal: "1C", role: common }
+      - { pin: "2C", terminal: "2C", role: common }
+
+  # Same insert. BX-12ND3 adds 3C with terminals 8–11.
+  # https://www.automationdirect.com/pn/BX-12ND3
+  - id: brx.bx_12nd3
+    catalog: BX-12ND3
+    manufacturer: AutomationDirect
+    platform: brx
+    series: BRX
+    library_id: adc.brx.bx_12nd3
+    verified: true
+    point_type: di_sink_source
+    supply: 24VDC
+    address_style: domore
+    address_base: 0
+    source: https://cdn.automationdirect.com/static/manuals/brxuserm/inserts/modules/bx-xxnd3.pdf
+    points:
+      - { pin: "0", terminal: "0", index: 0 }
+      - { pin: "1", terminal: "1", index: 1 }
+      - { pin: "2", terminal: "2", index: 2 }
+      - { pin: "3", terminal: "3", index: 3 }
+      - { pin: "4", terminal: "4", index: 4 }
+      - { pin: "5", terminal: "5", index: 5 }
+      - { pin: "6", terminal: "6", index: 6 }
+      - { pin: "7", terminal: "7", index: 7 }
+      - { pin: "8", terminal: "8", index: 8 }
+      - { pin: "9", terminal: "9", index: 9 }
+      - { pin: "10", terminal: "10", index: 10 }
+      - { pin: "11", terminal: "11", index: 11 }
+    groups:
+      - { common: "1C", points: ["0", "1", "2", "3"] }
+      - { common: "2C", points: ["4", "5", "6", "7"] }
+      - { common: "3C", points: ["8", "9", "10", "11"] }
+    power:
+      - { pin: "1C", terminal: "1C", role: common }
+      - { pin: "2C", terminal: "2C", role: common }
+      - { pin: "3C", terminal: "3C", role: common }
+
+  # https://cdn.automationdirect.com/static/specs/c016nd3.pdf
+  # C0-16ND3: 16-point 24 VDC sink/source, 4 isolated commons, 4 points each.
+  # C1 = terminals 1–4, C2 = 5–8, C3 = 9–12, C4 = 13–16.
+  # ZIPLink label sheet shows the same groups:
+  # https://cdn.automationdirect.com/static/manuals/ziplinks/labelsheets/ZL-C0-CBL20.pdf
+  # Addresses: CLICK user manual, module position + point 01–16.
+  # https://cdn.automationdirect.com/static/manuals/c0userm/c0userm.pdf
+  # The older adc.click.c0_16nd3 symbol is not this terminal map and stays unverified.
+  - id: click.c0_16nd3
+    catalog: C0-16ND3
+    manufacturer: AutomationDirect
+    platform: click
+    series: CLICK
+    verified: true
+    point_type: di_sink_source
+    supply: 24VDC
+    address_style: click
+    io_type: DI
+    source: https://cdn.automationdirect.com/static/specs/c016nd3.pdf
+    points:
+      - { pin: "1", terminal: "1", index: 0 }
+      - { pin: "2", terminal: "2", index: 1 }
+      - { pin: "3", terminal: "3", index: 2 }
+      - { pin: "4", terminal: "4", index: 3 }
+      - { pin: "5", terminal: "5", index: 4 }
+      - { pin: "6", terminal: "6", index: 5 }
+      - { pin: "7", terminal: "7", index: 6 }
+      - { pin: "8", terminal: "8", index: 7 }
+      - { pin: "9", terminal: "9", index: 8 }
+      - { pin: "10", terminal: "10", index: 9 }
+      - { pin: "11", terminal: "11", index: 10 }
+      - { pin: "12", terminal: "12", index: 11 }
+      - { pin: "13", terminal: "13", index: 12 }
+      - { pin: "14", terminal: "14", index: 13 }
+      - { pin: "15", terminal: "15", index: 14 }
+      - { pin: "16", terminal: "16", index: 15 }
+    groups:
+      - { common: C1, points: ["1", "2", "3", "4"] }
+      - { common: C2, points: ["5", "6", "7", "8"] }
+      - { common: C3, points: ["9", "10", "11", "12"] }
+      - { common: C4, points: ["13", "14", "15", "16"] }
+    power:
+      - { pin: C1, terminal: C1, role: common }
+      - { pin: C2, terminal: C2, role: common }
+      - { pin: C3, terminal: C3, role: common }
+      - { pin: C4, terminal: C4, role: common }
+
+  # https://cdn.automationdirect.com/static/specs/c008td1.pdf page 1
+  # C0-08TD1: 8-point sinking DC output, 3.3–27 VDC, 0.3 A/point, 1.2 A/common.
+  # Two commons, four points each. C1 with 1–4, C2 with 5–8.
+  # The wiring diagram and equivalent circuit show a +V terminal.
+  # External DC power required: 21.6–26.4 VDC, max 15 mA (all outputs ON).
+  # The L marks on that diagram are the loads on terminals 1–8, not a module terminal.
+  # adc.click.c0_08td1 is a different, incomplete symbol and is not used here.
+  - id: click.c0_08td1
+    catalog: C0-08TD1
+    manufacturer: AutomationDirect
+    platform: click
+    series: CLICK
+    verified: true
+    point_type: do_sink
+    supply: 24VDC
+    address_style: click
+    io_type: DO
+    source: https://cdn.automationdirect.com/static/specs/c008td1.pdf
+    points:
+      - { pin: "1", terminal: "1", index: 0 }
+      - { pin: "2", terminal: "2", index: 1 }
+      - { pin: "3", terminal: "3", index: 2 }
+      - { pin: "4", terminal: "4", index: 3 }
+      - { pin: "5", terminal: "5", index: 4 }
+      - { pin: "6", terminal: "6", index: 5 }
+      - { pin: "7", terminal: "7", index: 6 }
+      - { pin: "8", terminal: "8", index: 7 }
+    groups:
+      - { common: C1, points: ["1", "2", "3", "4"] }
+      - { common: C2, points: ["5", "6", "7", "8"] }
+    power:
+      - { pin: C1, terminal: C1, role: common }
+      - { pin: C2, terminal: C2, role: common }
+      - { pin: VP, terminal: "+V", role: supply_plus }
+
+  # 5069-IN004. 16-point sinking 24 V DC input.
+  # https://literature.rockwellautomation.com/idc/groups/literature/documents/in/5069-in004_-en-p.pdf
+  # RTB terminals 0–15 are Input 0–15. Terminals 16 and 17 are No Connect.
+  # The input common returns internally to SA(−) on the SA power RTB. It is not a module terminal.
+  # 5069-IN004E-EN-P, June 2022, p.5: 5069-RTB18-SCREW or 5069-RTB18-SPRING.
+  # "You must order RTBs separately. RTBs do not ship with Compact 5000 I/O modules."
+  - id: ab.5069_ib16
+    catalog: 5069-IB16
+    manufacturer: Allen-Bradley
+    platform: compactlogix
+    series: Compact 5000
+    verified: true
+    point_type: di_sink
+    supply: 24VDC
+    address_style: logix
+    io_type: DI
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/in/5069-in004_-en-p.pdf
+    return_note: "Input common returns internally to SA(-) on the SA power RTB (controller, 5069-AENTR/AEN2TR, or 5069-FPD). Not a module terminal. 5069-IN004."
+    points:
+      - { pin: I00, terminal: "0", index: 0 }
+      - { pin: I01, terminal: "1", index: 1 }
+      - { pin: I02, terminal: "2", index: 2 }
+      - { pin: I03, terminal: "3", index: 3 }
+      - { pin: I04, terminal: "4", index: 4 }
+      - { pin: I05, terminal: "5", index: 5 }
+      - { pin: I06, terminal: "6", index: 6 }
+      - { pin: I07, terminal: "7", index: 7 }
+      - { pin: I08, terminal: "8", index: 8 }
+      - { pin: I09, terminal: "9", index: 9 }
+      - { pin: I10, terminal: "10", index: 10 }
+      - { pin: I11, terminal: "11", index: 11 }
+      - { pin: I12, terminal: "12", index: 12 }
+      - { pin: I13, terminal: "13", index: 13 }
+      - { pin: I14, terminal: "14", index: 14 }
+      - { pin: I15, terminal: "15", index: 15 }
+    unwired:
+      - { pin: NC16, terminal: "16", role: nc }
+      - { pin: NC17, terminal: "17", role: nc }
+    accessories:
+      # 5069-IN004E-EN-P June 2022 p.5. No width/height/depth on that page.
+      - catalog: 5069-RTB18-SCREW
+        description: "Removable terminal block, 18 screw terminals"
+        note: "Ordered separately. 5069-RTB18-SPRING is the spring alternative. 5069-IN004E-EN-P June 2022 p.5."
+
+  # 5069-IN007. 16-point sourcing DC output.
+  # https://literature.rockwellautomation.com/idc/groups/literature/documents/in/5069-in007_-en-p.pdf
+  # Terminals: Output 0–15, then LA+ and LA−.
+  # "The Local Actuator (LA+ and LA-) connections are used to supply field-side power to the module.
+  # The module does not draw current from the SA power bus."
+  - id: ab.5069_ob16
+    catalog: 5069-OB16
+    manufacturer: Allen-Bradley
+    platform: compactlogix
+    series: Compact 5000
+    verified: true
+    point_type: do_source
+    supply: 24VDC
+    address_style: logix
+    io_type: DO
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/in/5069-in007_-en-p.pdf
+    points:
+      - { pin: Q0, terminal: "0", index: 0 }
+      - { pin: Q1, terminal: "1", index: 1 }
+      - { pin: Q2, terminal: "2", index: 2 }
+      - { pin: Q3, terminal: "3", index: 3 }
+      - { pin: Q4, terminal: "4", index: 4 }
+      - { pin: Q5, terminal: "5", index: 5 }
+      - { pin: Q6, terminal: "6", index: 6 }
+      - { pin: Q7, terminal: "7", index: 7 }
+      - { pin: Q8, terminal: "8", index: 8 }
+      - { pin: Q9, terminal: "9", index: 9 }
+      - { pin: Q10, terminal: "10", index: 10 }
+      - { pin: Q11, terminal: "11", index: 11 }
+      - { pin: Q12, terminal: "12", index: 12 }
+      - { pin: Q13, terminal: "13", index: 13 }
+      - { pin: Q14, terminal: "14", index: 14 }
+      - { pin: Q15, terminal: "15", index: 15 }
+    power:
+      - { pin: LAplus, terminal: "LA+", role: supply_plus }
+      - { pin: LAminus, terminal: "LA-", role: supply_minus }
+    accessories:
+      # Same Compact 5000 rule: 5069-IN004E-EN-P June 2022 p.5. RTBs do not ship with the module.
+      - catalog: 5069-RTB18-SCREW
+        description: "Removable terminal block, 18 screw terminals"
+        note: "Ordered separately. 5069-RTB18-SPRING is the spring alternative. 5069-IN004E-EN-P June 2022 p.5."
+
+  # 5069-IN010E-EN-P, August 2023, page 9. 8-channel current/voltage input.
+  # https://literature.rockwellautomation.com/idc/groups/literature/documents/in/5069-in010_-en-p.pdf
+  # Terminals 0/1 are Input 0+/0−, through 14/15 Input 7+/7−.
+  # Terminals 16 and 17 are Shield (page 9). "Terminal inputs 0−…7− are internally connected."
+  # A 4-wire device lands Signal − on Input n−. Its supply is separate from SA.
+  # Page 9: "Use separate external power supplies to provide SA power to the system
+  # and to power external devices that are connected to the module."
+  # Page 10: "No isolation between individual input ports." That is not a bond to the 24 V 0 V rail.
+  - id: ab.5069_if8
+    catalog: 5069-IF8
+    manufacturer: Allen-Bradley
+    platform: compactlogix
+    series: Compact 5000
+    verified: true
+    point_type: ai
+    supply: 24VDC
+    address_style: logix
+    io_type: AI
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/in/5069-in010_-en-p.pdf
+    return_note: "Terminal inputs 0- through 7- are internally connected. Terminals 16 and 17 are Shield. Use a separate external supply for 4-wire devices. 5069-IN010E-EN-P August 2023 p.9."
+    points:
+      - { pin: AI0, terminal: "0+", index: 0, pair: M0 }
+      - { pin: AI1, terminal: "1+", index: 1, pair: M1 }
+      - { pin: AI2, terminal: "2+", index: 2, pair: M2 }
+      - { pin: AI3, terminal: "3+", index: 3, pair: M3 }
+      - { pin: AI4, terminal: "4+", index: 4, pair: M4 }
+      - { pin: AI5, terminal: "5+", index: 5, pair: M5 }
+      - { pin: AI6, terminal: "6+", index: 6, pair: M6 }
+      - { pin: AI7, terminal: "7+", index: 7, pair: M7 }
+    power:
+      - { pin: M0, terminal: "0-", role: signal_minus, point: AI0 }
+      - { pin: M1, terminal: "1-", role: signal_minus, point: AI1 }
+      - { pin: M2, terminal: "2-", role: signal_minus, point: AI2 }
+      - { pin: M3, terminal: "3-", role: signal_minus, point: AI3 }
+      - { pin: M4, terminal: "4-", role: signal_minus, point: AI4 }
+      - { pin: M5, terminal: "5-", role: signal_minus, point: AI5 }
+      - { pin: M6, terminal: "6-", role: signal_minus, point: AI6 }
+      - { pin: M7, terminal: "7-", role: signal_minus, point: AI7 }
+      - { pin: SH16, terminal: "16", role: shield }
+      - { pin: SH17, terminal: "17", role: shield }
+    accessories:
+      - catalog: 5069-RTB18-SCREW
+        description: "Removable terminal block, 18 screw terminals"
+        note: "Ordered separately. 5069-RTB18-SPRING is the spring alternative. 5069-IN004E-EN-P June 2022 p.5. Named again in 5069-IN010E-EN-P August 2023 pp. 8-10."
+
+  # 2085-IN001F-EN-P, January 2025. 16-point 12/24 V DC sink/source input.
+  # https://literature.rockwellautomation.com/idc/groups/literature/documents/in/2085-in001_-en-p.pdf
+  # TB1: I-00, I-01, COM0, I-02, I-03, COM0, I-04, I-05, COM0, I-06, I-07, COM0.
+  # TB2: I-08, I-09, COM1, I-10, I-11, COM1, I-12, I-13, COM1, I-14, I-15, COM1.
+  # COM0 and COM1 are each repeated four times on the RTB. The sheet shows one of each.
+  # Addresses are Micro800 variables, not Logix Local: tags.
+  # 2080-UM003: discrete inputs are read from _IO_Xx_DI_yy.
+  # https://literature.rockwellautomation.com/idc/groups/literature/documents/um/2080-um003_-en-p.pdf
+  - id: ab.2085_iq16
+    catalog: 2085-IQ16
+    manufacturer: Allen-Bradley
+    platform: micro800
+    series: Micro800
+    verified: true
+    point_type: di_sink_source
+    supply: 24VDC
+    address_style: micro800
+    io_type: DI
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/in/2085-in001_-en-p.pdf
+    return_note: "COM0 is repeated four times on TB1 and COM1 four times on TB2 (2085-IN001). The sheet shows one COM0 and one COM1."
+    points:
+      - { pin: PT00, terminal: "I-00", index: 0 }
+      - { pin: PT01, terminal: "I-01", index: 1 }
+      - { pin: PT02, terminal: "I-02", index: 2 }
+      - { pin: PT03, terminal: "I-03", index: 3 }
+      - { pin: PT04, terminal: "I-04", index: 4 }
+      - { pin: PT05, terminal: "I-05", index: 5 }
+      - { pin: PT06, terminal: "I-06", index: 6 }
+      - { pin: PT07, terminal: "I-07", index: 7 }
+      - { pin: PT08, terminal: "I-08", index: 8 }
+      - { pin: PT09, terminal: "I-09", index: 9 }
+      - { pin: PT10, terminal: "I-10", index: 10 }
+      - { pin: PT11, terminal: "I-11", index: 11 }
+      - { pin: PT12, terminal: "I-12", index: 12 }
+      - { pin: PT13, terminal: "I-13", index: 13 }
+      - { pin: PT14, terminal: "I-14", index: 14 }
+      - { pin: PT15, terminal: "I-15", index: 15 }
+    groups:
+      - { common: COM0, points: [PT00, PT01, PT02, PT03, PT04, PT05, PT06, PT07] }
+      - { common: COM1, points: [PT08, PT09, PT10, PT11, PT12, PT13, PT14, PT15] }
+    power:
+      - { pin: COM0, terminal: COM0, role: common }
+      - { pin: COM1, terminal: COM1, role: common }
+    terminal_order:
+      - [I-00, I-01, COM0, I-02, I-03, COM0, I-04, I-05, COM0, I-06, I-07, COM0]
+      - [I-08, I-09, COM1, I-10, I-11, COM1, I-12, I-13, COM1, I-14, I-15, COM1]
+
+  # SM 1221 DI 16×24 V DC, 6ES7221-1BH32-0XB0.
+  # Wiring diagram, S7-1200 manual collection V20 (11/2024):
+  # https://docs.tia.siemens.cloud/r/simatic_s7_1200_manual_collection_enus_20/technical-specifications/digital-signal-modules-sms/sm-1221-digital-input-wiring-diagrams
+  # Datasheet (16 DI, groups of 4, sink/source):
+  # https://support.industry.siemens.com/teddatasheet/?caller=SIOS&format=pdf&language=en&mlfbs=6ES7221-1BH32-0XB0
+  # Dimensions: S7-1200 manual collection V20, "SM 1221 digital input specifications",
+  # Table 1: 45 × 100 × 75 mm (W × H × D).
+  # https://docs.tia.siemens.cloud/r/simatic_s7_1200_manual_collection_enus_20/technical-specifications/digital-signal-modules-sms/sm-1221-digital-input-specifications
+  # "For sinking inputs, connect − to M (shown). For sourcing inputs, connect + to M."
+  # Process-image byte is assigned in the device configuration. address_base 0 is the editable default.
+  - id: siemens.sm1221_di16
+    catalog: 6ES7221-1BH32-0XB0
+    manufacturer: Siemens
+    platform: s7-1200
+    series: S7-1200
+    verified: true
+    point_type: di_sink_source
+    supply: 24VDC
+    address_style: tia
+    io_type: DI
+    address_base: 0
+    panel: { w: 45, h: 100, d: 75, dims: catalog, din: true }
+    source: https://docs.tia.siemens.cloud/r/simatic_s7_1200_manual_collection_enus_20/technical-specifications/digital-signal-modules-sms/sm-1221-digital-input-wiring-diagrams
+    return_note: "For sinking inputs, connect − to M. For sourcing inputs, connect + to M. Siemens SM 1221 wiring diagram."
+    points:
+      - { pin: Ia0, terminal: "X10:4", index: 0, name: "DI a.0" }
+      - { pin: Ia1, terminal: "X10:5", index: 1, name: "DI a.1" }
+      - { pin: Ia2, terminal: "X10:6", index: 2, name: "DI a.2" }
+      - { pin: Ia3, terminal: "X10:7", index: 3, name: "DI a.3" }
+      - { pin: Ia4, terminal: "X11:4", index: 4, name: "DI a.4" }
+      - { pin: Ia5, terminal: "X11:5", index: 5, name: "DI a.5" }
+      - { pin: Ia6, terminal: "X11:6", index: 6, name: "DI a.6" }
+      - { pin: Ia7, terminal: "X11:7", index: 7, name: "DI a.7" }
+      - { pin: Ib0, terminal: "X12:4", index: 8, name: "DI b.0" }
+      - { pin: Ib1, terminal: "X12:5", index: 9, name: "DI b.1" }
+      - { pin: Ib2, terminal: "X12:6", index: 10, name: "DI b.2" }
+      - { pin: Ib3, terminal: "X12:7", index: 11, name: "DI b.3" }
+      - { pin: Ib4, terminal: "X13:4", index: 12, name: "DI b.4" }
+      - { pin: Ib5, terminal: "X13:5", index: 13, name: "DI b.5" }
+      - { pin: Ib6, terminal: "X13:6", index: 14, name: "DI b.6" }
+      - { pin: Ib7, terminal: "X13:7", index: 15, name: "DI b.7" }
+    groups:
+      - { common: 1M, points: [Ia0, Ia1, Ia2, Ia3] }
+      - { common: 2M, points: [Ia4, Ia5, Ia6, Ia7] }
+      - { common: 3M, points: [Ib0, Ib1, Ib2, Ib3] }
+      - { common: 4M, points: [Ib4, Ib5, Ib6, Ib7] }
+    power:
+      - { pin: 1M, terminal: "X10:3", role: common }
+      - { pin: 2M, terminal: "X11:3", role: common }
+      - { pin: 3M, terminal: "X12:3", role: common }
+      - { pin: 4M, terminal: "X13:3", role: common }
+      - { pin: FE, terminal: "X11:1", role: earth }
+    unwired:
+      - { pin: NC_X10_1, terminal: "X10:1", role: nc }
+      - { pin: NC_X10_2, terminal: "X10:2", role: nc }
+      - { pin: NC_X11_2, terminal: "X11:2", role: nc }
+      - { pin: NC_X12_1, terminal: "X12:1", role: nc }
+      - { pin: NC_X12_2, terminal: "X12:2", role: nc }
+      - { pin: NC_X13_1, terminal: "X13:1", role: nc }
+      - { pin: NC_X13_2, terminal: "X13:2", role: nc }
+
+  - id: platform.s7_1500
+    catalog: ""
+    manufacturer: Siemens
+    platform: s7-1500
+    verified: false
+    message: "No S7-1500 I/O module terminal table was verified from a Siemens installation manual. PanelCAD will not auto-draw an S7-1500 I/O sheet."
+
+  - id: platform.productivity
+    catalog: ""
+    manufacturer: AutomationDirect
+    platform: productivity
+    verified: false
+    message: "No Productivity / P-series I/O module terminal table was verified from an AutomationDirect installation manual. PanelCAD will not auto-draw a Productivity I/O sheet."
+
+  - id: symbol.iec_compact_16dio
+    catalog: ""
+    manufacturer: ""
+    platform: generic
+    library_id: iec.plc.compact_16dio
+    verified: false
+    message: "iec.plc.compact_16dio is a generic symbol. It has no verified module terminal map, so PanelCAD will not auto-draw it."
+
+  - id: symbol.iec_di16
+    catalog: ""
+    manufacturer: ""
+    platform: generic
+    library_id: iec.plc.di16
+    verified: false
+    message: "iec.plc.di16 is a generic symbol. It has no verified module terminal map, so PanelCAD will not auto-draw it."
+
+  - id: symbol.iec_do12
+    catalog: ""
+    manufacturer: ""
+    platform: generic
+    library_id: iec.plc.do12
+    verified: false
+    message: "iec.plc.do12 is a generic symbol. It has no verified module terminal map, so PanelCAD will not auto-draw it."
+
+  - id: symbol.iec_do16
+    catalog: ""
+    manufacturer: ""
+    platform: generic
+    library_id: iec.plc.do16
+    verified: false
+    message: "iec.plc.do16 is a generic symbol. It has no verified module terminal map, so PanelCAD will not auto-draw it."
+
+  - id: symbol.nema_compact_16dio
+    catalog: ""
+    manufacturer: ""
+    platform: generic
+    library_id: nema.plc.compact_16dio
+    verified: false
+    message: "nema.plc.compact_16dio is a generic symbol. It has no verified module terminal map, so PanelCAD will not auto-draw it."
+
+  - id: symbol.click_c0_16nd3_legacy
+    catalog: C0-16ND3
+    manufacturer: AutomationDirect
+    platform: click
+    library_id: adc.click.c0_16nd3
+    verified: false
+    message: "adc.click.c0_16nd3 does not match the C0-16ND3 terminal groups. Use io module click.c0_16nd3. PanelCAD will not auto-draw the old symbol."
+
+  - id: symbol.click_c0_08td1_legacy
+    catalog: C0-08TD1
+    manufacturer: AutomationDirect
+    platform: click
+    library_id: adc.click.c0_08td1
+    verified: false
+    message: "adc.click.c0_08td1 does not match the C0-08TD1 terminal groups. Use io module click.c0_08td1. PanelCAD will not auto-draw the old symbol."
+
+  - id: symbol.click_c2_03cpu
+    catalog: C2-03CPU
+    manufacturer: AutomationDirect
+    platform: click
+    library_id: adc.click.c2_03cpu
+    verified: false
+    message: "adc.click.c2_03cpu onboard I/O was not checked terminal-for-terminal. PanelCAD will not auto-draw it."

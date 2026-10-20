@@ -1,0 +1,130 @@
+# Standard US control-panel enclosures. George can add, hide, or edit rows.
+#
+# Sizes are height × width × depth in inches (Hoffman / Saginaw convention).
+# Back-panel usable size uses the usual wall-mount collar-stud inset:
+#   panel ≈ (H − 3 in) × (W − 3 in)
+# Floor-mount rows use the same inset unless a row overrides it.
+#
+# catalog / manufacturer / url:
+#   Only real catalog numbers confirmed on the maker's official product page.
+#   Leave catalog blank when the number is not confirmed. Never invent one.
+#   url is required whenever catalog is set.
+
+library: enclosures
+version: "1"
+
+defaults:
+  spare_pct: 0.25
+  duct_face_in: 2.0          # 2 in wire-duct face on the back panel
+  duct_depth_in: 3.0         # 3 in duct stand-off (box depth)
+  rail_to_duct_in: 1.0
+  wall_gutter_in: 0.5
+  airflow_gap_in: 1.0        # around VFDs / transformers
+  side_ducts: true
+  ambient_c: 40.0            # typical US plant high
+  max_internal_c: 50.0       # common PLC / electronics rating
+  vfd_efficiency: 0.97
+  psu_efficiency: 0.88
+  transformer_efficiency: 0.95
+  heat_k_steel: 5.5          # W/m²·K painted steel, natural convection
+  heat_k_stainless: 4.5
+  heat_k_nonmetallic: 3.5
+  nema: "12"
+  material: steel
+  mount: any
+
+enclosures:
+  # --- Wall-mount, painted steel, NEMA 12 (indoor, typical shop default) ---
+  - { id: wall-16x12x6-n12, mount: wall, nema: "12", material: steel, height_in: 16, width_in: 12, depth_in: 6, panel_height_in: 13, panel_width_in: 9 }
+  - { id: wall-16x12x8-n12, mount: wall, nema: "12", material: steel, height_in: 16, width_in: 12, depth_in: 8, panel_height_in: 13, panel_width_in: 9 }
+  # 20 × 12 × 8 Type 12 Continuous Hinge LP — official nVent HOFFMAN page
+  # https://www.nvent.com/en-us/hoffman/products/enca201208lp
+  - { id: wall-20x12x8-n12, mount: wall, nema: "12", material: steel, height_in: 20, width_in: 12, depth_in: 8, panel_height_in: 17, panel_width_in: 9, manufacturer: nVent Hoffman, catalog: A201208LP, url: "https://www.nvent.com/en-us/hoffman/products/enca201208lp" }
+  - { id: wall-20x16x6-n12, mount: wall, nema: "12", material: steel, height_in: 20, width_in: 16, depth_in: 6, panel_height_in: 17, panel_width_in: 13 }
+  - { id: wall-20x16x8-n12, mount: wall, nema: "12", material: steel, height_in: 20, width_in: 16, depth_in: 8, panel_height_in: 17, panel_width_in: 13 }
+  - { id: wall-20x16x10-n12, mount: wall, nema: "12", material: steel, height_in: 20, width_in: 16, depth_in: 10, panel_height_in: 17, panel_width_in: 13 }
+  - { id: wall-24x20x8-n12, mount: wall, nema: "12", material: steel, height_in: 24, width_in: 20, depth_in: 8, panel_height_in: 21, panel_width_in: 17 }
+  - { id: wall-24x20x10-n12, mount: wall, nema: "12", material: steel, height_in: 24, width_in: 20, depth_in: 10, panel_height_in: 21, panel_width_in: 17 }
+  - { id: wall-24x20x12-n12, mount: wall, nema: "12", material: steel, height_in: 24, width_in: 20, depth_in: 12, panel_height_in: 21, panel_width_in: 17 }
+  - { id: wall-30x24x8-n12, mount: wall, nema: "12", material: steel, height_in: 30, width_in: 24, depth_in: 8, panel_height_in: 27, panel_width_in: 21 }
+  - { id: wall-30x24x10-n12, mount: wall, nema: "12", material: steel, height_in: 30, width_in: 24, depth_in: 10, panel_height_in: 27, panel_width_in: 21 }
+  - { id: wall-30x24x12-n12, mount: wall, nema: "12", material: steel, height_in: 30, width_in: 24, depth_in: 12, panel_height_in: 27, panel_width_in: 21 }
+  - { id: wall-36x30x8-n12, mount: wall, nema: "12", material: steel, height_in: 36, width_in: 30, depth_in: 8, panel_height_in: 33, panel_width_in: 27 }
+  - { id: wall-36x30x10-n12, mount: wall, nema: "12", material: steel, height_in: 36, width_in: 30, depth_in: 10, panel_height_in: 33, panel_width_in: 27 }
+  - { id: wall-36x30x12-n12, mount: wall, nema: "12", material: steel, height_in: 36, width_in: 30, depth_in: 12, panel_height_in: 33, panel_width_in: 27 }
+  - { id: wall-42x36x8-n12, mount: wall, nema: "12", material: steel, height_in: 42, width_in: 36, depth_in: 8, panel_height_in: 39, panel_width_in: 33 }
+  - { id: wall-42x36x10-n12, mount: wall, nema: "12", material: steel, height_in: 42, width_in: 36, depth_in: 10, panel_height_in: 39, panel_width_in: 33 }
+  - { id: wall-42x36x12-n12, mount: wall, nema: "12", material: steel, height_in: 42, width_in: 36, depth_in: 12, panel_height_in: 39, panel_width_in: 33 }
+  - { id: wall-48x36x10-n12, mount: wall, nema: "12", material: steel, height_in: 48, width_in: 36, depth_in: 10, panel_height_in: 45, panel_width_in: 33 }
+  - { id: wall-48x36x12-n12, mount: wall, nema: "12", material: steel, height_in: 48, width_in: 36, depth_in: 12, panel_height_in: 45, panel_width_in: 33 }
+  - { id: wall-48x36x16-n12, mount: wall, nema: "12", material: steel, height_in: 48, width_in: 36, depth_in: 16, panel_height_in: 45, panel_width_in: 33 }
+
+  # --- Floor-mount, painted steel, NEMA 12 ---
+  - { id: floor-60x36x12-n12, mount: floor, nema: "12", material: steel, height_in: 60, width_in: 36, depth_in: 12, panel_height_in: 57, panel_width_in: 33 }
+  - { id: floor-60x36x16-n12, mount: floor, nema: "12", material: steel, height_in: 60, width_in: 36, depth_in: 16, panel_height_in: 57, panel_width_in: 33 }
+  - { id: floor-60x36x18-n12, mount: floor, nema: "12", material: steel, height_in: 60, width_in: 36, depth_in: 18, panel_height_in: 57, panel_width_in: 33 }
+  - { id: floor-72x36x12-n12, mount: floor, nema: "12", material: steel, height_in: 72, width_in: 36, depth_in: 12, panel_height_in: 69, panel_width_in: 33 }
+  - { id: floor-72x36x16-n12, mount: floor, nema: "12", material: steel, height_in: 72, width_in: 36, depth_in: 16, panel_height_in: 69, panel_width_in: 33 }
+  - { id: floor-72x36x18-n12, mount: floor, nema: "12", material: steel, height_in: 72, width_in: 36, depth_in: 18, panel_height_in: 69, panel_width_in: 33 }
+  - { id: floor-72x48x18-n12, mount: floor, nema: "12", material: steel, height_in: 72, width_in: 48, depth_in: 18, panel_height_in: 69, panel_width_in: 45 }
+  - { id: floor-90x36x18-n12, mount: floor, nema: "12", material: steel, height_in: 90, width_in: 36, depth_in: 18, panel_height_in: 87, panel_width_in: 33 }
+  - { id: floor-90x48x18-n12, mount: floor, nema: "12", material: steel, height_in: 90, width_in: 48, depth_in: 18, panel_height_in: 87, panel_width_in: 45 }
+
+  # --- NEMA 1 (indoor, no gasket) — same common sizes, no catalog numbers ---
+  - { id: wall-16x12x6-n1, mount: wall, nema: "1", material: steel, height_in: 16, width_in: 12, depth_in: 6, panel_height_in: 13, panel_width_in: 9 }
+  - { id: wall-20x16x8-n1, mount: wall, nema: "1", material: steel, height_in: 20, width_in: 16, depth_in: 8, panel_height_in: 17, panel_width_in: 13 }
+  - { id: wall-24x20x8-n1, mount: wall, nema: "1", material: steel, height_in: 24, width_in: 20, depth_in: 8, panel_height_in: 21, panel_width_in: 17 }
+  - { id: wall-30x24x10-n1, mount: wall, nema: "1", material: steel, height_in: 30, width_in: 24, depth_in: 10, panel_height_in: 27, panel_width_in: 21 }
+  - { id: wall-36x30x12-n1, mount: wall, nema: "1", material: steel, height_in: 36, width_in: 30, depth_in: 12, panel_height_in: 33, panel_width_in: 27 }
+  - { id: wall-48x36x12-n1, mount: wall, nema: "1", material: steel, height_in: 48, width_in: 36, depth_in: 12, panel_height_in: 45, panel_width_in: 33 }
+
+  # --- NEMA 4 (washdown) painted steel. Confirmed Hoffman numbers only. ---
+  # 16 × 12 × 8 Continuous Hinge LP — official nVent HOFFMAN page (Type 4; also listed Type 12/13/3R)
+  # https://www.nvent.com/en-us/hoffman/products/enca161208lp
+  - { id: wall-16x12x8-n4, mount: wall, nema: "4", material: steel, height_in: 16, width_in: 12, depth_in: 8, panel_height_in: 13, panel_width_in: 9, manufacturer: nVent Hoffman, catalog: A161208LP, url: "https://www.nvent.com/en-us/hoffman/products/enca161208lp" }
+  # 16 × 16 × 6 Continuous Hinge LP — official nVent HOFFMAN page
+  # https://www.nvent.com/en-us/hoffman/products/enca161606lp
+  - { id: wall-16x16x6-n4, mount: wall, nema: "4", material: steel, height_in: 16, width_in: 16, depth_in: 6, panel_height_in: 13, panel_width_in: 13, manufacturer: nVent Hoffman, catalog: A161606LP, url: "https://www.nvent.com/en-us/hoffman/products/enca161606lp" }
+  - { id: wall-20x16x8-n4, mount: wall, nema: "4", material: steel, height_in: 20, width_in: 16, depth_in: 8, panel_height_in: 17, panel_width_in: 13 }
+  - { id: wall-24x20x8-n4, mount: wall, nema: "4", material: steel, height_in: 24, width_in: 20, depth_in: 8, panel_height_in: 21, panel_width_in: 17 }
+  - { id: wall-24x20x12-n4, mount: wall, nema: "4", material: steel, height_in: 24, width_in: 20, depth_in: 12, panel_height_in: 21, panel_width_in: 17 }
+  - { id: wall-30x24x12-n4, mount: wall, nema: "4", material: steel, height_in: 30, width_in: 24, depth_in: 12, panel_height_in: 27, panel_width_in: 21 }
+  - { id: wall-36x30x12-n4, mount: wall, nema: "4", material: steel, height_in: 36, width_in: 30, depth_in: 12, panel_height_in: 33, panel_width_in: 27 }
+  - { id: wall-48x36x12-n4, mount: wall, nema: "4", material: steel, height_in: 48, width_in: 36, depth_in: 12, panel_height_in: 45, panel_width_in: 33 }
+  - { id: floor-60x36x12-n4, mount: floor, nema: "4", material: steel, height_in: 60, width_in: 36, depth_in: 12, panel_height_in: 57, panel_width_in: 33 }
+  - { id: floor-72x36x18-n4, mount: floor, nema: "4", material: steel, height_in: 72, width_in: 36, depth_in: 18, panel_height_in: 69, panel_width_in: 33 }
+
+  # --- NEMA 4X stainless. Confirmed Hoffman numbers only. ---
+  # 16 × 12 × 6 Type 4X SS304 — official nVent HOFFMAN page
+  # https://www.nvent.com/en-us/hoffman/products/enca16h1206sslp
+  - { id: wall-16x12x6-n4x, mount: wall, nema: "4X", material: stainless, height_in: 16, width_in: 12, depth_in: 6, panel_height_in: 13, panel_width_in: 9, manufacturer: nVent Hoffman, catalog: A16H1206SSLP, url: "https://www.nvent.com/en-us/hoffman/products/enca16h1206sslp" }
+  - { id: wall-20x16x8-n4x, mount: wall, nema: "4X", material: stainless, height_in: 20, width_in: 16, depth_in: 8, panel_height_in: 17, panel_width_in: 13 }
+  - { id: wall-24x20x8-n4x, mount: wall, nema: "4X", material: stainless, height_in: 24, width_in: 20, depth_in: 8, panel_height_in: 21, panel_width_in: 17 }
+  - { id: wall-24x20x12-n4x, mount: wall, nema: "4X", material: stainless, height_in: 24, width_in: 20, depth_in: 12, panel_height_in: 21, panel_width_in: 17 }
+  - { id: wall-30x24x12-n4x, mount: wall, nema: "4X", material: stainless, height_in: 30, width_in: 24, depth_in: 12, panel_height_in: 27, panel_width_in: 21 }
+  - { id: wall-36x30x12-n4x, mount: wall, nema: "4X", material: stainless, height_in: 36, width_in: 30, depth_in: 12, panel_height_in: 33, panel_width_in: 27 }
+  - { id: wall-48x36x12-n4x, mount: wall, nema: "4X", material: stainless, height_in: 48, width_in: 36, depth_in: 12, panel_height_in: 45, panel_width_in: 33 }
+  - { id: floor-60x36x12-n4x, mount: floor, nema: "4X", material: stainless, height_in: 60, width_in: 36, depth_in: 12, panel_height_in: 57, panel_width_in: 33 }
+
+  # AutomationDirect Ultimate Series carbon steel. The page title is
+  # "NEMA 4, 12, and 13"; nema is stored as 12. That PDF does not print
+  # the word Wiegmann. Box HxWxD is on
+  # https://cdn.automationdirect.com/static/specs/n412sdwm.pdf
+  # Subpanel HxW is on
+  # https://cdn.automationdirect.com/static/specs/encsubpanelsnpc.pdf
+  # (NP1212C, NP1612C, NP2016C, NP2420C). Sizes are the published numbers.
+  - { id: ad-n412121206c, mount: wall, nema: "12", material: steel, height_in: 12, width_in: 12, depth_in: 6.92, panel_height_in: 10.20, panel_width_in: 10.20, catalog: N412121206C, url: "https://cdn.automationdirect.com/static/specs/n412sdwm.pdf" }
+  - { id: ad-n412161206c, mount: wall, nema: "12", material: steel, height_in: 16, width_in: 12, depth_in: 6.92, panel_height_in: 14.20, panel_width_in: 10.20, catalog: N412161206C, url: "https://cdn.automationdirect.com/static/specs/n412sdwm.pdf" }
+  - { id: ad-n412161208c, mount: wall, nema: "12", material: steel, height_in: 16, width_in: 12, depth_in: 8.92, panel_height_in: 14.20, panel_width_in: 10.20, catalog: N412161208C, url: "https://cdn.automationdirect.com/static/specs/n412sdwm.pdf" }
+  - { id: ad-n412201608c, mount: wall, nema: "12", material: steel, height_in: 20, width_in: 16, depth_in: 8.92, panel_height_in: 18.20, panel_width_in: 14.20, catalog: N412201608C, url: "https://cdn.automationdirect.com/static/specs/n412sdwm.pdf" }
+  - { id: ad-n412242008c, mount: wall, nema: "12", material: steel, height_in: 24, width_in: 20, depth_in: 8.92, panel_height_in: 22.20, panel_width_in: 18.20, catalog: N412242008C, url: "https://cdn.automationdirect.com/static/specs/n412sdwm.pdf" }
+  # Wiegmann N412-SS. The stainless page names Wiegmann and prints
+  # 16.00 x 12.00 x 6.92 for N412161206SSC. Subpanel NP1612C is
+  # 14.20 x 10.20 on the subpanel PDF above. The page also lists NEMA 4, 12, and 13.
+  - { id: ad-n412161206ssc, mount: wall, nema: "4X", material: stainless, height_in: 16, width_in: 12, depth_in: 6.92, panel_height_in: 14.20, panel_width_in: 10.20, manufacturer: Wiegmann, catalog: N412161206SSC, url: "https://cdn.automationdirect.com/static/specs/oldspec/n412sssdwm_02_08_2024.pdf" }
+  # BantamBox polycarbonate. The AD spec titles the series BantamBox and
+  # does not print Attabox. Ratings on the page include NEMA 1, 3R, 4, 4X, and 12.
+  # Box size is tENA-2. Subpanel size is tENA-17 of the same PDF.
+  - { id: ad-bb121275w, mount: wall, nema: "4X", material: nonmetallic, height_in: 4.80, width_in: 4.72, depth_in: 2.95, panel_height_in: 4.41, panel_width_in: 4.33, manufacturer: BantamBox, catalog: BB121275W, url: "https://cdn.automationdirect.com/static/specs/oldspec/bantam_poly_2026_04_24.pdf" }
+  - { id: ad-bb161255w, mount: wall, nema: "4X", material: nonmetallic, height_in: 6.30, width_in: 4.72, depth_in: 2.17, panel_height_in: 5.94, panel_width_in: 4.41, manufacturer: BantamBox, catalog: BB161255W, url: "https://cdn.automationdirect.com/static/specs/oldspec/bantam_poly_2026_04_24.pdf" }
+  - { id: ad-bb201275w, mount: wall, nema: "4X", material: nonmetallic, height_in: 7.87, width_in: 4.72, depth_in: 2.95, panel_height_in: 7.44, panel_width_in: 4.29, manufacturer: BantamBox, catalog: BB201275W, url: "https://cdn.automationdirect.com/static/specs/oldspec/bantam_poly_2026_04_24.pdf" }

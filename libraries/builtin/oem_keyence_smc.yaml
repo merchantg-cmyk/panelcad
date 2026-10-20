@@ -1,0 +1,165 @@
+# Keyence and SMC parts. Dimensions from public cut sheets (2026-08).
+# Manufacturer names are trademarks of their owners.
+# Pin ids stay wireable (I0/Q0); `label` is what the OEM prints on the block.
+library: oem
+version: "0.1"
+devices:
+  - id: keyence.kv_b16xc
+    name: KV-B16XC 16-pt input
+    category: control.plc
+    ref_prefix: A
+    tags: [keyence, kv, input]
+    schematic:
+      width: 50
+      height: 110
+      pins:
+        - { id: Lplus, x: 0, y: 10, side: left, electrical: power, label: "24V" }
+        - { id: M, x: 0, y: 18, side: left, electrical: power, label: "0V" }
+        - { id: I0, x: 0, y: 30, side: left, electrical: input, label: X0 }
+        - { id: I1, x: 0, y: 38, side: left, electrical: input, label: X1 }
+        - { id: I2, x: 0, y: 46, side: left, electrical: input, label: X2 }
+        - { id: I3, x: 0, y: 54, side: left, electrical: input, label: X3 }
+        - { id: I4, x: 0, y: 62, side: left, electrical: input, label: X4 }
+        - { id: I5, x: 0, y: 70, side: left, electrical: input, label: X5 }
+        - { id: I6, x: 0, y: 78, side: left, electrical: input, label: X6 }
+        - { id: I7, x: 0, y: 86, side: left, electrical: input, label: X7 }
+      draw:
+        - rect: [8, 6, 34, 98]
+        - text: [25, 20, "KV-B16X", 2.4]
+    panel: { w: 28.5, h: 90.0, d: 76.0, din: true, in_panel: true, mount: din_rail, dims: catalog }
+    props:
+      manufacturer: Keyence
+      part_number: KV-B16XC
+      catalog: KV-B16XC
+      DI: 16
+      supply: 24VDC
+
+  - id: keyence.kv_b16tc
+    name: KV-B16TC 16-pt output
+    category: control.plc
+    ref_prefix: A
+    tags: [keyence, kv, output]
+    schematic:
+      width: 50
+      height: 110
+      pins:
+        - { id: Lplus, x: 50, y: 10, side: right, electrical: power, label: "24V" }
+        - { id: M, x: 50, y: 18, side: right, electrical: power, label: "0V" }
+        - { id: Q0, x: 50, y: 30, side: right, electrical: output, label: Y0 }
+        - { id: Q1, x: 50, y: 38, side: right, electrical: output, label: Y1 }
+        - { id: Q2, x: 50, y: 46, side: right, electrical: output, label: Y2 }
+        - { id: Q3, x: 50, y: 54, side: right, electrical: output, label: Y3 }
+        - { id: Q4, x: 50, y: 62, side: right, electrical: output, label: Y4 }
+        - { id: Q5, x: 50, y: 70, side: right, electrical: output, label: Y5 }
+        - { id: Q6, x: 50, y: 78, side: right, electrical: output, label: Y6 }
+        - { id: Q7, x: 50, y: 86, side: right, electrical: output, label: Y7 }
+      draw:
+        - rect: [8, 6, 34, 98]
+        - text: [25, 20, "KV-B16T", 2.4]
+    panel: { w: 28.5, h: 90.0, d: 76.0, din: true, in_panel: true, mount: din_rail, dims: catalog }
+    props:
+      manufacturer: Keyence
+      part_number: KV-B16TC
+      catalog: KV-B16TC
+      DO: 16
+      supply: 24VDC
+
+  - id: smc.ex260_sen1
+    name: EX260-SEN1 EtherNet/IP SI
+    category: control.plc
+    ref_prefix: A
+    tags: [smc, ex260, valve, ethernet]
+    schematic:
+      width: 50
+      height: 120
+      pins:
+        - { id: Q0, x: 50, y: 28, side: right, electrical: output, label: OUT0 }
+        - { id: Q1, x: 50, y: 36, side: right, electrical: output, label: OUT1 }
+        - { id: Q2, x: 50, y: 44, side: right, electrical: output, label: OUT2 }
+        - { id: Q3, x: 50, y: 52, side: right, electrical: output, label: OUT3 }
+        - { id: Q4, x: 50, y: 60, side: right, electrical: output, label: OUT4 }
+        - { id: Q5, x: 50, y: 68, side: right, electrical: output, label: OUT5 }
+        - { id: Q6, x: 50, y: 76, side: right, electrical: output, label: OUT6 }
+        - { id: Q7, x: 50, y: 84, side: right, electrical: output, label: OUT7 }
+        - { id: Q8, x: 50, y: 92, side: right, electrical: output, label: OUT8 }
+        - { id: Q9, x: 50, y: 100, side: right, electrical: output, label: OUT9 }
+        - { id: Q10, x: 50, y: 108, side: right, electrical: output, label: OUT10 }
+        - { id: Q11, x: 50, y: 116, side: right, electrical: output, label: OUT11 }
+      draw:
+        - rect: [8, 6, 34, 114]
+        - text: [25, 20, "EX260", 2.6]
+    ports:
+      - { id: ETH, kind: ethernet, medium: "10/100", protocol: EtherNet/IP, connector: M12, side: right, label: "P1" }
+    panel: { w: 28.2, h: 76.5, d: 102.4, din: false, in_panel: true, mount: backplate, dims: catalog }
+    props:
+      manufacturer: SMC
+      part_number: EX260-SEN1
+      catalog: EX260-SEN1
+      protocol: EtherNet/IP
+
+  - id: patlite.lr4_302wjnw_ryg
+    name: LR4-302WJNW-RYG
+    category: operator.light
+    ref_prefix: H
+    tags: [patlite, stacklight]
+    schematic:
+      width: 24
+      height: 28
+      pins:
+        - { id: X1, x: 0, y: 12, side: left, electrical: input, label: "24V" }
+        - { id: X2, x: 24, y: 12, side: right, electrical: input, label: "0V" }
+      draw:
+        - circle: [12, 12, 7]
+        - line: [7, 7, 17, 17]
+        - line: [17, 7, 7, 17]
+        - line: [0, 12, 5, 12]
+        - line: [19, 12, 24, 12]
+        - text: [12, 26, "LR4", 2.2]
+    panel: { w: 40.0, h: 219.0, d: 40.0, din: false, in_panel: false, mount: field, dims: catalog }
+    props:
+      manufacturer: PATLITE
+      part_number: LR4-302WJNW-RYG
+      catalog: LR4-302WJNW-RYG
+      voltage: 24VDC
+      colors: red/amber/green
+
+  - id: keyence.gc1000
+    name: GC-1000 safety controller
+    category: control.plc
+    ref_prefix: GC
+    tags: [keyence, gc, safety]
+    schematic:
+      width: 90
+      height: 110
+      pins:
+        - { id: Si0, x: 0, y: 22, side: left, electrical: input, label: "Si0-Si1" }
+        - { id: Si2, x: 0, y: 34, side: left, electrical: input, label: "Si2-Si3" }
+        - { id: Si4, x: 0, y: 46, side: left, electrical: input, label: "Si4-Si5" }
+        - { id: Si8, x: 0, y: 58, side: left, electrical: input, label: "Si8-Si9" }
+        - { id: Si10, x: 0, y: 70, side: left, electrical: input, label: "Si10-Si11" }
+        - { id: So0, x: 90, y: 22, side: right, electrical: output, label: So0 }
+        - { id: So1, x: 90, y: 34, side: right, electrical: output, label: So1 }
+        - { id: So2, x: 90, y: 46, side: right, electrical: output, label: So2 }
+        - { id: SOUTA, x: 90, y: 70, side: right, electrical: output, label: "S-OUT A" }
+      draw:
+        - rect: [8, 6, 74, 98]
+        - rect: [14, 12, 62, 14]
+        - text: [45, 22, "GC-1000", 3.2]
+        - text: [45, 100, "GC-1000", 1.8]
+        - line: [0, 22, 8, 22]
+        - line: [0, 34, 8, 34]
+        - line: [0, 46, 8, 46]
+        - line: [0, 58, 8, 58]
+        - line: [0, 70, 8, 70]
+        - line: [82, 22, 90, 22]
+        - line: [82, 34, 90, 34]
+        - line: [82, 46, 90, 46]
+        - line: [82, 70, 90, 70]
+    ports:
+      - { id: ETH, kind: ethernet, medium: "10/100", protocol: Ethernet, connector: RJ45, side: right }
+    panel: { w: 70, h: 90, d: 70, din: true, in_panel: true, mount: din_rail, dims: generic }
+    props:
+      manufacturer: Keyence
+      part_number: GC-1000
+      catalog: GC-1000
+      supply: 24VDC

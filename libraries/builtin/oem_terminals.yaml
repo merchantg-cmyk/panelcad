@@ -1,0 +1,81 @@
+# OEM DIN-rail terminals. Same two-pin symbol as iec.terminals.x_2p5.
+# jumper_family + pitch_mm pick the matching row in jumpers.yaml.
+library: iec
+version: "0.1"
+
+_term: &feedthrough
+  width: 16
+  height: 24
+  pins:
+    - { id: A, x: 0, y: 12, side: left }
+    - { id: B, x: 16, y: 12, side: right }
+  draw:
+    - rect: [3, 4, 10, 16]
+    - line: [0, 12, 3, 12]
+    - line: [13, 12, 16, 12]
+    - text: [8, 22, "X", 2.4]
+
+devices:
+  - id: terminals.phoenix_ut_2p5
+    name: Phoenix Contact UT 2,5
+    category: connection.terminal
+    ref_prefix: X
+    tags: [terminal, phoenix, ut]
+    standard: OEM
+    schematic: *feedthrough
+    panel: { w: 5.2, h: 47, d: 48, din: true, dims: catalog }
+    props:
+      manufacturer: Phoenix Contact
+      part_number: UT 2,5
+      catalog: "3044076"  # Phoenix item; 3044102 is UT 4
+      jumper_family: phoenix
+      pitch_mm: 5.2
+      section: 2.5mm2
+
+  - id: terminals.wago_2002_1201
+    name: WAGO 2002-1201
+    category: connection.terminal
+    ref_prefix: X
+    tags: [terminal, wago, topjob]
+    standard: OEM
+    schematic: *feedthrough
+    panel: { w: 5.2, h: 48, d: 39, din: true, dims: catalog }
+    props:
+      manufacturer: WAGO
+      part_number: "2002-1201"
+      catalog: "2002-1201"
+      jumper_family: wago
+      pitch_mm: 5.2
+      section: 2.5mm2
+
+  - id: terminals.weidmueller_wdu_2p5
+    name: Weidmüller WDU 2.5
+    category: connection.terminal
+    ref_prefix: X
+    tags: [terminal, weidmueller, wdu]
+    standard: OEM
+    schematic: *feedthrough
+    panel: { w: 5.1, h: 47, d: 46, din: true, dims: catalog }
+    props:
+      manufacturer: Weidmüller
+      part_number: WDU 2.5
+      catalog: "1020000000"
+      jumper_family: weidmueller
+      pitch_mm: 5.1
+      section: 2.5mm2
+
+  - id: terminals.adc_dn_t10
+    name: AutomationDirect DN-T10
+    category: connection.terminal
+    ref_prefix: X
+    tags: [terminal, dinkle, automationdirect]
+    standard: OEM
+    schematic: *feedthrough
+    panel: { w: 6.2, h: 47, d: 48, din: true, dims: catalog }
+    props:
+      manufacturer: AutomationDirect
+      part_number: DN-T10
+      catalog: DN-T10
+      jumper_family: dinkle
+      pitch_mm: 6.2
+      section: 2.5mm2

@@ -1,0 +1,812 @@
+# Yaskawa. GA500 400 V ABA outlines stay on SL.GA500.01 and can be verified: full.
+# GA500 240 V outlines are SIEPC71061752 section 10.8 tables for the A (no EMC) models. Amps stay on SL.GA500.01, so those rows stay partial.
+# GA800 and V1000 outlines were not on a dimension table read for this pass.
+# source_date is the day these pages were read.
+kind: manufacturer_parts
+manufacturer: Yaskawa
+version: "0.1"
+
+parts:
+  - catalog: 4001ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 480 V three-phase IP20, catalog code 4001ABA under the GA50U column, ND 1/2 HP 1.2 A, HD 1/2 HP 1.2 A, frame 2.1"
+    verified: full
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 1.2
+    width_mm: 108
+    height_mm: 128
+    depth_mm: 81
+    notes: "amps is Heavy Duty. Table 3.1 frame 2.1 is H 128 x W 108 x D 81 mm. The ratings page that prints GA50U4001ABA gives inches and is not the source of these millimetres."
+
+  - catalog: 4002ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 480 V three-phase IP20, catalog code 4002ABA under the GA50U column, ND 1 HP 2.1 A, HD 3/4 HP 1.8 A, frame 2.2"
+    verified: full
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 1.8
+    width_mm: 108
+    height_mm: 128
+    depth_mm: 99
+    notes: "amps is Heavy Duty. Table 3.1 frame 2.2 is H 128 x W 108 x D 99 mm. The ratings page that prints GA50U4002ABA gives inches and is not the source of these millimetres."
+
+  - catalog: 4004ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 480 V three-phase IP20, catalog code 4004ABA under the GA50U column, ND 2 HP 4.1 A, HD 2 HP 3.4 A, frame 2.4"
+    verified: full
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 3.4
+    width_mm: 108
+    height_mm: 128
+    depth_mm: 138
+    notes: "amps is Heavy Duty. Table 3.1 frame 2.4 is H 128 x W 108 x D 138 mm. The ratings page that prints GA50U4004ABA gives inches and is not the source of these millimetres."
+
+  - catalog: 4005ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 480 V three-phase IP20, catalog code 4005ABA under the GA50U column, ND 3 HP 5.4 A, HD 3 HP 4.8 A, frame 2.5"
+    verified: full
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 4.8
+    width_mm: 108
+    height_mm: 128
+    depth_mm: 154
+    notes: "amps is Heavy Duty. Table 3.1 frame 2.5 is H 128 x W 108 x D 154 mm. The ratings page that prints GA50U4005ABA gives inches and is not the source of these millimetres."
+
+  - catalog: 4007ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 480 V three-phase IP20, catalog code 4007ABA under the GA50U column, ND 4 HP 7.1 A, HD 3 HP 5.6 A, frame 2.5"
+    verified: full
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 5.6
+    width_mm: 108
+    height_mm: 128
+    depth_mm: 154
+    notes: "amps is Heavy Duty. Table 3.1 frame 2.5 is H 128 x W 108 x D 154 mm. The ratings page that prints GA50U4007ABA gives inches and is not the source of these millimetres."
+
+  - catalog: 4009ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 480 V three-phase IP20, catalog code 4009ABA under the GA50U column, ND 5 HP 8.9 A, HD 4 HP 7.3 A, frame 2.5"
+    verified: full
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 7.3
+    width_mm: 108
+    height_mm: 128
+    depth_mm: 154
+    notes: "amps is Heavy Duty. Table 3.1 frame 2.5 is H 128 x W 108 x D 154 mm. The ratings page that prints GA50U4009ABA gives inches and is not the source of these millimetres."
+
+  - catalog: 4012ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 480 V three-phase IP20, catalog code 4012ABA under the GA50U column, ND 7.5 HP 11.9 A, HD 5 HP 9.2 A, frame 3.1"
+    verified: full
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 9.2
+    width_mm: 140
+    height_mm: 128
+    depth_mm: 143
+    notes: "amps is Heavy Duty. Table 3.1 frame 3.1 is H 128 x W 140 x D 143 mm. The ratings page that prints GA50U4012ABA gives inches and is not the source of these millimetres."
+
+  - catalog: 4018ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 480 V three-phase IP20, catalog code 4018ABA under the GA50U column, ND 10 HP 17.5 A, HD 10 HP 14.8 A, frame 5"
+    verified: full
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 14.8
+    width_mm: 140
+    height_mm: 260
+    depth_mm: 140
+    notes: "amps is Heavy Duty. Table 3.1 frame 5 is H 260 x W 140 x D 140 mm. The ratings page that prints GA50U4018ABA gives inches and is not the source of these millimetres."
+
+  - catalog: 4023ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 480 V three-phase IP20, catalog code 4023ABA under the GA50U column, ND 15 HP 23.4 A, HD 10 HP 18 A, frame 5"
+    verified: full
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 18
+    width_mm: 140
+    height_mm: 260
+    depth_mm: 140
+    notes: "amps is Heavy Duty. Table 3.1 frame 5 is H 260 x W 140 x D 140 mm. The ratings page that prints GA50U4023ABA gives inches and is not the source of these millimetres."
+
+  - catalog: 4031ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 480 V three-phase IP20, catalog code 4031ABA under the GA50U column, ND 20 HP 31 A, HD 15 HP 24 A, frame 6"
+    verified: full
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 24
+    width_mm: 180
+    height_mm: 300
+    depth_mm: 143
+    notes: "amps is Heavy Duty. Table 3.1 frame 6 is H 300 x W 180 x D 143 mm. The ratings page that prints GA50U4031ABA gives inches and is not the source of these millimetres."
+
+  - catalog: 4038ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 480 V three-phase IP20, catalog code 4038ABA under the GA50U column, ND 25 HP 38 A, HD 20 HP 31 A, frame 6"
+    verified: full
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 31
+    width_mm: 180
+    height_mm: 300
+    depth_mm: 143
+    notes: "amps is Heavy Duty. Table 3.1 frame 6 is H 300 x W 180 x D 143 mm. The ratings page that prints GA50U4038ABA gives inches and is not the source of these millimetres."
+
+  - catalog: 4044ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 480 V three-phase IP20, catalog code 4044ABA under the GA50U column, ND 30 HP 44 A, HD 25 HP 39 A, frame 8"
+    verified: full
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 39
+    width_mm: 190
+    height_mm: 350
+    depth_mm: 204
+    notes: "amps is Heavy Duty. Table 3.1 frame 8 is H 350 x W 190 x D 204 mm. The ratings page that prints GA50U4044ABA gives inches and is not the source of these millimetres."
+
+  - catalog: 4060ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 480 V three-phase IP20, catalog code 4060ABA under the GA50U column, ND 40 HP 60 A, HD 30 HP 45 A, frame 8"
+    verified: full
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 45
+    width_mm: 190
+    height_mm: 350
+    depth_mm: 204
+    notes: "amps is Heavy Duty. Table 3.1 frame 8 is H 350 x W 190 x D 204 mm. The ratings page that prints GA50U4060ABA gives inches and is not the source of these millimetres."
+
+  - catalog: 2001ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 240 V three-phase IP20, catalog code 2001ABA under the GA50U column, ND 1/6 HP 1.2 A, HD 1/6 HP 0.8 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 0.8
+    width_mm: 68
+    height_mm: 128
+    depth_mm: 76
+    notes: "amps is Heavy Duty from SL.GA500.01. Outline is GA500 technical manual SIEPC71061752 section 10.8 Table 10.23, model 2001A (IP20, without EMC filter): W 68 x H 128 x D 76 mm. https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SIEPC71061752&documentName=SIEPC71061752.pdf. The A table matches the ABA catalog suffix. Two documents, so verified stays partial."
+
+  - catalog: 2002ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 240 V three-phase IP20, catalog code 2002ABA under the GA50U column, ND 1/4 HP 1.9 A, HD 1/4 HP 1.6 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 1.6
+    width_mm: 68
+    height_mm: 128
+    depth_mm: 76
+    notes: "amps is Heavy Duty from SL.GA500.01. Outline is GA500 technical manual SIEPC71061752 section 10.8 Table 10.23, model 2002A (IP20, without EMC filter): W 68 x H 128 x D 76 mm. https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SIEPC71061752&documentName=SIEPC71061752.pdf. The A table matches the ABA catalog suffix. Two documents, so verified stays partial."
+
+  - catalog: 2004ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 240 V three-phase IP20, catalog code 2004ABA under the GA50U column, ND 3/4 HP 3.5 A, HD 1/2 HP 3 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 3
+    width_mm: 68
+    height_mm: 128
+    depth_mm: 108
+    notes: "amps is Heavy Duty from SL.GA500.01. Outline is GA500 technical manual SIEPC71061752 section 10.8 Table 10.23, model 2004A (IP20, without EMC filter): W 68 x H 128 x D 108 mm. https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SIEPC71061752&documentName=SIEPC71061752.pdf. The A table matches the ABA catalog suffix. Two documents, so verified stays partial."
+
+  - catalog: 2006ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 240 V three-phase IP20, catalog code 2006ABA under the GA50U column, ND 1.5 HP 6 A, HD 1 HP 5 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 5
+    width_mm: 68
+    height_mm: 128
+    depth_mm: 128
+    notes: "amps is Heavy Duty from SL.GA500.01. Outline is GA500 technical manual SIEPC71061752 section 10.8 Table 10.23, model 2006A (IP20, without EMC filter): W 68 x H 128 x D 128 mm. https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SIEPC71061752&documentName=SIEPC71061752.pdf. The A table matches the ABA catalog suffix. Two documents, so verified stays partial."
+
+  - catalog: 2010ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 240 V three-phase IP20, catalog code 2010ABA under the GA50U column, ND 3 HP 9.6 A, HD 2 HP 8 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 8
+    notes: "amps is Heavy Duty from SL.GA500.01 Table 2.2. SIEPC71061752 Table 10.27 lists two depth triples before 2012A is labeled, so 2010/2012/2021 millimetres are not stored."
+
+  - catalog: 2012ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 240 V three-phase IP20, catalog code 2012ABA under the GA50U column, ND 4 HP 12.2 A, HD 3 HP 11 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 11
+    notes: "amps is Heavy Duty from SL.GA500.01 Table 2.2. SIEPC71061752 Table 10.27 lists two depth triples before 2012A is labeled, so 2010/2012/2021 millimetres are not stored."
+
+  - catalog: 2021ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 240 V three-phase IP20, catalog code 2021ABA under the GA50U column, ND 7.5 HP 21 A, HD 5 HP 17.6 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 17.6
+    notes: "amps is Heavy Duty from SL.GA500.01 Table 2.2. SIEPC71061752 Table 10.27 lists two depth triples before 2012A is labeled, so 2010/2012/2021 millimetres are not stored."
+
+  - catalog: 2030ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 240 V three-phase IP20, catalog code 2030ABA under the GA50U column, ND 10 HP 30 A, HD 7.5 HP 25 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 25
+    width_mm: 140
+    height_mm: 260
+    depth_mm: 140
+    notes: "amps is Heavy Duty from SL.GA500.01. Outline is GA500 technical manual SIEPC71061752 section 10.8 Table 10.31, model 2030A (IP20, without EMC filter): W 140 x H 260 x D 140 mm. https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SIEPC71061752&documentName=SIEPC71061752.pdf. The A table matches the ABA catalog suffix. Two documents, so verified stays partial."
+
+  - catalog: 2042ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 240 V three-phase IP20, catalog code 2042ABA under the GA50U column, ND 15 HP 42 A, HD 10 HP 33 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 33
+    width_mm: 140
+    height_mm: 260
+    depth_mm: 140
+    notes: "amps is Heavy Duty from SL.GA500.01. Outline is GA500 technical manual SIEPC71061752 section 10.8 Table 10.31, model 2042A (IP20, without EMC filter): W 140 x H 260 x D 140 mm. https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SIEPC71061752&documentName=SIEPC71061752.pdf. The A table matches the ABA catalog suffix. Two documents, so verified stays partial."
+
+  - catalog: 2056ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 240 V three-phase IP20, catalog code 2056ABA under the GA50U column, ND 20 HP 56 A, HD 15 HP 47 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 47
+    width_mm: 180
+    height_mm: 300
+    depth_mm: 143
+    notes: "amps is Heavy Duty from SL.GA500.01. Outline is GA500 technical manual SIEPC71061752 section 10.8 Table 10.31, model 2056A (IP20, without EMC filter): W 180 x H 300 x D 143 mm. https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SIEPC71061752&documentName=SIEPC71061752.pdf. The A table matches the ABA catalog suffix. Two documents, so verified stays partial."
+
+  - catalog: 2070ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 240 V three-phase IP20, catalog code 2070ABA under the GA50U column, ND 25 HP 70 A, HD 20 HP 60 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 60
+    width_mm: 220
+    height_mm: 350
+    depth_mm: 187
+    notes: "amps is Heavy Duty from SL.GA500.01. Outline is GA500 technical manual SIEPC71061752 section 10.8 Table 10.31, model 2070A (IP20, without EMC filter): W 220 x H 350 x D 187 mm. https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SIEPC71061752&documentName=SIEPC71061752.pdf. The A table matches the ABA catalog suffix. Two documents, so verified stays partial."
+
+  - catalog: 2082ABA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA500 240 V three-phase IP20, catalog code 2082ABA under the GA50U column, ND 30 HP 82 A, HD 25 HP 75 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA50U
+    amps: 75
+    width_mm: 220
+    height_mm: 350
+    depth_mm: 187
+    notes: "amps is Heavy Duty from SL.GA500.01. Outline is GA500 technical manual SIEPC71061752 section 10.8 Table 10.31, model 2082A (IP20, without EMC filter): W 220 x H 350 x D 187 mm. https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SIEPC71061752&documentName=SIEPC71061752.pdf. The A table matches the ABA catalog suffix. Two documents, so verified stays partial."
+
+  - catalog: JVOP-KPLCA04MEB
+    library_id: iec.notes.block
+    category: drive.option
+    description: "GA500 standard LCD keypad, local/remote, non-Bluetooth, JVOP-KPLCA04MEB"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA500
+    notes: "Keypad table. No outline on this row."
+
+  - catalog: JVOP-KPLCC04MBB
+    library_id: iec.notes.block
+    category: drive.option
+    description: "GA500 LCD keypad with Bluetooth, JVOP-KPLCC04MBB"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA500
+    notes: "Keypad table, Bluetooth, for DriveWizard Mobile. No outline on this row."
+
+  - catalog: USR000032
+    library_id: iec.notes.block
+    category: drive.option
+    description: "GA500 10% duty braking resistor USR000032, quantity 1"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA500
+    notes: "10% dynamic braking option table, max 10 second on-time, quantity 1, listed for GA50U codes 4001, 4002, and 4004. Ohms and outline are not in that table. The guide prints this catalog code as USR000032."
+
+  - catalog: USR000034
+    library_id: iec.notes.block
+    category: drive.option
+    description: "GA500 10% duty braking resistor USR000034, quantity 1"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA500
+    notes: "10% dynamic braking option table, max 10 second on-time, quantity 1, listed for GA50U codes 4005 and 4007. Ohms and outline are not in that table. The guide prints this catalog code as USR000034."
+
+  - catalog: USR000035
+    library_id: iec.notes.block
+    category: drive.option
+    description: "GA500 10% duty braking resistor USR000035, quantity 1"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA500
+    notes: "10% dynamic braking option table, max 10 second on-time, quantity 1, listed for GA50U codes 4009. Ohms and outline are not in that table. The guide prints this catalog code as USR000035."
+
+  - catalog: USR000036
+    library_id: iec.notes.block
+    category: drive.option
+    description: "GA500 10% duty braking resistor USR000036, quantity 1"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA500
+    notes: "10% dynamic braking option table, max 10 second on-time, quantity 1, listed for GA50U codes 4012. Ohms and outline are not in that table. The guide prints this catalog code as USR000036."
+
+  - catalog: USR000038
+    library_id: iec.notes.block
+    category: drive.option
+    description: "GA500 10% duty braking resistor USR000038, quantity 1"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA500
+    notes: "10% dynamic braking option table, max 10 second on-time, quantity 1, listed for GA50U codes 4018 and 4023. Ohms and outline are not in that table. The guide prints this catalog code as USR000038."
+
+  - catalog: USR000039
+    library_id: iec.notes.block
+    category: drive.option
+    description: "GA500 10% duty braking resistor USR000039, quantity 1"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA500
+    notes: "10% dynamic braking option table, max 10 second on-time, quantity 1, listed for GA50U codes 4031. Ohms and outline are not in that table. The guide prints this catalog code as USR000039."
+
+  - catalog: URS000154
+    library_id: iec.notes.block
+    category: drive.option
+    description: "GA500 10% duty braking resistor URS000154, quantity 1"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA500
+    notes: "10% dynamic braking option table, max 10 second on-time, quantity 1, listed for GA50U codes 4038 and 4044. Ohms and outline are not in that table. The guide prints this catalog code as URS000154."
+
+  - catalog: USR000066
+    library_id: iec.notes.block
+    category: drive.option
+    description: "GA500 10% duty braking resistor USR000066, quantity 1"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA500.01&documentName=SL.GA500.01.pdf"
+    source_date: "2026-10-08"
+    series: GA500
+    notes: "10% dynamic braking option table, max 10 second on-time, quantity 1, listed for GA50U codes 4060. Ohms and outline are not in that table. The guide prints this catalog code as USR000066."
+
+  - catalog: 4002ABM
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA800 480 V protected chassis, catalog code 4002ABM under the GA80U column, ND 1 HP 2.1 A, HD 0.75 HP 1.8 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA800.01&documentName=SL.GA800.01.pdf"
+    source_date: "2026-10-08"
+    series: GA80U
+    amps: 1.8
+    notes: "Table 2.2 three-phase 480 V drives. amps is Heavy Duty. This selection guide does not print the outline on the rating row, so width/height/depth are blank."
+
+  - catalog: 4004ABM
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA800 480 V protected chassis, catalog code 4004ABM under the GA80U column, ND 2 HP 4.1 A, HD 1.5 HP 3.4 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA800.01&documentName=SL.GA800.01.pdf"
+    source_date: "2026-10-08"
+    series: GA80U
+    amps: 3.4
+    notes: "Table 2.2 three-phase 480 V drives. amps is Heavy Duty. This selection guide does not print the outline on the rating row, so width/height/depth are blank."
+
+  - catalog: 4005ABM
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA800 480 V protected chassis, catalog code 4005ABM under the GA80U column, ND 3 HP 5.4 A, HD 2 HP 4.8 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA800.01&documentName=SL.GA800.01.pdf"
+    source_date: "2026-10-08"
+    series: GA80U
+    amps: 4.8
+    notes: "Table 2.2 three-phase 480 V drives. amps is Heavy Duty. This selection guide does not print the outline on the rating row, so width/height/depth are blank."
+
+  - catalog: 4007ABM
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA800 480 V protected chassis, catalog code 4007ABM under the GA80U column, ND 4 HP 7.1 A, HD 3 HP 5.5 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA800.01&documentName=SL.GA800.01.pdf"
+    source_date: "2026-10-08"
+    series: GA80U
+    amps: 5.5
+    notes: "Table 2.2 three-phase 480 V drives. amps is Heavy Duty. This selection guide does not print the outline on the rating row, so width/height/depth are blank."
+
+  - catalog: 4009ABM
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA800 480 V protected chassis, catalog code 4009ABM under the GA80U column, ND 5 HP 8.9 A, HD 4 HP 7.2 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA800.01&documentName=SL.GA800.01.pdf"
+    source_date: "2026-10-08"
+    series: GA80U
+    amps: 7.2
+    notes: "Table 2.2 three-phase 480 V drives. amps is Heavy Duty. This selection guide does not print the outline on the rating row, so width/height/depth are blank."
+
+  - catalog: 4012ABM
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA800 480 V protected chassis, catalog code 4012ABM under the GA80U column, ND 7.5 HP 11.9 A, HD 5 HP 9.2 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA800.01&documentName=SL.GA800.01.pdf"
+    source_date: "2026-10-08"
+    series: GA80U
+    amps: 9.2
+    notes: "Table 2.2 three-phase 480 V drives. amps is Heavy Duty. This selection guide does not print the outline on the rating row, so width/height/depth are blank."
+
+  - catalog: 4018ABM
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA800 480 V protected chassis, catalog code 4018ABM under the GA80U column, ND 10 HP 17.5 A, HD 7.5 HP 14.8 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA800.01&documentName=SL.GA800.01.pdf"
+    source_date: "2026-10-08"
+    series: GA80U
+    amps: 14.8
+    notes: "Table 2.2 three-phase 480 V drives. amps is Heavy Duty. This selection guide does not print the outline on the rating row, so width/height/depth are blank."
+
+  - catalog: 4023ABM
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA800 480 V protected chassis, catalog code 4023ABM under the GA80U column, ND 15 HP 23.4 A, HD 10 HP 18 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA800.01&documentName=SL.GA800.01.pdf"
+    source_date: "2026-10-08"
+    series: GA80U
+    amps: 18
+    notes: "Table 2.2 three-phase 480 V drives. amps is Heavy Duty. This selection guide does not print the outline on the rating row, so width/height/depth are blank."
+
+  - catalog: 4031ABM
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA800 480 V protected chassis, catalog code 4031ABM under the GA80U column, ND 20 HP 31 A, HD 15 HP 24 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA800.01&documentName=SL.GA800.01.pdf"
+    source_date: "2026-10-08"
+    series: GA80U
+    amps: 24
+    notes: "Table 2.2 three-phase 480 V drives. amps is Heavy Duty. This selection guide does not print the outline on the rating row, so width/height/depth are blank."
+
+  - catalog: 4038ABM
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA800 480 V protected chassis, catalog code 4038ABM under the GA80U column, ND 25 HP 38 A, HD 20 HP 31 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA800.01&documentName=SL.GA800.01.pdf"
+    source_date: "2026-10-08"
+    series: GA80U
+    amps: 31
+    notes: "Table 2.2 three-phase 480 V drives. amps is Heavy Duty. This selection guide does not print the outline on the rating row, so width/height/depth are blank."
+
+  - catalog: 4044ABM
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA800 480 V protected chassis, catalog code 4044ABM under the GA80U column, ND 30 HP 44 A, HD 25 HP 39 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA800.01&documentName=SL.GA800.01.pdf"
+    source_date: "2026-10-08"
+    series: GA80U
+    amps: 39
+    notes: "Table 2.2 three-phase 480 V drives. amps is Heavy Duty. This selection guide does not print the outline on the rating row, so width/height/depth are blank."
+
+  - catalog: 4060ABM
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA800 480 V protected chassis, catalog code 4060ABM under the GA80U column, ND 40 HP 59.6 A, HD 30 HP 45 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA800.01&documentName=SL.GA800.01.pdf"
+    source_date: "2026-10-08"
+    series: GA80U
+    amps: 45
+    notes: "Table 2.2 three-phase 480 V drives. amps is Heavy Duty. This selection guide does not print the outline on the rating row, so width/height/depth are blank."
+
+  - catalog: 4075ABM
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA800 480 V protected chassis, catalog code 4075ABM under the GA80U column, ND 50 HP 74.9 A, HD 40 HP 60 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA800.01&documentName=SL.GA800.01.pdf"
+    source_date: "2026-10-08"
+    series: GA80U
+    amps: 60
+    notes: "Table 2.2 three-phase 480 V drives. amps is Heavy Duty. This selection guide does not print the outline on the rating row, so width/height/depth are blank."
+
+  - catalog: 4089ABM
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "GA800 480 V protected chassis, catalog code 4089ABM under the GA80U column, ND 60 HP 89.2 A, HD 50 HP 75 A"
+    verified: partial
+    source: "https://www.yaskawa.com/delegate/getAttachment?cmd=documents&documentId=SL.GA800.01&documentName=SL.GA800.01.pdf"
+    source_date: "2026-10-08"
+    series: GA80U
+    amps: 75
+    notes: "Table 2.2 three-phase 480 V drives. amps is Heavy Duty. This selection guide does not print the outline on the rating row, so width/height/depth are blank."
+
+  - catalog: CIMR-VU4A0001FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 380-480 V 3-phase, ND 1.2 A 1/2 HP, HD 1.2 A 1/2 HP, CIMR-VU4A0001FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 1.2
+    notes: "amps is Heavy Duty. NEMA 1 on this row. Overload footnote: ND 120% for 60 s, HD 150% for 60 s. This ratings page has no outline, so millimetres are blank."
+
+  - catalog: CIMR-VU4A0002FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 380-480 V 3-phase, ND 2.1 A 3/4 & 1 HP, HD 1.8 A 3/4 HP, CIMR-VU4A0002FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 1.8
+    notes: "amps is Heavy Duty. Enclosure cell on this row is blank. Overload footnote: ND 120% for 60 s, HD 150% for 60 s. This ratings page has no outline, so millimetres are blank."
+
+  - catalog: CIMR-VU4A0004FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 380-480 V 3-phase, ND 4.1 A 2 HP, HD 3.4 A 1 & 2 HP, CIMR-VU4A0004FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 3.4
+    notes: "amps is Heavy Duty. NEMA 1 on this row. Overload footnote: ND 120% for 60 s, HD 150% for 60 s. This ratings page has no outline, so millimetres are blank."
+
+  - catalog: CIMR-VU4A0005FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 380-480 V 3-phase, ND 5.4 A 3 HP, HD 4.8 A 3 HP, CIMR-VU4A0005FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 4.8
+    notes: "amps is Heavy Duty. Enclosure cell on this row is blank. Overload footnote: ND 120% for 60 s, HD 150% for 60 s. This ratings page has no outline, so millimetres are blank."
+
+  - catalog: CIMR-VU4A0007FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 380-480 V 3-phase, ND 6.9 A 4 HP, HD 5.5 A 3 HP, CIMR-VU4A0007FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 5.5
+    notes: "amps is Heavy Duty. NEMA 1 on this row. Overload footnote: ND 120% for 60 s, HD 150% for 60 s. This ratings page has no outline, so millimetres are blank."
+
+  - catalog: CIMR-VU4A0009FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 380-480 V 3-phase, ND 8.8 A 5 HP, HD 7.2 A 4 HP, CIMR-VU4A0009FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 7.2
+    notes: "amps is Heavy Duty. Enclosure cell on this row is blank. Overload footnote: ND 120% for 60 s, HD 150% for 60 s. This ratings page has no outline, so millimetres are blank."
+
+  - catalog: CIMR-VU4A0011FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 380-480 V 3-phase, ND 11.1 A 7.5 HP, HD 9.2 A 5 HP, CIMR-VU4A0011FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 9.2
+    notes: "amps is Heavy Duty. NEMA 1 on this row. Overload footnote: ND 120% for 60 s, HD 150% for 60 s. This ratings page has no outline, so millimetres are blank."
+
+  - catalog: CIMR-VU4A0018FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 380-480 V 3-phase, ND 17.5 A 10 HP, HD 14.8 A 7.5 & 10 HP, CIMR-VU4A0018FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 14.8
+    notes: "amps is Heavy Duty. Enclosure cell on this row is blank. Overload footnote: ND 120% for 60 s, HD 150% for 60 s. This ratings page has no outline, so millimetres are blank."
+
+  - catalog: CIMR-VU4A0023FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 380-480 V 3-phase, ND 23 A 15 HP, HD 18 A 10 HP, CIMR-VU4A0023FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 18
+    notes: "amps is Heavy Duty. NEMA 1 on this row. Overload footnote: ND 120% for 60 s, HD 150% for 60 s. This ratings page has no outline, so millimetres are blank."
+
+  - catalog: CIMR-VU4A0031FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 380-480 V 3-phase, ND 31 A 20 HP, HD 24 A 15 HP, CIMR-VU4A0031FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 24
+    notes: "amps is Heavy Duty. Enclosure cell on this row is blank. Overload footnote: ND 120% for 60 s, HD 150% for 60 s. This ratings page has no outline, so millimetres are blank."
+
+  - catalog: CIMR-VU4A0038FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 380-480 V 3-phase, ND 38 A 25 HP, HD 31 A 20 HP, CIMR-VU4A0038FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 31
+    notes: "amps is Heavy Duty. Enclosure cell on this row is blank. Overload footnote: ND 120% for 60 s, HD 150% for 60 s. This ratings page has no outline, so millimetres are blank."
+
+  - catalog: CIMR-VU2A0004FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 200-240 V 3-phase, ND 3.5 A 1/2 & 3/4 HP, HD 3 A 1/2 HP, CIMR-VU2A0004FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 3
+    notes: "amps is Heavy Duty. Enclosure cell on this row is blank. Overload footnote on the page: ND 120% for 60 s, HD 150% for 60 s. Horsepower footnote mentions 230 V and 460 V motors; those words are not in the description. No outline on this page."
+
+  - catalog: CIMR-VU2A0006FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 200-240 V 3-phase, ND 6 A 1 HP, HD 5 A 3/4 & 1 HP, CIMR-VU2A0006FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 5
+    notes: "amps is Heavy Duty. NEMA 1 on this row. Overload footnote on the page: ND 120% for 60 s, HD 150% for 60 s. Horsepower footnote mentions 230 V and 460 V motors; those words are not in the description. No outline on this page."
+
+  - catalog: CIMR-VU2A0012FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 200-240 V 3-phase, ND 12 A 3 HP, HD 11 A 3 HP, CIMR-VU2A0012FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 11
+    notes: "amps is Heavy Duty. Enclosure cell on this row is blank. Overload footnote on the page: ND 120% for 60 s, HD 150% for 60 s. Horsepower footnote mentions 230 V and 460 V motors; those words are not in the description. No outline on this page."
+
+  - catalog: CIMR-VU2A0020FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 200-240 V 3-phase, ND 19.6 A 5 HP, HD 17.5 A 5 HP, CIMR-VU2A0020FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 17.5
+    notes: "amps is Heavy Duty. NEMA 1 on this row. Overload footnote on the page: ND 120% for 60 s, HD 150% for 60 s. Horsepower footnote mentions 230 V and 460 V motors; those words are not in the description. No outline on this page."
+
+  - catalog: CIMR-VU2A0030FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 200-240 V 3-phase, ND 30 A 7.5 & 10 HP, HD 25 A 7.5 HP, CIMR-VU2A0030FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 25
+    notes: "amps is Heavy Duty. Enclosure cell on this row is blank. Overload footnote on the page: ND 120% for 60 s, HD 150% for 60 s. Horsepower footnote mentions 230 V and 460 V motors; those words are not in the description. No outline on this page."
+
+  - catalog: CIMR-VU2A0040FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 200-240 V 3-phase, ND 40 A 10 HP, HD 33 A 10 HP, CIMR-VU2A0040FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 33
+    notes: "amps is Heavy Duty. Enclosure cell on this row is blank. Overload footnote on the page: ND 120% for 60 s, HD 150% for 60 s. Horsepower footnote mentions 230 V and 460 V motors; those words are not in the description. No outline on this page."
+
+  - catalog: CIMR-VU2A0056FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 200-240 V 3-phase, ND 56 A 20 HP, HD 47 A 15 HP, CIMR-VU2A0056FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 47
+    notes: "amps is Heavy Duty. NEMA 1 on this row. Overload footnote on the page: ND 120% for 60 s, HD 150% for 60 s. Horsepower footnote mentions 230 V and 460 V motors; those words are not in the description. No outline on this page."
+
+  - catalog: CIMR-VU2A0069FAA
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "V1000 200-240 V 3-phase, ND 69 A 25 HP, HD 60 A 20 HP, CIMR-VU2A0069FAA"
+    verified: partial
+    source: "https://www.yaskawa.com/products/drives/industrial-ac-drives/microdrives/v1000-drive/-/content/_6b474b12-3855-47b3-b64a-6bc14f88ac1d_Models38Ratings"
+    source_date: "2026-10-08"
+    series: V1000
+    amps: 60
+    notes: "amps is Heavy Duty. Enclosure cell on this row is blank. Overload footnote on the page: ND 120% for 60 s, HD 150% for 60 s. Horsepower footnote mentions 230 V and 460 V motors; those words are not in the description. No outline on this page."

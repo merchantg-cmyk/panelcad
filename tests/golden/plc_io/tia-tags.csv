@@ -1,0 +1,14 @@
+# PanelCAD generic PLC tag CSV (target: tia_csv). Not a TIA Portal import file.
+# The TIA import file is target tia: sheets PLCTags and TagTableProperties.
+# https://docs.tia.siemens.cloud/r/en-us/v21/declaring-plc-tags/editing-plc-tag-tables/exporting-and-importing-plc-tags/format-of-the-export-file-.xlsx
+# These columns are PanelCAD's text export, not the English xlsx titles.
+# Logical addresses use international mnemonics (%I / %Q). https://docs.tia.siemens.cloud/r/en-us/v21/tia-portal-openness-api-for-automation-of-engineering-workflows/export/import/importing/exporting-hardware-data/export/import-of-plc-tags
+name,data_type,logical_address,comment
+S1,Bool,%I0.0,"S1, Start, wire 101, sheet main line 104"
+Spare_I0_1,Bool,%I0.1,spare
+Spare_I0_2,Bool,%I0.2,spare
+Spare_I0_3,Bool,%I0.3,spare
+CR1,Bool,%Q0.0,"CR1, Run, wire 102, sheet main line 103"
+Spare_Q0_1,Bool,%Q0.1,spare
+Spare_Q0_2,Bool,%Q0.2,spare
+Spare_Q0_3,Bool,%Q0.3,spare

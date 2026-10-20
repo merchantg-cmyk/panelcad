@@ -1,0 +1,123 @@
+<?xml version='1.0' encoding='utf-8'?>
+<WagoSmartDesignerProject xmlns="https://panelcad.dev/ns/wago-smartdesigner" generator="PanelCAD" version="0.2.0" product="WAGO smartDESIGNER" confidence="unconfirmed">
+  <Header>
+    <ProjectName>Vendor strip sample</ProjectName>
+    <Strip>X1</Strip>
+    <Note>PanelCAD interchange XML with rail order, article numbers, markers, and accessories. WAGO smartDESIGNER's documented import is a CAE file (EPLAN / WSCAD / E³). AutoCAD Electrical 2027 claims a vendor XML; that schema is not public. Older ProServe XML does not import. Import of this XML is unconfirmed. Use the comma CSV fallback.</Note>
+  </Header>
+  <TerminalStrip name="X1" sequence="rail">
+    <Item position="1">
+      <Kind>end_stop</Kind>
+      <Article>249-116</Article>
+      <Designation>Screwless end stop</Designation>
+      <Tag>XS1</Tag>
+      <TerminalNumber />
+      <InternalWire />
+      <ExternalWire />
+      <Jumper />
+      <Accessory>end_stop</Accessory>
+      <Spare>false</Spare>
+      <LibraryId>iec.accessories.end_stop</LibraryId>
+      <Mapped>true</Mapped>
+    </Item>
+    <Item position="2">
+      <Kind>end_plate</Kind>
+      <Article>2002-1291</Article>
+      <Designation>End and intermediate plate, gray</Designation>
+      <Tag>XP1</Tag>
+      <TerminalNumber />
+      <InternalWire />
+      <ExternalWire />
+      <Jumper />
+      <Accessory>end_plate</Accessory>
+      <Spare>false</Spare>
+      <LibraryId>iec.accessories.end_plate</LibraryId>
+      <Mapped>true</Mapped>
+    </Item>
+    <Item position="3">
+      <Kind>terminal</Kind>
+      <Article>2002-1201</Article>
+      <Designation>2-conductor through terminal block 2.5 mm²</Designation>
+      <Tag>X1-3</Tag>
+      <TerminalNumber>3</TerminalNumber>
+      <InternalWire />
+      <ExternalWire>11</ExternalWire>
+      <Jumper />
+      <Accessory />
+      <Spare>false</Spare>
+      <LibraryId>iec.terminals.x_2p5</LibraryId>
+      <Mapped>true</Mapped>
+    </Item>
+    <Item position="4">
+      <Kind>partition</Kind>
+      <Article>2002-1292</Article>
+      <Designation>End and intermediate plate, orange</Designation>
+      <Tag>XD1</Tag>
+      <TerminalNumber />
+      <InternalWire />
+      <ExternalWire />
+      <Jumper />
+      <Accessory>partition</Accessory>
+      <Spare>false</Spare>
+      <LibraryId>iec.accessories.partition</LibraryId>
+      <Mapped>true</Mapped>
+    </Item>
+    <Item position="5">
+      <Kind>terminal</Kind>
+      <Article>2002-1201</Article>
+      <Designation>2-conductor through terminal block 2.5 mm²</Designation>
+      <Tag>X1-2</Tag>
+      <TerminalNumber>2</TerminalNumber>
+      <InternalWire>10</InternalWire>
+      <ExternalWire />
+      <Jumper>J1</Jumper>
+      <Accessory />
+      <Spare>false</Spare>
+      <LibraryId>iec.terminals.x_2p5</LibraryId>
+      <Mapped>true</Mapped>
+    </Item>
+    <Item position="6">
+      <Kind>terminal</Kind>
+      <Article>2002-1201</Article>
+      <Designation>2-conductor through terminal block 2.5 mm²</Designation>
+      <Tag>X1-1</Tag>
+      <TerminalNumber>1</TerminalNumber>
+      <InternalWire>10</InternalWire>
+      <ExternalWire>11</ExternalWire>
+      <Jumper>J1</Jumper>
+      <Accessory />
+      <Spare>false</Spare>
+      <LibraryId>iec.terminals.x_2p5</LibraryId>
+      <Mapped>true</Mapped>
+    </Item>
+    <Item position="7">
+      <Kind>end_plate</Kind>
+      <Article>2002-1291</Article>
+      <Designation>End and intermediate plate, gray</Designation>
+      <Tag>XP2</Tag>
+      <TerminalNumber />
+      <InternalWire />
+      <ExternalWire />
+      <Jumper />
+      <Accessory>end_plate</Accessory>
+      <Spare>false</Spare>
+      <LibraryId>iec.accessories.end_plate</LibraryId>
+      <Mapped>true</Mapped>
+    </Item>
+    <Item position="8">
+      <Kind>end_stop</Kind>
+      <Article>249-116</Article>
+      <Designation>Screwless end stop</Designation>
+      <Tag>XS2</Tag>
+      <TerminalNumber />
+      <InternalWire />
+      <ExternalWire />
+      <Jumper />
+      <Accessory>end_stop</Accessory>
+      <Spare>false</Spare>
+      <LibraryId>iec.accessories.end_stop</LibraryId>
+      <Mapped>true</Mapped>
+    </Item>
+  </TerminalStrip>
+  <Warnings />
+</WagoSmartDesignerProject>

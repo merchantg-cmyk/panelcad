@@ -1,0 +1,84 @@
+# Terminal jumpers (plug-in bridges / comb bars).
+#
+# George: add a row under jumpers: → items. Matching uses jumper_family + pitch_mm
+# + poles. Old projects still store only properties.jumper on the terminal; the
+# BOM and strip export derive the part from this table.
+#
+# Full devices:[] entries also work if you need a custom schematic.
+library: iec
+version: "0.1"
+
+jumpers:
+  - family: generic
+    pitch_mm: 5.2
+    manufacturer: ""
+    kind: bridge
+    items:
+      - { poles: 2, part_number: "Jumper 2-pole 5.2 mm" }
+      - { poles: 3, part_number: "Jumper 3-pole 5.2 mm" }
+      - { poles: 4, part_number: "Jumper 4-pole 5.2 mm" }
+      - { poles: 5, part_number: "Jumper 5-pole 5.2 mm" }
+      - { poles: 10, part_number: "Jumper 10-pole 5.2 mm", cut_to_length: true }
+
+  - family: generic
+    pitch_mm: 6.2
+    manufacturer: ""
+    kind: bridge
+    items:
+      - { poles: 2, part_number: "Jumper 2-pole 6.2 mm" }
+      - { poles: 3, part_number: "Jumper 3-pole 6.2 mm" }
+      - { poles: 4, part_number: "Jumper 4-pole 6.2 mm" }
+      - { poles: 10, part_number: "Jumper 10-pole 6.2 mm", cut_to_length: true }
+
+  - family: phoenix
+    pitch_mm: 5.2
+    manufacturer: Phoenix Contact
+    kind: bridge
+    items:
+      - { poles: 2, part_number: FBS 2-5, catalog: "3030161" }
+      - { poles: 3, part_number: FBS 3-5, catalog: "3030174" }
+      - { poles: 4, part_number: FBS 4-5, catalog: "3030187" }
+      - { poles: 5, part_number: FBS 5-5, catalog: "3030190" }
+      - { poles: 10, part_number: FBS 10-5, catalog: "3030213", cut_to_length: true }
+
+  - family: phoenix
+    pitch_mm: 6.2
+    manufacturer: Phoenix Contact
+    kind: bridge
+    items:
+      - { poles: 2, part_number: FBS 2-6, catalog: "3030336" }
+      - { poles: 3, part_number: FBS 3-6, catalog: "3030349" }
+      - { poles: 4, part_number: FBS 4-6, catalog: "3030352" }
+      - { poles: 5, part_number: FBS 5-6, catalog: "3030365" }
+      - { poles: 10, part_number: FBS 10-6, catalog: "3030378", cut_to_length: true }
+
+  - family: wago
+    pitch_mm: 5.2
+    manufacturer: WAGO
+    kind: comb
+    items:
+      - { poles: 2, part_number: "2002-402", catalog: "2002-402" }
+      - { poles: 3, part_number: "2002-403", catalog: "2002-403" }
+      - { poles: 4, part_number: "2002-404", catalog: "2002-404" }
+      - { poles: 5, part_number: "2002-405", catalog: "2002-405" }
+      - { poles: 10, part_number: "2002-410", catalog: "2002-410", cut_to_length: true }
+
+  - family: weidmueller
+    pitch_mm: 5.1
+    manufacturer: Weidmüller
+    kind: comb
+    items:
+      - { poles: 2, part_number: "ZQV 2.5N/2", catalog: "2108470000" }
+      - { poles: 3, part_number: "ZQV 2.5N/3", catalog: "2108480000" }
+      - { poles: 4, part_number: "ZQV 2.5N/4", catalog: "2108490000" }
+      - { poles: 10, part_number: "ZQV 2.5N/10", catalog: "2108540000", cut_to_length: true }
+
+  - family: dinkle
+    pitch_mm: 6.2
+    manufacturer: AutomationDirect
+    kind: bridge
+    items:
+      - { poles: 2, part_number: DN-T10SJ-2, catalog: DN-T10SJ-2 }
+      - { poles: 3, part_number: DN-T10SJ-3, catalog: DN-T10SJ-3 }
+      - { poles: 4, part_number: DN-T10SJ-4, catalog: DN-T10SJ-4 }
+      - { poles: 10, part_number: DN-T10SJ-10, catalog: DN-T10SJ-10, cut_to_length: true }

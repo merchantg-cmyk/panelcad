@@ -1,0 +1,131 @@
+# Control-circuit consumption and transformer inrush. Numbers are copied from
+# the publication in `source`. heat_w stays enclosure loss and is not coil watts.
+kind: manufacturer_parts
+version: "0.1"
+
+parts:
+  - catalog: "100-C09KJ10"
+    manufacturer: Allen-Bradley
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "Bulletin 100-C IEC contactor, 9 A AC-3, 24 V AC conventional coil, 1 NO auxiliary"
+    verified: partial
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/td/100-td013_-en-p.pdf
+    source_date: "2026-10-07"
+    series: 100-C
+    amps: 9
+    poles: 3
+    coil_voltage: "24VAC 50/60Hz"
+    contact_config: 1NO
+    coil_va_inrush: 75
+    coil_va_sealed: 9.5
+    power_w: 2.7
+    heat_w: 3.4
+    mounting: din
+    width_mm: 45
+    height_mm: 81
+    depth_mm: 80.5
+    notes: >
+      Explicit SKU. 100-TD013 Table 19 first conventional AC group: pickup 75 VA,
+      hold-in 9.5 VA / 2.7 W. Rockwell CMP-GL-SG004C-EN-E (March 2019) places
+      75 VA and 9.5 VA / 2.7 W on frames 09 and 12. KJ is the documented 24 V AC
+      coil code (100-C09◊10). heat_w 3.4 remains AC total dissipation at Ie
+      AC-3/400 V, not the coil. Do not read this row as 55 W.
+
+  - catalog: "9070T100D23"
+    manufacturer: Schneider Electric
+    library_id: iec.power.control_transformer
+    category: power.transformer
+    description: "9070 Type T control transformer, 100 VA, 120×240 V primary, 24 V secondary"
+    verified: partial
+    source: https://productinfo.se.com/9070ct9901ictcatalog/9070ct9901/9070CT9901%20Industrial%20Control%20Transformers%20Catalog/en/9070CT9901%20(bookmap)_0000310476.xml/$/TypeTTransformers-7F50D353
+    source_date: "2026-10-07"
+    series: 9070T
+    va: 100
+    inrush_method: schneider_9070_type_t
+    mounting: din
+    notes: >
+      Catalog number is 9070T{VA}t completed with voltage code D23
+      (120×240 V to 24 V) by the catalog's own "replace t with the voltage code"
+      rule. Inrush uses the Type T regulation chart at 90% secondary voltage
+      and 20% power factor (stable supply, under 5% fluctuation): 100 VA → 499 VA.
+      Do not use the 85% column.
+
+  - catalog: "9070T150D23"
+    manufacturer: Schneider Electric
+    library_id: iec.power.control_transformer
+    category: power.transformer
+    description: "9070 Type T control transformer, 150 VA, 120×240 V primary, 24 V secondary"
+    verified: partial
+    source: https://productinfo.se.com/9070ct9901ictcatalog/9070ct9901/9070CT9901%20Industrial%20Control%20Transformers%20Catalog/en/9070CT9901%20(bookmap)_0000310476.xml/$/TypeTTransformers-7F50D353
+    source_date: "2026-10-07"
+    series: 9070T
+    va: 150
+    inrush_method: schneider_9070_type_t
+    mounting: din
+    notes: >
+      9070T{VA}t with voltage code D23. Type T chart, 90% secondary, 20% PF:
+      150 VA → 893 VA inrush. The 200 VA row on that chart is 815 VA, lower than 150.
+
+  - catalog: "9070T200D23"
+    manufacturer: Schneider Electric
+    library_id: iec.power.control_transformer
+    category: power.transformer
+    description: "9070 Type T control transformer, 200 VA, 120×240 V primary, 24 V secondary"
+    verified: partial
+    source: https://productinfo.se.com/9070ct9901ictcatalog/9070ct9901/9070CT9901%20Industrial%20Control%20Transformers%20Catalog/en/9070CT9901%20(bookmap)_0000310476.xml/$/TypeTTransformers-7F50D353
+    source_date: "2026-10-07"
+    series: 9070T
+    va: 200
+    inrush_method: schneider_9070_type_t
+    mounting: din
+    notes: >
+      9070T{VA}t with voltage code D23. Type T chart, 90% secondary, 20% PF:
+      200 VA → 815 VA inrush (published value; lower than the 150 VA row).
+
+  - catalog: "C2-03CPU"
+    manufacturer: AutomationDirect
+    library_id: adc.click.c2_03cpu
+    category: control.plc
+    description: "CLICK PLUS CPU, Ethernet, logic-side current 130 mA at 24 V DC"
+    verified: partial
+    source: https://cdn.automationdirect.com/static/specs/clickpower.pdf
+    source_date: "2026-10-07"
+    series: CLICK
+    current_a: 0.130
+    power_w: 3.12
+    mounting: din
+    notes: >
+      CLICK power-considerations table: C2-03CPU logic-side current 130 mA,
+      field-side 0. power_w is 0.130 A × 24 V. Field devices are separate loads.
+
+  - catalog: "C0-16ND3"
+    manufacturer: AutomationDirect
+    library_id: iec.plc.di16
+    category: control.plc
+    description: "CLICK 16-point 24 V DC input, logic-side current 40 mA"
+    verified: partial
+    source: https://cdn.automationdirect.com/static/specs/clickpower.pdf
+    source_date: "2026-10-07"
+    series: CLICK
+    current_a: 0.040
+    mounting: din
+    notes: >
+      Logic-side 40 mA, field-side 0. Mapped to iec.plc.di16 because that symbol
+      has Lplus/M logic power. The adc.click.c0_16nd3 symbol's C0/C1 pins are
+      input commons, not the logic supply. current_a is logic current only.
+
+  - catalog: "C0-08TD1"
+    manufacturer: AutomationDirect
+    library_id: adc.click.c0_08td1
+    category: control.plc
+    description: "CLICK 8-point DC sinking output, logic-side current 50 mA"
+    verified: partial
+    source: https://cdn.automationdirect.com/static/specs/clickpower.pdf
+    source_date: "2026-10-07"
+    series: CLICK
+    current_a: 0.050
+    mounting: din
+    notes: >
+      Logic-side 50 mA. The same table lists 15 mA field-side; that is not
+      included in current_a. The symbol's C0/C1 pins are output commons.

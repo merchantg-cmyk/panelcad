@@ -1,0 +1,105 @@
+# Eaton XT / FAZ. Official eaton.com SKU pages. The live HTML fetch of
+# XTCE007B10A returned HTTP 500 in this pass; numbers below are only those
+# published on the indexed official SKU pages / Eaton PDFs.
+kind: manufacturer_parts
+manufacturer: Eaton
+version: "0.1"
+
+parts:
+  - catalog: "XTCE007B10A"
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "XT IEC FVNR contactor, 7 A, Frame B 45 mm, 1 NO, 110 V 50 Hz / 120 V 60 Hz coil"
+    verified: partial
+    source: https://www.eaton.com/us/en-us/skuPage.XTCE007B10A.html
+    source_date: "2026-10-07"
+    series: XT
+    amps: 7
+    poles: 3
+    coil_voltage: "110VAC 50Hz / 120VAC 60Hz"
+    contact_config: 1NO
+    mounting: din
+    width_mm: 45
+    notes: >
+      Official SKU page: 7 A, Frame B, 45 mm, 1 NO, 110/120 V coil, screw.
+      Package L×W×H 2.95×2.67×1.77 in was not used as the panel footprint.
+      Height and depth left blank.
+
+  - catalog: "XTCE009B10A"
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "XT IEC FVNR contactor, 9 A, Frame B, 1 NO (coil code A)"
+    verified: partial
+    source: https://www.eaton.com/content/dam/eaton/products/industrialcontrols-drives-automation-sensors/xt-iec-manual-motor-protectors/brochures/xt-small-frame-control-sa03407020e.pdf
+    source_date: "2026-10-07"
+    series: XT
+    amps: 9
+    poles: 3
+    contact_config: 1NO
+    mounting: din
+    notes: "SA03407020E table XTCE009B10_ 9 A / 1 NO. Coil letter and W×H×D not on that brochure row."
+
+  - catalog: "XTCE012B10A"
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "XT IEC FVNR contactor, 12 A, Frame B, 1 NO (coil code A)"
+    verified: partial
+    source: https://www.eaton.com/content/dam/eaton/products/industrialcontrols-drives-automation-sensors/xt-iec-manual-motor-protectors/brochures/xt-small-frame-control-sa03407020e.pdf
+    source_date: "2026-10-07"
+    series: XT
+    amps: 12
+    poles: 3
+    contact_config: 1NO
+    mounting: din
+    notes: "SA03407020E table XTCE012B10_ 12 A / 1 NO. Footprint left blank."
+
+  - catalog: "FAZ-C10/1-NA"
+    library_id: iec.breakers.mcb_1p_16a
+    category: protection.breaker
+    description: "Eaton Moeller FAZ-NA MCB, 1 pole, C-curve, 10 A, UL (North America)"
+    verified: partial
+    source: https://www.eaton.com/us/en-us/skuPage.102087.html
+    source_date: "2026-10-07"
+    series: FAZ-NA
+    amps: 10
+    poles: 1
+    mounting: din
+    width_mm: 17.7
+    height_mm: 105
+    depth_mm: 75.5
+    notes: >
+      Official SKU 102087 returned HTTP 500 on re-audit 2026-10-07.
+      Prior published 105 × 75.5 × 17.7 mm kept but demoted from full until the page is readable again.
+
+  - catalog: "FAZ-C10/1-SP"
+    library_id: iec.breakers.mcb_1p_16a
+    category: protection.breaker
+    description: "Eaton FAZ supplementary protector, 1 pole, C-curve, 10 A, 15 kAIC"
+    verified: partial
+    source: https://www.eaton.com/us/en-us/skuPage.FAZ-C10%7B%7D1-SP.html
+    source_date: "2026-10-07"
+    series: FAZ
+    amps: 10
+    poles: 1
+    ka: 15
+    mounting: din
+    notes: "Official SKU: 10 A, 15 kAIC, 1 pole, C curve, 277 V. Product length 3.5 in on the page was not mapped to W×H×D."
+
+  - catalog: "BH-0122"
+    library_id: iec.protection.fuse_3p
+    category: protection.fuse
+    description: "Eaton Bussmann BH-0 modular fuse block, FWH 70A-100A, 5/16-18 stud, 500 V"
+    verified: partial
+    source: https://www.eaton.com/content/dam/eaton/products/electrical-circuit-protection/fuses/bussmann-series-fuse-blocks-and-holders/high-speed-fuse-blocks-and-holders/bus-ele-ds-1200-bh-0-series.pdf
+    source_date: "2026-10-11"
+    series: BH-0
+    poles: 3
+    mounting: panel
+    width_mm: 161.94
+    height_mm: 164.08
+    depth_mm: 68.20
+    notes: >
+      Data sheet 1200 (Form BH-0). FWH 70A-100A -> BH-0122.
+      Three 53.98 mm bases, overall length 164.08 mm, stud height 68.20 mm.
+      Pole spacing is not published; the three outlines touch.
+      Panel footprint for Yaskawa GA500 Table 15.4 FWH-70B.

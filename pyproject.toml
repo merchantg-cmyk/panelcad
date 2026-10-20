@@ -1,0 +1,61 @@
+[project]
+name = "panelcad"
+version = "0.5.10"
+description = "CAD for industrial control panels, PLCs, HMIs, and power distribution"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "AGPL-3.0-or-later" }
+authors = [{ name = "PanelCAD" }]
+classifiers = [
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+]
+dependencies = [
+    "pydantic>=2.6",
+    "pydantic-ai>=2.54",
+    "pyyaml>=6.0",
+    "pyside6>=6.6",
+    "typer>=0.12",
+    "ezdxf>=1.3",
+    "pypdf>=4.0",
+    "openpyxl>=3.1",
+    "pymupdf>=1.24",
+    "pillow>=10.0",
+    "opencv-python-headless>=4.9",
+    "pytesseract>=0.3.10",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+panelcad = "panelcad.launch:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+panelcad = ["gui/icons/*.svg", "gui/icons/LICENSE", "assets/*", "diag/_report_endpoint.txt", "diag/_report_bot.txt", "update/_release_feed.txt", "importer/agent_response.v1.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "confirm_generic_layout: confirm library envelopes so packing/cutout tests can place symbols",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# F841 flags an assignment that never escapes the function. In settings.py that
+# is a missed `global` (the cache clear used to be a local and was discarded).
+extend-select = ["F841"]
+
+[tool.ruff.lint.per-file-ignores]
+# Enforce F841 on the settings cache. Other modules keep their existing locals.
+"!src/panelcad/settings.py" = ["F841"]

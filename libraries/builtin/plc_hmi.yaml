@@ -1,0 +1,177 @@
+library: iec
+version: "0.1"
+devices:
+  - id: plc.compact_16dio
+    name: Compact PLC 16DI / 16DO
+    category: control.plc
+    ref_prefix: A
+    tags: [plc, cpu]
+    schematic:
+      width: 90
+      height: 80
+      pins:
+        - { id: Lplus, x: 0, y: 12, side: left, electrical: power }
+        - { id: M, x: 0, y: 20, side: left, electrical: power }
+        - { id: I0_0, x: 0, y: 32, side: left, electrical: input }
+        - { id: I0_1, x: 0, y: 40, side: left, electrical: input }
+        - { id: I0_2, x: 0, y: 48, side: left, electrical: input }
+        - { id: I0_3, x: 0, y: 56, side: left, electrical: input }
+        - { id: Q0_0, x: 90, y: 32, side: right, electrical: output }
+        - { id: Q0_1, x: 90, y: 40, side: right, electrical: output }
+        - { id: Q0_2, x: 90, y: 48, side: right, electrical: output }
+        - { id: Q0_3, x: 90, y: 56, side: right, electrical: output }
+      draw:
+        - rect: [8, 6, 74, 68]
+        - rect: [14, 12, 62, 14]
+        - text: [45, 22, "PLC", 3.5]
+        - line: [0, 12, 8, 12]
+        - line: [0, 20, 8, 20]
+        - line: [0, 32, 8, 32]
+        - line: [0, 40, 8, 40]
+        - line: [0, 48, 8, 48]
+        - line: [0, 56, 8, 56]
+        - line: [82, 32, 90, 32]
+        - line: [82, 40, 90, 40]
+        - line: [82, 48, 90, 48]
+        - line: [82, 56, 90, 56]
+    ports:
+      - { id: ETH, kind: ethernet, medium: "10/100", protocol: Ethernet, connector: RJ45, side: right }
+    panel: { w: 70, h: 80, d: 62, din: true }
+    props: { DI: 16, DO: 16, supply: 24VDC, comms: Ethernet }
+
+  - id: plc.di16
+    name: PLC DI 16 sink
+    category: control.plc
+    ref_prefix: A
+    tags: [plc, input]
+    schematic:
+      width: 50
+      height: 110
+      pins:
+        - { id: Lplus, x: 0, y: 10, side: left, electrical: power }
+        - { id: M, x: 0, y: 18, side: left, electrical: power }
+        - { id: I0, x: 0, y: 30, side: left, electrical: input }
+        - { id: I1, x: 0, y: 38, side: left, electrical: input }
+        - { id: I2, x: 0, y: 46, side: left, electrical: input }
+        - { id: I3, x: 0, y: 54, side: left, electrical: input }
+        - { id: I4, x: 0, y: 62, side: left, electrical: input }
+        - { id: I5, x: 0, y: 70, side: left, electrical: input }
+        - { id: I6, x: 0, y: 78, side: left, electrical: input }
+        - { id: I7, x: 0, y: 86, side: left, electrical: input }
+      draw:
+        - rect: [8, 6, 34, 98]
+        - text: [25, 20, "DI16", 3]
+        - line: [0, 10, 8, 10]
+        - line: [0, 18, 8, 18]
+        - line: [0, 30, 8, 30]
+        - line: [0, 38, 8, 38]
+        - line: [0, 46, 8, 46]
+        - line: [0, 54, 8, 54]
+        - line: [0, 62, 8, 62]
+        - line: [0, 70, 8, 70]
+        - line: [0, 78, 8, 78]
+        - line: [0, 86, 8, 86]
+    panel: { w: 25, h: 100, d: 74, din: true }
+    props: { DI: 16, type: sink, supply: 24VDC }
+
+  - id: plc.do12
+    name: PLC DO 12 transistor
+    category: control.plc
+    ref_prefix: A
+    tags: [plc, output]
+    schematic:
+      width: 50
+      height: 120
+      pins:
+        - { id: Lplus, x: 50, y: 10, side: right, electrical: power }
+        - { id: M, x: 50, y: 18, side: right, electrical: power }
+        - { id: Q0, x: 50, y: 28, side: right, electrical: output }
+        - { id: Q1, x: 50, y: 36, side: right, electrical: output }
+        - { id: Q2, x: 50, y: 44, side: right, electrical: output }
+        - { id: Q3, x: 50, y: 52, side: right, electrical: output }
+        - { id: Q4, x: 50, y: 60, side: right, electrical: output }
+        - { id: Q5, x: 50, y: 68, side: right, electrical: output }
+        - { id: Q6, x: 50, y: 76, side: right, electrical: output }
+        - { id: Q7, x: 50, y: 84, side: right, electrical: output }
+        - { id: Q8, x: 50, y: 92, side: right, electrical: output }
+        - { id: Q9, x: 50, y: 100, side: right, electrical: output }
+        - { id: Q10, x: 50, y: 108, side: right, electrical: output }
+        - { id: Q11, x: 50, y: 116, side: right, electrical: output }
+      draw:
+        - rect: [8, 6, 34, 114]
+        - text: [25, 20, "DO12", 3]
+        - line: [42, 10, 50, 10]
+        - line: [42, 18, 50, 18]
+        - line: [42, 28, 50, 28]
+        - line: [42, 36, 50, 36]
+        - line: [42, 44, 50, 44]
+        - line: [42, 52, 50, 52]
+        - line: [42, 60, 50, 60]
+        - line: [42, 68, 50, 68]
+        - line: [42, 76, 50, 76]
+        - line: [42, 84, 50, 84]
+        - line: [42, 92, 50, 92]
+        - line: [42, 100, 50, 100]
+        - line: [42, 108, 50, 108]
+        - line: [42, 116, 50, 116]
+    panel: { w: 25, h: 100, d: 74, din: true }
+    props: { DO: 12, type: transistor, supply: 24VDC }
+
+  - id: plc.do16
+    name: PLC DO 16 transistor
+    category: control.plc
+    ref_prefix: A
+    tags: [plc, output]
+    schematic:
+      width: 50
+      height: 110
+      pins:
+        - { id: Lplus, x: 50, y: 10, side: right, electrical: power }
+        - { id: M, x: 50, y: 18, side: right, electrical: power }
+        - { id: Q0, x: 50, y: 30, side: right, electrical: output }
+        - { id: Q1, x: 50, y: 38, side: right, electrical: output }
+        - { id: Q2, x: 50, y: 46, side: right, electrical: output }
+        - { id: Q3, x: 50, y: 54, side: right, electrical: output }
+        - { id: Q4, x: 50, y: 62, side: right, electrical: output }
+        - { id: Q5, x: 50, y: 70, side: right, electrical: output }
+        - { id: Q6, x: 50, y: 78, side: right, electrical: output }
+        - { id: Q7, x: 50, y: 86, side: right, electrical: output }
+      draw:
+        - rect: [8, 6, 34, 98]
+        - text: [25, 20, "DO16", 3]
+        - line: [42, 10, 50, 10]
+        - line: [42, 18, 50, 18]
+        - line: [42, 30, 50, 30]
+        - line: [42, 38, 50, 38]
+        - line: [42, 46, 50, 46]
+        - line: [42, 54, 50, 54]
+        - line: [42, 62, 50, 62]
+        - line: [42, 70, 50, 70]
+        - line: [42, 78, 50, 78]
+        - line: [42, 86, 50, 86]
+    panel: { w: 25, h: 100, d: 74, din: true }
+    props: { DO: 16, type: transistor, supply: 24VDC }
+
+  - id: hmi.panel_7in
+    name: HMI 7 inch
+    category: control.hmi
+    ref_prefix: P
+    tags: [hmi, panel]
+    schematic:
+      width: 70
+      height: 50
+      pins:
+        - { id: Lplus, x: 0, y: 14, side: left, electrical: power }
+        - { id: M, x: 0, y: 24, side: left, electrical: power }
+        - { id: ETH, x: 70, y: 20, side: right }
+      draw:
+        - rect: [6, 6, 58, 38]
+        - rect: [12, 12, 46, 22]
+        - text: [35, 24, "HMI", 3.5]
+        - line: [0, 14, 6, 14]
+        - line: [0, 24, 6, 24]
+        - line: [64, 20, 70, 20]
+    ports:
+      - { id: ETH, kind: ethernet, medium: "10/100", protocol: Ethernet, connector: RJ45, side: right }
+    panel: { w: 200, h: 146, d: 34, din: false, in_panel: true, mount: door, dims: generic }
+    props: { size: 7in, supply: 24VDC, comms: Ethernet }

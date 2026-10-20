@@ -1,0 +1,32 @@
+library: reconstruct
+version: "0.1"
+devices:
+  - id: needs_info
+    name: INFO NEEDED
+    category: connection.notes
+    ref_prefix: U
+    tags: [reconstruct, needs_info, placeholder]
+    schematic:
+      width: 28
+      height: 18
+      pins: []
+      draw:
+        - rect: [1, 1, 26, 16]
+        - text: [14, 10, "INFO", 2.2]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { location: reconstruct-only, reconstruct_needs_info: yes, bom: no }
+
+  - id: measured_envelope
+    name: Measured envelope
+    category: mechanical.envelope
+    ref_prefix: U
+    tags: [reconstruct, envelope]
+    schematic:
+      width: 28
+      height: 18
+      pins: []
+      draw:
+        - rect: [1, 1, 26, 16]
+        - text: [14, 10, "ENV", 2.2]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: true, mount: none, dims: measured }
+    props: { location: reconstruct, description: Measured envelope }

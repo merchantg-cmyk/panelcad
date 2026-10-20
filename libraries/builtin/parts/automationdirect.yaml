@@ -1,0 +1,853 @@
+# AutomationDirect house brands and lines AD sells under its own catalog pages.
+# verified: full means every filled field is in this PDF.
+# A second URL in notes (drawing or user-manual chapter) keeps the row partial.
+# source_date is the day these pages were read.
+kind: manufacturer_parts
+manufacturer: AutomationDirect
+version: "0.1"
+
+parts:
+  - catalog: GH15BN-3-10A
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "GH15 IEC contactor, AC-3 9 A at 440 V, 3 poles, 1 NO aux, 110-120 VAC coil, 45 mm frame"
+    verified: full
+    source: "https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf"
+    source_date: "2026-10-08"
+    series: GH15
+    amps: 9
+    poles: 3
+    coil_voltage: 110-120VAC
+    contact_config: 1NO
+    ka: 5
+    sccr: 5kA
+    mounting: din
+    width_mm: 45
+    height_mm: 80
+    depth_mm: 85
+    notes: "Order code is the full catalog on tMRC-100 (PDF page 2): the trailing coil letter is that table's coil column. AC-3 amps, 5 kA SCCR with Class RK5 Type 2 fuses, and 35 mm DIN or screw mounting are on tMRC-101 (PDF page 3). Outline tMRC-107 (PDF page 9) row GH15BN/GH15CN/GH15DN is 45.0 x 80.0 x 85.0 mm. Drawing https://cdn.automationdirect.com/static/drawings/GH15BN-3-10A.pdf titles this SKU 45 mm frame, 9 A, 1 N.O. aux, 120 VAC coil, 60 Hz, and prints 45.0 x 80.0 x 85.0 mm."
+
+  - catalog: GH15BN-3-01A
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "GH15 IEC contactor, AC-3 9 A at 440 V, 3 poles, 1 NC aux, 110-120 VAC coil, 45 mm frame"
+    verified: full
+    source: "https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf"
+    source_date: "2026-10-08"
+    series: GH15
+    amps: 9
+    poles: 3
+    coil_voltage: 110-120VAC
+    contact_config: 1NC
+    ka: 5
+    sccr: 5kA
+    mounting: din
+    width_mm: 45
+    height_mm: 80
+    depth_mm: 85
+    notes: "Order code is the full catalog on tMRC-100 (PDF page 2): the trailing coil letter is that table's coil column. AC-3 amps, 5 kA SCCR with Class RK5 Type 2 fuses, and 35 mm DIN or screw mounting are on tMRC-101 (PDF page 3). Outline tMRC-107 (PDF page 9) row GH15BN/GH15CN/GH15DN is 45.0 x 80.0 x 85.0 mm."
+
+  - catalog: GH15BN-3-10B
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "GH15 IEC contactor, AC-3 9 A at 440 V, 3 poles, 1 NO aux, 220-240 VAC coil, 45 mm frame"
+    verified: full
+    source: "https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf"
+    source_date: "2026-10-08"
+    series: GH15
+    amps: 9
+    poles: 3
+    coil_voltage: 220-240VAC
+    contact_config: 1NO
+    ka: 5
+    sccr: 5kA
+    mounting: din
+    width_mm: 45
+    height_mm: 80
+    depth_mm: 85
+    notes: "Order code is the full catalog on tMRC-100 (PDF page 2): the trailing coil letter is that table's coil column. AC-3 amps, 5 kA SCCR with Class RK5 Type 2 fuses, and 35 mm DIN or screw mounting are on tMRC-101 (PDF page 3). Outline tMRC-107 (PDF page 9) row GH15BN/GH15CN/GH15DN is 45.0 x 80.0 x 85.0 mm. Coil column on tMRC-100 is 220-240 VAC 50-60 Hz."
+
+  - catalog: GH15CN-3-10A
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "GH15 IEC contactor, AC-3 12 A at 440 V, 3 poles, 1 NO aux, 110-120 VAC coil, 45 mm frame"
+    verified: full
+    source: "https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf"
+    source_date: "2026-10-08"
+    series: GH15
+    amps: 12
+    poles: 3
+    coil_voltage: 110-120VAC
+    contact_config: 1NO
+    ka: 5
+    sccr: 5kA
+    mounting: din
+    width_mm: 45
+    height_mm: 80
+    depth_mm: 85
+    notes: "Order code is the full catalog on tMRC-100 (PDF page 2): the trailing coil letter is that table's coil column. AC-3 amps, 5 kA SCCR with Class RK5 Type 2 fuses, and 35 mm DIN or screw mounting are on tMRC-101 (PDF page 3). Outline tMRC-107 (PDF page 9) row GH15BN/GH15CN/GH15DN is 45.0 x 80.0 x 85.0 mm. AC-3 column for GH15CN is 12 A."
+
+  - catalog: GH15DN-3-10A
+    library_id: iec.contactors.ac3_32a
+    category: switching.contactor
+    description: "GH15 IEC contactor, AC-3 16 A at 440 V, 3 poles, 1 NO aux, 110-120 VAC coil, 45 mm frame"
+    verified: full
+    source: "https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf"
+    source_date: "2026-10-08"
+    series: GH15
+    amps: 16
+    poles: 3
+    coil_voltage: 110-120VAC
+    contact_config: 1NO
+    ka: 5
+    sccr: 5kA
+    mounting: din
+    width_mm: 45
+    height_mm: 80
+    depth_mm: 85
+    notes: "Order code is the full catalog on tMRC-100 (PDF page 2): the trailing coil letter is that table's coil column. AC-3 amps, 5 kA SCCR with Class RK5 Type 2 fuses, and 35 mm DIN or screw mounting are on tMRC-101 (PDF page 3). Outline tMRC-107 (PDF page 9) row GH15BN/GH15CN/GH15DN is 45.0 x 80.0 x 85.0 mm. AC-3 column for GH15DN is 16 A."
+
+  - catalog: GH15ET-3-00A
+    library_id: iec.contactors.ac3_32a
+    category: switching.contactor
+    description: "GH15 IEC contactor, AC-3 25 A at 440 V, 3 poles, 110-120 VAC coil, 45 mm frame"
+    verified: full
+    source: "https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf"
+    source_date: "2026-10-08"
+    series: GH15
+    amps: 25
+    poles: 3
+    coil_voltage: 110-120VAC
+    ka: 5
+    sccr: 5kA
+    mounting: din
+    width_mm: 45
+    height_mm: 80
+    depth_mm: 91
+    notes: "Order code is the full catalog on tMRC-100. Aux columns are blank. AC-3 amps, 5 kA SCCR with Class RK5 Type 2 fuses, and 35 mm DIN or screw mounting are on tMRC-101. Outline tMRC-107 row GH15ET/GH15FT is 45.0 x 80.0 x 91.0 mm. AC-3 column for GH15ET is 25 A."
+
+  - catalog: GH15FT-3-00A
+    library_id: iec.contactors.ac3_32a
+    category: switching.contactor
+    description: "GH15 IEC contactor, AC-3 32 A at 440 V, 3 poles, 110-120 VAC coil, 45 mm frame"
+    verified: full
+    source: "https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf"
+    source_date: "2026-10-08"
+    series: GH15
+    amps: 32
+    poles: 3
+    coil_voltage: 110-120VAC
+    ka: 5
+    sccr: 5kA
+    mounting: din
+    width_mm: 45
+    height_mm: 80
+    depth_mm: 91
+    notes: "Order code is the full catalog on tMRC-100. Aux columns are blank. AC-3 amps, 5 kA SCCR with Class RK5 Type 2 fuses, and 35 mm DIN or screw mounting are on tMRC-101. Outline tMRC-107 row GH15ET/GH15FT is 45.0 x 80.0 x 91.0 mm. AC-3 column for GH15FT is 32 A."
+
+  - catalog: GH15GT-3-00A
+    library_id: iec.contactors.ac3_32a
+    category: switching.contactor
+    description: "GH15 IEC contactor, AC-3 40 A at 440 V, 3 poles, 120 VAC 60 Hz coil, 60 mm frame"
+    verified: full
+    source: "https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf"
+    source_date: "2026-10-08"
+    series: GH15
+    amps: 40
+    poles: 3
+    coil_voltage: "120VAC 60Hz"
+    ka: 5
+    sccr: 5kA
+    mounting: din
+    width_mm: 60
+    height_mm: 114
+    depth_mm: 109
+    notes: "Order code is the full catalog on tMRC-100. Coil column is 120 VAC 60 Hz only. AC-3 40 A and SCCR 5 kA with a UL rated MCCB Type 2 are on tMRC-102 (PDF page 4), the 60 mm table. Outline tMRC-107 row GH15GT/GH15HT/GH15JT is 60.0 x 114.0 x 109.0 mm."
+
+  - catalog: RTD32-400
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "GH15 RTD32 thermal overload, 2.7-4.0 A, class 10A, for GH15BN to GH15FT series contactors"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf"
+    source_date: "2026-10-08"
+    series: RTD32
+    amps_min: 2.7
+    amps_max: 4
+    contact_config: 1NO1NC
+    mounting: plug_on
+    notes: "Amp ends 2.7 and 4.0 A are the GH-series PDF selection guide. Product page https://www.automationdirect.com/pn/RTD32-400 title fetched 2026-10-09: for GH15BN to GH15FT series contactors. Class 10A, phase-loss sensitive, 1 NO and 1 NC. Power dissipation 2.3 W per phase (not stored as heat_w). Outline mm not published for the relay alone."
+
+  - catalog: RTD32-600
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "GH15 RTD32 thermal overload, 4.0-6.0 A, class 10A, for GH15BN to GH15FT series contactors"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf"
+    source_date: "2026-10-08"
+    series: RTD32
+    amps_min: 4
+    amps_max: 6
+    contact_config: 1NO1NC
+    mounting: plug_on
+    notes: "Amp ends 4.0 and 6.0 A are the GH-series PDF selection guide. Product page https://www.automationdirect.com/pn/RTD32-600 title fetched 2026-10-09: for GH15BN to GH15FT series contactors. Class 10A. Outline mm not published for the relay alone."
+
+  - catalog: RTD32-900
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "GH15 RTD32 thermal overload, 6.0-9.0 A, class 10A, for GH15BN to GH15FT series contactors"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf"
+    source_date: "2026-10-08"
+    series: RTD32
+    amps_min: 6
+    amps_max: 9
+    contact_config: 1NO1NC
+    mounting: plug_on
+    notes: "Amp ends 6.0 and 9.0 A are the GH-series PDF selection guide. Product page https://www.automationdirect.com/pn/RTD32-900 title fetched 2026-10-09: for GH15BN to GH15FT series contactors. Outline mm blank."
+
+  - catalog: RTD32-1400
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "GH15 RTD32 thermal overload, 10-14 A, class 10A, for GH15CN to GH15FT series contactors"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf"
+    source_date: "2026-10-08"
+    series: RTD32
+    amps_min: 10
+    amps_max: 14
+    contact_config: 1NO1NC
+    mounting: plug_on
+    notes: "Amp ends 10.0 and 14.0 A are the GH-series PDF selection guide. Product page https://www.automationdirect.com/pn/RTD32-1400 title fetched 2026-10-09: for GH15CN to GH15FT series contactors. Outline mm blank."
+
+  - catalog: RTD32-1800
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "GH15 RTD32 thermal overload, 13-18 A, class 10A, for GH15DN, GH15ET, or GH15FT series contactors"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf"
+    source_date: "2026-10-08"
+    series: RTD32
+    amps_min: 13
+    amps_max: 18
+    contact_config: 1NO1NC
+    mounting: plug_on
+    notes: "Amp ends 13.0 and 18.0 A are the GH-series PDF selection guide. Product page https://www.automationdirect.com/pn/RTD32-1800 title fetched 2026-10-09: for GH15DN, GH15ET, or GH15FT series contactors. Outline mm blank."
+
+  - catalog: RTD32-2400
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "GH15 RTD32 thermal overload, 17-24 A, class 10A, for GH15ET or GH15FT series contactors"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf"
+    source_date: "2026-10-08"
+    series: RTD32
+    amps_min: 17
+    amps_max: 24
+    contact_config: 1NO1NC
+    mounting: plug_on
+    notes: "Amp ends 17.0 and 24.0 A are the GH-series PDF selection guide. Product page https://www.automationdirect.com/pn/RTD32-2400 title fetched 2026-10-09: for GH15ET or GH15FT series contactors. Outline mm blank."
+
+  - catalog: RTD32-3200
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "GH15 RTD32 thermal overload, class 10A, for GH15ET or GH15FT 45 mm contactors"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf"
+    source_date: "2026-10-08"
+    series: RTD32
+    amps_min: 22
+    amps_max: 32
+    contact_config: 1NO1NC
+    mounting: plug_on
+    notes: "RANGE CONFLICT: Product page fetched 2026-10-08 lists 23.0-32.0 A; the GH-series PDF lists 22.0-32.0 A. Stored amps_min stays 22 from the PDF (https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf) so neither figure is dropped. The product page is https://www.automationdirect.com/pn/RTD32-3200. Both spans include 28 A. The product page says this relay is for GH15ET or GH15FT 45 mm contactors. Outline mm blank."
+
+  - catalog: RTD65-4200
+    library_id: iec.protection.overload_9a
+    category: protection.overload
+    description: "GH15 RTD65 thermal overload, 28-42 A, class 10A, 60 mm"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf"
+    source_date: "2026-10-08"
+    series: RTD65
+    amps_min: 28
+    amps_max: 42
+    contact_config: 1NO1NC
+    mounting: plug_on
+    notes: "Range 28.0 to 42.0 A for GH15GT/HT. RTD65 dissipation is 3.7 W per phase (not stored). Outline mm blank."
+
+  - catalog: SC-E02P-110VAC
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "Fuji Duo SC-E02 contactor, AC-3 9 A / 4 kW at 380-440 V, 3 poles, 110 VAC coil, 43 mm wide"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/fujimc9150.pdf"
+    source_date: "2026-10-08"
+    series: SC-E
+    amps: 9
+    poles: 3
+    coil_voltage: 110VAC
+    mounting: din
+    width_mm: 43
+    notes: "IEC table SC-E02(G) AC-3 9 A and 4 kW at 380-440 V. Coil code 110VAC is 100-110 VAC 50 Hz / 110-120 VAC 60 Hz. E02-E05 are 43 mm wide. E02 through E4 have 35 mm DIN or screw mounting. E02-E4 have no internal auxiliary. Height and depth blank."
+
+  - catalog: SC-E02P-24VAC
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "Fuji Duo SC-E02 contactor, AC-3 9 A / 4 kW at 380-440 V, 24 VAC coil, 43 mm wide"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/fujimc9150.pdf"
+    source_date: "2026-10-08"
+    series: SC-E
+    amps: 9
+    poles: 3
+    coil_voltage: 24VAC
+    mounting: din
+    width_mm: 43
+    notes: "24VAC code is 24 VAC 50 Hz / 24-26 VAC 60 Hz. Height and depth blank."
+
+  - catalog: SC-E02PG-24VDC
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "Fuji Duo SC-E02G contactor, AC-3 9 A / 4 kW at 380-440 V, 24 VDC coil, 43 mm wide"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/fujimc9150.pdf"
+    source_date: "2026-10-08"
+    series: SC-E
+    amps: 9
+    poles: 3
+    coil_voltage: 24VDC
+    mounting: din
+    width_mm: 43
+    notes: "DC coil code 24VDC is 24 VDC. Same AC-3 current as SC-E02. Height and depth blank."
+
+  - catalog: SC-E03P-110VAC
+    library_id: iec.contactors.ac3_9a
+    category: switching.contactor
+    description: "Fuji Duo SC-E03 contactor, AC-3 12 A / 5.5 kW at 380-440 V, 110 VAC coil, 43 mm wide"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/fujimc9150.pdf"
+    source_date: "2026-10-08"
+    series: SC-E
+    amps: 12
+    poles: 3
+    coil_voltage: 110VAC
+    mounting: din
+    width_mm: 43
+    notes: "IEC AC-3 12 A at 380-440 V. Height and depth blank."
+
+  - catalog: SC-E04P-110VAC
+    library_id: iec.contactors.ac3_32a
+    category: switching.contactor
+    description: "Fuji Duo SC-E04 contactor, AC-3 18 A / 7.5 kW at 380-440 V, 110 VAC coil, 43 mm wide"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/fujimc9150.pdf"
+    source_date: "2026-10-08"
+    series: SC-E
+    amps: 18
+    poles: 3
+    coil_voltage: 110VAC
+    mounting: din
+    width_mm: 43
+    notes: "IEC AC-3 18 A at 380-440 V. Height and depth blank."
+
+  - catalog: SC-E05P-110VAC
+    library_id: iec.contactors.ac3_32a
+    category: switching.contactor
+    description: "Fuji Duo SC-E05 contactor, AC-3 25 A / 11 kW at 380-440 V, 110 VAC coil, 43 mm wide"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/fujimc9150.pdf"
+    source_date: "2026-10-08"
+    series: SC-E
+    amps: 25
+    poles: 3
+    coil_voltage: 110VAC
+    mounting: din
+    width_mm: 43
+    notes: "IEC AC-3 25 A at 380-440 V. Height and depth blank."
+
+  - catalog: SC-E1-110VAC
+    library_id: iec.contactors.ac3_32a
+    category: switching.contactor
+    description: "Fuji Duo SC-E1 contactor, AC-3 32 A / 15 kW at 380-440 V, 110 VAC coil, 54 mm wide"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/fujimc9150.pdf"
+    source_date: "2026-10-08"
+    series: SC-E
+    amps: 32
+    poles: 3
+    coil_voltage: 110VAC
+    mounting: din
+    width_mm: 54
+    notes: "IEC AC-3 32 A at 380-440 V. E1-E2S are 54 mm wide. DIN sentence covers SC-E02 to SC-E4. Height and depth blank."
+
+  - catalog: SC-E2-110VAC
+    library_id: iec.contactors.ac3_32a
+    category: switching.contactor
+    description: "Fuji Duo SC-E2 contactor, AC-3 40 A / 18.5 kW at 380-440 V, 110 VAC coil, 54 mm wide"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/fujimc9150.pdf"
+    source_date: "2026-10-08"
+    series: SC-E
+    amps: 40
+    poles: 3
+    coil_voltage: 110VAC
+    mounting: din
+    width_mm: 54
+    notes: "IEC AC-3 40 A at 380-440 V. Height and depth blank."
+
+  - catalog: SC-E3-110VAC
+    library_id: iec.contactors.ac3_32a
+    category: switching.contactor
+    description: "Fuji Duo SC-E3 contactor, AC-3 65 A / 30 kW at 380-440 V, 110 VAC coil, 67 mm wide"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/fujimc9150.pdf"
+    source_date: "2026-10-08"
+    series: SC-E
+    amps: 65
+    poles: 3
+    coil_voltage: 110VAC
+    mounting: din
+    width_mm: 67
+    notes: "IEC table prints AC-3 / AC-4 as 65 / 65 A at 380-440 V and 30 kW. E3-E4 are 67 mm wide. Height and depth blank."
+
+  - catalog: GS21-20P5
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "DURApulse GS20 200-240 V 1-phase, 0.5 hp, 0.4 kW, CT 2.8 A, VT 3.2 A, frame A, IP20"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/gs20drives.pdf"
+    source_date: "2026-10-08"
+    series: GS20
+    amps: 2.8
+    width_mm: 68
+    height_mm: 128
+    depth_mm: 125
+    notes: "CT amps stay on gs20drives.pdf. Frame A3 outline is chapter 2 of the GS20 user manual, printed page 2-7: 68 W x 128 H x 125 D mm. https://cdn.automationdirect.com/static/manuals/gs20m/ch2.pdf. Two documents, so verified stays partial."
+
+  - catalog: GS23-41P0
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "DURApulse GS20 380-480 V 3-phase, 1 hp, 0.75 kW, CT 2.7 A, VT 3 A, frame A, IP20"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/gs20drives.pdf"
+    source_date: "2026-10-08"
+    series: GS20
+    amps: 2.7
+    width_mm: 68
+    height_mm: 128
+    depth_mm: 143
+    notes: "CT amps stay on gs20drives.pdf. Frame A5 outline is chapter 2 of the GS20 user manual, printed page 2-7: 68 W x 128 H x 143 D mm. https://cdn.automationdirect.com/static/manuals/gs20m/ch2.pdf. Two documents, so verified stays partial."
+
+  - catalog: GS23-42P0
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "DURApulse GS20 380-480 V 3-phase, 2 hp, 1.5 kW, CT 4.2 A, VT 4.6 A, frame B, IP20"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/gs20drives.pdf"
+    source_date: "2026-10-08"
+    series: GS20
+    amps: 4.2
+    width_mm: 72
+    height_mm: 142
+    depth_mm: 143
+    notes: "CT amps stay on gs20drives.pdf. Frame B1 outline is chapter 2 of the GS20 user manual, printed page 2-8: 72 W x 142 H x 143 D mm. https://cdn.automationdirect.com/static/manuals/gs20m/ch2.pdf. Two documents, so verified stays partial."
+
+  - catalog: GS23-43P0
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "DURApulse GS20 380-480 V 3-phase, 3 hp, 2.2 kW, CT 5.5 A, VT 6.5 A, frame C, IP20"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/gs20drives.pdf"
+    source_date: "2026-10-08"
+    series: GS20
+    amps: 5.5
+    width_mm: 87
+    height_mm: 157
+    depth_mm: 152
+    notes: "CT amps stay on gs20drives.pdf. Frame C1 outline is chapter 2 of the GS20 user manual, printed page 2-9: 87 W x 157 H x 152 D mm. https://cdn.automationdirect.com/static/manuals/gs20m/ch2.pdf. Two documents, so verified stays partial."
+
+  - catalog: GS23-45P0
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "DURApulse GS20 380-480 V 3-phase, 5 hp, 3.7 kW, CT 9 A, VT 10.5 A, frame C, IP20"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/gs20drives.pdf"
+    source_date: "2026-10-08"
+    series: GS20
+    amps: 9
+    width_mm: 87
+    height_mm: 157
+    depth_mm: 152
+    notes: "CT amps stay on gs20drives.pdf. Frame C1 outline is chapter 2 of the GS20 user manual, printed page 2-9: 87 W x 157 H x 152 D mm. https://cdn.automationdirect.com/static/manuals/gs20m/ch2.pdf. Two documents, so verified stays partial."
+
+  - catalog: GS23-47P5
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "DURApulse GS20 380-480 V 3-phase, 7.5 hp, 5.5 kW, CT 12 A, VT 15.7 A, frame D, IP20"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/gs20drives.pdf"
+    source_date: "2026-10-08"
+    series: GS20
+    amps: 12
+    width_mm: 109
+    height_mm: 207
+    depth_mm: 154
+    notes: "CT amps stay on gs20drives.pdf. Frame D1 outline is chapter 2 of the GS20 user manual, printed page 2-10: 109 W x 207 H x 154 D mm. https://cdn.automationdirect.com/static/manuals/gs20m/ch2.pdf. Two documents, so verified stays partial."
+
+  - catalog: GS23-4010
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "DURApulse GS20 380-480 V 3-phase, 10 hp, 7.5 kW, CT 17 A, VT 20.5 A, frame D, IP20"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/gs20drives.pdf"
+    source_date: "2026-10-08"
+    series: GS20
+    amps: 17
+    width_mm: 109
+    height_mm: 207
+    depth_mm: 154
+    notes: "CT amps stay on gs20drives.pdf. Frame D1 outline is chapter 2 of the GS20 user manual, printed page 2-10: 109 W x 207 H x 154 D mm. https://cdn.automationdirect.com/static/manuals/gs20m/ch2.pdf. Two documents, so verified stays partial."
+
+  - catalog: GS23-4015
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "DURApulse GS20 380-480 V 3-phase, 15 hp, 11 kW, CT 25 A, VT 28 A, frame E, IP20"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/gs20drives.pdf"
+    source_date: "2026-10-08"
+    series: GS20
+    amps: 25
+    width_mm: 130
+    height_mm: 250
+    depth_mm: 185
+    notes: "CT amps stay on gs20drives.pdf. Frame E1 outline is chapter 2 of the GS20 user manual, printed page 2-11: 130 W x 250 H x 185 D mm. https://cdn.automationdirect.com/static/manuals/gs20m/ch2.pdf. Two documents, so verified stays partial."
+
+  - catalog: GS23-4020
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "DURApulse GS20 380-480 V 3-phase, 20 hp, 15 kW, CT 32 A, VT 36 A, frame E, IP20"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/gs20drives.pdf"
+    source_date: "2026-10-08"
+    series: GS20
+    amps: 32
+    width_mm: 130
+    height_mm: 250
+    depth_mm: 185
+    notes: "CT amps stay on gs20drives.pdf. Frame E1 outline is chapter 2 of the GS20 user manual, printed page 2-11: 130 W x 250 H x 185 D mm. https://cdn.automationdirect.com/static/manuals/gs20m/ch2.pdf. Two documents, so verified stays partial."
+
+  - catalog: GS23-4030
+    library_id: iec.drives.vfd_1k5
+    category: drive.vfd
+    description: "DURApulse GS20 380-480 V 3-phase, 30 hp, 22 kW, CT 45 A, VT 49 A, frame F, IP20"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/gs20drives.pdf"
+    source_date: "2026-10-08"
+    series: GS20
+    amps: 45
+    width_mm: 175
+    height_mm: 300
+    depth_mm: 192
+    notes: "CT amps stay on gs20drives.pdf. Frame F1 outline is chapter 2 of the GS20 user manual, printed page 2-12: 175 W x 300 H x 192 D mm. https://cdn.automationdirect.com/static/manuals/gs20m/ch2.pdf. The 154.0 callout on that page is an inner width, not the outline. Two documents, so verified stays partial."
+
+  - catalog: C0-00DD1-D
+    library_id: iec.plc.compact_16dio
+    category: control.plc
+    description: "CLICK Basic PLC, 24 VDC, 8 DC inputs, 6 sinking DC outputs, 2 RS-232"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/cutsheet/C0-00DD1-D_cutsheet.pdf"
+    source_date: "2026-10-08"
+    series: CLICK
+    mounting: din
+    width_mm: 53.5
+    height_mm: 102.1
+    depth_mm: 75
+    notes: "Cutsheet: Basic CPU, 24 VDC, 8 DC in, 6 sinking DC out, ladder 8k steps, UL E157382. Drawing https://cdn.automationdirect.com/static/drawings/C0-00DD1-D.pdf titles 8 DC IN / 6 SINK and prints 53.5 wide, 102.1 high, 75.0 deep. 93.0 and 85.0 are inner callouts. Two URLs, so verified stays partial. The generic symbol is 16DI/16DO."
+
+  - catalog: PSP24-060S
+    library_id: iec.power.psu_24v_5a
+    category: power.supply
+    description: "Rhino PSP 24 VDC 2.5 A / 60 W power supply, 85-264 VAC input, IP20, DIN or chassis"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/cutsheet/PSP24-060S_cutsheet.pdf"
+    source_date: "2026-10-08"
+    series: Rhino
+    amps: 2.5
+    mounting: din
+    width_mm: 45
+    height_mm: 75
+    depth_mm: 100
+    notes: "Cutsheet: 24 VDC at 2.5 A / 60 W, 85-264 VAC nominal, IP20, DIN or chassis, plastic. Drawing https://cdn.automationdirect.com/static/drawings/PSP24-060S.pdf prints 45.0 W x 75.0 H x 100.0 D mm and does not print amps. Two URLs, so verified stays partial."
+
+  - catalog: GCX1100
+    library_id: iec.operators.pb_no
+    category: operator.pushbutton
+    description: "GCX 22 mm metal momentary pushbutton, black, 30 mm actuator, 1 NO, IP65"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/cents22mmpb.pdf"
+    source_date: "2026-10-08"
+    series: GCX
+    contact_config: 1NO
+    mounting: door
+    notes: "Mounts in a 22 mm hole. UL E189258. Body outline not used as width_mm (30 mm is the actuator diameter)."
+
+  - catalog: GCX1101
+    library_id: iec.operators.pb_nc
+    category: operator.pushbutton
+    description: "GCX 22 mm metal momentary pushbutton, red, 30 mm actuator, 1 NC, IP65"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/cents22mmpb.pdf"
+    source_date: "2026-10-08"
+    series: GCX
+    contact_config: 1NC
+    mounting: door
+    notes: "Mounts in a 22 mm hole. Body outline blank."
+
+  - catalog: GCX1102
+    library_id: iec.operators.pb_no
+    category: operator.pushbutton
+    description: "GCX 22 mm metal momentary pushbutton, green, 30 mm actuator, 1 NO, IP65"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/cents22mmpb.pdf"
+    source_date: "2026-10-08"
+    series: GCX
+    contact_config: 1NO
+    mounting: door
+    notes: "Mounts in a 22 mm hole. Body outline blank. ECX operator rows in this PDF were not complete pushbutton catalog lines, so ECX pushbuttons are not entered."
+
+  - catalog: GCX3300
+    library_id: iec.operators.selector_no
+    category: operator.selector
+    description: "GCX 22 mm selector, 2-position, maintained, 1 NO, plastic base, black knob, IP65"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/cutsheet/GCX3300_cutsheet.pdf"
+    source_date: "2026-10-08"
+    series: GCX
+    contact_config: 1NO
+    mounting: door
+    notes: "Cutsheet: 22 mm barrel, 2-position, maintained, (1) N.O., plastic base and bezel, black 30 mm round knob, IP65, UL Listed E189258, CSA 66746. The linked drawing was not parsed, so width, height, and depth stay blank."
+
+  - catalog: DN-T12-A
+    library_id: iec.terminals.x_2p5
+    category: connection.terminal
+    description: "DINnector DN-T12-A screw feed-through terminal, 24-12 AWG, 20 A, 600 V, gray"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/cutsheet/DN-T12-A_cutsheet.pdf"
+    source_date: "2026-10-08"
+    series: DN
+    amps: 20
+    sccr: 100kA
+    mounting: din
+    notes: "35 mm DIN, pack of 100, UL E179129. Drawing PDF was not parsed, so width/height/depth are blank. An older DN-T12 (no -A) dimension is not used."
+
+  - catalog: PSP24-120S
+    library_id: iec.power.psu_24v_5a
+    category: power.supply
+    description: "Rhino PSP 24 VDC 5 A / 120 W power supply, 85-264 VAC input, IP20, DIN or chassis"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/cutsheet/PSP24-120S_cutsheet.pdf"
+    source_date: "2026-10-08"
+    series: Rhino
+    amps: 5
+    mounting: din
+    width_mm: 85
+    height_mm: 75
+    depth_mm: 100
+    notes: "Cutsheet: 24 VDC at 5 A / 120 W, efficiency 80% at 115 VAC and 86% at 230 VAC, IP20, DIN or chassis, plastic. Drawing https://cdn.automationdirect.com/static/drawings/PSP24-120S.pdf prints 85.0 W x 75.0 H x 100.0 D mm and does not print amps. Two URLs, so verified stays partial."
+
+  - catalog: FAZ-C6-3-NA-L
+    library_id: iec.breakers.mcb_3p_32a
+    category: protection.breaker
+    description: "Eaton FAZ-NA-L miniature breaker, 6 A, 3-pole, C curve, UL 489, 10 kA at 240 VAC"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/cutsheet/FAZ-C6-3-NA-L_cutsheet.pdf"
+    source_date: "2026-10-08"
+    series: FAZ-NA
+    amps: 6
+    poles: 3
+    ka: 10
+    mounting: din
+    width_mm: 53.1
+    height_mm: 105
+    depth_mm: 60
+    notes: "Cutsheet: 6 A, 240 VAC/96 VDC, 3-pole, C curve, thermal-magnetic, 10 kA at 240 VAC, UL 489, feeder and branch, 35 mm DIN. Eaton P/N on that sheet is FAZ-C6/3-NA-L; the AD catalog spelling is FAZ-C6-3-NA-L. Drawing https://cdn.automationdirect.com/static/drawings/FAZ-C6-3-NA-L.pdf titles 3-POLE, 6A. Front width 53.1 mm. Side view overall height 105.0 mm and overall depth 60.0 mm. 73.0 mm is the top-view callout, not the overall height. Two URLs, so verified stays partial."
+
+  - catalog: FAZ-C10-3-NA-L
+    library_id: iec.breakers.mcb_3p_32a
+    category: protection.breaker
+    description: "Eaton FAZ-NA-L miniature breaker, 10 A, 3-pole, C curve, UL 489"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/eatonfazna.pdf"
+    source_date: "2026-10-08"
+    series: FAZ-NA
+    amps: 10
+    poles: 3
+    mounting: din
+    notes: "FAZ-NA and FAZ-NA-L overview: UL 489, DIN-rail, feeder and branch. 3-pole C-curve selection table lists FAZ-C10-3-NA-L at 10 A. This row does not copy the FAZ-C6-3-NA-L drawing. Outline millimetres are blank."
+
+  - catalog: FAZ-C15-3-NA-L
+    library_id: iec.breakers.mcb_3p_32a
+    category: protection.breaker
+    description: "Eaton FAZ-NA-L miniature breaker, 15 A, 3-pole, C curve, UL 489"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/eatonfazna.pdf"
+    source_date: "2026-10-08"
+    series: FAZ-NA
+    amps: 15
+    poles: 3
+    mounting: din
+    notes: "3-pole C-curve selection table lists FAZ-C15-3-NA-L at 15 A. UL 489 series overview. Outline millimetres are blank."
+
+  - catalog: FAZ-C20-3-NA-L
+    library_id: iec.breakers.mcb_3p_32a
+    category: protection.breaker
+    description: "Eaton FAZ-NA-L miniature breaker, 20 A, 3-pole, C curve, UL 489"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/eatonfazna.pdf"
+    source_date: "2026-10-08"
+    series: FAZ-NA
+    amps: 20
+    poles: 3
+    mounting: din
+    notes: "3-pole C-curve selection table lists FAZ-C20-3-NA-L at 20 A. UL 489 series overview. Outline millimetres are blank."
+
+  - catalog: FAZ-C6-1-SP
+    library_id: iec.breakers.mcb_1p_16a
+    category: protection.supplementary
+    description: "Eaton FAZ supplementary protector, 6 A, 1-pole, C curve, UL 1077"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/eatonfaz.pdf"
+    source_date: "2026-10-08"
+    series: FAZ
+    amps: 6
+    poles: 1
+    mounting: din
+    notes: "Page 1: FAZ supplementary protectors, UL 1077 recognized, not branch-circuit protection. Single-pole selection guide lists FAZ-C6-1-SP at 6 A. Eaton P/N uses a dot and a slash; this row keeps the AD hyphen spelling. Outline millimetres were not read from a drawing, so they stay blank."
+
+  - catalog: FAZ-C10-1-SP
+    library_id: iec.breakers.mcb_1p_16a
+    category: protection.supplementary
+    description: "Eaton FAZ supplementary protector, 10 A, 1-pole, C curve, UL 1077"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/eatonfaz.pdf"
+    source_date: "2026-10-08"
+    series: FAZ
+    amps: 10
+    poles: 1
+    mounting: din
+    notes: "Single-pole selection guide lists FAZ-C10-1-SP at 10 A. UL 1077, not a branch breaker. Outline millimetres stay blank."
+
+  - catalog: EHCC3DIU
+    library_id: iec.protection.fuse
+    category: protection.fuse
+    description: "Edison modular Class CC fuse holder, indicator, 30 A, 600 V, 3-pole"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/cutsheet/EHCC3DIU_cutsheet.pdf"
+    source_date: "2026-10-08"
+    series: Edison
+    amps: 30
+    poles: 3
+    sccr: 200kA
+    mounting: din
+    width_mm: 52.5
+    height_mm: 73.9
+    depth_mm: 52.8
+    notes: "Cutsheet: Class CC, 30 A, 600 V, 3-pole, indicator, 18-4 AWG copper, 200 kA SCCR, 35 mm DIN, UL E300536. Drawing https://cdn.automationdirect.com/static/drawings/EHCC3DIU.pdf: front width 52.5 mm, front height 73.9 mm, side overall depth 52.8 mm. 47.8 mm is a smaller side callout. 61.8 mm is the top view. Two URLs, so verified stays partial."
+
+  - catalog: C0-00DD2-D
+    library_id: iec.plc.compact_16dio
+    category: control.plc
+    description: "CLICK Basic PLC, 24 VDC, 8 DC inputs, 6 sourcing DC outputs"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/cutsheet/C0-00DD2-D_cutsheet.pdf"
+    source_date: "2026-10-08"
+    series: CLICK
+    mounting: din
+    width_mm: 53.5
+    height_mm: 102.1
+    depth_mm: 75
+    notes: "Cutsheet: Basic, 24 VDC, 8 DC in sink/source, 6 sourcing out, ladder 8k steps. Drawing https://cdn.automationdirect.com/static/drawings/C0-00DD2-D.pdf titles 8 DC IN / 6 SOURCE DC OUT and prints 53.5 wide, 102.1 high, 75.0 deep. 93.0 and 85.0 are inner callouts. Two URLs, so verified stays partial."
+
+  - catalog: C0-08ND3
+    library_id: iec.plc.di16
+    category: control.plc
+    description: "CLICK 8-point 12-24 VDC sink/source input module"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/cutsheet/C0-08ND3_cutsheet.pdf"
+    source_date: "2026-10-08"
+    series: CLICK
+    mounting: din
+    width_mm: 27
+    height_mm: 100.3
+    depth_mm: 75
+    notes: "Cutsheet: 8-point, 12-24 VDC sink/source, 2 isolated commons, 4 points per common, UL E157382. Drawing https://cdn.automationdirect.com/static/drawings/C0-08ND3.pdf prints 27.0 wide, 100.3 high, 75.0 deep. Two URLs, so verified stays partial."
+
+  - catalog: C0-16TD1
+    library_id: iec.plc.do16
+    category: control.plc
+    description: "CLICK 16-point 5-27 VDC sinking output module, 0.1 A per point"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/cutsheet/C0-16TD1_cutsheet.pdf"
+    source_date: "2026-10-08"
+    series: CLICK
+    amps: 0.1
+    mounting: din
+    width_mm: 27
+    height_mm: 100.3
+    depth_mm: 75
+    notes: "Cutsheet: 16-point, 5-27 VDC sinking, 0.1 A/point, 2 commons, 8 points per common. Drawing https://cdn.automationdirect.com/static/drawings/C0-16TD1.pdf prints 27.0 wide, 100.3 high, 75.0 deep. Two URLs, so verified stays partial."
+
+  - catalog: BX-DM1E-18ED13
+    library_id: iec.plc.compact_16dio
+    category: control.plc
+    description: "BRX Do-more PLC, 120-240 VAC, Ethernet, 10 discrete in, 8 sinking out"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/cutsheet/BX-DM1E-18ED13_cutsheet.pdf"
+    source_date: "2026-10-08"
+    series: BRX
+    mounting: din
+    width_mm: 119.1
+    height_mm: 107.9
+    depth_mm: 112.1
+    notes: "Cutsheet: 120-240 VAC, Ethernet and serial, 10 AC/DC in, 1 analog in, 8 sinking out, 1 analog out, 64k ladder words. Drawing https://cdn.automationdirect.com/static/drawings/BX-DM1E-18ED13.pdf prints 119.1 wide, 107.9 high, 112.1 deep. 91.1 mm is a partial side callout. Two URLs, so verified stays partial."
+
+  - catalog: GCX1232-24L
+    library_id: iec.operators.pilot_light
+    category: operator.light
+    description: "GCX 22 mm metal LED indicating light, green, 24 VAC/VDC, full voltage, IP65"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/cutsheet/GCX1232-24L_cutsheet.pdf"
+    source_date: "2026-10-08"
+    series: GCX
+    mounting: door
+    width_mm: 40
+    height_mm: 29.8
+    depth_mm: 38.8
+    notes: "Cutsheet: permanent LED, IP65, 22 mm barrel, green, 30 mm round operator, metal base, 24 VAC/VDC full voltage, UL recognized E189258. Drawing https://cdn.automationdirect.com/static/drawings/GCX1232-24L.pdf top view is 40.0 by 29.8 mm. Side view behind-panel depth is 38.8 mm. The 13.8 mm callout is the front projection and is not added. 29.3 mm is the lens diameter, not the outline width. Two URLs, so verified stays partial."
+
+  - catalog: T1-1522G-1
+    library_id: iec.wire.duct
+    category: connection.duct
+    description: "T1 slotted wire duct, gray, 40 x 60 mm, 2 m, cover included"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/oldspec/wireductt1_2026_04_24.pdf"
+    source_date: "2026-10-08"
+    series: T1
+    mounting: panel
+    width_mm: 40
+    height_mm: 60
+    notes: "T1-1522G-1 is listed at 6.56 ft [2 m], cover included. Actual-size row T1-1522* is 1.57 x 2.36 in [40 x 60 mm]. Length is not stored as depth_mm. The T1-1540 metric cell on this page is garbled and is not used. Depth is blank, so verified stays partial."
+
+  - catalog: T1-2222G-1
+    library_id: iec.wire.duct
+    category: connection.duct
+    description: "T1 slotted wire duct, gray, 60 x 60 mm, 2 m, cover included"
+    verified: partial
+    source: "https://cdn.automationdirect.com/static/specs/oldspec/wireductt1_2026_04_24.pdf"
+    source_date: "2026-10-08"
+    series: T1
+    mounting: panel
+    width_mm: 60
+    height_mm: 60
+    notes: "T1-2222G-1 is listed at 6.56 ft [2 m]. Actual-size row T1-2222* is 2.36 x 2.36 in [60 x 60 mm]. Length is not stored as depth_mm."

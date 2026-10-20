@@ -1,0 +1,172 @@
+# Panel cutouts for library parts. Numbers come from the cited drawing only.
+# A record with unknown: true is an editable flag — no geometry is invented.
+#
+# Not in this library, so no cutout is filed (do not guess a hole):
+#   door fans and filters, panel meters other than PPC5-1102,
+#   Allen-Bradley / Siemens HMI SKUs, disconnect operator handles.
+# The generic 7 inch HMI and the schematic disconnect carry unknown: true.
+kind: cutouts
+version: "1"
+
+definitions:
+  # IEC 60947-5-1:2003 clause 6.3.1 Table 2, size 022, and Table 3.
+  # UNVERIFIED. The official IEC text is not on file. These figures were
+  # read from a secondary BIS adoption and have not been checked against
+  # an IEC publication. Do not treat them as a verified manufacturer drawing.
+  #   mounting hole d = 22.3 mm +0.4/0
+  #   key recess h = 24.1 mm +0.4/0, width b = 3.2 mm +0.2/0
+  #   key at 12 o'clock. The recess is specified "if any"; this record
+  #   includes it so a keyed operator clocks. Set include_key false on the
+  #   device to cut the round hole only.
+  # Panel thickness 1 mm to 6 mm.
+  # Table 3 size 022: centres 30 mm in a row and 50 mm between rows.
+  # "Distances a and b may be interchanged."
+  # The hole and key match 800-TD008 pp. 47 and 89. The 30/50 interchangeable
+  # centres are not an 800-TD008 column.
+  # https://law.resource.org/pub/in/bis/S05/is.iec.60947.5.1.2003.pdf
+  iec_022: &iec_022
+    unknown: false
+    shape: d
+    diameter_mm: 22.3
+    diameter_plus_mm: 0.4
+    diameter_minus_mm: 0
+    key_width_mm: 3.2
+    key_width_plus_mm: 0.2
+    key_span_mm: 24.1
+    key_span_plus_mm: 0.4
+    key_side: top
+    key_optional: false
+    panel_thickness_min_mm: 1
+    panel_thickness_max_mm: 6
+    min_center_a_mm: 30
+    min_center_b_mm: 50
+    centers_interchangeable: true
+    verified: false
+    source: https://law.resource.org/pub/in/bis/S05/is.iec.60947.5.1.2003.pdf
+    note: "UNVERIFIED. Transcribed from a secondary BIS adoption of IEC 60947-5-1:2003 Table 2 size 022 and Table 3 (hole Ø22.3 +0.4/0, key 3.2 × 24.1, centres 30 mm and 50 mm interchangeable, panel 1–6 mm). Not checked against an official IEC publication. The same hole and key are on 800-TD008 pp. 47 and 89; the 30/50 interchangeable centres are not an 800-TD008 column. Behind-panel depth is not in that table."
+
+  # Allen-Bradley Bulletin 800F / 800FD.
+  # The hole is not "22.5 mm". That is the family name on 800-TD008.
+  # 800-TD008 pp. 47 and 89 and 800F-IN016 p. 3 draw the mounting hole as
+  # Ø22.3 +0.4/−0, with the key 3.2 +0.2/−0 by 24.1 +0.4/−0 marked OPTIONAL.
+  # The key is stored and is not cut unless include_key is set.
+  # Plastic panel thickness on the p. 47 figure is 1…6 mm (other constructions
+  # on that sheet are 1…4.8, 1…4, and 1…2.8 mm).
+  # Centre pitches are per operator column on those instruction sheets, not
+  # IEC Table 3. Page 47 prints 30, 40, 48, 50, 40/60, 50/60, 60/90 and 70 mm.
+  # https://literature.rockwellautomation.com/idc/groups/literature/documents/in/800f-in016_-en-p.pdf
+  # https://literature.rockwellautomation.com/idc/groups/literature/documents/td/800-td008_-en-p.pdf
+  ab_800f_hole: &ab_800f_hole
+    unknown: false
+    shape: round
+    diameter_mm: 22.3
+    diameter_plus_mm: 0.4
+    diameter_minus_mm: 0
+    key_width_mm: 3.2
+    key_width_plus_mm: 0.2
+    key_span_mm: 24.1
+    key_span_plus_mm: 0.4
+    key_side: top
+    key_optional: true
+    panel_thickness_min_mm: 1
+    panel_thickness_max_mm: 6
+    source: https://literature.rockwellautomation.com/idc/groups/literature/documents/in/800f-in016_-en-p.pdf
+
+  # 800-TD008 p. 47, flush push-button columns: 30 mm side by side, 40 mm stacked.
+  ab_800f_push: &ab_800f_push
+    <<: *ab_800f_hole
+    min_center_x_mm: 30
+    min_center_y_mm: 40
+    note: "Hole Ø22.3 +0.4/−0 mm, key optional, from 800-TD008 pp. 47 and 89 and 800F-IN016 p. 3. 22.5 mm is the family name, not the hole. Flush push-button centres on p. 47: 30 mm horizontal, 40 mm vertical. The same sheet prints 48, 50, 40/60, 50/60, 60/90 and 70 mm for other operators. Editable per part. Installation sheet: https://literature.rockwellautomation.com/idc/groups/literature/documents/in/800f-in016_-en-p.pdf"
+
+  # 800-TD008 p. 89, plain pilot column: 30 mm on both axes.
+  # Diagram A (plain pilot body) prints panel thickness 1–10.5 mm. The same
+  # sheet also prints 1–9.3, 1–8.5, and 1–7.3 mm for other operators and for
+  # legend-plate mounting. 10.5 mm is diagram A only.
+  ab_800fd_pilot: &ab_800fd_pilot
+    <<: *ab_800f_hole
+    min_center_x_mm: 30
+    min_center_y_mm: 30
+    panel_thickness_min_mm: 1
+    panel_thickness_max_mm: 10.5
+    note: "Hole Ø22.3 +0.4/−0 mm, key optional, from 800-TD008 p. 89 and 800F-IN016 p. 3. 22.5 mm is the family name, not the hole. Plain pilot centres on p. 89: 30 mm horizontal and 30 mm vertical. Panel thickness for that plain pilot (diagram A) is 1–10.5 mm. The same sheet prints 1–9.3, 1–8.5, and 1–7.3 mm for other operators and legend-plate mounting. Editable per part."
+
+  # 800-TD008G-EN-P, March 2026.
+  # p. 13 lists 800FP-LSM23 as a 2-position illuminated standard knob.
+  # Code LS is the standard knob. Code LH is the knob lever.
+  # p. 12 footnote 1: "30 mm hole spacing does not work if knob lever is used.
+  # See page 47 for recommended operator panel spacing."
+  # p. 47 first column is 30 mm horizontal, 40 mm vertical, and 50 mm vertical
+  # on the legend-plate row. The 48 mm column is the next column.
+  ab_800f_selector: &ab_800f_selector
+    <<: *ab_800f_hole
+    min_center_x_mm: 30
+    min_center_y_mm: 40
+    note: "Hole Ø22.3 +0.4/−0 mm, key optional, from 800-TD008 p. 47 and 800F-IN016 p. 3. 800FP-LSM23 is a standard knob (p. 13, code LS), not a knob lever (code LH). p. 12 footnote 1: 30 mm hole spacing does not work if a knob lever is used. p. 47 first column is 30 mm horizontal and 40 mm vertical; that column's legend-plate row is 50 mm vertical. Editable per part."
+
+  # ProSense PPC5-1102 (Yokogawa UT55A hardware, AutomationDirect manual).
+  # Manual section 1.3: panel cutout 92 +0.8/0 mm × 92 +0.8/0 mm.
+  # Panel thickness 1 to 10 mm. Brackets on the top and bottom — no panel drills.
+  # Side view 65 mm is "depth from the panel face" excluding the rear projection.
+  # No corner radius is published on that cutout (drawn square). The catalog
+  # drawing's "MIN BEND R40" is a panel bend, not the cutout corner.
+  # Page 1-5, General mounting figure: 117 mm min horizontal centres,
+  # 145 mm min vertical centres. Side-by-side close mounting is a separate
+  # gang cutout, not this pair.
+  # https://cdn.automationdirect.com/static/manuals/psprocontrol/ppc5manual.pdf
+  ppc5: &ppc5
+    unknown: false
+    shape: rect
+    width_mm: 92
+    height_mm: 92
+    width_plus_mm: 0.8
+    height_plus_mm: 0.8
+    width_minus_mm: 0
+    height_minus_mm: 0
+    corner_radius_mm: 0
+    depth_behind_mm: 65
+    panel_thickness_min_mm: 1
+    panel_thickness_max_mm: 10
+    min_center_x_mm: 117
+    min_center_y_mm: 145
+    source: https://cdn.automationdirect.com/static/manuals/psprocontrol/ppc5manual.pdf
+    note: "Section 1.3, page 1-5, General mounting figure: centres 117 mm minimum horizontal and 145 mm minimum vertical. Panel cutout 92 +0.8/0 × 92 +0.8/0 mm, panel 1–10 mm, depth from the panel face 65 mm excluding the rear projection. No panel mounting holes (top and bottom brackets). Insert: https://cdn.automationdirect.com/static/manuals/psprocontrol/ppc5insert.pdf Outline drawing (no cutout tolerance): https://cdn.automationdirect.com/static/drawings/PPC5-1102.pdf"
+
+  unknown_cutout: &unknown_cutout
+    unknown: true
+    note: "No manufacturer cutout drawing is on file for this symbol. Edit the cutout before manufacturing."
+
+records:
+  - library_ids:
+      - iec.operators.pb_no
+      - iec.operators.pb_nc
+      - iec.operators.pb_illum
+      - iec.operators.estop
+      - iec.operators.pilot_light
+      - iec.operators.selector_2pos
+      - iec.operators.selector_3pos
+      - nema.operators.pb_no
+      - nema.operators.pb_nc
+      - nema.operators.pb_illum
+      - nema.operators.estop
+      - nema.operators.pilot_light
+      - nema.operators.selector_3pos
+    cutout: *iec_022
+  - catalogs:
+      - { manufacturer: Allen-Bradley, catalog: 800FP-F3 }
+      - { manufacturer: Allen-Bradley, catalog: 800FP-F4 }
+    cutout: *ab_800f_push
+  - catalogs:
+      - { manufacturer: Allen-Bradley, catalog: 800FD-P3N3R }
+    cutout: *ab_800fd_pilot
+  - catalogs:
+      - { manufacturer: Allen-Bradley, catalog: 800FP-LSM23PN5GX01 }
+    cutout: *ab_800f_selector
+  - library_ids:
+      - adc.prosense.ppc5_1102
+    cutout: *ppc5
+  - library_ids:
+      - iec.hmi.panel_7in
+      - iec.protection.disconnect_3p
+      - nema.protection.disconnect_3p
+    cutout: *unknown_cutout

@@ -1,0 +1,595 @@
+# OEM examples from AutomationDirect catalog (CLICK, BRX, STRIDE, DURApulse GS20, IronHorse ES1, ProSense PPC5).
+# Data from public cut sheets: https://www.automationdirect.com/pn/<part>
+library: adc
+version: "0.1"
+devices:
+  - id: click.c0_16nd3
+    name: CLICK 16-pt 24VDC input
+    category: control.plc
+    ref_prefix: A
+    tags: [plc, input, click, automationdirect]
+    schematic:
+      width: 52
+      height: 96
+      pins:
+        - { id: C0, x: 0, y: 12, side: left, electrical: power }
+        - { id: X0, x: 0, y: 22, side: left, electrical: input }
+        - { id: X1, x: 0, y: 30, side: left, electrical: input }
+        - { id: X2, x: 0, y: 38, side: left, electrical: input }
+        - { id: X3, x: 0, y: 46, side: left, electrical: input }
+        - { id: C1, x: 0, y: 58, side: left, electrical: power }
+        - { id: X4, x: 0, y: 68, side: left, electrical: input }
+        - { id: X5, x: 0, y: 76, side: left, electrical: input }
+      draw:
+        - rect: [8, 6, 36, 84]
+        - text: [26, 16, "DI16", 2.8]
+        - text: [26, 24, "24V", 2.2]
+        - line: [0, 12, 8, 12]
+        - line: [0, 22, 8, 22]
+        - line: [0, 30, 8, 30]
+        - line: [0, 38, 8, 38]
+        - line: [0, 46, 8, 46]
+        - line: [0, 58, 8, 58]
+        - line: [0, 68, 8, 68]
+        - line: [0, 76, 8, 76]
+        - text: [26, 86, "C0-16", 2.0]
+    panel: { w: 27.0, h: 90.3, d: 66.8, din: true, in_panel: true, mount: din_rail, dims: catalog }
+    props:
+      manufacturer: AutomationDirect
+      part_number: C0-16ND3
+      catalog: C0-16ND3
+      DI: 16
+      type: sink/source
+      supply: 24VDC
+      commons: 4
+      series: CLICK
+      watt_loss: 0.96
+      watt_loss_source: https://cdn.automationdirect.com/static/specs/c016nd3.pdf
+      watt_loss_note: "Bus power 40 mA at 24 VDC (0.96 W). Field power 0. Operating 0–55 °C."
+      max_ambient_c: 55
+
+  - id: click.c0_08td1
+    name: CLICK 8-pt DC sinking output
+    category: control.plc
+    ref_prefix: A
+    tags: [plc, output, click, automationdirect]
+    schematic:
+      width: 52
+      height: 88
+      pins:
+        - { id: C0, x: 52, y: 14, side: right, electrical: power }
+        - { id: Y0, x: 52, y: 24, side: right, electrical: output }
+        - { id: Y1, x: 52, y: 32, side: right, electrical: output }
+        - { id: Y2, x: 52, y: 40, side: right, electrical: output }
+        - { id: Y3, x: 52, y: 48, side: right, electrical: output }
+        - { id: C1, x: 52, y: 60, side: right, electrical: power }
+        - { id: Y4, x: 52, y: 70, side: right, electrical: output }
+        - { id: Y5, x: 52, y: 78, side: right, electrical: output }
+      draw:
+        - rect: [8, 6, 36, 76]
+        - text: [26, 16, "DO8", 2.8]
+        - text: [26, 24, "sink", 2.2]
+        - line: [44, 14, 52, 14]
+        - line: [44, 24, 52, 24]
+        - line: [44, 32, 52, 32]
+        - line: [44, 40, 52, 40]
+        - line: [44, 48, 52, 48]
+        - line: [44, 60, 52, 60]
+        - line: [44, 70, 52, 70]
+        - line: [44, 78, 52, 78]
+        - text: [26, 78, "C0-08", 2.0]
+    panel: { w: 27.0, h: 90.3, d: 66.8, din: true, in_panel: true, mount: din_rail, dims: catalog }
+    props:
+      manufacturer: AutomationDirect
+      part_number: C0-08TD1
+      catalog: C0-08TD1
+      DO: 8
+      type: sinking
+      Iout: 0.3A
+      supply: 3.3-27VDC
+      series: CLICK
+      watt_loss: 1.56
+      watt_loss_source: https://cdn.automationdirect.com/static/specs/c016nd3.pdf
+      watt_loss_note: "Logic 50 mA + field 15 mA at 24 VDC (1.56 W), from the CLICK power-budget table. Operating 0–55 °C."
+      max_ambient_c: 55
+
+  - id: click.c2_03cpu
+    name: CLICK PLUS CPU Ethernet
+    category: control.plc
+    ref_prefix: A
+    tags: [plc, cpu, click, automationdirect]
+    schematic:
+      width: 88
+      height: 88
+      pins:
+        - { id: Lplus, x: 0, y: 14, side: left, electrical: power }
+        - { id: M, x: 0, y: 22, side: left, electrical: power }
+        - { id: X0, x: 0, y: 36, side: left, electrical: input }
+        - { id: X1, x: 0, y: 44, side: left, electrical: input }
+        - { id: X2, x: 0, y: 52, side: left, electrical: input }
+        - { id: X3, x: 0, y: 60, side: left, electrical: input }
+        - { id: Y0, x: 88, y: 36, side: right, electrical: output }
+        - { id: Y1, x: 88, y: 44, side: right, electrical: output }
+        - { id: Y2, x: 88, y: 52, side: right, electrical: output }
+        - { id: ETH, x: 88, y: 18, side: right }
+      draw:
+        - rect: [8, 6, 72, 76]
+        - rect: [14, 12, 60, 14]
+        - text: [44, 22, "CLICK+", 3.0]
+        - line: [0, 14, 8, 14]
+        - line: [0, 22, 8, 22]
+        - line: [0, 36, 8, 36]
+        - line: [0, 44, 8, 44]
+        - line: [0, 52, 8, 52]
+        - line: [0, 60, 8, 60]
+        - line: [80, 18, 88, 18]
+        - line: [80, 36, 88, 36]
+        - line: [80, 44, 88, 44]
+        - line: [80, 52, 88, 52]
+        - text: [44, 76, "C2-03", 2.2]
+    ports:
+      - { id: ETH, kind: ethernet, medium: "10/100", protocol: "Modbus TCP", connector: RJ45, side: right }
+      - { id: COM1, kind: serial, medium: RS-232, protocol: Modbus RTU, connector: RJ12, side: left }
+      - { id: COM2, kind: serial, medium: RS-485, protocol: Modbus RTU, connector: terminal, side: left }
+      - { id: USB, kind: usb, medium: USB, protocol: programming, connector: micro-B, side: bottom }
+    panel: { w: 85.0, h: 101.8, d: 60.8, din: true, in_panel: true, mount: din_rail, dims: catalog }
+    props:
+      manufacturer: AutomationDirect
+      part_number: C2-03CPU
+      catalog: C2-03CPU
+      DI: 8
+      DO: 6
+      supply: 24VDC
+      comms: Ethernet
+      series: CLICK PLUS
+      watt_loss: 3.12
+      watt_loss_source: https://cdn.automationdirect.com/static/specs/c20xcpu.pdf
+      watt_loss_note: "Power budget 130 mA at 24 VDC (3.12 W). The 20 W maximum includes attached modules and is not the CPU alone. Operating 0–55 °C."
+      max_ambient_c: 55
+
+  - id: durapulse.gs21_20p5
+    name: DURApulse GS20 0.5 hp 230V
+    category: drive.vfd
+    ref_prefix: U
+    tags: [vfd, drive, durapulse, automationdirect, gs20]
+    schematic:
+      width: 58
+      height: 78
+      pins:
+        - { id: L, x: 16, y: 0, side: top, electrical: power }
+        - { id: N, x: 28, y: 0, side: top, electrical: power }
+        - { id: U, x: 14, y: 78, side: bottom, electrical: power }
+        - { id: V, x: 26, y: 78, side: bottom, electrical: power }
+        - { id: W, x: 38, y: 78, side: bottom, electrical: power }
+        - { id: DI1, x: 58, y: 22, side: right, electrical: input }
+        - { id: DI2, x: 58, y: 30, side: right, electrical: input }
+        - { id: DCM, x: 58, y: 38, side: right, electrical: input }
+        - { id: RA, x: 58, y: 52, side: right, electrical: output }
+        - { id: RC, x: 58, y: 60, side: right, electrical: output }
+      draw:
+        - rect: [6, 10, 40, 58]
+        - text: [26, 26, "U", 3.4]
+        - text: [26, 36, "GS20", 2.4]
+        - text: [26, 46, "0.5hp", 2.1]
+        - line: [16, 0, 16, 10]
+        - line: [28, 0, 28, 10]
+        - line: [14, 68, 14, 78]
+        - line: [26, 68, 26, 78]
+        - line: [38, 68, 38, 78]
+        - line: [46, 22, 58, 22]
+        - line: [46, 30, 58, 30]
+        - line: [46, 38, 58, 38]
+        - line: [46, 52, 58, 52]
+        - line: [46, 60, 58, 60]
+    ports:
+      - { id: COM1, kind: serial, medium: RS-485, protocol: Modbus RTU, connector: RJ45, side: left }
+      - { id: USB, kind: usb, medium: USB, protocol: programming, connector: USB-B, side: bottom }
+    panel: { w: 68.0, h: 128.0, d: 125.0, din: false, in_panel: true, mount: backplate, dims: catalog }
+    props:
+      manufacturer: AutomationDirect
+      part_number: GS21-20P5
+      catalog: GS21-20P5
+      series: DURApulse GS20
+      Pn: 0.5hp
+      Vin: 230VAC
+      phases_in: 1
+      phases_out: 3
+      Iout: 2.8A
+      frame: A3
+      enclosure: IP20
+      comms: RS-485 Modbus
+      STO: built-in
+      watt_loss: 30.8
+      watt_loss_source: https://cdn.automationdirect.com/static/specs/gs20drives.pdf
+      watt_loss_note: "Total dissipation 30.8 W (heatsink 16.3 W + internal 14.5 W). Use the Total value. IP20 ambient −20 to +50 °C without derating."
+      max_ambient_c: 50
+
+  # https://www.automationdirect.com/pn/BX-08ND3
+  # Cut sheet: 8-pt 12-24 VDC sink/source, 2 isolated commons, 4 pts/common.
+  # Terminals from BRX discrete expansion wiring: 1C, 0-3, 2C, 4-7.
+  # Panel millimetres from ADC BRX discrete expansion drawing (8-pt, no TB):
+  # 1.08 x 4.57 x 3.25 in = 27.5 x 116.2 x 82.6 mm.
+  - id: brx.bx_08nd3
+    name: BRX 8-pt 12-24VDC input
+    category: control.plc
+    ref_prefix: A
+    tags: [plc, input, brx, automationdirect, discrete]
+    schematic:
+      width: 52
+      height: 112
+      pins:
+        - { id: "1C", x: 0, y: 14, side: left, electrical: power, label: "1C" }
+        - { id: "0", x: 0, y: 24, side: left, electrical: input, label: "0" }
+        - { id: "1", x: 0, y: 32, side: left, electrical: input, label: "1" }
+        - { id: "2", x: 0, y: 40, side: left, electrical: input, label: "2" }
+        - { id: "3", x: 0, y: 48, side: left, electrical: input, label: "3" }
+        - { id: "2C", x: 0, y: 62, side: left, electrical: power, label: "2C" }
+        - { id: "4", x: 0, y: 72, side: left, electrical: input, label: "4" }
+        - { id: "5", x: 0, y: 80, side: left, electrical: input, label: "5" }
+        - { id: "6", x: 0, y: 88, side: left, electrical: input, label: "6" }
+        - { id: "7", x: 0, y: 96, side: left, electrical: input, label: "7" }
+      draw:
+        - rect: [8, 6, 36, 100]
+        - text: [26, 18, "DI8", 2.8]
+        - text: [26, 28, "12-24V", 2.0]
+        - line: [0, 14, 8, 14]
+        - line: [0, 24, 8, 24]
+        - line: [0, 32, 8, 32]
+        - line: [0, 40, 8, 40]
+        - line: [0, 48, 8, 48]
+        - line: [0, 62, 8, 62]
+        - line: [0, 72, 8, 72]
+        - line: [0, 80, 8, 80]
+        - line: [0, 88, 8, 88]
+        - line: [0, 96, 8, 96]
+        - text: [26, 100, "BX-08", 2.0]
+    panel: { w: 27.5, h: 116.2, d: 82.6, din: true, in_panel: true, mount: din_rail, dims: catalog }
+    props:
+      manufacturer: AutomationDirect
+      part_number: BX-08ND3
+      catalog: BX-08ND3
+      DI: 8
+      type: sink/source
+      supply: 12-24VDC
+      commons: 2
+      points_per_common: 4
+      series: BRX
+      requires: BX-RTB08
+      source: https://www.automationdirect.com/pn/BX-08ND3
+
+  # https://www.automationdirect.com/pn/BX-12ND3
+  # Cut sheet: 12-pt 12-24 VDC sink/source, 3 isolated commons, 4 pts/common.
+  # Terminals from BRX discrete expansion wiring: 1C 0-3, 2C 4-7, 3C 8-11.
+  # Panel millimetres from ADC BRX discrete expansion drawing (8/12-pt, no TB):
+  # 1.08 x 4.57 x 3.25 in = 27.5 x 116.2 x 82.6 mm. Same body as BX-08ND3.
+  - id: brx.bx_12nd3
+    name: BRX 12-pt 12-24VDC input
+    category: control.plc
+    ref_prefix: A
+    tags: [plc, input, brx, automationdirect, discrete]
+    schematic:
+      width: 52
+      height: 148
+      pins:
+        - { id: "1C", x: 0, y: 14, side: left, electrical: power, label: "1C" }
+        - { id: "0", x: 0, y: 24, side: left, electrical: input, label: "0" }
+        - { id: "1", x: 0, y: 32, side: left, electrical: input, label: "1" }
+        - { id: "2", x: 0, y: 40, side: left, electrical: input, label: "2" }
+        - { id: "3", x: 0, y: 48, side: left, electrical: input, label: "3" }
+        - { id: "2C", x: 0, y: 62, side: left, electrical: power, label: "2C" }
+        - { id: "4", x: 0, y: 72, side: left, electrical: input, label: "4" }
+        - { id: "5", x: 0, y: 80, side: left, electrical: input, label: "5" }
+        - { id: "6", x: 0, y: 88, side: left, electrical: input, label: "6" }
+        - { id: "7", x: 0, y: 96, side: left, electrical: input, label: "7" }
+        - { id: "3C", x: 0, y: 110, side: left, electrical: power, label: "3C" }
+        - { id: "8", x: 0, y: 120, side: left, electrical: input, label: "8" }
+        - { id: "9", x: 0, y: 128, side: left, electrical: input, label: "9" }
+        - { id: "10", x: 0, y: 136, side: left, electrical: input, label: "10" }
+        - { id: "11", x: 0, y: 144, side: left, electrical: input, label: "11" }
+      draw:
+        - rect: [8, 6, 36, 140]
+        - text: [26, 18, "DI12", 2.8]
+        - text: [26, 28, "12-24V", 2.0]
+        - line: [0, 14, 8, 14]
+        - line: [0, 24, 8, 24]
+        - line: [0, 32, 8, 32]
+        - line: [0, 40, 8, 40]
+        - line: [0, 48, 8, 48]
+        - line: [0, 62, 8, 62]
+        - line: [0, 72, 8, 72]
+        - line: [0, 80, 8, 80]
+        - line: [0, 88, 8, 88]
+        - line: [0, 96, 8, 96]
+        - line: [0, 110, 8, 110]
+        - line: [0, 120, 8, 120]
+        - line: [0, 128, 8, 128]
+        - line: [0, 136, 8, 136]
+        - line: [0, 144, 8, 144]
+        - text: [26, 140, "BX-12", 2.0]
+    panel: { w: 27.5, h: 116.2, d: 82.6, din: true, in_panel: true, mount: din_rail, dims: catalog }
+    props:
+      manufacturer: AutomationDirect
+      part_number: BX-12ND3
+      catalog: BX-12ND3
+      DI: 12
+      type: sink/source
+      supply: 12-24VDC
+      commons: 3
+      points_per_common: 4
+      series: BRX
+      requires: BX-RTB08
+      source: https://www.automationdirect.com/pn/BX-12ND3
+
+  # https://www.automationdirect.com/pn/SIO-MB12CDR
+  # Cut sheet: STRIDE combo, 8-pt 12-24 VDC sinking in, 4 Form C (SPDT) relays 2A,
+  # 1x Ethernet RJ45 Modbus TCP, external 10-30 VDC.
+  # Terminals from ADC SIO-MB12CDR insert: IN0-IN7 + 2 input COM; each relay NC/COM/NO.
+  # Panel millimetres from ADC 2D drawing SIO-MB12CDR.pdf (full scale):
+  # 22.5 mm DIN width, 120.0 mm height, 50.6 mm depth. Manual: thin 22.5 mm EN-50022.
+  - id: stride.sio_mb12cdr
+    name: STRIDE 8-in 4-relay Modbus TCP
+    category: control.plc
+    ref_prefix: A
+    tags: [plc, input, output, stride, automationdirect, modbus, ethernet, discrete]
+    schematic:
+      width: 88
+      height: 132
+      pins:
+        - { id: "+VS", x: 0, y: 12, side: left, electrical: power, label: "+VS" }
+        - { id: "-VS", x: 0, y: 20, side: left, electrical: power, label: "-VS" }
+        - { id: INIT, x: 0, y: 28, side: left, electrical: power, label: INIT }
+        - { id: COM_IN0, x: 0, y: 40, side: left, electrical: power, label: "COM" }
+        - { id: IN0, x: 0, y: 48, side: left, electrical: input, label: IN0 }
+        - { id: IN1, x: 0, y: 56, side: left, electrical: input, label: IN1 }
+        - { id: IN2, x: 0, y: 64, side: left, electrical: input, label: IN2 }
+        - { id: IN3, x: 0, y: 72, side: left, electrical: input, label: IN3 }
+        - { id: COM_IN1, x: 0, y: 84, side: left, electrical: power, label: "COM" }
+        - { id: IN4, x: 0, y: 92, side: left, electrical: input, label: IN4 }
+        - { id: IN5, x: 0, y: 100, side: left, electrical: input, label: IN5 }
+        - { id: IN6, x: 0, y: 108, side: left, electrical: input, label: IN6 }
+        - { id: IN7, x: 0, y: 116, side: left, electrical: input, label: IN7 }
+        - { id: NC0, x: 88, y: 16, side: right, electrical: unspecified, label: NC0 }
+        - { id: COM0, x: 88, y: 24, side: right, electrical: unspecified, label: COM0 }
+        - { id: NO0, x: 88, y: 32, side: right, electrical: output, label: NO0 }
+        - { id: NC1, x: 88, y: 44, side: right, electrical: unspecified, label: NC1 }
+        - { id: COM1, x: 88, y: 52, side: right, electrical: unspecified, label: COM1 }
+        - { id: NO1, x: 88, y: 60, side: right, electrical: output, label: NO1 }
+        - { id: NC2, x: 88, y: 72, side: right, electrical: unspecified, label: NC2 }
+        - { id: COM2, x: 88, y: 80, side: right, electrical: unspecified, label: COM2 }
+        - { id: NO2, x: 88, y: 88, side: right, electrical: output, label: NO2 }
+        - { id: NC3, x: 88, y: 100, side: right, electrical: unspecified, label: NC3 }
+        - { id: COM3, x: 88, y: 108, side: right, electrical: unspecified, label: COM3 }
+        - { id: NO3, x: 88, y: 116, side: right, electrical: output, label: NO3 }
+        - { id: ETH, x: 88, y: 8, side: right, label: ETH }
+      draw:
+        - rect: [10, 4, 68, 124]
+        - text: [44, 16, "STRIDE", 2.6]
+        - text: [44, 26, "DI8/RL4", 2.2]
+        - text: [44, 36, "MB TCP", 2.0]
+        - line: [0, 12, 10, 12]
+        - line: [0, 20, 10, 20]
+        - line: [0, 28, 10, 28]
+        - line: [0, 40, 10, 40]
+        - line: [0, 48, 10, 48]
+        - line: [0, 56, 10, 56]
+        - line: [0, 64, 10, 64]
+        - line: [0, 72, 10, 72]
+        - line: [0, 84, 10, 84]
+        - line: [0, 92, 10, 92]
+        - line: [0, 100, 10, 100]
+        - line: [0, 108, 10, 108]
+        - line: [0, 116, 10, 116]
+        - line: [78, 8, 88, 8]
+        - line: [78, 16, 88, 16]
+        - line: [78, 24, 88, 24]
+        - line: [78, 32, 88, 32]
+        - line: [78, 44, 88, 44]
+        - line: [78, 52, 88, 52]
+        - line: [78, 60, 88, 60]
+        - line: [78, 72, 88, 72]
+        - line: [78, 80, 88, 80]
+        - line: [78, 88, 88, 88]
+        - line: [78, 100, 88, 100]
+        - line: [78, 108, 88, 108]
+        - line: [78, 116, 88, 116]
+        - text: [44, 124, "SIO-MB12", 2.0]
+    ports:
+      - { id: ETH, kind: ethernet, medium: "10/100", protocol: "Modbus TCP", connector: RJ45, side: right }
+    panel: { w: 22.5, h: 120.0, d: 50.6, din: true, in_panel: true, mount: din_rail, dims: catalog }
+    props:
+      manufacturer: AutomationDirect
+      part_number: SIO-MB12CDR
+      catalog: SIO-MB12CDR
+      DI: 8
+      DO: 4
+      type: sinking in / Form C relay out
+      supply: 10-30VDC
+      Iout: 2A
+      commons_in: 2
+      points_per_common_in: 4
+      series: STRIDE
+      comms: Ethernet Modbus TCP
+      default_ip: 192.168.1.100
+      source: https://www.automationdirect.com/pn/SIO-MB12CDR
+
+  # https://www.automationdirect.com/pn/ES1-3A-N4
+  # Cut sheet: IronHorse ES1 NEMA 4X / IP67, 3/4 hp, 1-phase 120/230 VAC in,
+  # 230 VAC 3-phase out, 3 A, V/Hz, frame 1, wall mount. Reverse is field-install
+  # (N4R has built-in reverse). No parameters/software; 7 trimpots.
+  # Power/motor: 1/4 in male spades AC1, AC2, Ground, U, V, W.
+  # Control P7 spring clamp (es1drives.pdf terminal block):
+  # P7-4 HI, P7-5 W, P7-6 LO, P7-7 COM, P7-8 RUN, P7-9 FWD/REV, P7-10 BRK.
+  # Form C run relay: NO, NC, COM. 1 A @ 30 VDC / 120 VAC.
+  # Panel millimetres from ADC 2D drawing ES1-3A-N4.pdf (front/side):
+  # W 140.47 mm [5.530 in], H 150.93 mm [5.942 in], D 181.61 mm [7.150 in].
+  # Class table labels those as Width / Height / Length. Weight 3.08 lb.
+  - id: ironhorse.es1_3a_n4
+    name: IronHorse ES1 3/4 hp NEMA 4X
+    category: drive.vfd
+    ref_prefix: U
+    tags: [vfd, drive, ironhorse, automationdirect, es1, nema4x]
+    schematic:
+      width: 72
+      height: 104
+      pins:
+        - { id: AC1, x: 20, y: 0, side: top, electrical: power, label: AC1 }
+        - { id: AC2, x: 36, y: 0, side: top, electrical: power, label: AC2 }
+        - { id: GND, x: 52, y: 0, side: top, electrical: power, label: GND }
+        - { id: U, x: 18, y: 104, side: bottom, electrical: power, label: U }
+        - { id: V, x: 36, y: 104, side: bottom, electrical: power, label: V }
+        - { id: W, x: 54, y: 104, side: bottom, electrical: power, label: W }
+        - { id: "P7-4", x: 0, y: 22, side: left, electrical: input, label: "P7-4" }
+        - { id: "P7-5", x: 0, y: 30, side: left, electrical: input, label: "P7-5" }
+        - { id: "P7-6", x: 0, y: 38, side: left, electrical: input, label: "P7-6" }
+        - { id: "P7-7", x: 72, y: 20, side: right, electrical: input, label: "P7-7" }
+        - { id: "P7-8", x: 72, y: 28, side: right, electrical: input, label: "P7-8" }
+        - { id: "P7-9", x: 72, y: 36, side: right, electrical: input, label: "P7-9" }
+        - { id: "P7-10", x: 72, y: 44, side: right, electrical: input, label: "P7-10" }
+        - { id: "NO", x: 72, y: 62, side: right, electrical: output, label: "NO" }
+        - { id: "NC", x: 72, y: 70, side: right, electrical: output, label: "NC" }
+        - { id: "COM", x: 72, y: 78, side: right, electrical: output, label: "COM" }
+      draw:
+        - rect: [8, 10, 56, 84]
+        - text: [36, 28, "U", 3.4]
+        - text: [36, 40, "ES1", 2.4]
+        - text: [36, 50, "3/4hp", 2.1]
+        - text: [36, 60, "N4X", 2.0]
+        - line: [20, 0, 20, 10]
+        - line: [36, 0, 36, 10]
+        - line: [52, 0, 52, 10]
+        - line: [18, 94, 18, 104]
+        - line: [36, 94, 36, 104]
+        - line: [54, 94, 54, 104]
+        - line: [0, 22, 8, 22]
+        - line: [0, 30, 8, 30]
+        - line: [0, 38, 8, 38]
+        - line: [64, 20, 72, 20]
+        - line: [64, 28, 72, 28]
+        - line: [64, 36, 72, 36]
+        - line: [64, 44, 72, 44]
+        - line: [64, 62, 72, 62]
+        - line: [64, 70, 72, 70]
+        - line: [64, 78, 72, 78]
+        - text: [36, 88, "ES1-3A", 2.0]
+    panel: { w: 140.47, h: 150.93, d: 181.61, din: false, in_panel: true, mount: backplate, dims: catalog }
+    props:
+      manufacturer: AutomationDirect
+      part_number: ES1-3A-N4
+      catalog: ES1-3A-N4
+      series: IronHorse ES1
+      Pn: 0.75hp
+      Vin: 120/230VAC
+      Vout: 230VAC
+      phases_in: 1
+      phases_out: 3
+      Iout: 3A
+      frame: 1
+      enclosure: NEMA 4X
+      ip: IP67
+      reverse: field-install
+      control: V/Hz
+      relay: Form C 1A
+      mounting: wall
+      weight_lb: 3.08
+      source: https://www.automationdirect.com/pn/ES1-3A-N4
+
+  # https://www.automationdirect.com/pn/PPC5-1102
+  # Cut sheet: ProSense advanced process controller, 1/4 DIN 96 x 96 mm,
+  # universal PV (mA/V/RTD/TC), aux analog, (1) 3 A Form C + (3) 1 A Form A,
+  # 100-240 VAC, Ethernet + RS-485 Modbus gateway. Panel mount, IP66 front.
+  # Terminals from ppc5insert.pdf wiring diagram (PPC5-1102 / 110x):
+  # 111 L, 110 N; 101 NC 102 NO 103 COM (control 3 A); AL1 108/109, AL2 106/107,
+  # AL3 104/105; PV 201 A / 202 b / 203 B; analog OUT 207/208; DI1-3 211/210/209
+  # + 212 COM; DI16 304 + 303 COM; RSP 305/306; RS-485 407 RSB 408 RSA.
+  # Panel millimetres from ADC 2D drawing PPC5-1102.pdf and insert:
+  # 96.0 x 96.0 mm bezel, 65.0 mm depth from panel face, 11 mm bezel projection,
+  # 92 x 92 mm cutout. Door / 1/4 DIN, not DIN rail.
+  - id: prosense.ppc5_1102
+    name: ProSense PPC5 1/4 DIN process controller
+    category: control.hmi
+    ref_prefix: TIC
+    tags: [hmi, process, pid, controller, prosense, automationdirect, ethernet]
+    schematic:
+      width: 88
+      height: 160
+      pins:
+        - { id: "111", x: 0, y: 14, side: left, electrical: power, label: "111 L" }
+        - { id: "110", x: 0, y: 22, side: left, electrical: power, label: "110 N" }
+        - { id: "201", x: 0, y: 38, side: left, electrical: input, label: "201 A" }
+        - { id: "202", x: 0, y: 46, side: left, electrical: input, label: "202 b" }
+        - { id: "203", x: 0, y: 54, side: left, electrical: input, label: "203 B" }
+        - { id: "207", x: 0, y: 70, side: left, electrical: output, label: "207 +" }
+        - { id: "208", x: 0, y: 78, side: left, electrical: output, label: "208 -" }
+        - { id: "305", x: 0, y: 94, side: left, electrical: input, label: "305 RSP+" }
+        - { id: "306", x: 0, y: 102, side: left, electrical: input, label: "306 RSP-" }
+        - { id: "407", x: 0, y: 118, side: left, electrical: unspecified, label: "407 RSB" }
+        - { id: "408", x: 0, y: 126, side: left, electrical: unspecified, label: "408 RSA" }
+        - { id: ETH, x: 88, y: 10, side: right, label: ETH }
+        - { id: "101", x: 88, y: 22, side: right, electrical: output, label: "101 NC" }
+        - { id: "102", x: 88, y: 30, side: right, electrical: output, label: "102 NO" }
+        - { id: "103", x: 88, y: 38, side: right, electrical: output, label: "103 COM" }
+        - { id: "108", x: 88, y: 52, side: right, electrical: output, label: "108 AL1" }
+        - { id: "109", x: 88, y: 60, side: right, electrical: output, label: "109 AL1C" }
+        - { id: "106", x: 88, y: 68, side: right, electrical: output, label: "106 AL2" }
+        - { id: "107", x: 88, y: 76, side: right, electrical: output, label: "107 AL2C" }
+        - { id: "104", x: 88, y: 84, side: right, electrical: output, label: "104 AL3" }
+        - { id: "105", x: 88, y: 92, side: right, electrical: output, label: "105 AL3C" }
+        - { id: "211", x: 88, y: 108, side: right, electrical: input, label: "211 DI1" }
+        - { id: "210", x: 88, y: 116, side: right, electrical: input, label: "210 DI2" }
+        - { id: "209", x: 88, y: 124, side: right, electrical: input, label: "209 DI3" }
+        - { id: "212", x: 88, y: 132, side: right, electrical: input, label: "212 COM" }
+        - { id: "304", x: 88, y: 144, side: right, electrical: input, label: "304 DI16" }
+        - { id: "303", x: 88, y: 152, side: right, electrical: input, label: "303 COM" }
+      draw:
+        - rect: [10, 6, 68, 148]
+        - rect: [18, 12, 52, 18]
+        - text: [44, 24, "PPC5", 2.8]
+        - text: [44, 34, "1/4 DIN", 2.0]
+        - text: [44, 44, "PID", 2.0]
+        - line: [0, 14, 10, 14]
+        - line: [0, 22, 10, 22]
+        - line: [0, 38, 10, 38]
+        - line: [0, 46, 10, 46]
+        - line: [0, 54, 10, 54]
+        - line: [0, 70, 10, 70]
+        - line: [0, 78, 10, 78]
+        - line: [0, 94, 10, 94]
+        - line: [0, 102, 10, 102]
+        - line: [0, 118, 10, 118]
+        - line: [0, 126, 10, 126]
+        - line: [78, 10, 88, 10]
+        - line: [78, 22, 88, 22]
+        - line: [78, 30, 88, 30]
+        - line: [78, 38, 88, 38]
+        - line: [78, 52, 88, 52]
+        - line: [78, 60, 88, 60]
+        - line: [78, 68, 88, 68]
+        - line: [78, 76, 88, 76]
+        - line: [78, 84, 88, 84]
+        - line: [78, 92, 88, 92]
+        - line: [78, 108, 88, 108]
+        - line: [78, 116, 88, 116]
+        - line: [78, 124, 88, 124]
+        - line: [78, 132, 88, 132]
+        - line: [78, 144, 88, 144]
+        - line: [78, 152, 88, 152]
+        - text: [44, 148, "PPC5-1102", 1.8]
+    ports:
+      - { id: ETH, kind: ethernet, medium: "10/100", protocol: "Modbus TCP", connector: RJ45, side: right }
+      - { id: RS485, kind: serial, medium: RS-485, protocol: "Modbus RTU", connector: terminal, side: left }
+    panel: { w: 96.0, h: 96.0, d: 65.0, din: false, in_panel: true, mount: door, dims: catalog }
+    props:
+      manufacturer: AutomationDirect
+      part_number: PPC5-1102
+      catalog: PPC5-1102
+      series: ProSense PPC5
+      size: 96x96mm
+      din_cutout: 1/4 DIN
+      cutout_mm: 92x92
+      supply: 100-240VAC
+      enclosure: IP66 front
+      relay_control: Form C 3A
+      relay_alarm: "3x Form A 1A"
+      DI: 4
+      comms: Ethernet Modbus TCP / RS-485 gateway
+      source: https://www.automationdirect.com/pn/PPC5-1102
