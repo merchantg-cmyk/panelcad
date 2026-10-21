@@ -174,8 +174,8 @@ def test_manifest_parses_aliases_and_requires_sha() -> None:
 
 
 def test_drive_and_unc_feeds_are_files_not_urls() -> None:
-    drive_file = r"G:\My Drive\ECS\PanelCAD\panelcad-feed.json"
-    drive_dir = r"G:\My Drive\ECS\PanelCAD"
+    drive_file = r"G:\My Drive\PanelCAD\Projects\panelcad-feed.json"
+    drive_dir = r"G:\My Drive\PanelCAD\Projects"
     unc = r"\\fileserver\share\PanelCAD\panelcad-feed.json"
     unc_dir = r"\\fileserver\share\PanelCAD"
     assert classify_feed(drive_file) == "file"
@@ -185,11 +185,11 @@ def test_drive_and_unc_feeds_are_files_not_urls() -> None:
     assert resolve_feed_location(drive_dir) == drive_file
     assert resolve_feed_location(unc) == unc
     assert resolve_feed_location(unc_dir) == unc
-    assert resolve_feed_location("G:/My Drive/ECS/PanelCAD") == drive_file
+    assert resolve_feed_location("G:/My Drive/PanelCAD/Projects") == drive_file
     resolved = resolve_feed_location("https://example.invalid/releases")
     assert resolved == "https://example.invalid/releases/panelcad-feed.json"
     download = resolve_download(drive_file, "PanelCAD-0.9.0-setup.zip")
-    assert download == r"G:\My Drive\ECS\PanelCAD\PanelCAD-0.9.0-setup.zip"
+    assert download == r"G:\My Drive\PanelCAD\Projects\PanelCAD-0.9.0-setup.zip"
     with pytest.raises(UpdateError, match="https"):
         resolve_feed_location("http://example.invalid/panelcad-feed.json")
 
@@ -372,7 +372,7 @@ def test_skip_version_suppresses_startup_prompt(tmp_path: Path) -> None:
 
 def test_startup_check_at_most_once_per_day() -> None:
     now = datetime(2026, 10, 8, 12, 0, tzinfo=timezone.utc)
-    settings = UpdateSettings(feed=r"G:\My Drive\ECS\PanelCAD", check_on_startup=True)
+    settings = UpdateSettings(feed=r"G:\My Drive\PanelCAD\Projects", check_on_startup=True)
     assert startup_check_due(settings, now=now, feed=settings.feed) is True
     settings.last_check = "2026-10-08T11:00:00Z"
     assert startup_check_due(settings, now=now, feed=settings.feed) is False
@@ -382,7 +382,7 @@ def test_startup_check_at_most_once_per_day() -> None:
     assert startup_check_due(settings, now=now, feed=settings.feed) is False
     stale = now - timedelta(hours=24)
     settings = UpdateSettings(
-        feed=r"G:\My Drive\ECS\PanelCAD",
+        feed=r"G:\My Drive\PanelCAD\Projects",
         last_check=stale.strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
     assert startup_check_due(settings, now=now, feed=settings.feed) is True
@@ -946,7 +946,7 @@ def test_update_dialogs_render_notes_and_actions(tmp_path: Path) -> None:
         "installable": True,
         "blocked": False,
         "size": 1200,
-        "feed": r"G:\My Drive\ECS\PanelCAD\panelcad-feed.json",
+        "feed": r"G:\My Drive\PanelCAD\Projects\panelcad-feed.json",
         "notes": (
             "Shop release.\n"
             "Upgrade keeps drawings, settings, logs, and the user part library.\n"
@@ -979,7 +979,7 @@ def test_update_dialogs_render_notes_and_actions(tmp_path: Path) -> None:
     assert available.choice == "skip"
 
     settings = UpdateSettingsDialog(
-        UpdateSettings(feed=r"G:\My Drive\ECS\PanelCAD\panelcad-feed.json")
+        UpdateSettings(feed=r"G:\My Drive\PanelCAD\Projects\panelcad-feed.json")
     )
     settings.resize(760, settings.sizeHint().height())
     settings.show()

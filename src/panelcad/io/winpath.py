@@ -1,6 +1,7 @@
 """Drive paths and paths longer than the classic Windows limit.
 
-Shop jobs live on Google Drive (``G:\\My Drive\\...``). A path of 260
+A synced folder (``G:\\My Drive\\PanelCAD\\Projects\\...`` or
+``D:\\Shared\\PanelCAD\\...``) is an ordinary Windows path. A path of 260
 characters or more is opened with the ``\\\\?\\`` prefix. Settings and the
 window keep the path a person can read. The prefix is only for the OS call.
 """
@@ -34,8 +35,10 @@ def human_path(path: Path | str) -> str:
 def stored_path(path: Path | str) -> str:
     """Form written to settings and shown in the menu.
 
-    A Windows path uses backslashes, so ``G:/My Drive/job.pcad.yaml`` and
-    ``G:\\My Drive\\job.pcad.yaml`` are one entry. A POSIX path is unchanged.
+    A Windows path uses backslashes, so
+    ``G:/My Drive/PanelCAD/Projects/job.pcad.yaml`` and
+    ``G:\\My Drive\\PanelCAD\\Projects\\job.pcad.yaml`` are one entry. A POSIX
+    path is unchanged.
     """
 
     text = human_path(path)

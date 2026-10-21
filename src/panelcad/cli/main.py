@@ -1229,7 +1229,7 @@ def sharpen_cmd(
         None,
         "--project",
         "-p",
-        help="Job YAML. Default: G:\\My Drive\\Grok\\PanelCAD\\examples\\dol_starter.pcad.yaml",
+        help="Job YAML. Example: G:\\My Drive\\PanelCAD\\Projects\\dol_starter.pcad.yaml",
     ),
     pdf: Optional[Path] = typer.Option(
         None,

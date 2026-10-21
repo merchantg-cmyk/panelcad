@@ -27,7 +27,7 @@ from panelcad.theme import (
 
 
 def test_google_drive_and_long_windows_paths_round_trip() -> None:
-    short = r"G:\My Drive\Grok\PanelCAD\jobs\riverside pump.pcad.yaml"
+    short = r"G:\My Drive\PanelCAD\Projects\riverside pump.pcad.yaml"
     assert display_name(short) == "riverside pump.pcad.yaml"
     assert extended_windows_path(short) == short
     assert not extended_windows_path(short).startswith("\\\\?\\")
@@ -47,7 +47,7 @@ def test_google_drive_and_long_windows_paths_round_trip() -> None:
     assert display_name(unc) == "job.pcad.yaml"
 
     remember_project("\\\\?\\" + full)
-    remember_project("G:/My Drive/Grok/PanelCAD/jobs/riverside pump.pcad.yaml")
+    remember_project("G:/My Drive/PanelCAD/Projects/riverside pump.pcad.yaml")
     remember_project(short)
     assert recent_projects() == [short, full]
     assert project_presence(short) == "missing"
@@ -93,7 +93,7 @@ def test_recent_list_is_the_settings_file_not_auth_json() -> None:
     from panelcad.settings import settings_path
 
     set_theme("dark")
-    drive = r"G:\My Drive\Grok\PanelCAD\jobs\riverside pump.pcad.yaml"
+    drive = r"G:\My Drive\PanelCAD\Projects\riverside pump.pcad.yaml"
     remember_project(drive)
     path = settings_path()
     assert path.name == "settings.json"
@@ -156,7 +156,7 @@ def test_open_recent_menu_lists_opens_and_clears(
     copied = tmp_path / "copied.pcad.yaml"
     Session.create("Older").save(older)
     Session.create("Newer").save(newer)
-    ghost = r"G:\My Drive\Grok\PanelCAD\jobs\gone.pcad.yaml"
+    ghost = r"G:\My Drive\PanelCAD\Projects\gone.pcad.yaml"
 
     window = MainWindow(Session.create("Untitled"))
     window.show()
@@ -274,7 +274,7 @@ def test_start_page_recent_is_keyboard_accessible(tmp_path: Path) -> None:
     app = QApplication.instance() or QApplication([])
     job = tmp_path / "mcc-2.pcad.yaml"
     Session.create("MCC").save(job)
-    ghost = r"G:\My Drive\Grok\PanelCAD\jobs\gone.pcad.yaml"
+    ghost = r"G:\My Drive\PanelCAD\Projects\gone.pcad.yaml"
     remember_project(str(job))
     remember_project(ghost)
     window = MainWindow(None, show_start=True)
