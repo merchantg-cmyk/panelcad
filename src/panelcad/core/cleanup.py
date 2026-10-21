@@ -729,6 +729,31 @@ def clamp_working(sheet: Sheet, catalog: Catalog, skip: set[str] | None = None) 
     return n
 
 
+def _keeps_rungs(session: Session, sheet: Sheet) -> bool:
+    from panelcad.core.power_layout import count_rung_rows
+
+    return _series_reaches_both_rails(session, sheet) or count_rung_rows(sheet, session.catalog) >= 2
+
+
+def _reflow_rungs(sheet: Sheet, catalog: Catalog) -> int | None:
+    """Reflow built rungs; None (page untouched) when the reflow cannot read the page."""
+
+    from panelcad.core.power_layout import reflow_existing_rungs
+
+    saved = [(comp, comp.x, comp.y) for comp in sheet.components]
+    wires = [wire.model_copy(deep=True) for wire in sheet.wires]
+    try:
+        moved = reflow_existing_rungs(sheet, catalog)
+    except Exception:  # noqa: BLE001
+        # A symbol with no pins (notes, a title strip) breaks the reflow. Undo
+        # any partial move and let the older arrange path handle the page.
+        for comp, x, y in saved:
+            comp.x, comp.y = x, y
+        sheet.wires = wires
+        return None
+    return moved
+
+
 def cleanup_sheet(session: Session, sheet: Sheet) -> dict[str, Any]:
     catalog = session.catalog
     scaled = aligned = unstacked = 0
@@ -805,6 +830,11 @@ def cleanup_sheet(session: Session, sheet: Sheet) -> dict[str, Any]:
                 unstacked = powered + separate_symbol_overlaps(sheet, catalog, rung=False)
             elif layout_left_alone(sheet.id):
                 unstacked = 0
+            elif _keeps_rungs(session, sheet) and (reflowed := _reflow_rungs(sheet, catalog)) is not None:
+                # The circuit builder already drew rungs. arrange_schematic
+                # would string the longest path across one row and pile the
+                # rest through it. Pack the rows that are there instead.
+                unstacked = reflowed
             else:
                 arrange_schematic(sheet, catalog)
                 unstacked = unstack(sheet, catalog)
@@ -843,10 +873,340 @@ def cleanup_sheet(session: Session, sheet: Sheet) -> dict[str, Any]:
     }
 
 
+def _measured(sheet: Sheet) -> bool:
+    return sheet.kind == "schematic" and not is_io_sheet(sheet) and not is_layout_sheet(sheet)
+
+
+def _restore_project(session: Session, saved: Any) -> None:
+    project = session.project
+    for name in type(project).model_fields:
+        setattr(project, name, getattr(saved, name))
+
+
+def _split_over_dense(session: Session, sheet_id: str) -> list[str]:
+    """A page over the density limit is split before it is tidied.
+
+    Tidying a full page first packed it tighter, hid the over-full flag, and
+    put wires through symbols. The continuation pages are then cleaned one
+    at a time. Only a page that already has built rungs is split.
+    """
+
+    from panelcad.core.spacing import page_fullness
+
+    sheet = session.sheet(sheet_id)
+    if not _measured(sheet) or not page_fullness(sheet, session.catalog).get("over_dense"):
+        return [sheet_id]
+    if not _keeps_rungs(session, sheet):
+        # A rough placement is not a built page. Cleanup arranges it and
+        # pulls parts back inside the border instead.
+        return [sheet_id]
+    saved = session.project.model_copy(deep=True)
+    try:
+        result = session.split_sheet(sheet_id, apply=True)
+    except Exception:  # noqa: BLE001
+        # A page the splitter cannot handle (no ladder rails to feed, for
+        # example) is tidied as one page. Inside Cleanup's undo step a failed
+        # split is not rolled back for us, so put the project back here.
+        _restore_project(session, saved)
+        return [sheet_id]
+    pages = [str(page) for page in (result.get("pages") or []) if page]
+    if len(pages) > 1:
+        from panelcad.core.sheet_quality import CROSSING_ALLOWANCE, PRIMARY, sheet_quality
+
+        before = sheet_quality(saved.sheet(sheet_id), session.catalog, saved)
+        after = {key: 0 for key in PRIMARY}
+        for page in pages:
+            q = sheet_quality(session.sheet(page), session.catalog, session.project)
+            for key in PRIMARY:
+                after[key] += q[key]
+        cleared = after["overlaps"] < before["overlaps"]
+        allowance = CROSSING_ALLOWANCE * (len(pages) - 1) if cleared else 0
+        if (
+            after["overlaps"] > before["overlaps"]
+            or after["through"] > before["through"]
+            or after["crossings"] > before["crossings"] + allowance
+        ):
+            # Same rule as a tidy: the split may not add overlaps or wires
+            # through symbols, and adds crossings (feed arrows) only within
+            # the allowance and only when it clears an overlap. Otherwise
+            # keep the page whole.
+            _restore_project(session, saved)
+            return [sheet_id]
+    return pages or [sheet_id]
+
+
+def open_rung_gaps(sheet: Sheet, catalog: Catalog, *, gap: float = 2.0) -> int:
+    """Open the pitch where one rung's symbol sits on the rung above.
+
+    After a split the continuation page keeps the tight pitch of the full
+    page, so a Start button's operator lands on the hold-in contact drawn
+    under the rung above (PB6 on M2-13). Everything below the clash moves
+    down together, so every rung keeps its shape and its devices. Nothing
+    moves when the page has no room below.
+    """
+
+    if not _measured(sheet):
+        return 0
+    from panelcad.render.titleblock import working_rect
+
+    _wx, wy, _ww, wh = working_rect(sheet)
+    floor = wy + wh - 1.0
+    moved = 0
+    for _ in range(40):
+        boxes = {}
+        for comp in sheet.components:
+            try:
+                boxes[comp.id] = (comp, _aabb(sheet, catalog, comp))
+            except KeyError:
+                continue
+        hit = None
+        items = sorted(boxes.values(), key=lambda item: (item[1][1], item[0].id))
+        for i, (ca, ra) in enumerate(items):
+            for cb, rb in items[i + 1 :]:
+                if not _overlap(ra, rb, pad=-0.5):
+                    continue
+                upper, lower = ((ca, ra), (cb, rb))
+                if (ra[1] + ra[3]) > (rb[1] + rb[3]):
+                    upper, lower = lower, upper
+                dy = upper[1][3] - lower[1][1] + gap
+                if dy > 0:
+                    hit = (lower[1][1] - 0.01, upper[1][3], upper[0].id, dy)
+                    break
+            if hit:
+                break
+        if hit is None:
+            break
+        cut, wire_cut, keep, dy = hit
+        below = [item for item in boxes.values() if item[1][1] > cut and item[0].id != keep]
+        lowest = max((item[1][3] for item in below), default=cut)
+        if lowest + dy > floor:
+            break
+        for comp, _rect in below:
+            comp.y += dy
+        for wire in sheet.wires:
+            for point in wire.points:
+                if point.y > wire_cut:
+                    point.y += dy
+            for end in (wire.from_at, wire.to_at):
+                if end is not None and end.y > wire_cut:
+                    end.y += dy
+        moved += len(below)
+    return moved
+
+
+def open_column_gaps(sheet: Sheet, catalog: Catalog, *, gap: float = 2.0) -> int:
+    """Open a rung sideways where two symbols on it touch.
+
+    Everything right of the clash moves right together, short of the return
+    rail, so the rung keeps its order. Nothing moves when there is no room.
+    """
+
+    if not _measured(sheet):
+        return 0
+    from panelcad.core.ladder import rail_xs
+
+    _left_rail, right_rail = rail_xs(sheet)
+    limit = right_rail - 1.0
+    moved = 0
+    for _ in range(40):
+        boxes = {}
+        for comp in sheet.components:
+            try:
+                boxes[comp.id] = (comp, _aabb(sheet, catalog, comp))
+            except KeyError:
+                continue
+        hit = None
+        items = sorted(boxes.values(), key=lambda item: (item[1][0], item[0].id))
+        for i, (ca, ra) in enumerate(items):
+            for cb, rb in items[i + 1 :]:
+                if not _overlap(ra, rb, pad=-0.5):
+                    continue
+                left, right = ((ca, ra), (cb, rb))
+                if (ra[0] + ra[2]) > (rb[0] + rb[2]):
+                    left, right = right, left
+                dx = left[1][2] - right[1][0] + gap
+                if dx > 0:
+                    hit = (right[1][0] - 0.01, left[1][2], left[0].id, dx)
+                    break
+            if hit:
+                break
+        if hit is None:
+            break
+        cut, wire_cut, keep, dx = hit
+        beyond = [item for item in boxes.values() if item[1][0] > cut and item[0].id != keep]
+        furthest = max((item[1][2] for item in beyond), default=cut)
+        if furthest + dx > limit:
+            break
+        for comp, _rect in beyond:
+            comp.x += dx
+        for wire in sheet.wires:
+            for point in wire.points:
+                if wire_cut < point.x < right_rail - 0.5:
+                    point.x += dx
+            for end in (wire.from_at, wire.to_at):
+                if end is not None and wire_cut < end.x < right_rail - 0.5:
+                    end.x += dx
+        moved += len(beyond)
+    return moved
+
+
+def nudge_overlaps(session: Session, sheet: Sheet, *, gap: float = 2.0) -> int:
+    """Move one symbol of each clashing pair to the nearest free spot.
+
+    The smaller symbol moves up, down, left or right just far enough to
+    clear; the side that reads best (fewest overlaps, wires through symbols
+    and crossings) wins. Wires follow their pins, so the rest of the page
+    does not move.
+    """
+
+    from panelcad.core.sheet_quality import sheet_quality
+    from panelcad.render.titleblock import working_rect
+
+    catalog = session.catalog
+    wx, wy, ww, wh = working_rect(sheet)
+    moved = 0
+    tried: set[tuple[str, str]] = set()
+    for _ in range(20):
+        boxes = {}
+        for comp in sheet.components:
+            try:
+                boxes[comp.id] = (comp, _aabb(sheet, catalog, comp))
+            except KeyError:
+                continue
+        pair = None
+        items = sorted(boxes.values(), key=lambda item: (item[1][1], item[1][0], item[0].id))
+        for i, (ca, ra) in enumerate(items):
+            for cb, rb in items[i + 1 :]:
+                if _overlap(ra, rb, pad=-0.5) and (ca.id, cb.id) not in tried:
+                    pair = ((ca, ra), (cb, rb))
+                    break
+            if pair:
+                break
+        if pair is None:
+            break
+        tried.add((pair[0][0].id, pair[1][0].id))
+        area = lambda r: (r[2] - r[0]) * (r[3] - r[1])
+        (still, rs), (mover, rm) = sorted(pair, key=lambda item: (area(item[1]), item[0].id), reverse=True)
+        here = (mover.x, mover.y)
+        base = sheet_quality(sheet, catalog, session.project)
+        best = None
+        for dx, dy in (
+            (0.0, rs[3] - rm[1] + gap),
+            (0.0, rs[1] - rm[3] - gap),
+            (rs[2] - rm[0] + gap, 0.0),
+            (rs[0] - rm[2] - gap, 0.0),
+        ):
+            box = (rm[0] + dx, rm[1] + dy, rm[2] + dx, rm[3] + dy)
+            if box[0] < wx or box[1] < wy or box[2] > wx + ww or box[3] > wy + wh:
+                continue
+            if any(_overlap(box, r, pad=-0.5) for cid, (_c, r) in boxes.items() if cid != mover.id):
+                continue
+            mover.x, mover.y = here[0] + dx, here[1] + dy
+            q = sheet_quality(sheet, catalog, session.project)
+            mover.x, mover.y = here
+            if q["overlaps"] < base["overlaps"] and (best is None or _rank(q) < best[0]):
+                best = (_rank(q), dx, dy)
+        if best is not None:
+            mover.x, mover.y = here[0] + best[1], here[1] + best[2]
+            moved += 1
+    return moved
+
+
+def _rank(q: dict[str, int]) -> tuple[int, ...]:
+    from panelcad.core.sheet_quality import PRIMARY
+
+    return tuple(q[key] for key in PRIMARY) + (q["bends"],)
+
+
+def _guarded_cleanup(session: Session, sheet_id: str) -> dict[str, Any]:
+    """Clean one page and keep it only when no readability number got worse.
+
+    Tidies are tried from the drawing as built: the full Cleanup, and gap
+    openers that only move whole rows down or a rung's right-hand part
+    right, and a nudge that moves one clashing symbol clear. The best one
+    that passes sheet_quality.no_worse wins (the full Cleanup on a tie):
+    overlaps and wires through symbols never rise, and crossings rise by at
+    most CROSSING_ALLOWANCE only to clear an overlap. When none passes, the
+    page stays as built.
+
+    A rough placement with no built rungs is not guarded: there Cleanup is
+    what draws the ladder, as before.
+    """
+
+    from panelcad.core.sheet_quality import no_worse, sheet_quality
+    from panelcad.core.spacing import page_fullness
+
+    sheet = session.sheet(sheet_id)
+    if not _measured(sheet) or not _keeps_rungs(session, sheet):
+        return cleanup_sheet(session, sheet)
+    before = sheet_quality(sheet, session.catalog, session.project)
+    idle = {"sheet": sheet_id, "scaled": 0, "aligned": 0, "unstacked": 0, "clamped": 0, "spaced": 0}
+    saved = session.project.model_copy(deep=True)
+    best: tuple[tuple[int, ...], Any, dict[str, Any], dict[str, int]] | None = None
+    overflow: dict[str, Any] | None = None
+    for name in ("cleanup", "rung_gaps", "column_gaps", "both_gaps", "nudge"):
+        _restore_project(session, saved.model_copy(deep=True))
+        page = session.sheet(sheet_id)
+        try:
+            if name == "cleanup":
+                result = cleanup_sheet(session, page)
+                overflow = dict(session.project.properties.get("power_column_overflow") or {})
+            else:
+                moved = 0
+                if name in ("rung_gaps", "both_gaps"):
+                    moved += open_rung_gaps(page, session.catalog)
+                if name in ("column_gaps", "both_gaps"):
+                    moved += open_column_gaps(page, session.catalog)
+                if name == "nudge":
+                    moved += nudge_overlaps(session, page)
+                result = {**idle, "unstacked": moved}
+        except Exception:  # noqa: BLE001
+            # A page this tidy cannot read (a symbol with no pins, a rung the
+            # reflow does not recognise) just loses that candidate.
+            continue
+        after = sheet_quality(session.sheet(sheet_id), session.catalog, session.project)
+        if no_worse(after, before) and (best is None or _rank(after) < best[0]):
+            best = (_rank(after), session.project.model_copy(deep=True), {**result, "method": name}, after)
+    def _keep_overflow_note() -> None:
+        # Cleanup records branches that do not fit the power columns. That
+        # note is about the page, not about which tidy won, so keep it.
+        if overflow is None:
+            return
+        notes = dict(session.project.properties.get("power_column_overflow") or {})
+        if sheet_id in overflow:
+            notes[sheet_id] = overflow[sheet_id]
+        else:
+            notes.pop(sheet_id, None)
+        if notes:
+            session.project.properties["power_column_overflow"] = notes
+        else:
+            session.project.properties.pop("power_column_overflow", None)
+
+    if best is not None:
+        _restore_project(session, best[1])
+        _keep_overflow_note()
+        result = best[2]
+        result.update({"before": before, "after": best[3], "kept": True})
+        result.setdefault("density", page_fullness(session.sheet(sheet_id), session.catalog))
+        return result
+    # Every tidy made this page harder to read. The drawing as built wins.
+    _restore_project(session, saved)
+    _keep_overflow_note()
+    return {**idle, "before": before, "after": before, "kept": False,
+            "density": page_fullness(session.sheet(sheet_id), session.catalog)}
+
+
 def cleanup_project(session: Session, sheet_id: str | None = None) -> dict[str, Any]:
-    if sheet_id:
-        sheets = [session.sheet(sheet_id)]
-    else:
-        sheets = list(session.project.sheets)
-    results = [cleanup_sheet(session, sh) for sh in sheets]
-    return {"sheets": results, "count": len(results)}
+    wanted = [session.sheet(sheet_id).id] if sheet_id else [sh.id for sh in session.project.sheets]
+    order: list[str] = []
+    split: list[dict[str, Any]] = []
+    for sid in wanted:
+        pages = _split_over_dense(session, sid)
+        if len(pages) > 1:
+            split.append({"sheet": sid, "pages": pages})
+        order.extend(page for page in pages if page not in order)
+    results = [_guarded_cleanup(session, sid) for sid in order]
+    out: dict[str, Any] = {"sheets": results, "count": len(results)}
+    if split:
+        out["split"] = split
+    return out

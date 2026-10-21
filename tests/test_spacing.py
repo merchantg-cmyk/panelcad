@@ -382,9 +382,14 @@ def test_cleanup_does_not_push_the_estop_into_the_supply():
     from panelcad.core.spacing import _boxes_hit
 
     path = Path(__file__).resolve().parents[1] / "examples" / "dol_starter.pcad.yaml"
+    from panelcad.core.sheet_quality import CROSSING_ALLOWANCE, sheet_quality
+
     session = Session.open(path)
+    sheet = session.project.sheet("control")
+    before = sheet_quality(sheet, session.catalog, session.project)
     session.cleanup("control")
     sheet = session.project.sheet("control")
+    after = sheet_quality(sheet, session.catalog, session.project)
     boxes = [
         (comp.id, _body(session, "control", comp.id))
         for comp in sheet.components
@@ -393,6 +398,8 @@ def test_cleanup_does_not_push_the_estop_into_the_supply():
     for index, (name, box) in enumerate(boxes):
         for other, obox in boxes[index + 1 :]:
             assert not _boxes_hit(box, obox, pad=0.0), (name, other)
+    assert after["through"] <= before["through"]
+    assert after["crossings"] <= before["crossings"] + CROSSING_ALLOWANCE
     g1 = _body(session, "control", "G1")
     s0 = _body(session, "control", "S0")
     assert not _boxes_hit(g1, s0, pad=0.0)
