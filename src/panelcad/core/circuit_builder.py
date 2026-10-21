@@ -348,7 +348,10 @@ def insert_circuit_help() -> str:
         f"{INSERT_CIRCUIT_SCHEMA['description']} "
         f"Args: {', '.join(bits)}. {notes} "
         "kw<=4 selects the 9A contactor; kw>15 selects the 100A MCCB. "
-        "FLA defaults to NEC Table 430.250. Result includes standard, layout, and warnings."
+        "FLA defaults to NEC Table 430.250. Result includes standard, layout, and warnings. "
+        "Devices land on the spacing grid (minimum horizontal and vertical clearance) and "
+        "spread across the usable sheet width. Result.density is page fullness; when a page "
+        "is over that area limit, split_sheet apply=true continues it with off-page references."
     )
 
 
@@ -1006,7 +1009,6 @@ def build_motor_circuit(
     control_parts = [part for part in parts if part.page == "control"]
     io_parts = [part for part in parts if part.page == "io"]
     _park_control(session, power_parts)
-    _clear_existing(session, sheet, power_parts)
     control_sheet = None
     io_sheet = None
     if control_parts:
@@ -1045,7 +1047,20 @@ def build_motor_circuit(
         power_parts,
         lambda part: planned_rating_lines(part, motor_props, sizing),
     )
-    fit_warnings = _fit_with_overflow(session, sheet, power_parts)
+    from panelcad.core.spacing import distribute_power_columns
+
+    column_warnings = distribute_power_columns(session, sheet, power_parts)
+    staying = [part for part in power_parts if not getattr(part, "sheet_override", "")]
+    fit_warnings = list(column_warnings)
+    fit_warnings.extend(_fit_with_overflow(session, sheet, staying))
+    for dest_id in sorted({part.sheet_override for part in power_parts if part.sheet_override}):
+        fit_warnings.extend(
+            _fit_with_overflow(
+                session,
+                dest_id,
+                [part for part in power_parts if part.sheet_override == dest_id],
+            )
+        )
     if control_sheet and control_parts:
         from panelcad.core.circuit_extra import arrange_control_ladder
 
@@ -1178,6 +1193,23 @@ def build_motor_circuit(
     # Session, JSONL, and the CLI all read this. Layout warnings used to be
     # nested only, so a second insert that missed the sheet reported None.
     result["warnings"] = list((layout or {}).get("warnings") or [])
+    from panelcad.core.spacing import page_fullness
+
+    seen: list[str] = []
+    density: list[dict[str, Any]] = []
+    for part in parts:
+        sid = part.sheet_override or (
+            control_sheet if part.page == "control" and control_sheet else sheet
+        )
+        if not sid or sid in seen:
+            continue
+        seen.append(sid)
+        try:
+            row = page_fullness(session.sheet(sid), session.catalog)
+        except (KeyError, AttributeError):
+            continue
+        density.append(row)
+    result["density"] = density
     return result
 
 
@@ -2429,6 +2461,40 @@ def _wire(
     wires: list[dict[str, str]] = []
     pins = symbols.pins
 
+    def _part_home(pin_ref: str, sheet_id: str | None = None) -> str | None:
+        """Sheet this insert actually placed the device on.
+
+        The same tag can be a power symbol and a coil. A spilled column is
+        the one with sheet_override. A rail name has no component.
+        """
+
+        if "." not in str(pin_ref):
+            return None
+        ref = str(pin_ref).split(".", 1)[0]
+        matches = [part for part in parts if part.ref == ref]
+        if not matches:
+            return _schematic_home(session, pin_ref)
+
+        def _home(part: _Part) -> str:
+            if part.sheet_override:
+                return str(part.sheet_override)
+            if part.page == "control" and control_sheet:
+                return control_sheet
+            if part.page == "io" and part.sheet_override:
+                return str(part.sheet_override)
+            return sheet
+
+        if len(matches) == 1:
+            return _home(matches[0])
+        if sheet_id:
+            for part in matches:
+                if _home(part) == sheet_id:
+                    return sheet_id
+        overridden = [part for part in matches if part.sheet_override]
+        if len(overridden) == 1:
+            return _home(overridden[0])
+        return _schematic_home(session, pin_ref)
+
     def connect(
         frm: str,
         to: str,
@@ -2438,15 +2504,17 @@ def _wire(
         to_sheet: str | None = None,
     ) -> None:
         dest = sheet_id or sheet
-        # Overflow moves the lower half of a tall stack onto the next sheet.
-        # Power wires follow those symbols; a caller-chosen sheet_id still wins.
-        if sheet_id is None and not to_sheet:
-            home_from = _schematic_home(session, frm)
-            home_to = _schematic_home(session, to)
+        # Wire on the sheet that holds the symbol. A continuation column must
+        # not be wired back on the page it spilled from.
+        if not to_sheet:
+            home_from = _part_home(frm, sheet_id)
+            home_to = _part_home(to, sheet_id)
             if home_from and home_to and home_from != home_to:
                 dest = home_from
                 to_sheet = home_to
             elif home_from and home_from == home_to:
+                dest = home_from
+            elif home_from and not home_to:
                 dest = home_from
             elif home_to and not home_from:
                 dest = home_to

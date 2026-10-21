@@ -68,9 +68,30 @@ _NEMA_COVERS: dict[str, frozenset[str]] = {
 }
 
 
+# Size Enclosure offers this range. The stored target uses the same limits.
+FILL_TARGET_MIN = 0.40
+FILL_TARGET_MAX = 0.95
+# Do not walk from a wall box to the largest floor cabinet chasing the band.
+_MAX_STEP_AREA = 3.0
+
+
+def _as_fraction(value: Any) -> float:
+    """0.65 and 65 both mean 65 percent. Values above 1.5 are percents."""
+
+    number = float(value)
+    if number > 1.5:
+        number /= 100.0
+    return max(0.0, number)
+
+
 @dataclass
 class SizingOptions:
     spare_pct: float = 0.25
+    # Aim for this share of the back-panel area. The band is the acceptable fill.
+    # A tighter box steps up to the next real library size.
+    fill_target: float = 0.65
+    fill_min: float = 0.60
+    fill_max: float = 0.70
     duct_face_in: float = 2.0
     duct_depth_in: float = 3.0
     rail_to_duct_in: float = 1.0
@@ -92,6 +113,19 @@ class SizingOptions:
     # same rail. A separate control rail is only for when this is set, or when
     # the power rail has no room left.
     separate_control_rail: bool = False
+
+    def __post_init__(self) -> None:
+        self.spare_pct = _as_fraction(self.spare_pct)
+        self.fill_target = _as_fraction(self.fill_target)
+        self.fill_min = _as_fraction(self.fill_min)
+        self.fill_max = _as_fraction(self.fill_max)
+        if self.fill_min > self.fill_max:
+            self.fill_min, self.fill_max = self.fill_max, self.fill_min
+        # The dialog's 40–95% is stored as entered. It is not pulled back into 60–70%.
+        self.fill_target = min(FILL_TARGET_MAX, max(FILL_TARGET_MIN, self.fill_target))
+        if self.fill_target < self.fill_min - 1e-9 or self.fill_target > self.fill_max + 1e-9:
+            self.fill_min = max(FILL_TARGET_MIN, self.fill_target - 0.05)
+            self.fill_max = min(FILL_TARGET_MAX, self.fill_target + 0.05)
 
     @property
     def duct_face_mm(self) -> float:
@@ -116,6 +150,9 @@ class SizingOptions:
     def to_dict(self) -> dict[str, Any]:
         return {
             "spare_pct": self.spare_pct,
+            "fill_target": self.fill_target,
+            "fill_min": self.fill_min,
+            "fill_max": self.fill_max,
             "duct_face_in": self.duct_face_in,
             "duct_depth_in": self.duct_depth_in,
             "rail_to_duct_in": self.rail_to_duct_in,
@@ -1798,6 +1835,129 @@ def _placed_insert_frame(
     return box, items, far_x, far_y
 
 
+@dataclass
+class _Fit:
+    box: StandardEnclosure
+    items: list[LayoutItem]
+    packed_w: float
+    packed_h: float
+    packed_d: float
+    fill: float
+    height_spare: float
+
+
+def _panel_fill(packed_w: float, packed_h: float, box: StandardEnclosure) -> float:
+    area = max(box.panel_width_mm * box.panel_height_mm, 1.0)
+    return (max(packed_w, 0.0) * max(packed_h, 0.0)) / area
+
+
+def _height_spare_ratio(packed_h: float, box: StandardEnclosure) -> float:
+    return (box.panel_height_mm - packed_h) / max(packed_h, 1.0)
+
+
+def fill_headline(
+    *,
+    fill_ratio: float,
+    height_spare: float,
+    options: SizingOptions,
+    chosen_name: str,
+    chosen_catalog: str,
+    stepped_up: bool,
+    tight_name: str,
+) -> str:
+    """One sentence for the size that was chosen. Over 70% is never 'inside the band'."""
+
+    band = f"{options.fill_min:.0%}–{options.fill_max:.0%}"
+    name = chosen_catalog or chosen_name
+    over_band = fill_ratio > options.fill_max + 1e-6
+    under_band = fill_ratio + 1e-6 < options.fill_min
+    if over_band and not stepped_up:
+        return (
+            f"No larger library size within range of this pack. {name} is the closest fit "
+            f"at {fill_ratio:.0%} (over the {band} band)."
+        )
+    if over_band:
+        return (
+            f"Stepped up from {tight_name} to {name}. Panel fill is {fill_ratio:.0%}, "
+            f"still over the {band} band. No larger size in range lands inside it."
+        )
+    if stepped_up:
+        return (
+            f"Fill target {options.fill_target:.0%} (band {band}) plus {options.spare_pct:.0%} spare height. "
+            f"Stepped up from {tight_name} to {name} (panel fill {fill_ratio:.0%})."
+        )
+    if not chosen_catalog:
+        return (
+            "No confirmed catalog enclosure covers this pack. "
+            f"Using library size {chosen_name} (panel fill {fill_ratio:.0%}). Dimensions are not invented."
+        )
+    if under_band:
+        return (
+            f"Catalog {chosen_catalog} is the smallest confirmed box that covers the pack "
+            f"(panel fill {fill_ratio:.0%}, under the {band} target)."
+        )
+    return (
+        f"Catalog {chosen_catalog} is inside the {band} fill target "
+        f"(panel fill {fill_ratio:.0%}, spare height {height_spare:.0%})."
+    )
+
+
+def _fill_ok(rec: _Fit, options: SizingOptions) -> bool:
+    return rec.fill <= options.fill_max + 1e-6 and rec.height_spare + 1e-6 >= options.spare_pct
+
+
+def _pick_for_fill(fits: list[_Fit], options: SizingOptions) -> tuple[_Fit, _Fit, bool, bool]:
+    """Smallest geometric fit, then a nearby library size when that fit is too full.
+
+    Confirmed catalog rows win over an uncatalogued size of the same job.
+    The step stays on the same mount and within ``_MAX_STEP_AREA`` of the
+    tight box, so a wall pack does not become the largest floor cabinet.
+    When nothing in that range sits in the fill band, the closest fit is kept.
+    Returns (chosen, tightest, stepped_up, band_unreachable).
+    """
+
+    geometric = fits[0]
+    catalogued = [rec for rec in fits if str(rec.box.catalog or "").strip()]
+    pool = catalogued if catalogued else fits
+    tight = pool[0]
+    tight_area = max(tight.box.panel_width_mm * tight.box.panel_height_mm, 1.0)
+    mount = tight.box.mount
+    limited: list[_Fit] = []
+    for rec in pool:
+        area = rec.box.panel_width_mm * rec.box.panel_height_mm
+        if rec.box.mount != mount:
+            continue
+        if rec is not tight and area > tight_area * _MAX_STEP_AREA + 1.0:
+            continue
+        limited.append(rec)
+    if not limited:
+        limited = [tight]
+    in_band = [rec for rec in limited if _fill_ok(rec, options)]
+    unreachable = False
+    if in_band:
+        chosen = in_band[0]
+    else:
+        unreachable = True
+
+        def _band_distance(rec: _Fit) -> float:
+            if rec.fill > options.fill_max:
+                return rec.fill - options.fill_max
+            if rec.fill < options.fill_min:
+                return options.fill_min - rec.fill
+            return 0.0
+
+        chosen = min(
+            limited,
+            key=lambda rec: (
+                _band_distance(rec),
+                abs(rec.fill - options.fill_target),
+                rec.box.panel_width_mm * rec.box.panel_height_mm,
+            ),
+        )
+    stepped = chosen.box.id != geometric.box.id
+    return chosen, geometric, stepped, unreachable
+
+
 def recommend_enclosure(
     project: Project,
     catalog: Catalog,
@@ -1823,12 +1983,16 @@ def recommend_enclosure(
     items: list[LayoutItem] = []
     packed_w = packed_h = 0.0
     heat: dict[str, Any] = {}
+    tight_box: StandardEnclosure | None = None
+    stepped_up = False
+    band_unreachable = False
     # Geometric fits only. Candidates are smallest panel first. Each one is
     # re-packed to that subpanel's usable width: devices wrap onto another
-    # row, and a panel-mount part sits on whichever row has room. The first
-    # box whose panel covers that pack (width, height, and depth) wins.
-    # Heat is reported and does not jump the box. `separate_control_rail`
-    # still forces control onto its own rail.
+    # row, and a panel-mount part sits on whichever row has room. The tightest
+    # fit is the floor. When that panel is fuller than fill_max, or shorter
+    # than spare_pct of packed height, the next real library size is used.
+    # Confirmed catalog rows are preferred. Heat does not jump the box.
+    fits: list[_Fit] = []
     for box in _candidate_boxes(lib, opts):
         inner = usable_inner_width(box, opts)
         if max_part_w > inner + 1e-6:
@@ -1843,11 +2007,26 @@ def recommend_enclosure(
             or box.depth_mm + 1e-6 < trial_depth
         ):
             continue
-        chosen = box
-        items = trial_items
-        packed_w, packed_h, max_depth = trial_w, trial_h, trial_d
-        heat = heat_report(cabinet, box, opts)
-        break
+        far_w = max(trial_w, max((it.x + it.w for it in trial_items), default=trial_w))
+        far_h = max(trial_h, max((it.y + it.h for it in trial_items), default=trial_h) + opts.wall_gutter_mm)
+        fits.append(
+            _Fit(
+                box=box,
+                items=trial_items,
+                packed_w=far_w,
+                packed_h=far_h,
+                packed_d=trial_d,
+                fill=_panel_fill(far_w, far_h, box),
+                height_spare=_height_spare_ratio(far_h, box),
+            )
+        )
+    if fits:
+        picked, geometric, stepped_up, band_unreachable = _pick_for_fill(fits, opts)
+        chosen = picked.box
+        tight_box = geometric.box
+        items = picked.items
+        packed_w, packed_h, max_depth = picked.packed_w, picked.packed_h, picked.packed_d
+        heat = heat_report(cabinet, chosen, opts)
     if chosen is None:
         pool = _candidate_boxes(lib, opts)
         chosen = max(pool, key=lambda b: (b.panel_width_mm * b.panel_height_mm, b.depth_mm)) if pool else None
@@ -1885,22 +2064,28 @@ def recommend_enclosure(
         )
         stored_split = bool((project.properties.get("enclosure_sizing") or {}).get("separate_control_rail"))
         split_changed = bool(opts.separate_control_rail) != stored_split
-        if theoretical_misses_current and content_fits and not split_changed:
+        held_fill = _panel_fill(content_w, content_h, held)
+        held_spare = _height_spare_ratio(content_h, held)
+        held_meets_fill = held_fill <= opts.fill_max + 1e-6 and held_spare + 1e-6 >= opts.spare_pct
+        if theoretical_misses_current and content_fits and not split_changed and held_meets_fill:
             chosen = held
             items = held_items
             packed_w, packed_h = content_w, content_h
             max_depth = min(max_depth, held.depth_mm)
             heat = heat_report(cabinet, chosen, opts)
             keep_placed = True
+            stepped_up = False
+            band_unreachable = False
+            tight_box = held
 
-    # Spare is leftover back-panel height (future rows) and unused rail, not a wider box.
+    # Spare is leftover back-panel height. Together with the fill band it
+    # picks the next library size when the tightest panel is too full.
     need_w = max(packed_w, door_w)
     need_h = max(packed_h * (1.0 + spare), door_h)
     need_d = max(max_depth, opts.duct_depth_mm) + door_depth + opts.rail_to_duct_mm
 
-    # fit is geometric: the catalog panel covers the wrapped back-panel.
-    # Spare is reported. It does not pick a larger box.
-    # Heat does not change this.
+    # fit is geometric: the chosen library panel covers the wrapped back-panel.
+    # Heat does not change this. Fill and spare choose which library row.
     fit = bool(
         chosen is not None
         and chosen.panel_width_mm + 1e-6 >= packed_w
@@ -1919,6 +2104,21 @@ def recommend_enclosure(
     if chosen is not None and door_items:
         center_door_items(door_items, chosen.width_mm, chosen.height_mm)
     reasons = _reasons(cabinet, door, opts, packed_w, packed_h, chosen, fit, heat, door_clash, missing, units)
+    fill_ratio = _panel_fill(packed_w, packed_h, chosen) if chosen is not None else 0.0
+    height_spare = _height_spare_ratio(packed_h, chosen) if chosen is not None else 0.0
+    if chosen is not None:
+        reasons.insert(
+            0,
+            fill_headline(
+                fill_ratio=fill_ratio,
+                height_spare=height_spare,
+                options=opts,
+                chosen_name=chosen.id,
+                chosen_catalog=str(chosen.catalog or ""),
+                stepped_up=bool(stepped_up and tight_box is not None and tight_box.id != chosen.id),
+                tight_name=(tight_box.catalog or tight_box.id) if tight_box is not None else "the tight fit",
+            ),
+        )
     if keep_placed and chosen is not None:
         name = chosen.catalog or chosen.id
         reasons.insert(
@@ -1946,6 +2146,18 @@ def recommend_enclosure(
             "packed_width_mm": round(packed_w, 2),
             "packed_height_mm": round(packed_h, 2),
             "spare_pct": spare,
+        },
+        "fill": {
+            "ratio": round(fill_ratio, 3),
+            "target": opts.fill_target,
+            "min": opts.fill_min,
+            "max": opts.fill_max,
+            "height_spare": round(height_spare, 3),
+            "spare_pct": spare,
+            "stepped_up": stepped_up and not keep_placed,
+            "band_unreachable": band_unreachable and not keep_placed,
+            "tight_id": None if tight_box is None else tight_box.id,
+            "catalog": "" if chosen is None else chosen.catalog,
         },
         "reasons": reasons,
         "parts": [_part_row(p) for p in cabinet],
@@ -2079,6 +2291,9 @@ def _assumptions(options: SizingOptions, units: str) -> dict[str, Any]:
     return {
         "units": units,
         "spare_pct": options.spare_pct,
+        "fill_target": options.fill_target,
+        "fill_min": options.fill_min,
+        "fill_max": options.fill_max,
         "duct": f"{options.duct_face_in:g} × {options.duct_depth_in:g} in",
         "rail_to_duct_in": options.rail_to_duct_in,
         "wall_gutter_in": options.wall_gutter_in,

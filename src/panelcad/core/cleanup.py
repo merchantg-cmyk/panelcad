@@ -341,9 +341,18 @@ def orient_two_pin_flow(sheet: Sheet, catalog: Catalog, ref: str) -> bool:
             ys.append(other_c.y - comp.y)
     if not xs:
         return False
-    # The nearest device is the run this symbol belongs to. A long tap to
-    # another branch must not flip a vertical fuse flat, or the other way.
-    nearest = min(range(len(xs)), key=lambda index: (xs[index] * xs[index] + ys[index] * ys[index], index))
+    # The nearest device is the run this symbol belongs to. A nearby horizontal
+    # partner wins over a slightly closer branch below, so spreading a rung
+    # does not stand the contact up. A long tap still must not flip it.
+    ranked = sorted(range(len(xs)), key=lambda index: (xs[index] * xs[index] + ys[index] * ys[index], index))
+    nearest = ranked[0]
+    horizontal = [index for index in ranked if abs(xs[index]) + 4.0 >= abs(ys[index])]
+    if horizontal:
+        partner = horizontal[0]
+        near_d = xs[nearest] * xs[nearest] + ys[nearest] * ys[nearest]
+        part_d = xs[partner] * xs[partner] + ys[partner] * ys[partner]
+        if part_d <= near_d * 2.25:
+            nearest = partner
     dx = abs(xs[nearest])
     dy = abs(ys[nearest])
     want = 90 if dy > dx + 4.0 else 0
@@ -723,6 +732,7 @@ def clamp_working(sheet: Sheet, catalog: Catalog, skip: set[str] | None = None) 
 def cleanup_sheet(session: Session, sheet: Sheet) -> dict[str, Any]:
     catalog = session.catalog
     scaled = aligned = unstacked = 0
+    powered = 0
     if sheet.kind == "terminal":
         return {"sheet": sheet.id, "scaled": 0, "aligned": 0, "unstacked": 0, "clamped": 0}
     if is_generated_io_sheet(sheet):
@@ -802,14 +812,34 @@ def cleanup_sheet(session: Session, sheet: Sheet) -> dict[str, Any]:
     from panelcad.core.power_layout import layout_left_alone, unfitted_columns
 
     clamped = clamp_working(sheet, catalog, skip=unfitted_columns(sheet.id))
+    spaced = 0
+    from panelcad.core.power_layout import has_rotated_phase_stacks
+
+    # Power columns already share phase pins. Spreading that row pulls a
+    # breaker off its contactor. Ladder and plain schematic rungs still open up.
+    if (
+        not layout_left_alone(sheet.id)
+        and not powered
+        and not has_rotated_phase_stacks(sheet, catalog)
+        and sheet.kind in {"schematic", "io"}
+        and not is_generated_io_sheet(sheet)
+    ):
+        from panelcad.core.spacing import apply_spacing_grid
+
+        spaced = apply_spacing_grid(sheet, catalog)
     if not layout_left_alone(sheet.id):
         _clear_routes(sheet)
+    from panelcad.core.spacing import page_fullness
+
+    density = page_fullness(sheet, catalog)
     return {
         "sheet": sheet.id,
         "scaled": scaled,
         "aligned": aligned,
         "unstacked": unstacked,
         "clamped": clamped,
+        "spaced": spaced,
+        "density": density,
     }
 
 

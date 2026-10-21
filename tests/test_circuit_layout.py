@@ -759,19 +759,19 @@ def test_soft_starter_sits_on_the_row_that_fits():
     din = [item for item in items if item.get("kind") == "device" and item.get("role") == "din"]
     box = rec["enclosure"]
     assert rec["fit"] is True
-    assert box["id"] == "wall-30x24x10-n12"
-    assert box["height_in"] == 30
-    assert box["width_in"] == 24
+    # The 30×24 panel is over the fill target, so the sizer steps up to 36×30.
+    # That panel is wide enough for the starter to share the DIN row.
+    assert rec["fill"]["stepped_up"] is True
+    assert rec["fill"]["tight_id"] == "wall-30x24x10-n12"
+    assert box["id"] == "wall-36x30x10-n12"
+    assert box["height_in"] == 36
+    assert box["width_in"] == 30
     assert box["depth_in"] == 10
-    assert box["panel_width_mm"] == pytest.approx(533.4, abs=0.2)
-    assert box["panel_height_mm"] == pytest.approx(685.8, abs=0.2)
-    assert rec["needed"]["packed_width_mm"] == pytest.approx(490.0, abs=0.5)
-    assert rec["needed"]["packed_height_mm"] == pytest.approx(678.0, abs=0.5)
+    assert box["panel_width_mm"] == pytest.approx(685.8, abs=0.2)
+    assert box["panel_height_mm"] == pytest.approx(838.2, abs=0.2)
     assert box["panel_width_mm"] + 1e-6 >= rec["needed"]["packed_width_mm"]
     assert box["panel_height_mm"] + 1e-6 >= rec["needed"]["packed_height_mm"]
-    # 363 mm of DIN plus the airflow gap and the 80 mm starter is wider than the
-    # 30×24 usable width, so U1 is on the next row rather than a 36-wide box.
-    assert starter["y"] > max(item["y"] for item in din) + 20.0
+    assert abs(starter["y"] - max(item["y"] for item in din)) < 1.0
 
 
 def test_soft_starter_motor_records_internal_overload():
@@ -1005,11 +1005,13 @@ def test_plug_on_overload_stacks_under_its_contactor():
     assert overload["y"] > rail["y"] + rail["h"]
     assert supply["x"] - (contactor["x"] + contactor["w"]) == pytest.approx(20.0, abs=0.4)
     box = rec["enclosure"]
-    assert box["id"] == "wall-20x16x8-n12"
+    assert box["id"] == "ad-n412201608c"
+    assert box["catalog"] == "N412201608C"
+    assert rec["fill"]["stepped_up"] is True
     assert rec["needed"]["packed_width_mm"] == pytest.approx(277.5, abs=0.5)
     assert rec["needed"]["packed_height_mm"] == pytest.approx(328.8, abs=0.5)
-    assert box["panel_width_mm"] == pytest.approx(330.2, abs=0.2)
-    assert box["panel_height_mm"] == pytest.approx(431.8, abs=0.2)
+    assert box["panel_width_mm"] == pytest.approx(360.68, abs=0.2)
+    assert box["panel_height_mm"] == pytest.approx(462.28, abs=0.2)
     ducts = [item for item in rec["arrangement"]["items"] if item["kind"] == "duct"]
     for duct in ducts:
         assert not (
@@ -1219,7 +1221,10 @@ def test_second_insert_stays_inside_the_backplate(first, first_kw, second, secon
         _assert_on_drawn_backplate(session, sheet)
         _assert_clear(_boxes(session, sheet.id, legends=sheet.kind == "door_layout"))
     if result["warnings"]:
-        assert any("free backplate" in line or "door outline" in line for line in result["warnings"])
+        assert any(
+            "free backplate" in line or "door outline" in line or "drawing area" in line
+            for line in result["warnings"]
+        )
 
 
 @pytest.mark.confirm_generic_layout
@@ -1554,7 +1559,9 @@ def test_single_soft_starter_insert_refits_without_apply(standard: str, extra: d
     assert (round(enc.width_mm, 1), round(enc.height_mm, 1)) != (261.0, 348.0)
     assert enc.width_mm == pytest.approx(508.0, abs=1.0)
     assert enc.height_mm == pytest.approx(609.6, abs=1.0)
-    assert enc.depth_mm == pytest.approx(254.0, abs=1.0)
+    # N412242008C is the published 24×20. Its depth is 8.92 in, not a generic 10 in.
+    assert enc.depth_mm == pytest.approx(226.57, abs=1.0)
+    assert enc.catalog == "N412242008C"
     assert float(enc.draw_scale or 1.0) == pytest.approx(0.5, abs=0.02)
     starter = next(
         comp
@@ -1618,17 +1625,19 @@ def test_size_enclosure_keeps_the_box_the_insert_fits():
     assert float(sheet.enclosure.draw_scale) == pytest.approx(0.5, abs=0.02)
     rec = session.recommend_enclosure()
     box = rec["enclosure"]
-    assert box["id"] == "ad-n412242008c"
+    # The insert's 24×20 is over the fill target. Recommend steps up; it does not invent a size.
+    assert rec["fill"]["stepped_up"] is True
+    assert box["id"] == "wall-36x30x8-n12"
     assert box["panel_height_mm"] + 1e-6 >= rec["needed"]["packed_height_mm"]
     assert box["panel_width_mm"] + 1e-6 >= rec["needed"]["packed_width_mm"]
     _assert_strip_on_rails(session)
     applied = session.apply_enclosure(place_parts=True, recommendation=rec)
-    assert (applied.get("enclosure") or {}).get("id") == "ad-n412242008c"
+    assert (applied.get("enclosure") or {}).get("id") == "wall-36x30x8-n12"
     sheet = _panel_sheet(session)
     assert sheet.enclosure is not None
     _assert_strip_on_rails(session)
-    assert sheet.enclosure.catalog == "N412242008C"
-    assert float(sheet.enclosure.draw_scale) == pytest.approx(0.5, abs=0.02)
+    assert sheet.enclosure.catalog == ""
+    assert float(sheet.enclosure.draw_scale) == pytest.approx(1.0 / 3.0, abs=0.02)
     _assert_legible_first_insert(session, {"warnings": applied.get("warnings") or []})
 
 

@@ -284,6 +284,8 @@ OPS = {
     "layout_network",
     "layout_io",
     "cleanup",
+    "page_density",
+    "split_sheet",
     "set_pin_labels",
     "set_address",
     "update_check",
@@ -508,8 +510,8 @@ OP_HELP: dict[str, dict[str, str]] = {
     "set_enclosure": "Backplate size. Args: width_mm?, height_mm?, depth_mm?, x?, y?, name?, sheet?",
     "layout_from_schematic": "Pack unique schematic devices onto a panel_layout sheet. Keeps a sized enclosure and does not invent a box size. The page outline is not a size: result.needs_info is set and nothing is placed until the enclosure is sized. Generic/placeholder parts are left unplaced (result.unplaced). Args: sheet?",
     "recommend_cabinet": "Cabinet W×H×D from BOM incabinet=yes. Args: sheet?, apply?=false",
-    "size_enclosure": "Shop enclosure auto-size from footprints, duct, spare space, and heat. Never writes unless apply=true. Args: apply?=false, place_parts?=false, sheet?, spare_pct?, nema?, material?, ambient_c?, max_internal_c?, duct_face_in?, duct_depth_in?, separate_control_rail?=false",
-    "recommend_enclosure": "Same as size_enclosure with apply=false.",
+    "size_enclosure": "Shop enclosure auto-size from footprints, wire duct, spare space, and a 60-70% fill target. Picks the next real catalog size up when the tightest library box is too full. Never invents a width or height. Never writes unless apply=true. Args: apply?=false, place_parts?=false, sheet?, spare_pct?, fill_target?, fill_min?, fill_max?, nema?, material?, ambient_c?, max_internal_c?, duct_face_in?, duct_depth_in?, rail_to_duct_in?, wall_gutter_in?, separate_control_rail?=false",
+    "recommend_enclosure": "Same as size_enclosure with apply=false. Reports fill.ratio, fill.stepped_up, and the catalog number.",
     "apply_enclosure": "Write the recommended enclosure (one undo). Args: place_parts?=false, sheet?, same sizing args as size_enclosure.",
     "compute_heat_load": "Watt loss, temperature rise, and cooling for the enclosure already on the panel. Does not resize the box. Args: path? (PDF), ambient_c?, max_internal_c?, min_internal_c?, min_ambient_c?, component_max_c?, altitude_m?, outdoor?, mount?, material?, nema?. Estimates stay labeled ESTIMATE.",
     "set_ambient": "Store ambient and temperature limits used by the thermal report. Does not change enclosure size. One undo. Args: ambient_c?, max_internal_c?, min_internal_c?, min_ambient_c?, component_max_c?, altitude_m?, outdoor?, mount?, material?, nema?, estimates? {ref: watts}.",
@@ -532,7 +534,9 @@ OP_HELP: dict[str, dict[str, str]] = {
     "set_network": "Comms page header. Args: name?, medium?, protocol?, sheet?",
     "layout_network": "Place devices with matching ports on a network sheet. Does not invent IP addresses; an unknown IP stays blank or TBD. Args: sheet?, medium?",
     "layout_io": "Arrange PLC/I/O cards as ladder rungs. Args: sheet?",
-    "cleanup": "Unstack overlaps, scale field symbols to rungs, keep devices on the page. Args: sheet? (omit = all sheets). Run this after place/layout_io.",
+    "cleanup": "Unstack overlaps, spread devices on the spacing grid (minimum horizontal and vertical clearance, across the usable width), scale field symbols to rungs, keep devices on the page. Returns density (page fullness). Args: sheet? (omit = all sheets). Run this after place/layout_io.",
+    "page_density": "Devices and rungs against the usable-area limit for each page. Not a fixed count. over_dense recommends split_sheet. Args: sheet?. Does not write.",
+    "split_sheet": "When a schematic or I/O page is over the usable-area limit, recommend a continuation. apply=true moves the overflow onto the next page and ties the cut with off-page references. Args: sheet?, apply?=false.",
     "set_pin_labels": "OEM terminal captions. Args: ref, labels{id:text}, sheet?",
     "set_address": "IP and/or node/station. Args: ref, ip?, node?, sheet?",
     "update_check": (
@@ -1409,6 +1413,9 @@ class Agent:
         opts: dict[str, Any] = {}
         for key in (
             "spare_pct",
+            "fill_target",
+            "fill_min",
+            "fill_max",
             "duct_face_in",
             "duct_depth_in",
             "rail_to_duct_in",
@@ -1540,6 +1547,15 @@ class Agent:
 
     def op_cleanup(self, msg: dict[str, Any]) -> dict[str, Any]:
         return self._need().cleanup(msg.get("sheet") or msg.get("sheet_id"))
+
+    def op_page_density(self, msg: dict[str, Any]) -> dict[str, Any]:
+        return self._need().page_density(msg.get("sheet") or msg.get("sheet_id"))
+
+    def op_split_sheet(self, msg: dict[str, Any]) -> dict[str, Any]:
+        apply = msg.get("apply")
+        if isinstance(apply, str):
+            apply = apply.lower() in ("1", "true", "yes", "y", "on")
+        return self._need().split_sheet(msg.get("sheet") or msg.get("sheet_id"), apply=bool(apply))
 
     def op_set_pin_labels(self, msg: dict[str, Any]) -> dict[str, Any]:
         labels = msg.get("labels") or {}

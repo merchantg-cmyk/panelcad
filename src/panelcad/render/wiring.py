@@ -12,6 +12,7 @@ from panelcad.core.route import (
     present_route,
     expand_rect,
     path_as_obstacles,
+    path_hits_obstacles,
     needs_separation,
     pull_path,
     route_orthogonal,
@@ -47,6 +48,41 @@ def _symbol_size(sheet: Sheet, catalog: Catalog, comp: Component, device: Device
 
         return node_size(len(effective_ports(device, comp)))
     return (device.schematic_width, device.schematic_height)
+
+
+def _supply_interiors(sheet: Sheet, catalog: Catalog) -> list[Rect]:
+    """Supply and transformer bodies a straight rung must not cross.
+
+    Phase lanes and contact-to-contact rungs stay on the ladder route. A
+    supply drop that would run through the PSU is sent around the body.
+    """
+
+    boxes: list[Rect] = []
+    for comp in sheet.components:
+        try:
+            device = catalog.get(comp.library_id)
+        except KeyError:
+            continue
+        if not _is_supply_category(device.category):
+            continue
+        boxes.append(_interior_box(component_obstacle(sheet, catalog, comp, pad=0.0)))
+    return boxes
+
+
+def _is_supply_category(category: str) -> bool:
+    """Power supply and control transformer, by library category, not by id text."""
+
+    cat = str(category or "").lower()
+    return cat.startswith("power.supply") or cat.startswith("power.transformer")
+
+
+def _interior_box(rect: Rect, inset: float = 1.4) -> Rect:
+    """Shrink a symbol so a wire on the pin edge is not 'through' the body."""
+
+    x0, y0, x1, y1 = rect
+    if x1 - x0 <= inset * 2.2 or y1 - y0 <= inset * 2.2:
+        return rect
+    return (x0 + inset, y0 + inset, x1 - inset, y1 - inset)
 
 
 def component_obstacle(sheet: Sheet, catalog: Catalog, comp: Component, *, pad: float = 0.8) -> Rect:
@@ -539,7 +575,18 @@ def route_wire(
     from panelcad.core.ladder import is_iec_column_sheet, is_ladder_sheet, ladder_route
 
     if is_ladder_sheet(sheet, project) or is_generated_io_sheet(sheet) or is_iec_column_sheet(sheet, project):
-        return present_route(ladder_route(ax, ay, bx, by))
+        plain = ladder_route(ax, ay, bx, by)
+        # A supply or transformer sitting on a rung must not have the conductor
+        # through its body. Phase lanes stay on the straight ladder route.
+        blocks = _supply_interiors(sheet, catalog)
+        if blocks and path_hits_obstacles(plain, blocks, skip_ends=True):
+            wx, wy, ww, wh = working_rect(sheet)
+            bounds = (wx, wy + 4.0, wx + ww, wy + wh - 2.0)
+            walls = sheet_obstacles(sheet, catalog, skip=set())
+            return present_route(
+                route_orthogonal(ax, ay, a_side, bx, by, b_side, walls, bounds=bounds)
+            )
+        return present_route(plain)
     # Every symbol is an obstacle, including the two this wire lands on.
     # Stubs out of the pin are ignored (path_hits skip_ends); the body is not.
     obstacles = sheet_obstacles(sheet, catalog, skip=set())

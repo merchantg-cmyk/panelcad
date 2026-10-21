@@ -33,8 +33,9 @@ A backpanel or door part is layout-ready only with a real catalog footprint or a
 insert_circuit can take a manufacturer (AutomationDirect, LS Electric, Yaskawa) and assigns that vendor's published SKUs. secondary_manufacturer fills categories that brand does not make (omit it for the project vendor, else AutomationDirect; none leaves those symbols generic). Fallback rows are marked catalog_fallback. Generic symbols stay off the layout until a catalog part or confirmed envelope exists.
 On a ladder, a control relay (CR, MCR) is a coil circle (contactors.coil), not a 4-pole relay box.
 Do not place power.load_24v or notes.block. Those are not the device.
-Wire pin to pin, for example CR1.A2 to LT1.X1. The router keeps the path orthogonal.
-To size the box, call recommend_enclosure (does not write) then apply_enclosure.
+Wire pin to pin, for example CR1.A2 to LT1.X1. The router keeps the path orthogonal and off device bodies.
+Place devices on the spacing grid: minimum horizontal and vertical clearance, spread across the usable sheet width. Call cleanup after place or insert_circuit. page_density reports how full each page is. The limit is the usable area (max devices and rungs), not a fixed count. When a page is over that limit the Problems list warns. Call split_sheet with apply=true to continue on the next sheet with off-page references. Do not keep adding devices to an over-dense page.
+To size the box, call recommend_enclosure (does not write) then apply_enclosure. It aims for 60-70% back-panel fill plus the spare-space percent and wire-duct clearance, and picks the next real catalog enclosure up from the tightest fit. Never invent a width, height, or depth.
 For heat in the box that is already chosen, call compute_heat_load. set_ambient stores the temperatures. Neither resizes the enclosure.
 insert_circuit builds a motor starter (dol, vfd, reversing, star_delta, soft_starter, plc_motor).
 place_layout (default true) puts in-cabinet devices on the panel and operators on the door.
@@ -209,6 +210,7 @@ def place(
 
     On a panel_layout or door_layout sheet the part must already be layout-ready
     (assigned catalog dimensions, or a confirmed envelope). Do not invent sizes.
+    After a batch of places, call cleanup so symbols sit on the spacing grid.
     """
 
     lib = library_id.lower()
@@ -218,6 +220,31 @@ def place(
             "light, stack light, PLC, HMI, or drive that is drawn."
         )
     return _run(ctx, "place", library_id=library_id, x=x, y=y, ref=ref)
+
+
+@drawing_agent.tool
+def cleanup(ctx: RunContext[Drawing], sheet: str | None = None) -> dict[str, Any]:
+    """Spread devices on the spacing grid and report page fullness. Run after place or insert_circuit."""
+
+    return _run(ctx, "cleanup", sheet=sheet)
+
+
+@drawing_agent.tool
+def page_density(ctx: RunContext[Drawing], sheet: str | None = None) -> dict[str, Any]:
+    """How full each page is. max_devices and max_rungs come from the usable area. over_dense means split the page."""
+
+    return _run(ctx, "page_density", sheet=sheet)
+
+
+@drawing_agent.tool
+def split_sheet(
+    ctx: RunContext[Drawing],
+    sheet: str | None = None,
+    apply: bool = False,
+) -> dict[str, Any]:
+    """Recommend a continuation when the page is over the area limit. apply=true moves the overflow and adds off-page references."""
+
+    return _run(ctx, "split_sheet", sheet=sheet, apply=apply)
 
 
 @drawing_agent.tool
@@ -498,23 +525,29 @@ def recommend_enclosure(
     ctx: RunContext[Drawing],
     sheet: str | None = None,
     spare_pct: float | None = None,
+    fill_target: float | None = None,
     nema: str | None = None,
     material: str | None = None,
     ambient_c: float | None = None,
     max_internal_c: float | None = None,
+    duct_face_in: float | None = None,
+    rail_to_duct_in: float | None = None,
     separate_control_rail: bool | None = None,
 ) -> dict[str, Any]:
-    """Recommend a standard enclosure from footprints, duct, spare space, and heat. Does not write the project."""
+    """Recommend a catalog enclosure from footprints, wire duct, spare space, and a 60-70% fill target. Steps up to the next real catalog size when the tightest box is too full. Does not write the project. Never invents dimensions."""
 
     return _run(
         ctx,
         "recommend_enclosure",
         sheet=sheet,
         spare_pct=spare_pct,
+        fill_target=fill_target,
         nema=nema,
         material=material,
         ambient_c=ambient_c,
         max_internal_c=max_internal_c,
+        duct_face_in=duct_face_in,
+        rail_to_duct_in=rail_to_duct_in,
         separate_control_rail=separate_control_rail,
     )
 
@@ -525,13 +558,16 @@ def apply_enclosure(
     sheet: str | None = None,
     place_parts: bool = False,
     spare_pct: float | None = None,
+    fill_target: float | None = None,
     nema: str | None = None,
     material: str | None = None,
     ambient_c: float | None = None,
     max_internal_c: float | None = None,
+    duct_face_in: float | None = None,
+    rail_to_duct_in: float | None = None,
     separate_control_rail: bool | None = None,
 ) -> dict[str, Any]:
-    """Write the recommended enclosure as one undo. Set place_parts to lay out the shop arrangement."""
+    """Write the recommended enclosure as one undo. Uses the fill target and duct clearance. Set place_parts to lay out the shop arrangement."""
 
     return _run(
         ctx,
@@ -539,10 +575,13 @@ def apply_enclosure(
         sheet=sheet,
         place_parts=place_parts,
         spare_pct=spare_pct,
+        fill_target=fill_target,
         nema=nema,
         material=material,
         ambient_c=ambient_c,
         max_internal_c=max_internal_c,
+        duct_face_in=duct_face_in,
+        rail_to_duct_in=rail_to_duct_in,
         separate_control_rail=separate_control_rail,
     )
 
@@ -815,7 +854,7 @@ def insert_circuit(
         ),
     ] = False,
 ) -> dict[str, Any]:
-    """Insert a motor circuit on the schematic. place_layout also fills the panel and door without moving parts already there. When manufacturer is set, assign that vendor's published catalog SKUs. secondary_manufacturer fills categories that brand does not make."""
+    """Insert a motor circuit on the schematic. Power columns and control rungs use the spacing grid and spread across the sheet. density reports page fullness; split_sheet when a page is over the area limit. place_layout also fills the panel and door without moving parts already there. When manufacturer is set, assign that vendor's published catalog SKUs. secondary_manufacturer fills categories that brand does not make."""
 
     return _run(
         ctx,

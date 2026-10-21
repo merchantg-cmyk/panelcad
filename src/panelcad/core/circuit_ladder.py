@@ -102,6 +102,37 @@ def _part_pin_x(session: Any, part: _Part, pin_id: str) -> float:
     return float(part.x) + float(device.pin(pin_id).x)
 
 
+def _contact_origins(
+    session: Any,
+    fresh: list[_Part],
+    cursor: float,
+    right: float,
+    output: _Part | None,
+    placed: set[int],
+    free_span: bool,
+) -> list[float]:
+    """Pack a rung, then share leftover width so contacts are not bunched at the rail."""
+
+    if not fresh:
+        return []
+    if not free_span or len(fresh) < 2:
+        origins: list[float] = []
+        x = cursor
+        for part in fresh:
+            origins.append(x)
+            x += _body(session, part)[0] + CONTACT_GAP
+        return origins
+    from panelcad.core.spacing import MIN_H_MM, spread_row
+
+    widths = [_body(session, part)[0] for part in fresh]
+    gap = max(CONTACT_GAP, MIN_H_MM)
+    reserve = RAIL_PAD
+    if output is not None and id(output) not in placed:
+        reserve = _body(session, output)[0] + RAIL_PAD + gap
+    limit = right - reserve
+    return spread_row(cursor, limit, widths, gap)
+
+
 def layout_rungs(
     session: Any,
     sheet_id: str,
@@ -197,7 +228,8 @@ def layout_rungs(
                 if other.x - 2.0 <= cursor <= other.x + ow + 2.0:
                     cursor = other.x + ow + CONTACT_GAP
         rung_bottom = pin_y
-        for part in fresh:
+        origins = _contact_origins(session, fresh, cursor, right, output, placed, span_lo is None)
+        for index, part in enumerate(fresh):
             device = _device(session, part.library_id)
             width, height = _size(device)
             pin = part.align_pin or next((p.id for p in device.pins if p.side == "left"), device.pins[0].id)
@@ -205,7 +237,7 @@ def layout_rungs(
             # A column contact arrives rotated 90°. The ladder origin is the unrotated body.
             part.rotation = 0
             part.scale = 1.0
-            part.x = cursor
+            part.x = origins[index] if index < len(origins) else cursor
             if span_lo is not None and span_hi is not None:
                 part.x = min(max(span_lo + 2.0, part.x), max(span_lo + 1.0, span_hi - 2.0 - width))
             part.y = pin_y - _pin_y(device, pin)
@@ -706,11 +738,12 @@ def _offpage_to_rail(
     dest_sheet: str,
     rail: str,
     net: str,
+    rung_y: float | None = None,
 ) -> None:
     """Off-page link from a supply pin to a rail on another control sheet."""
 
     from panelcad.core.cleanup import sheet_number
-    from panelcad.core.ladder import iec_rail_ys, is_iec_column_sheet, rail_xs
+    from panelcad.core.ladder import is_iec_column_sheet
     from panelcad.render.sheet import parse_pin_ref, pin_world
 
     link = f"{home}:{pin_ref}|{dest_sheet}:{rail}"
@@ -725,7 +758,7 @@ def _offpage_to_rail(
     px, py = pin_world(comp, device.pin(pin_id))
     src_no = sheet_number(session.project.sheets, home) or 1
     dst_no = sheet_number(session.project.sheets, dest_sheet) or 1
-    sx, sy, sw, sh = working_rect(src)
+    rung = float(py if rung_y is None else rung_y)
     hidden = {
         "hide_tag": True,
         "in_panel": False,
@@ -735,14 +768,19 @@ def _offpage_to_rail(
         "link": link,
         "role": "supply_feed",
     }
+    hot = str(dest.rail_hot or "")
+    side = "left" if rail == hot else "right"
+    if is_iec_column_sheet(dest) or is_iec_column_sheet(src):
+        side = "top" if rail == hot else "bottom"
     to_ref = session.next_ref("iec.connection.offpage", home)
-    session.place(
+    seat_offpage_arrow(
+        session,
+        home,
         "iec.connection.offpage",
-        ref=to_ref,
-        x=min(px + 10.0, sx + sw - 12.0),
-        y=min(max(py - 2.0, sy + 2.0), sy + sh - 8.0),
-        sheet_id=home,
-        snap=False,
+        to_ref,
+        rung_y=rung,
+        along=px,
+        side=side,
         properties={
             **hidden,
             "tag": net,
@@ -754,25 +792,15 @@ def _offpage_to_rail(
     )
     session.wire(pin_ref, f"{to_ref}.A", net=net, sheet_id=home)
 
-    wx, wy, ww, wh = working_rect(dest)
-    if is_iec_column_sheet(dest):
-        hot_y, ret_y = iec_rail_ys(dest)
-        y = hot_y + 6.0 if rail == str(dest.rail_hot or "") else ret_y - 8.0
-        x = wx + 8.0
-    else:
-        left, right = rail_xs(dest)
-        y = wy + 8.0
-        x = left + 2.0 if rail == str(dest.rail_hot or "") else right - 10.0
-    x = min(max(x, wx + 1.0), wx + ww - 12.0)
-    y = min(max(y, wy + 1.0), wy + wh - 8.0)
     from_ref = session.next_ref("iec.connection.offpage_from", dest_sheet)
-    session.place(
+    seat_offpage_arrow(
+        session,
+        dest_sheet,
         "iec.connection.offpage_from",
-        ref=from_ref,
-        x=x,
-        y=y,
-        sheet_id=dest_sheet,
-        snap=False,
+        from_ref,
+        rung_y=rung,
+        along=px,
+        side=side,
         properties={
             **hidden,
             "tag": net,
@@ -783,6 +811,699 @@ def _offpage_to_rail(
         },
     )
     session.wire(f"{from_ref}.A", rail, net=net, sheet_id=dest_sheet)
+
+
+def link_split_feeds(
+    session: Any,
+    source: Any,
+    dest: Any,
+    crossing: list[tuple[str, str, str, str]],
+) -> list[dict[str, Any]]:
+    """One off-page pair per rail, and one pair for a contact that feeds several rungs.
+
+    A pair sits in the free row under the devices, at the rail the net uses.
+    Feed wires stay in that row or on a device's own pin stub. They do not
+    run across a rung that is already drawn.
+    """
+
+    from panelcad.core.ladder import is_iec_column_sheet
+
+    if is_iec_column_sheet(source) or is_iec_column_sheet(dest):
+        return _link_each_crossing(session, source, dest, crossing)
+    return _link_ladder_feeds(session, source, dest, crossing)
+
+
+def _link_each_crossing(
+    session: Any,
+    source: Any,
+    dest: Any,
+    crossing: list[tuple[str, str, str, str]],
+) -> list[dict[str, Any]]:
+    """IEC columns keep one arrow per crossing. Ladder sheets share a rail pair."""
+
+    links: list[dict[str, Any]] = []
+    shared: dict[str, int] = {}
+    for keep, move, _net, kind in crossing:
+        if kind == "device":
+            shared[keep] = shared.get(keep, 0) + 1
+    for left, right, net, kind in crossing:
+        if kind == "rail":
+            _offpage_to_rail(
+                session, dest.id, left, source.id, right, net or right, rung_y=_ref_pin_y(session, dest, left)
+            )
+            links.append({"from": left, "to": right, "to_sheet": source.id, "net": net, "kind": "rail"})
+            continue
+        stay_y = _ref_pin_y(session, source, left)
+        move_y = _ref_pin_y(session, dest, right)
+        src_y = move_y if shared.get(left, 0) > 1 and move_y is not None else stay_y
+        links.append(
+            session.wire_offpage(
+                left,
+                right,
+                net=net or None,
+                from_sheet=source.id,
+                to_sheet=dest.id,
+                label=net or None,
+                src_rung_y=src_y,
+                dst_rung_y=move_y,
+            )
+        )
+    return links
+
+
+def _link_ladder_feeds(
+    session: Any,
+    source: Any,
+    dest: Any,
+    crossing: list[tuple[str, str, str, str]],
+) -> list[dict[str, Any]]:
+    from collections import defaultdict
+
+    rails: dict[str, list[str]] = defaultdict(list)
+    fans: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    singles: list[tuple[str, str, str]] = []
+    for keep, move, net, kind in crossing:
+        if kind == "rail":
+            rails[move].append(keep)
+            continue
+        fans[keep].append((move, net))
+    for keep, moves in list(fans.items()):
+        if len(moves) == 1:
+            move, net = moves[0]
+            singles.append((keep, move, net))
+            del fans[keep]
+
+    links: list[dict[str, Any]] = []
+    hot = str(dest.rail_hot or source.rail_hot or "")
+    ret = str(dest.rail_return or source.rail_return or "")
+    for rail, pins in rails.items():
+        for pin in pins:
+            session.wire(pin, rail, net=rail or None, sheet_id=dest.id)
+        links.append(_link_rail_pair(session, source, dest, rail, hot))
+    for keep, moves in fans.items():
+        side_rail = _fan_rail(session, source, keep, hot, ret)
+        for move, _net in moves:
+            session.wire(move, side_rail, net=side_rail or None, sheet_id=dest.id)
+        links.append(_link_fan_pair(session, source, dest, keep, side_rail, moves[0][1]))
+    for keep, move, net in singles:
+        stay_y = _ref_pin_y(session, source, keep)
+        move_y = _ref_pin_y(session, dest, move)
+        links.append(
+            session.wire_offpage(
+                keep,
+                move,
+                net=net or None,
+                from_sheet=source.id,
+                to_sheet=dest.id,
+                label=net or None,
+                src_rung_y=stay_y,
+                dst_rung_y=move_y,
+            )
+        )
+    return links
+
+
+def _ref_pin_y(session: Any, sheet: Any, pin_ref: str) -> float | None:
+    if "." not in str(pin_ref):
+        return None
+    from panelcad.render.sheet import parse_pin_ref, pin_world
+
+    try:
+        cid, pid = parse_pin_ref(pin_ref)
+        comp = sheet.component(cid)
+        _px, py = pin_world(comp, session.catalog.get(comp.library_id).pin(pid))
+    except (KeyError, ValueError):
+        return None
+    return float(py)
+
+
+def _fan_rail(session: Any, sheet: Any, pin_ref: str, hot: str, ret: str) -> str:
+    """The rail on the same side of the sheet as this shared contact."""
+
+    from panelcad.render.sheet import parse_pin_ref
+
+    wx, _wy, ww, _wh = working_rect(sheet)
+    try:
+        cid, _pid = parse_pin_ref(pin_ref)
+        comp = sheet.component(cid)
+    except (KeyError, ValueError):
+        return hot or ret
+    if float(comp.x) <= wx + ww / 2.0:
+        return hot or ret
+    return ret or hot
+
+
+def _link_rail_pair(session: Any, source: Any, dest: Any, rail: str, hot: str) -> dict[str, Any]:
+    """Tie one rail across the two sheets with a single arrow at each end."""
+
+    from panelcad.core.cleanup import sheet_number
+
+    side = "left" if rail == hot else "right"
+    src_no = sheet_number(session.project.sheets, source.id) or 1
+    dst_no = sheet_number(session.project.sheets, dest.id) or 1
+    hidden = _feed_props(f"{source.id}:rail:{rail}|{dest.id}:rail:{rail}")
+    # TO on the sheet that already has the rail, FROM on the continuation.
+    _place_rail_arrow(
+        session,
+        source,
+        "iec.connection.offpage",
+        side=side,
+        rail=rail,
+        callout=f"TO {dst_no}",
+        props={**hidden, "tag": rail, "dest_sheet": dest.id, "dest_ref": rail, "dest_pin": ""},
+        role="supply_feed",
+    )
+    _place_rail_arrow(
+        session,
+        dest,
+        "iec.connection.offpage_from",
+        side=side,
+        rail=rail,
+        callout=f"FROM {src_no}",
+        props={**hidden, "tag": rail, "dest_sheet": source.id, "dest_ref": rail, "dest_pin": ""},
+        role="supply_feed",
+    )
+    return {"from": rail, "to": rail, "to_sheet": dest.id, "net": rail, "kind": "rail"}
+
+
+def _link_fan_pair(
+    session: Any,
+    source: Any,
+    dest: Any,
+    keep: str,
+    rail: str,
+    net: str,
+) -> dict[str, Any]:
+    """One arrow for a contact that used to feed every moved rung."""
+
+    from panelcad.core.cleanup import sheet_number
+    from panelcad.core.geometry import Point
+    from panelcad.render.sheet import parse_pin_ref, pin_world
+
+    src_no = sheet_number(session.project.sheets, source.id) or 1
+    dst_no = sheet_number(session.project.sheets, dest.id) or 1
+    cid, pid = parse_pin_ref(keep)
+    comp = source.component(cid)
+    device = session.catalog.get(comp.library_id)
+    px, py = pin_world(comp, device.pin(pid))
+    hidden = _feed_props(f"{source.id}:{keep}|{dest.id}:rail:{rail}")
+    origin_y = _feed_origin_y(source, session.catalog)
+    channel = _clear_drop_x(source, session.catalog, float(px), float(py), origin_y + 6.0)
+    to_ref = session.next_ref("iec.connection.offpage", source.id)
+    session.place(
+        "iec.connection.offpage",
+        ref=to_ref,
+        x=channel + 4.0,
+        y=origin_y,
+        sheet_id=source.id,
+        snap=False,
+        properties={
+            **hidden,
+            "tag": net or rail,
+            "callout": f"TO {dst_no} / {rail}",
+            "dest_sheet": dest.id,
+            "dest_ref": rail,
+            "dest_pin": "",
+            "role": "to",
+        },
+    )
+    arrow = source.component(to_ref)
+    pin_x, pin_y = pin_world(arrow, session.catalog.get(arrow.library_id).pin("A"))
+    wire = session.wire(keep, f"{to_ref}.A", net=net or rail, sheet_id=source.id)
+    wire.points = [Point(x=channel, y=float(py)), Point(x=channel, y=float(pin_y))]
+    _place_rail_arrow(
+        session,
+        dest,
+        "iec.connection.offpage_from",
+        side="left" if rail == str(dest.rail_hot or "") else "right",
+        rail=rail,
+        callout=f"FROM {src_no} / {rail}",
+        props={
+            **hidden,
+            "tag": rail,
+            "dest_sheet": source.id,
+            "dest_ref": cid,
+            "dest_pin": pid,
+        },
+        role="from",
+    )
+    return {"from": keep, "to": rail, "to_sheet": dest.id, "net": net or rail, "kind": "fan"}
+
+
+def _feed_props(link: str) -> dict[str, Any]:
+    return {
+        "hide_tag": True,
+        "in_panel": False,
+        "incabinet": False,
+        "mount": "none",
+        "din_rail": False,
+        "link": link,
+    }
+
+
+def _place_rail_arrow(
+    session: Any,
+    sheet: Any,
+    library_id: str,
+    *,
+    side: str,
+    rail: str,
+    callout: str,
+    props: dict[str, Any],
+    role: str,
+) -> None:
+    """Park an arrow on the rail in the free row and tie its pin to that rail."""
+
+    from panelcad.core.geometry import Point
+    from panelcad.core.ladder import rail_xs
+    from panelcad.render.sheet import pin_world
+
+    symbol = session.catalog.get(library_id)
+    width = float(symbol.schematic_width or 32.0)
+    pin = symbol.pin("A")
+    origin_y = _feed_origin_y(sheet, session.catalog)
+    wx, wy, ww, _wh = working_rect(sheet)
+    left, right = rail_xs(sheet)
+    if side == "right":
+        # Pin on the right edge of a FROM arrow lands on the return rail.
+        # A TO arrow's pin is on the left, so its body ends at the rail and the
+        # stub jogs through the clear band above the arrow.
+        if float(pin.x) > width / 2.0:
+            x = right - width
+        else:
+            x = min(right, wx + ww) - width
+    else:
+        x = max(left, wx) - (0.0 if float(pin.x) < width / 2.0 else float(pin.x))
+        if x < wx + 0.4:
+            x = wx + 0.4
+    ref = session.next_ref(library_id, sheet.id)
+    session.place(
+        library_id,
+        ref=ref,
+        x=x,
+        y=origin_y,
+        sheet_id=sheet.id,
+        snap=False,
+        properties={**props, "callout": callout, "role": role},
+    )
+    comp = sheet.component(ref)
+    pin_x, pin_y = pin_world(comp, session.catalog.get(comp.library_id).pin("A"))
+    rail_x = right if side == "right" else left
+    wire = session.wire(f"{ref}.A", rail, net=rail or None, sheet_id=sheet.id)
+    if abs(float(pin_x) - rail_x) <= 0.8:
+        return
+    # Leave the pin away from the arrow body, then cross to the rail above it.
+    band_y = max(origin_y - 4.0, wy + 1.0)
+    away = -3.0 if float(pin.x) < width / 2.0 else 3.0
+    out_x = float(pin_x) + away
+    wire.points = [Point(x=out_x, y=float(pin_y)), Point(x=out_x, y=band_y)]
+    wire.to_at = Point(x=rail_x, y=band_y)
+
+
+def _feed_origin_y(sheet: Any, catalog: Any) -> float:
+    """Top of an arrow in the open band under the last device."""
+
+    from panelcad.core.spacing import _body_box
+
+    _wx, wy, _ww, wh = working_rect(sheet)
+    height = 12.0
+    bottom = wy + 12.0
+    for comp in sheet.components:
+        if "offpage" in (comp.library_id or ""):
+            continue
+        try:
+            box = _body_box(comp, catalog.get(comp.library_id))
+        except KeyError:
+            continue
+        bottom = max(bottom, box[3])
+    origin = bottom + 8.0
+    if origin + height > wy + wh - 0.6:
+        origin = wy + wh - height - 0.6
+    return origin
+
+
+def _clear_drop_x(sheet: Any, catalog: Any, pin_x: float, y0: float, y1: float) -> float:
+    """A vertical channel beside the pin that misses every symbol."""
+
+    from panelcad.core.spacing import _body_box
+
+    boxes = []
+    for comp in sheet.components:
+        if "offpage" in (comp.library_id or ""):
+            continue
+        try:
+            boxes.append(_body_box(comp, catalog.get(comp.library_id)))
+        except KeyError:
+            continue
+    lo, hi = (y0, y1) if y0 <= y1 else (y1, y0)
+
+    def clear(x: float) -> bool:
+        for box in boxes:
+            if x < box[0] - 1.5 or x > box[2] + 1.5:
+                continue
+            if hi < box[1] - 0.4 or lo > box[3] + 0.4:
+                continue
+            return False
+        return True
+
+    for step in range(1, 24):
+        candidate = float(pin_x) + step * 2.0
+        if clear(candidate):
+            return candidate
+    for step in range(1, 12):
+        candidate = float(pin_x) - step * 2.0
+        if clear(candidate):
+            return candidate
+    return float(pin_x) + 4.0
+
+
+def seat_offpage_arrow(
+    session: Any,
+    sheet_id: str,
+    library_id: str,
+    ref: str,
+    *,
+    rung_y: float,
+    side: str,
+    properties: dict[str, Any],
+    along: float | None = None,
+) -> Any:
+    """Park one off-page arrow on its rung, at the rail, inside the border.
+
+    ``side`` is ``left`` or ``right`` on a ladder, ``top`` or ``bottom`` on an
+    IEC column. A second arrow for the same rung steps inward, then devices
+    that still cover the arrow move off it.
+    """
+
+    from panelcad.core.ladder import iec_rail_ys, rail_xs
+    from panelcad.core.spacing import _body_box, _boxes_hit
+
+    sheet = session.sheet(sheet_id)
+    symbol = session.catalog.get(library_id)
+    width = float(symbol.schematic_width or 32.0)
+    height = float(symbol.schematic_height or 12.0)
+    pin = symbol.pin("A")
+    wx, wy, ww, wh = working_rect(sheet)
+    x, y = _rail_arrow_origin(
+        sheet,
+        width,
+        height,
+        float(pin.x),
+        float(pin.y),
+        rung_y,
+        side,
+        along,
+        rail_xs,
+        iec_rail_ys,
+    )
+    x, y = _step_clear_of_arrows(
+        sheet, session.catalog, x, y, width, height, side, _body_box, _boxes_hit
+    )
+    session.place(
+        library_id,
+        ref=ref,
+        x=x,
+        y=y,
+        sheet_id=sheet_id,
+        snap=False,
+        properties=properties,
+    )
+    _open_arrow_slot(sheet, session.catalog, ref, side, _body_box, _boxes_hit)
+    return sheet.component(ref)
+
+
+def _rail_arrow_origin(
+    sheet: Any,
+    width: float,
+    height: float,
+    pin_x: float,
+    pin_y: float,
+    rung_y: float,
+    side: str,
+    along: float | None,
+    rail_xs: Any,
+    iec_rail_ys: Any,
+) -> tuple[float, float]:
+    """Origin that puts the arrow body on the rail and the pin on the rung."""
+
+    wx, wy, ww, wh = working_rect(sheet)
+    if side in {"top", "bottom"}:
+        hot_y, ret_y = iec_rail_ys(sheet)
+        rail_y = hot_y if side == "top" else ret_y
+        y = rail_y - pin_y
+        x = (float(along) if along is not None else wx + ww / 2.0) - width / 2.0
+    else:
+        left, right = rail_xs(sheet)
+        y = float(rung_y) - pin_y
+        if side == "right":
+            edge = min(right, wx + ww)
+            x = edge - width
+        else:
+            edge = max(left, wx)
+            x = edge - pin_x
+    x = min(max(x, wx + 0.4), wx + ww - width - 0.4)
+    y = min(max(y, wy + 0.4), wy + wh - height - 0.4)
+    return x, y
+
+
+def _step_clear_of_arrows(
+    sheet: Any,
+    catalog: Any,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    side: str,
+    body_box: Any,
+    boxes_hit: Any,
+) -> tuple[float, float]:
+    """Keep a new arrow off arrows already on this sheet, still at the rail."""
+
+    wx, wy, ww, wh = working_rect(sheet)
+    gap = 2.0
+    for _ in range(10):
+        box = (x, y, x + width, y + height)
+        blocked = None
+        for comp in sheet.components:
+            if "offpage" not in (comp.library_id or ""):
+                continue
+            try:
+                other = body_box(comp, catalog.get(comp.library_id))
+            except KeyError:
+                continue
+            if boxes_hit(box, other, pad=0.4):
+                blocked = other
+                break
+        if blocked is None:
+            return x, y
+        if side == "right":
+            shifted = blocked[0] - width - gap
+            if shifted >= wx + 0.4:
+                x = shifted
+                continue
+        elif side == "left":
+            shifted = blocked[2] + gap
+            if shifted + width <= wx + ww - 0.4:
+                x = shifted
+                continue
+        elif side == "bottom":
+            shifted = blocked[1] - height - gap
+            if shifted >= wy + 0.4:
+                y = shifted
+                continue
+        else:
+            shifted = blocked[3] + gap
+            if shifted + height <= wy + wh - 0.4:
+                y = shifted
+                continue
+        nudged = y + height + gap
+        if nudged + height <= wy + wh - 0.4:
+            y = nudged
+        else:
+            y = max(wy + 0.4, y - height - gap)
+    return x, y
+
+
+def _open_arrow_slot(
+    sheet: Any,
+    catalog: Any,
+    arrow_id: str,
+    side: str,
+    body_box: Any,
+    boxes_hit: Any,
+) -> None:
+    """Slide devices off the arrow. The arrow stays on its rung at the rail."""
+
+    wx, wy, ww, wh = working_rect(sheet)
+    gap = 1.6
+    horizontal = side in {"left", "right"}
+    inward = -1.0 if side in {"right", "bottom"} else 1.0
+    arrow = sheet.component(arrow_id)
+    try:
+        symbol = catalog.get(arrow.library_id)
+    except KeyError:
+        return
+    height = float(symbol.schematic_height or 12.0)
+    moved: set[str] = set()
+    for _ in range(48):
+        arrow_box = body_box(arrow, symbol)
+        if not _push_off_arrow(
+            sheet, catalog, arrow_box, body_box, boxes_hit, horizontal, inward, wx, wy, ww, wh, gap, moved
+        ) and not _separate_device_pairs(
+            sheet, catalog, body_box, boxes_hit, horizontal, inward, wx, wy, ww, wh, gap, moved
+        ):
+            if not _arrow_hits_device(sheet, catalog, arrow_box, body_box, boxes_hit):
+                return
+            # The rung is full. Step this arrow along the rail and try once more.
+            if horizontal:
+                bumped = arrow.y + height + gap
+                if bumped + height > wy + wh - 0.4:
+                    bumped = arrow.y - height - gap
+                if bumped < wy + 0.4 or bumped + height > wy + wh - 0.4:
+                    return
+                arrow.y = bumped
+            else:
+                width = float(symbol.schematic_width or 32.0)
+                bumped = arrow.x + width + gap
+                if bumped + width > wx + ww - 0.4:
+                    bumped = arrow.x - width - gap
+                if bumped < wx + 0.4 or bumped + width > wx + ww - 0.4:
+                    return
+                arrow.x = bumped
+            continue
+
+
+def _arrow_hits_device(
+    sheet: Any,
+    catalog: Any,
+    arrow_box: tuple[float, float, float, float],
+    body_box: Any,
+    boxes_hit: Any,
+) -> bool:
+    for comp in sheet.components:
+        if "offpage" in (comp.library_id or ""):
+            continue
+        try:
+            box = body_box(comp, catalog.get(comp.library_id))
+        except KeyError:
+            continue
+        if boxes_hit(arrow_box, box, pad=0.2):
+            return True
+    return False
+
+
+def _push_off_arrow(
+    sheet: Any,
+    catalog: Any,
+    arrow_box: tuple[float, float, float, float],
+    body_box: Any,
+    boxes_hit: Any,
+    horizontal: bool,
+    inward: float,
+    wx: float,
+    wy: float,
+    ww: float,
+    wh: float,
+    gap: float,
+    moved: set[str],
+) -> bool:
+    """Move the first device that covers the arrow. True when something moved."""
+
+    for comp in sheet.components:
+        if "offpage" in (comp.library_id or ""):
+            continue
+        try:
+            box = body_box(comp, catalog.get(comp.library_id))
+        except KeyError:
+            continue
+        if not boxes_hit(arrow_box, box, pad=0.2):
+            continue
+        if horizontal and inward < 0:
+            shift = box[2] - (arrow_box[0] - gap)
+            if shift > 0 and box[0] - shift >= wx + 0.2:
+                comp.x -= shift
+                moved.add(comp.id)
+                return True
+        elif horizontal:
+            shift = (arrow_box[2] + gap) - box[0]
+            if shift > 0 and box[2] + shift <= wx + ww - 0.2:
+                comp.x += shift
+                moved.add(comp.id)
+                return True
+        elif inward < 0:
+            shift = box[3] - (arrow_box[1] - gap)
+            if shift > 0 and box[1] - shift >= wy + 0.2:
+                comp.y -= shift
+                moved.add(comp.id)
+                return True
+        else:
+            shift = (arrow_box[3] + gap) - box[1]
+            if shift > 0 and box[3] + shift <= wy + wh - 0.2:
+                comp.y += shift
+                moved.add(comp.id)
+                return True
+    return False
+
+
+def _separate_device_pairs(
+    sheet: Any,
+    catalog: Any,
+    body_box: Any,
+    boxes_hit: Any,
+    horizontal: bool,
+    inward: float,
+    wx: float,
+    wy: float,
+    ww: float,
+    wh: float,
+    gap: float,
+    moved: set[str],
+) -> bool:
+    """Push a neighbor out of a device that was slid off the arrow."""
+
+    devices: list[tuple[Any, tuple[float, float, float, float]]] = []
+    for comp in sheet.components:
+        if "offpage" in (comp.library_id or ""):
+            continue
+        try:
+            devices.append((comp, body_box(comp, catalog.get(comp.library_id))))
+        except KeyError:
+            continue
+    for index, (comp, box) in enumerate(devices):
+        for other, obox in devices[index + 1 :]:
+            if comp.id not in moved and other.id not in moved:
+                continue
+            if not boxes_hit(box, obox, pad=0.2):
+                continue
+            if horizontal and inward < 0:
+                left, left_box, right_box = (comp, box, obox) if box[0] <= obox[0] else (other, obox, box)
+                shift = left_box[2] + gap - right_box[0]
+                if shift > 0 and left_box[0] - shift >= wx + 0.2:
+                    left.x -= shift
+                    moved.add(left.id)
+                    return True
+            elif horizontal:
+                right, right_box, left_box = (comp, box, obox) if box[2] >= obox[2] else (other, obox, box)
+                shift = left_box[2] + gap - right_box[0]
+                if shift > 0 and right_box[2] + shift <= wx + ww - 0.2:
+                    right.x += shift
+                    moved.add(right.id)
+                    return True
+            elif inward < 0:
+                upper, upper_box, lower_box = (comp, box, obox) if box[1] <= obox[1] else (other, obox, box)
+                shift = upper_box[3] + gap - lower_box[1]
+                if shift > 0 and upper_box[1] - shift >= wy + 0.2:
+                    upper.y -= shift
+                    moved.add(upper.id)
+                    return True
+            else:
+                lower, lower_box, upper_box = (comp, box, obox) if box[3] >= obox[3] else (other, obox, box)
+                shift = upper_box[3] + gap - lower_box[1]
+                if shift > 0 and lower_box[3] + shift <= wy + wh - 0.2:
+                    lower.y += shift
+                    moved.add(lower.id)
+                    return True
+    return False
 
 
 def route_rail_captions(session: Any, sheet_id: str | None) -> None:

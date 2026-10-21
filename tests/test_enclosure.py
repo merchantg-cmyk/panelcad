@@ -92,33 +92,35 @@ def test_smallest_standard_box_fits_din_row():
     packed_w = rec["needed"]["packed_width_mm"]
     packed_h = rec["needed"]["packed_height_mm"]
     spare = float(rec["needed"]["spare_pct"])
-    # main d639fc7 required the catalog panel to cover needed height, and
-    # needed height is packed height times (1 + spare). That check cannot
-    # come back. Spare is leftover back-panel height for a future row: this
-    # DIN row packs to 257.8 mm and 257.8 × 1.25 is 322 mm, which is taller
-    # than the smallest wall panel that already covers the row (259 mm,
-    # ad-n412121206c). Using spare to pick the box would jump that row to a
-    # larger cabinet. The same rule keeps a star-delta + reversing insert on
-    # N412242008C: the placed layout fits its 564 mm panel, and
-    # placed × 1.25 does not. needed.height still reports the spare target.
+    # needed.height still reports packed height times (1 + spare). The box
+    # itself is the smallest confirmed catalog row whose panel covers the
+    # pack and meets the fill band plus spare height. A tight 12×12 that
+    # covers the row with almost no leftover height steps up one library size.
     assert rec["needed"]["height_mm"] + 1e-6 >= packed_h * (1.0 + spare)
     assert box["panel_width_mm"] + 1e-6 >= packed_w
     assert box["panel_height_mm"] + 1e-6 >= packed_h
     assert box["depth_mm"] + 1e-6 >= rec["needed"]["depth_mm"]
-    from panelcad.core.enclosure import _candidate_boxes
-    from panelcad.library.enclosures import load_enclosures
-    from panelcad.core.enclosure import options_from_defaults
+    assert box["catalog"], box["id"]
+    fill = rec["fill"]
+    assert fill["target"] == 0.65
+    if fill["stepped_up"]:
+        assert fill["tight_id"] and fill["tight_id"] != box["id"]
+    else:
+        from panelcad.core.enclosure import _candidate_boxes, options_from_defaults
+        from panelcad.library.enclosures import load_enclosures
 
-    options = options_from_defaults(rec["options"])
-    for cand in _candidate_boxes(load_enclosures(), options):
-        if cand.id == box["id"]:
-            break
-        covers = (
-            cand.panel_width_mm + 1e-6 >= packed_w
-            and cand.panel_height_mm + 1e-6 >= packed_h
-            and cand.depth_mm + 1e-6 >= rec["needed"]["depth_mm"]
-        )
-        assert not covers, cand.id
+        options = options_from_defaults(rec["options"])
+        for cand in _candidate_boxes(load_enclosures(), options):
+            if cand.id == box["id"]:
+                break
+            if not cand.catalog:
+                continue
+            covers = (
+                cand.panel_width_mm + 1e-6 >= packed_w
+                and cand.panel_height_mm + 1e-6 >= packed_h
+                and cand.depth_mm + 1e-6 >= rec["needed"]["depth_mm"]
+            )
+            assert not covers, cand.id
     # A couple of DIN modules should not jump to a floor-mount cabinet.
     assert box["mount"] == "wall"
     assert box["height_in"] <= 24

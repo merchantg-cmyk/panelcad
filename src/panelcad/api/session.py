@@ -1375,6 +1375,8 @@ class Session:
         from_sheet: str | None = None,
         to_sheet: str,
         label: str | None = None,
+        src_rung_y: float | None = None,
+        dst_rung_y: float | None = None,
     ) -> dict[str, Any]:
         """Wire a pin on this page to a pin on another page via matching TO / FROM arrows."""
         from panelcad.core.cleanup import sheet_number
@@ -1414,44 +1416,68 @@ class Session:
 
         op_src_id = self.next_ref("iec.connection.offpage", src.id)
         op_dst_id = self.next_ref("iec.connection.offpage_from", dest.id)
-        src_x = RIGHT_X if leaving_right else LEFT_X - 4.0
-        dst_x = LEFT_X if leaving_right else RIGHT_X
-        self.place(
-            "iec.connection.offpage",
-            ref=op_src_id,
-            x=src_x,
-            y=ay - 6.0,
-            sheet_id=src.id,
-            properties={
-                "tag": cap,
-                "callout": f"TO {dst_no} / {dst_cid}",
-                "dest_sheet": dest.id,
-                "dest_title": dest.title,
-                "dest_ref": dst_cid,
-                "dest_pin": dst_pid,
-                "link": link,
-                "role": "to",
-            },
-            snap=False,
-        )
-        self.place(
-            "iec.connection.offpage_from",
-            ref=op_dst_id,
-            x=dst_x,
-            y=dy - 6.0,
-            sheet_id=dest.id,
-            properties={
-                "tag": cap,
-                "callout": f"FROM {src_no} / {src_cid}",
-                "dest_sheet": src.id,
-                "dest_title": src.title,
-                "dest_ref": src_cid,
-                "dest_pin": src_pid,
-                "link": link,
-                "role": "from",
-            },
-            snap=False,
-        )
+        src_props = {
+            "tag": cap,
+            "callout": f"TO {dst_no} / {dst_cid}",
+            "dest_sheet": dest.id,
+            "dest_title": dest.title,
+            "dest_ref": dst_cid,
+            "dest_pin": dst_pid,
+            "link": link,
+            "role": "to",
+        }
+        dst_props = {
+            "tag": cap,
+            "callout": f"FROM {src_no} / {src_cid}",
+            "dest_sheet": src.id,
+            "dest_title": src.title,
+            "dest_ref": src_cid,
+            "dest_pin": src_pid,
+            "link": link,
+            "role": "from",
+        }
+        if is_io_sheet(src) or is_io_sheet(dest):
+            src_x = RIGHT_X if leaving_right else LEFT_X - 4.0
+            dst_x = LEFT_X if leaving_right else RIGHT_X
+            self.place(
+                "iec.connection.offpage",
+                ref=op_src_id,
+                x=src_x,
+                y=ay - 6.0,
+                sheet_id=src.id,
+                properties=src_props,
+                snap=False,
+            )
+            self.place(
+                "iec.connection.offpage_from",
+                ref=op_dst_id,
+                x=dst_x,
+                y=dy - 6.0,
+                sheet_id=dest.id,
+                properties=dst_props,
+                snap=False,
+            )
+        else:
+            from panelcad.core.circuit_ladder import seat_offpage_arrow
+
+            seat_offpage_arrow(
+                self,
+                src.id,
+                "iec.connection.offpage",
+                op_src_id,
+                rung_y=float(ay if src_rung_y is None else src_rung_y),
+                side="right" if leaving_right else "left",
+                properties=src_props,
+            )
+            seat_offpage_arrow(
+                self,
+                dest.id,
+                "iec.connection.offpage_from",
+                op_dst_id,
+                rung_y=float(dy if dst_rung_y is None else dst_rung_y),
+                side="left" if leaving_right else "right",
+                properties=dst_props,
+            )
         w1 = self.wire(frm, f"{op_src_id}.A", net=cap, sheet_id=src.id, label=cap)
         w2 = self.wire(f"{op_dst_id}.A", to, net=cap, sheet_id=dest.id, label=cap)
         return {
@@ -1619,6 +1645,155 @@ class Session:
         from panelcad.core.cleanup import cleanup_project
 
         return cleanup_project(self, sheet_id)
+
+    def page_density(self, sheet_id: str | None = None) -> dict[str, Any]:
+        """Devices and rungs against the usable-area limit. Does not write."""
+
+        from panelcad.core.spacing import project_density
+
+        return project_density(self.project, self.catalog, sheet_id)
+
+    def split_sheet(self, sheet_id: str | None = None, apply: bool = False) -> dict[str, Any]:
+        """Recommend a continuation page, or move the overflow when apply is true.
+
+        Crossing conductors become off-page references. The limit is the usable
+        area of the sheet, not a fixed device count.
+        """
+
+        from panelcad.core.spacing import split_plan
+
+        sheet = self.sheet(sheet_id)
+        plan = split_plan(sheet, self.catalog)
+        base = sheet.id
+        continuation = f"{base}-2"
+        n = 2
+        while any(other.id == continuation for other in self.project.sheets):
+            n += 1
+            continuation = f"{base}-{n}"
+        plan["continuation"] = continuation if plan.get("move") else ""
+        plan["applied"] = False
+        if not apply or not plan.get("move"):
+            return plan
+
+        def _run() -> dict[str, Any]:
+            from panelcad.core.spacing import page_fullness, split_plan as plan_for
+
+            pages = [sheet.id]
+            links: list[dict[str, Any]] = []
+            guard = 0
+            while guard < 8:
+                guard += 1
+                progressed = False
+                for sid in list(pages):
+                    page = self.sheet(sid)
+                    if not page_fullness(page, self.catalog).get("over_dense"):
+                        continue
+                    step = plan_for(page, self.catalog)
+                    if not step.get("move"):
+                        continue
+                    base = page.id
+                    continuation = f"{base}-2"
+                    n = 2
+                    while any(other.id == continuation for other in self.project.sheets):
+                        n += 1
+                        continuation = f"{base}-{n}"
+                    step["continuation"] = continuation
+                    result = self._apply_split(page.id, step)
+                    if result.get("continuation") and result["continuation"] not in pages:
+                        pages.append(result["continuation"])
+                    links.extend(result.get("offpage") or [])
+                    progressed = True
+                if not progressed:
+                    break
+            from panelcad.core.spacing import page_fullness as fullness
+
+            return {
+                "applied": True,
+                "sheet": sheet.id,
+                "pages": pages,
+                "continuation": pages[-1] if len(pages) > 1 else "",
+                "offpage": links,
+                "density": [fullness(self.sheet(sid), self.catalog) for sid in pages],
+                "over_dense": [
+                    sid for sid in pages if fullness(self.sheet(sid), self.catalog).get("over_dense")
+                ],
+            }
+
+        return self._undoable("split_sheet", f"split {sheet.id}", _run)
+
+    def _apply_split(self, sheet_id: str, plan: dict[str, Any]) -> dict[str, Any]:
+        from panelcad.render.titleblock import working_rect
+
+        sheet = self.sheet(sheet_id)
+        move_ids = set(plan.get("move") or [])
+        moving = [comp for comp in sheet.components if comp.id in move_ids]
+        if not moving:
+            plan["applied"] = False
+            return plan
+        title = f"{sheet.title or sheet.id} (cont.)"
+        dest = self.add_sheet(str(plan["continuation"]), title=title, kind=sheet.kind, make_active=False)
+        dest.drawing_style = sheet.drawing_style
+        dest.rail_hot = sheet.rail_hot
+        dest.rail_return = sheet.rail_return
+        dest.standard = sheet.standard
+        dest.description = f"Continuation of {sheet.id}"
+
+        def _owner(end: str) -> str | None:
+            ref = str(end).split(".", 1)[0]
+            if any(comp.id == ref for comp in sheet.components) or ref in move_ids:
+                return ref
+            return None
+
+        stay_wires = []
+        moved_wires = []
+        crossing: list[tuple[str, str, str, str]] = []
+        for wire in list(sheet.wires):
+            ends = (wire.frm, wire.to)
+            owners = [_owner(end) for end in ends]
+            device_owners = [owner for owner in owners if owner]
+            rail_ends = [end for end, owner in zip(ends, owners, strict=True) if owner is None]
+            net = str(wire.net or wire.number or "")
+            # A moved pin landed on a shared rail. Reference that rail; do not
+            # copy it onto the continuation as if it were a new source.
+            if rail_ends and device_owners and all(owner in move_ids for owner in device_owners):
+                device_end = next(end for end, owner in zip(ends, owners, strict=True) if owner in move_ids)
+                crossing.append((device_end, rail_ends[0], net, "rail"))
+                continue
+            owner_set = set(device_owners)
+            if not owner_set or owner_set.isdisjoint(move_ids):
+                stay_wires.append(wire)
+                continue
+            if owner_set <= move_ids:
+                moved_wires.append(wire)
+                continue
+            keep_end = wire.frm if _owner(wire.frm) not in move_ids else wire.to
+            move_end = wire.to if keep_end == wire.frm else wire.frm
+            crossing.append((keep_end, move_end, net, "device"))
+        sheet.wires = stay_wires
+        sheet.components = [comp for comp in sheet.components if comp.id not in move_ids]
+        _wx, wy, _ww, _wh = working_rect(dest)
+        top = min(float(comp.y) for comp in moving)
+        dy = (wy + 18.0) - top
+        for comp in moving:
+            comp.y = float(comp.y) + dy
+            dest.components.append(comp)
+        for wire in moved_wires:
+            wire.points = []
+            dest.wires.append(wire)
+        from panelcad.core.circuit_ladder import link_split_feeds
+
+        links = link_split_feeds(self, sheet, dest, crossing)
+        from panelcad.core.spacing import page_fullness
+
+        plan = dict(plan)
+        plan["applied"] = True
+        plan["continuation"] = dest.id
+        plan["offpage"] = links
+        plan["density"] = [
+            page_fullness(sheet, self.catalog),
+            page_fullness(dest, self.catalog),
+        ]
+        return plan
 
     def delete_component(self, ref: str, sheet_id: str | None = None) -> None:
         sheet = self.sheet(sheet_id)
@@ -6495,6 +6670,7 @@ class Session:
         target = [self.sheet(sheet_id)] if sheet_id else list(self.project.sheets)
         total = len(self.project.sheets)
         from panelcad.reconstruct.service import status as reconstruct_status
+        from panelcad.core.spacing import page_fullness
 
         return {
             "name": self.project.name,
@@ -6519,6 +6695,7 @@ class Session:
                     "components": self.list_components(s.id),
                     "wires": self.list_wires(s.id),
                     "rails": self.list_rails(s.id),
+                    "density": page_fullness(s, self.catalog),
                     "enclosure": s.enclosure.model_dump() if s.enclosure else None,
                     "network": s.network.model_dump() if s.network else None,
                 }

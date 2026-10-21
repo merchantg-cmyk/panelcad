@@ -121,7 +121,37 @@ class SizeEnclosureDialog(QDialog):
         self.spare.setDecimals(0)
         self.spare.setValue(25)
         self.spare.setSuffix(" %")
+        self.spare.setToolTip("Minimum leftover back-panel height, as a percent of the packed height.")
         form.addRow("Spare space", self.spare)
+        from panelcad.core.enclosure import FILL_TARGET_MAX, FILL_TARGET_MIN
+
+        self.fill_target = QDoubleSpinBox()
+        self.fill_target.setRange(FILL_TARGET_MIN * 100.0, FILL_TARGET_MAX * 100.0)
+        self.fill_target.setSingleStep(5.0)
+        self.fill_target.setDecimals(0)
+        self.fill_target.setValue(65)
+        self.fill_target.setSuffix(" %")
+        self.fill_target.setToolTip(
+            "Aim for this share of the back-panel area (default 60–70%). "
+            "A tighter fit steps up to the next real catalog size."
+        )
+        form.addRow("Fill target", self.fill_target)
+        self.duct_face = QDoubleSpinBox()
+        self.duct_face.setRange(0.0, 6.0)
+        self.duct_face.setSingleStep(0.5)
+        self.duct_face.setDecimals(1)
+        self.duct_face.setValue(2.0)
+        self.duct_face.setSuffix(" in")
+        self.duct_face.setToolTip("Wire-duct face on the back panel.")
+        form.addRow("Wire duct", self.duct_face)
+        self.rail_clear = QDoubleSpinBox()
+        self.rail_clear.setRange(0.0, 4.0)
+        self.rail_clear.setSingleStep(0.25)
+        self.rail_clear.setDecimals(2)
+        self.rail_clear.setValue(1.0)
+        self.rail_clear.setSuffix(" in")
+        self.rail_clear.setToolTip("Clearance from a DIN rail to the wire duct.")
+        form.addRow("Rail to duct", self.rail_clear)
         self.ambient = QDoubleSpinBox()
         self.ambient.setRange(-20.0, 80.0)
         self.ambient.setSuffix(" °C")
@@ -185,6 +215,13 @@ class SizeEnclosureDialog(QDialog):
             if stored.get("spare_pct") is not None:
                 raw = float(stored["spare_pct"])
                 self.spare.setValue(raw * 100.0 if raw <= 1.0 else raw)
+            if stored.get("fill_target") is not None:
+                raw = float(stored["fill_target"])
+                self.fill_target.setValue(raw * 100.0 if raw <= 1.5 else raw)
+            if stored.get("duct_face_in") is not None:
+                self.duct_face.setValue(float(stored["duct_face_in"]))
+            if stored.get("rail_to_duct_in") is not None:
+                self.rail_clear.setValue(float(stored["rail_to_duct_in"]))
             if stored.get("ambient_c") is not None:
                 self.ambient.setValue(float(stored["ambient_c"]))
             if stored.get("max_internal_c") is not None:
@@ -194,6 +231,9 @@ class SizeEnclosureDialog(QDialog):
         self.separate_control.toggled.connect(self.recalculate)
         self.material.currentIndexChanged.connect(self.recalculate)
         self.spare.valueChanged.connect(self.recalculate)
+        self.fill_target.valueChanged.connect(self.recalculate)
+        self.duct_face.valueChanged.connect(self.recalculate)
+        self.rail_clear.valueChanged.connect(self.recalculate)
         self.ambient.valueChanged.connect(self.recalculate)
         self.tmax.valueChanged.connect(self.recalculate)
         self.recalculate()
@@ -207,6 +247,9 @@ class SizeEnclosureDialog(QDialog):
             "nema": str(self.nema.currentData()),
             "material": str(self.material.currentData()),
             "spare_pct": float(self.spare.value()) / 100.0,
+            "fill_target": float(self.fill_target.value()) / 100.0,
+            "duct_face_in": float(self.duct_face.value()),
+            "rail_to_duct_in": float(self.rail_clear.value()),
             "ambient_c": float(self.ambient.value()),
             "max_internal_c": float(self.tmax.value()),
             "separate_control_rail": self.separate_control.isChecked(),

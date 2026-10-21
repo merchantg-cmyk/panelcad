@@ -185,8 +185,10 @@ def test_dol_matches_example_pin_pairs_and_libraries():
     assert not any("overload" in c["library_id"] and c["role"] != "overload" for c in result["components"])
     motor = session.sheet().component("M1")
     assert motor.properties["kW"] == 1.5
-    assert session.sheet().component("Q1").x == pytest.approx(40)
     q = session.sheet().component("Q1")
+    _wx, _wy, ww, _wh = working_rect(session.sheet())
+    # The power column is centered on the sheet, not packed against the left border.
+    assert q.x > _wx + ww * 0.2
     _wx, wy, _ww, _wh = working_rect(session.sheet())
     assert wy <= q.y <= 22
     _assert_inside_working(session, result["sheet"])

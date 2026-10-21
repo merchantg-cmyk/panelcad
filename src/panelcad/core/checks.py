@@ -135,6 +135,7 @@ CHECK_IDS: tuple[str, ...] = (
     "nameplate_fla_above_ocpd",
     "nameplate_flc_approximate",
     "nameplate_unconfirmed",
+    "page_over_dense",
 )
 
 _AMP_RE = re.compile(r"([0-9]+(?:[.][0-9]+)?)\s*A\b", re.I)
@@ -421,6 +422,7 @@ def run_checks(
     findings.extend(_nameplate_findings(project, catalog))
     findings.extend(_print_import_findings(project))
     findings.extend(_power_column_overflow(project))
+    findings.extend(_page_density(project, catalog))
     hidden = set(suppressed_ids(project))
     out: list[Finding] = []
     seen: set[str] = set()
@@ -435,6 +437,30 @@ def run_checks(
         out.append(item)
     out.sort(key=_finding_rank)
     return out
+
+
+def _page_density(project: Project, catalog: Catalog) -> list[Finding]:
+    """Warn when a schematic or I/O page holds more than its usable area allows."""
+
+    from panelcad.core.spacing import page_fullness
+
+    findings: list[Finding] = []
+    for sheet in project.sheets:
+        if sheet.closed:
+            continue
+        row = page_fullness(sheet, catalog)
+        if not row.get("over_dense"):
+            continue
+        findings.append(
+            Finding(
+                "page_over_dense",
+                "warning",
+                str(row.get("message") or f"Sheet {sheet.id} is over the page limit"),
+                sheet=sheet.id,
+                ref=sheet.id,
+            )
+        )
+    return findings
 
 
 def _power_column_overflow(project: Project) -> list[Finding]:
