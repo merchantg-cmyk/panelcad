@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.5.11 — 2026-10-21
+
+- **Overload heaters** — Smoother overload heaters and OL contacts.
+- **Control transformer** — A control transformer with two separate windings (H1-H2, H3-H4) and voltage jumpers.
+- **Cleanup** — Cleanup keeps rungs, splits crowded pages first, and clears overlaps.
+- **Split sheet** — Split-sheet off-page arrows are fixed.
+- **Nameplate** — Nameplate FLA includes a dual-rated transformer.
+- **Libraries** — Libraries with arcs need 0.5.11.
+
 - **Device drag** — While a device moves, a wire to a ladder rail stays on that rung, including a clicked landing. A wire to an IEC rail stays on that horizontal rail, on the pin's column, even when an old stored riser is still on the wire. The line is not drawn to the middle of the sheet.
 - **Wire gauges** — A gauge note is not drawn on a lead shorter than the note. The wire number still prints, and the gauge stays on the wire list. A shared bundle note on a longer column is unchanged.
 - **License** — PanelCAD is AGPL-3.0-or-later. The full GNU AGPL version 3 text is `LICENSE`. Third-party notices are `THIRD_PARTY_NOTICES.md`.
