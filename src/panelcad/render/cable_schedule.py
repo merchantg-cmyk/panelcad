@@ -53,7 +53,7 @@ def write_cable_schedule_pdf(session: Any, path: Path | str) -> Path:
 
 
 def _pages(project: Project):
-    schedule = list(project.cables)
+    schedule = [cable for cable in project.cables if cable.kind != "interpanel"]
     pulls = pull_rows(project)
     terms = termination_rows(project)
     pages = [lambda qp, project, number, count: _paint_schedule(qp, project, schedule, pulls, number, count)]

@@ -8,6 +8,8 @@ IEC locations stay ``/sheet.column``.
 
 from __future__ import annotations
 
+import contextvars
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 from panelcad.core.models import Project, Sheet
@@ -132,7 +134,34 @@ def column_from_header(sheet: Sheet, x: float) -> int:
     return cells[-1][0]
 
 
+# Print package sheet order. Empty means callers use the list they passed
+# (the saved project order). Arrows and cross-references read this so a
+# regrouped package agrees with the sheet numbers on the title block.
+_sheet_order: contextvars.ContextVar[tuple[str, ...] | None] = contextvars.ContextVar(
+    "panelcad_printed_sheet_order",
+    default=None,
+)
+
+
+@contextmanager
+def use_sheet_order(sheets: list[Sheet] | None):
+    """Number sheets as *sheets* for arrows, line numbers, and cross-references."""
+
+    ids = tuple(sheet.id for sheet in sheets) if sheets else None
+    token = _sheet_order.set(ids)
+    try:
+        yield
+    finally:
+        _sheet_order.reset(token)
+
+
 def sheet_number(project_sheets: list[Sheet], sheet_id: str) -> int:
+    override = _sheet_order.get()
+    if override is not None:
+        try:
+            return override.index(sheet_id) + 1
+        except ValueError:
+            return 0
     for index, sheet in enumerate(project_sheets, start=1):
         if sheet.id == sheet_id:
             return index

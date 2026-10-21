@@ -627,6 +627,11 @@ def offpage_callout(project: Project, catalog: Catalog, sheet: Sheet, comp: Comp
         if dest_sheet_id:
             no = sheet_number(project.sheets, dest_sheet_id) or dest_sheet_id
             extra = f" / {dest_ref}" if dest_ref else ""
+            from panelcad.core.panels import offpage_other_panel
+
+            other = offpage_other_panel(project, sheet, comp)
+            if other:
+                return f"{prefix} {other} {no}{extra}"
             return f"{prefix} {no}{extra}"
         return str(comp.properties.get("callout") or "").strip()
     dest_sheet, dest = peer
@@ -635,6 +640,11 @@ def offpage_callout(project: Project, catalog: Catalog, sheet: Sheet, comp: Comp
     style = xref_style(project, dest_sheet)
     # Location.display already returns /sheet.col for IEC. Do not add another slash.
     loc_text = loc.iec().lstrip("/") if style == "iec" else loc.display(style)
+    from panelcad.core.panels import offpage_other_panel
+
+    other = offpage_other_panel(project, sheet, comp)
+    if other:
+        return f"{prefix} {other} {loc.sheet_no} / {loc_text}"
     return f"{prefix} {loc.sheet_no} / {loc_text}"
 
 

@@ -176,6 +176,8 @@ class Component(BaseModel):
     pins_locked: bool = True
     pin_overrides: dict[str, PinOverride] = Field(default_factory=dict)
     picture: str = ""
+    # Control panel this device belongs to (Panel.id). Empty on a single-panel file.
+    panel: str = ""
 
     def visual_scale(self) -> float:
         try:
@@ -431,6 +433,8 @@ class Sheet(BaseModel):
     standard: str = ""  # empty = inherit title_block.standard (default NEMA/ANSI)
     # Volts a person or Circuit Builder stated for this sheet. Empty is not a guess.
     control_voltage: float | None = None
+    # Panel.id this sheet belongs to. Empty on a single-panel file.
+    panel: str = ""
 
     @field_validator("control_voltage", mode="before")
     @classmethod
@@ -448,6 +452,22 @@ class Sheet(BaseModel):
             if r.id == rail_id:
                 return r
         raise KeyError(f"no rail '{rail_id}' on sheet '{self.id}'")
+
+
+class Panel(BaseModel):
+    """One physical control panel in a project.
+
+    A project with no ``panels`` list is a single unnamed panel. The file
+    stays unchanged until a panel is added. This record does not store
+    width, height, or depth. The enclosure is a catalog row applied to
+    this panel's backpanel sheet.
+    """
+
+    id: str
+    tag: str = ""
+    name: str = ""
+    enclosure_id: str = ""
+    system: str = ""  # IEC =system aspect. Empty uses project.location_system.
 
 
 class CableConductor(BaseModel):
@@ -505,6 +525,12 @@ class Cable(BaseModel):
     show_tag: bool = True
     pairs: int = 0
     assignments: list[CableConductor] = Field(default_factory=list)
+    # field = a cable leaving the panel. interpanel = a cable between two panels.
+    kind: Literal["field", "interpanel"] = "field"
+    from_panel: str = ""
+    to_panel: str = ""
+    to_strip: str = ""
+    to_terminals: list[str] = Field(default_factory=list)
 
 
 class ShareEvent(BaseModel):
@@ -534,6 +560,11 @@ class Project(BaseModel):
     # Issued snapshots and revision clouds. Omitted from YAML until a revision is issued.
     revision_control: RevisionControl | None = None
     cables: list[Cable] = Field(default_factory=list)
+    # Omitted from YAML when empty. One implicit panel is the legacy file.
+    panels: list[Panel] = Field(default_factory=list)
+    active_panel: str = ""
+    # Default IEC =system aspect for panels that do not set their own.
+    location_system: str = ""
     phase_colors: PhaseColors | None = None
     reconstruct: Any = None
     sheets: list[Sheet] = Field(default_factory=list)

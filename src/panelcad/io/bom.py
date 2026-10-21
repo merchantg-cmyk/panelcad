@@ -281,6 +281,26 @@ def unresolved_needs_info_rows(project: Project) -> list[dict[str, str]]:
     return rows
 
 
+def _ref_panel_tag(project: Project, ref: str) -> str:
+    if not project.panels or not ref:
+        return ""
+    for sheet in project.sheets:
+        for comp in sheet.components:
+            if comp.id == ref:
+                tag = _component_panel_tag(project, sheet, comp)
+                if tag:
+                    return tag
+    return ""
+
+
+def _component_panel_tag(project: Project, sheet: Any, comp: Component) -> str:
+    if not project.panels:
+        return ""
+    from panelcad.core.panels import component_panel_tag
+
+    return component_panel_tag(project, sheet, comp)
+
+
 def instance_rows(project: Project, catalog: Catalog) -> list[dict[str, str]]:
     """One row per physical part. The same ref on another sheet is not a second part.
 
@@ -307,6 +327,10 @@ def instance_rows(project: Project, catalog: Catalog) -> list[dict[str, str]]:
                 sheets = [part for part in str(existing.get("sheet") or "").split(",") if part]
                 if sheet.id not in sheets:
                     existing["sheet"] = ",".join([*sheets, sheet.id])
+                if project.panels and not str(existing.get("panel") or "").strip():
+                    tag = _component_panel_tag(project, sheet, comp)
+                    if tag:
+                        existing["panel"] = tag
                 continue
             props = {**device.properties, **comp.properties}
             fp = effective_footprint(device, comp)
@@ -338,6 +362,10 @@ def instance_rows(project: Project, catalog: Catalog) -> list[dict[str, str]]:
                 "x": f"{comp.x:g}",
                 "y": f"{comp.y:g}",
             }
+            if project.panels:
+                row["panel"] = _component_panel_tag(project, sheet, comp)
+                if "panel" not in extra_keys:
+                    extra_keys.append("panel")
             for k, v in props.items():
                 if k in PROP_FIELDS or k in row or k in {"catalog_source", "source", "io", "bom_accessories", "pin_labels"}:
                     continue
@@ -366,11 +394,25 @@ def instance_rows(project: Project, catalog: Catalog) -> list[dict[str, str]]:
     return _align_columns(rows, extra_keys)
 
 
-def grouped_rows(project: Project, catalog: Catalog) -> list[dict[str, str]]:
+def grouped_rows(
+    project: Project,
+    catalog: Catalog,
+    *,
+    by_panel: bool | None = None,
+) -> list[dict[str, str]]:
+    """Grouped bill. With two or more panels, the same part on two panels is two lines.
+
+    ``by_panel=False`` sums those lines into one project total. A file with
+    no panels list keeps the original columns.
+    """
+
     buckets: dict[tuple[str, ...], dict[str, Any]] = {}
     order: list[tuple[str, ...]] = []
     counted: set[str] = set()
     from panelcad.library.panel import export_dimension_mm, is_info_needed_placeholder
+
+    split = bool(project.panels) if by_panel is None else bool(by_panel)
+    show_panel = bool(project.panels) and (split or by_panel is False)
 
     for sheet in project.sheets:
         for comp in sheet.components:
@@ -384,6 +426,7 @@ def grouped_rows(project: Project, catalog: Catalog) -> list[dict[str, str]]:
             props = {**device.properties, **comp.properties}
             fp = effective_footprint(device, comp)
             description = str(props.get("description") or device.name)
+            panel_name = _component_panel_tag(project, sheet, comp) if project.panels else ""
             key = (
                 comp.library_id,
                 str(props.get("manufacturer", "") or ""),
@@ -391,6 +434,7 @@ def grouped_rows(project: Project, catalog: Catalog) -> list[dict[str, str]]:
                 str(props.get("catalog", "") or ""),
                 str(props.get("catalog_fallback") or ""),
                 description,
+                panel_name if split else "",
             )
             if key not in buckets:
                 width_s, height_s, depth_s = export_dimension_mm(device, comp)
@@ -416,8 +460,11 @@ def grouped_rows(project: Project, catalog: Catalog) -> list[dict[str, str]]:
                     "mount": fp.mount,
                     "dim_source": fp.dim_source,
                     "notes": _with_placeholder(str(props.get("notes", "") or ""), props, fp),
+                    "panels": set(),
                 }
                 order.append(key)
+            if show_panel and panel_name:
+                buckets[key]["panels"].add(panel_name)
             if comp.id in counted:
                 if sheet.id not in str(buckets[key]["sheet"]).split(","):
                     buckets[key]["sheet"] = f"{buckets[key]['sheet']},{sheet.id}"
@@ -428,12 +475,15 @@ def grouped_rows(project: Project, catalog: Catalog) -> list[dict[str, str]]:
             if sheet.id not in str(buckets[key]["sheet"]).split(","):
                 buckets[key]["sheet"] = f"{buckets[key]['sheet']},{sheet.id}"
     for row in _accessory_rows(project):
+        ref = str(row.get("ref") or "")
+        accessory_panel = _ref_panel_tag(project, ref) if split else ""
         key = (
             str(row.get("library_id") or "accessory"),
             str(row.get("manufacturer") or ""),
             str(row.get("part_number") or ""),
             str(row.get("catalog") or ""),
             "",
+            accessory_panel,
         )
         if key not in buckets:
             buckets[key] = {
@@ -458,19 +508,24 @@ def grouped_rows(project: Project, catalog: Catalog) -> list[dict[str, str]]:
                 "mount": "",
                 "dim_source": "",
                 "notes": str(row.get("notes") or ""),
+                "panels": set(),
             }
             order.append(key)
         buckets[key]["qty"] += 1
-        ref = str(row.get("ref") or "")
         if ref and ref not in buckets[key]["refs"]:
             buckets[key]["refs"].append(ref)
+        if show_panel and accessory_panel:
+            buckets[key]["panels"].add(accessory_panel)
     for row in jumper_bom_rows(project, catalog):
+        ref = str(row.get("ref") or "")
+        jumper_panel = _ref_panel_tag(project, ref) if split else ""
         key = (
             str(row.get("library_id") or ""),
             str(row.get("manufacturer") or ""),
             str(row.get("part_number") or ""),
             str(row.get("catalog") or ""),
             str(row.get("description") or ""),
+            jumper_panel,
         )
         try:
             qty = int(float(row.get("qty") or 1))
@@ -497,12 +552,14 @@ def grouped_rows(project: Project, catalog: Catalog) -> list[dict[str, str]]:
                 "mount": str(row.get("mount") or "none"),
                 "dim_source": str(row.get("dim_source") or ""),
                 "notes": str(row.get("notes") or ""),
+                "panels": set(),
             }
             order.append(key)
         buckets[key]["qty"] += max(1, qty)
-        ref = str(row.get("ref") or "")
         if ref and ref not in buckets[key]["refs"]:
             buckets[key]["refs"].append(ref)
+        if show_panel and jumper_panel:
+            buckets[key]["panels"].add(jumper_panel)
         sheet_id = str(row.get("sheet") or "")
         if sheet_id and sheet_id not in str(buckets[key]["sheet"]).split(","):
             buckets[key]["sheet"] = (
@@ -512,35 +569,53 @@ def grouped_rows(project: Project, catalog: Catalog) -> list[dict[str, str]]:
     live = [key for key in order if int(buckets[key]["qty"]) > 0]
     for i, key in enumerate(live, start=1):
         b = buckets[key]
-        rows.append(
-            {
-                "item": str(i),
-                "qty": str(b["qty"]),
-                "sheet": b["sheet"],
-                "ref": ", ".join(b["refs"]),
-                "library_id": b["library_id"],
-                "description": b["description"],
-                "manufacturer": b["manufacturer"],
-                "part_number": b["part_number"],
-                "catalog": b["catalog"],
-                "source": b.get("source", ""),
-                "catalog_fallback": b.get("catalog_fallback", ""),
-                "catalog_primary": b.get("catalog_primary", ""),
-                "category": b["category"],
-                "width_mm": b["width_mm"],
-                "height_mm": b["height_mm"],
-                "depth_mm": b["depth_mm"],
-                "din_rail": b["din_rail"],
-                "incabinet": b.get("incabinet", b["in_panel"]),
-                "in_panel": b["in_panel"],
-                "mount": b["mount"],
-                "dim_source": b["dim_source"],
-                "notes": b["notes"],
-                "x": "",
-                "y": "",
-            }
-        )
+        item = {
+            "item": str(i),
+            "qty": str(b["qty"]),
+            "sheet": b["sheet"],
+            "ref": ", ".join(b["refs"]),
+            "library_id": b["library_id"],
+            "description": b["description"],
+            "manufacturer": b["manufacturer"],
+            "part_number": b["part_number"],
+            "catalog": b["catalog"],
+            "source": b.get("source", ""),
+            "catalog_fallback": b.get("catalog_fallback", ""),
+            "catalog_primary": b.get("catalog_primary", ""),
+            "category": b["category"],
+            "width_mm": b["width_mm"],
+            "height_mm": b["height_mm"],
+            "depth_mm": b["depth_mm"],
+            "din_rail": b["din_rail"],
+            "incabinet": b.get("incabinet", b["in_panel"]),
+            "in_panel": b["in_panel"],
+            "mount": b["mount"],
+            "dim_source": b["dim_source"],
+            "notes": b["notes"],
+            "x": "",
+            "y": "",
+        }
+        if show_panel:
+            names = sorted(name for name in (b.get("panels") or set()) if name)
+            item["panel"] = ", ".join(names)
+        rows.append(item)
     return rows
+
+
+def bom_for_panel(project: Project, catalog: Catalog, panel: str) -> list[dict[str, str]]:
+    """Grouped lines whose panel tag or id is ``panel``."""
+
+    from panelcad.core.panels import find_panel, panel_tag
+
+    found = find_panel(project, panel)
+    if found is None:
+        raise KeyError(f"no panel '{panel}'")
+    want = {found.id.casefold(), panel_tag(found).casefold()}
+    return [
+        row
+        for row in grouped_rows(project, catalog, by_panel=True)
+        if str(row.get("panel") or "").casefold() in want
+    ]
 
 
 def _align_columns(rows: list[dict[str, str]], extra_keys: list[str]) -> list[dict[str, str]]:

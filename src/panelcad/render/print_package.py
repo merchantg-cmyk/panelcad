@@ -35,6 +35,7 @@ SECTIONS: tuple[str, ...] = (
     "xref",
     "plc_io",
     "terminals",
+    "interconnect",
     "checks",
     "power",
     "thermal",
@@ -84,6 +85,10 @@ _SECTION_ALIASES = {
     "plc_io_list": "plc_io",
     "terminal": "terminals",
     "terminal_strips": "terminals",
+    "interconnect": "interconnect",
+    "interpanel": "interconnect",
+    "inter_panel": "interconnect",
+    "cable_schedule": "interconnect",
     "check": "checks",
     "design_checks": "checks",
     "findings": "checks",
@@ -493,6 +498,7 @@ _REPORT_TITLES = {
     "xref": "Device Index",
     "plc_io": "PLC I/O List",
     "terminals": "Terminal Strips",
+    "interconnect": "Interconnect Schedule",
     "checks": "Design Checks",
 }
 
@@ -513,11 +519,88 @@ def _collect_report_rows_and_note(session: Any, kind: str) -> tuple[list[dict[st
         return list(session.io_rows()), ""
     if kind == "terminals":
         return list(session.terminal_strip_rows()), ""
+    if kind == "interconnect":
+        from panelcad.core.panels import interconnect_rows
+
+        return interconnect_rows(session.project), ""
     all_rows = session.design_checks(include_suppressed=True)
     open_rows = [row for row in all_rows if row.get("suppressed") != "yes"]
     n_suppressed = len(all_rows) - len(open_rows)
     note = f"{n_suppressed} finding(s) suppressed (not listed)." if n_suppressed else ""
     return open_rows, note
+
+
+def _panel_bom_pages(session: Any, report_w: float, report_h: float) -> list[PackagePage]:
+    """One BOM block per panel, then the summed project bill."""
+
+    from panelcad.core.panels import panel_tag
+    from panelcad.io.bom import bom_for_panel, grouped_rows
+
+    pages: list[PackagePage] = []
+    project = session.project
+    for panel in project.panels:
+        rows = _bom_display_rows(bom_for_panel(project, session.catalog, panel.id))
+        if not rows:
+            continue
+        pages.extend(
+            _paginated_report(
+                "bom",
+                f"Bill of Materials — {panel_tag(panel)}",
+                rows,
+                "",
+                report_w,
+                report_h,
+                sheet_id=panel.id,
+            )
+        )
+    rolled = _bom_display_rows(grouped_rows(project, session.catalog, by_panel=False))
+    from panelcad.io.bom import with_needs_info_section
+
+    rolled = with_needs_info_section(rolled, project, session.catalog)
+    if rolled:
+        pages.extend(
+            _paginated_report(
+                "bom",
+                "Bill of Materials",
+                rolled,
+                "",
+                report_w,
+                report_h,
+                sheet_id="project",
+            )
+        )
+    return pages
+
+
+def _paginated_report(
+    kind: str,
+    title: str,
+    rows: list[dict[str, str]],
+    note: str,
+    report_w: float,
+    report_h: float,
+    *,
+    sheet_id: str = "",
+) -> list[PackagePage]:
+    keys, _labels, raw_widths = _report_spec(kind, rows)
+    widths = _resolved_widths(raw_widths, report_w)
+    usable = _report_table_usable(report_h, extra_lines=1 if note else 0)
+    pages: list[PackagePage] = []
+    for start, count in _paginate_wrapped(rows, keys, widths, usable):
+        pages.append(
+            PackagePage(
+                kind,
+                title,
+                report_w,
+                report_h,
+                sheet_id=sheet_id,
+                report=kind,
+                row_start=start,
+                row_count=count,
+                note=note,
+            )
+        )
+    return pages
 
 
 def _index_rows_per_page(height_mm: float) -> int:
@@ -534,16 +617,31 @@ def plan_print_package(
     """Deterministic page list. Same project + options → same order and count.
 
     Empty report sections are omitted (no placeholder page, no index row).
+    Sheet numbers inside reports follow the printed order.
     """
 
+    from panelcad.core.panels import package_sheet_order
+    from panelcad.core.zones import use_sheet_order
+
+    with use_sheet_order(package_sheet_order(session.project)):
+        return _plan_print_package(session, sections=sections, paper=paper)
+
+
+def _plan_print_package(
+    session: Any,
+    *,
+    sections: str | Sequence[str] | None = None,
+    paper: str = "mixed",
+) -> PackagePlan:
     paper = normalize_paper(paper)
     enabled = normalize_sections(sections)
     project: Project = session.project
+    from panelcad.core.panels import package_sheet_order, package_sheet_title
     tb = project.title_block
     rev = current_revision(tb)
     rev_s = (rev.rev if rev else "") or ""
     report_w, report_h = report_page_size(paper)
-    all_sheets = list(project.sheets)
+    all_sheets = package_sheet_order(project)
     drawn_sheets = all_sheets if "drawings" in enabled else []
     drawing_count = len(drawn_sheets)
 
@@ -565,7 +663,7 @@ def plan_print_package(
         drawing_pages.append(
             PackagePage(
                 "drawings",
-                sheet.title or sheet.id,
+                package_sheet_title(project, sheet, sheet.title or sheet.id),
                 dw,
                 dh,
                 sheet_id=sheet.id,
@@ -581,6 +679,9 @@ def plan_print_package(
     report_pages: list[PackagePage] = []
     for kind, title in _REPORT_TITLES.items():
         if kind not in enabled:
+            continue
+        if kind == "bom" and len(project.panels) >= 2:
+            report_pages.extend(_panel_bom_pages(session, report_w, report_h))
             continue
         rows, note = _collect_report_rows_and_note(session, kind)
         if not rows:
@@ -653,7 +754,7 @@ def plan_print_package(
             pending.append(
                 {
                     "number": _index_sheet_number(sheet, index),
-                    "title": _index_sheet_title(sheet),
+                    "title": package_sheet_title(project, sheet, _index_sheet_title(sheet)),
                     "kind": sheet.kind.replace("_", " "),
                     "rev": rev_s,
                     "section": "drawings",
@@ -671,11 +772,13 @@ def plan_print_package(
                 "sheet_id": page.sheet_id,
             }
         )
-    seen_reports: set[str] = set()
+    seen_reports: set[tuple[str, str]] = set()
     for page in report_pages:
-        if page.section in seen_reports:
+        sid = page.sheet_id if page.section == "bom" else ""
+        key = (page.section, sid)
+        if key in seen_reports:
             continue
-        seen_reports.add(page.section)
+        seen_reports.add(key)
         pending.append(
             {
                 "number": "—",
@@ -683,7 +786,7 @@ def plan_print_package(
                 "kind": "report",
                 "rev": rev_s,
                 "section": page.section,
-                "sheet_id": "",
+                "sheet_id": sid,
             }
         )
 
@@ -705,7 +808,13 @@ def plan_print_package(
     pages = cover_pages + index_pages + rev_pages + nameplate_pages + drawing_pages + cutout_pages + report_pages
     index_rows: list[IndexRow] = []
     for entry in pending:
-        if entry["section"] in {"drawings", "cutouts"} and entry.get("sheet_id"):
+        if entry["section"] == "bom" and entry.get("sheet_id"):
+            target = next(
+                i
+                for i, page in enumerate(pages)
+                if page.section == "bom" and page.sheet_id == entry["sheet_id"]
+            )
+        elif entry["section"] in {"drawings", "cutouts"} and entry.get("sheet_id"):
             target = next(
                 i
                 for i, page in enumerate(pages)
@@ -840,8 +949,26 @@ def write_print_package(
     sections: str | Sequence[str] | None = None,
     paper: str = "mixed",
 ) -> dict[str, Any]:
-    """Write a vector PDF with bookmarks and index links. Returns a result dict."""
+    """Write a vector PDF with bookmarks and index links. Returns a result dict.
 
+    Drawings and reports number sheets in the printed order, including
+    off-page arrows and cross-reference line numbers.
+    """
+
+    from panelcad.core.panels import package_sheet_order
+    from panelcad.core.zones import use_sheet_order
+
+    with use_sheet_order(package_sheet_order(session.project)):
+        return _write_print_package(session, path, sections=sections, paper=paper)
+
+
+def _write_print_package(
+    session: Any,
+    path: Path | str,
+    *,
+    sections: str | Sequence[str] | None = None,
+    paper: str = "mixed",
+) -> dict[str, Any]:
     from PySide6.QtGui import QPainter, QPdfWriter
 
     from panelcad.render.pdf_outline import apply_outlines_and_links
@@ -1252,7 +1379,17 @@ def _report_spec(
             keys.append("flag")
             labels.append("FLAG")
             widths.append(22.0)
+        if any(str(row.get("panel") or "").strip() for row in (rows or [])):
+            keys.insert(2, "panel")
+            labels.insert(2, "PANEL")
+            widths.insert(2, 18.0)
         return keys, labels, widths
+    if kind == "interconnect":
+        return (
+            ["tag", "from_panel", "from_strip", "to_panel", "to_strip", "cable_type", "conductors", "length"],
+            ["TAG", "FROM", "STRIP", "TO", "STRIP", "CABLE", "CND", "LENGTH"],
+            [18.0, 22.0, 28.0, 22.0, 28.0, 0.0, 14.0, 24.0],
+        )
     if kind == "wires":
         return (
             ["number", "from_device", "from_terminal", "to_device", "to_terminal", "color", "gauge", "sheet"],
@@ -1295,6 +1432,20 @@ def _collect_report_rows(session: Any, kind: str) -> list[dict[str, str]]:
     return rows
 
 
+def _rows_for_package_page(session: Any, page: PackagePage) -> list[dict[str, str]]:
+    """The same row list the planner paginated for this page."""
+
+    if page.report == "bom" and page.sheet_id:
+        from panelcad.io.bom import bom_for_panel, grouped_rows, with_needs_info_section
+
+        project = session.project
+        if page.sheet_id == "project":
+            rows = _bom_display_rows(grouped_rows(project, session.catalog, by_panel=False))
+            return with_needs_info_section(rows, project, session.catalog)
+        return _bom_display_rows(bom_for_panel(project, session.catalog, page.sheet_id))
+    return _collect_report_rows(session, page.report)
+
+
 def _paint_power(qp, session: Any, page: PackagePage, page_index: int, page_count: int) -> None:
     from panelcad.core.power_budget import analyze
     from panelcad.render.power_report import paint_supply_page
@@ -1324,7 +1475,7 @@ def _paint_report(
 ) -> None:
     _frame(qp, page.width_mm, page.height_mm)
     y0 = _header(qp, page.title.upper(), session.project, page, page_index, page_count)
-    rows = _collect_report_rows(session, page.report)
+    rows = _rows_for_package_page(session, page)
     keys, labels, raw_widths = _report_spec(page.report, rows)
     widths = _resolved_widths(raw_widths, page.width_mm)
     usable = page.width_mm - 2 * MARGIN_X

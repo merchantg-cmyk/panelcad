@@ -1651,6 +1651,21 @@ def _apply_fields(cable: Cable, fields: dict[str, Any]) -> None:
             else:
                 cable.from_terminals = [str(part).strip() for part in (value or []) if str(part).strip()]
             continue
+        if key == "to_terminals":
+            if isinstance(value, str):
+                cable.to_terminals = [part.strip() for part in value.split(",") if part.strip()]
+            else:
+                cable.to_terminals = [str(part).strip() for part in (value or []) if str(part).strip()]
+            continue
+        if key == "kind":
+            kind = str(value or "field").strip().lower().replace("-", "").replace("_", "")
+            if kind in {"", "field"}:
+                cable.kind = "field"
+            elif kind == "interpanel":
+                cable.kind = "interpanel"
+            else:
+                raise ValueError("cable kind must be field or interpanel")
+            continue
         if not hasattr(cable, key):
             raise ValueError(f"unknown cable field '{key}'")
         if value is None:

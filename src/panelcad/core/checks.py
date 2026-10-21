@@ -84,6 +84,8 @@ CHECK_IDS: tuple[str, ...] = (
     "overload_outside_fla",
     "coil_voltage_mismatch",
     "outside_enclosure",
+    "panel_needs_enclosure",
+    "panel_enclosure_tight",
     "heat_rise_over_limit",
     "above_max_ambient",
     "nema4_filter_fan",
@@ -406,6 +408,7 @@ def run_checks(
     findings.extend(_coil_voltage_mismatch(project, catalog))
     findings.extend(_unwired_coils(project, catalog))
     findings.extend(_outside_enclosure(project, catalog))
+    findings.extend(_panel_enclosure_findings(project, catalog))
     findings.extend(_on_title_block(project, catalog))
     findings.extend(_heat_rise_over_limit(project, catalog))
     findings.extend(_thermal_limit_findings(project, catalog))
@@ -1894,12 +1897,111 @@ def _on_title_block(project: Project, catalog: Catalog) -> list[Finding]:
     return findings
 
 
+def _panel_enclosure_findings(project: Project, catalog: Catalog) -> list[Finding]:
+    """A panel backpanel needs a catalog box. A chosen box that the parts miss stays chosen."""
+
+    from panelcad.core.layout import enclosure_is_sized, footprint_size
+    from panelcad.core.panels import panel_backpanel_chosen, panel_tag
+    from panelcad.library.panel import effective_footprint, is_incabinet
+
+    findings: list[Finding] = []
+    for panel in project.panels:
+        sheet = next(
+            (
+                item
+                for item in project.sheets
+                if item.kind == "panel_layout" and item.panel == panel.id
+            ),
+            None,
+        )
+        if sheet is None:
+            continue
+        tag = panel_tag(panel)
+        if not enclosure_is_sized(sheet.enclosure, sheet.page):
+            findings.append(
+                Finding(
+                    "panel_needs_enclosure",
+                    "warning",
+                    f"{tag} has no enclosure. Pick a catalog box or run Size Enclosure.",
+                    sheet=sheet.id,
+                    ref=tag,
+                )
+            )
+            continue
+        if not panel_backpanel_chosen(project, sheet) or sheet.enclosure is None:
+            continue
+        enc = sheet.enclosure
+        scale = float(enc.draw_scale or 1.0) or 1.0
+        right = enc.x + enc.width_mm * scale
+        bottom = enc.y + enc.height_mm * scale
+        outside = False
+        for comp in sheet.components:
+            device = _device(catalog, comp)
+            if device is None or _skip_device(device):
+                continue
+            if not is_incabinet(device, comp) and effective_footprint(device, comp).mount in {"none", "field"}:
+                continue
+            width, height = footprint_size(device, comp)
+            if width <= 0 and height <= 0:
+                continue
+            if (
+                comp.x + 0.05 < enc.x
+                or comp.y + 0.05 < enc.y
+                or comp.x + width - 0.05 > right
+                or comp.y + height - 0.05 > bottom
+            ):
+                outside = True
+                break
+        stored = project.properties.get("panel_unplaced") or {}
+        pending: list[str] = []
+        if isinstance(stored, dict):
+            raw = stored.get(sheet.id) or []
+            if isinstance(raw, dict):
+                owners = [str(ref) for ref in raw.get("owners") or [] if str(ref)]
+                raw = raw.get("refs") or []
+                if owners:
+                    alive = {comp.id for item in project.sheets for comp in item.components}
+                    if not any(ref in alive for ref in owners):
+                        raw = []
+            if isinstance(raw, (list, tuple)):
+                present = {comp.id for comp in sheet.components}
+                pending = [str(ref) for ref in raw if str(ref) and str(ref) not in present]
+        if not outside and not pending:
+            continue
+        name = str(enc.catalog or enc.name or panel.enclosure_id or tag).strip()
+        if pending:
+            names = ", ".join(pending)
+            verb = "does" if len(pending) == 1 else "do"
+            message = (
+                f"{tag} enclosure {name} does not fit the circuit. "
+                f"{names} {verb} not fit in the free backplate. "
+                "Run Size Enclosure to choose a larger box."
+            )
+        else:
+            message = (
+                f"{tag} enclosure {name} does not fit the circuit. "
+                "Run Size Enclosure to choose a larger box."
+            )
+        findings.append(
+            Finding(
+                "panel_enclosure_tight",
+                "warning",
+                message,
+                sheet=sheet.id,
+                ref=tag,
+                target=str(panel.enclosure_id or ""),
+            )
+        )
+    return findings
+
+
 def _outside_enclosure(project: Project, catalog: Catalog) -> list[Finding]:
     findings: list[Finding] = []
     for sheet in project.sheets:
         if not is_layout_sheet(sheet) or sheet.enclosure is None:
             continue
         enc = sheet.enclosure
+        scale = float(enc.draw_scale or 1.0) or 1.0
         for comp in sheet.components:
             device = _device(catalog, comp)
             if device is None or _skip_device(device):
@@ -1913,8 +2015,8 @@ def _outside_enclosure(project: Project, catalog: Catalog) -> list[Finding]:
             if (
                 ox + 0.05 < enc.x
                 or oy + 0.05 < enc.y
-                or ox + w - 0.05 > enc.x + enc.width_mm
-                or oy + h - 0.05 > enc.y + enc.height_mm
+                or ox + w - 0.05 > enc.x + enc.width_mm * scale
+                or oy + h - 0.05 > enc.y + enc.height_mm * scale
             ):
                 place = "door" if sheet.kind == "door_layout" else "enclosure"
                 findings.append(

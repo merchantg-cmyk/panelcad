@@ -104,6 +104,15 @@ OPS = {
     "inspect",
     "list_sheets",
     "add_sheet",
+    "list_panels",
+    "add_panel",
+    "delete_panel",
+    "set_panel_enclosure",
+    "set_active_panel",
+    "assign_panel",
+    "assign_sheet_panel",
+    "add_interconnect",
+    "interconnect_schedule",
     "set_active_sheet",
     "set_sheet_title",
     "delete_sheet",
@@ -122,6 +131,7 @@ OPS = {
     "move",
     "set_properties",
     "wire",
+    "wire_offpage",
     "delete_component",
     "rename_component",
     "duplicate_component",
@@ -332,7 +342,7 @@ OP_HELP: dict[str, dict[str, str]] = {
     "list_components": "Devices on a sheet with pins and properties. Args: sheet?",
     "list_wires": "Wires on a sheet. Args: sheet?",
     "inspect_device": "Library symbol + pins. Args: library_id",
-    "place": "Args: library_id, ref?, x, y, sheet?, rotation?, properties?. On panel_layout or door_layout the part must be layout-ready (catalog dims or a confirmed envelope). Do not invent millimetres.",
+    "place": "Args: library_id, ref?, x, y, sheet?, rotation?, properties?, panel?. panel is a control-panel tag (CP1, RIO2) when the project has more than one panel. On panel_layout or door_layout the part must be layout-ready (catalog dims or a confirmed envelope). Do not invent millimetres.",
     "place_from_bom": "Same library part onto this sheet. Args: library_id, ref?, x?, y?, sheet?. Schematic/ladder/network/panel/io each draw it their own way. Does not clone the library.",
     "insert_circuit": insert_circuit_help() + " secondary_manufacturer fills categories the preferred brand does not make (omit = project vendor, else AutomationDirect; none disables). Fallback rows set catalog_fallback=yes.",
     "undo": "Undo the last drawing change. No args.",
@@ -340,6 +350,7 @@ OP_HELP: dict[str, dict[str, str]] = {
     "move": "Args: ref, x, y, sheet?",
     "set_properties": "Args: ref, properties{}, sheet?",
     "wire": "Args: from, to, net?, sheet?, to_sheet?, number?. number locks that wire number, the same as Set wire number. to_sheet = other page, places TO/FROM arrows.",
+    "wire_offpage": "Off-page wire between two sheets. Args: from, to, to_sheet, from_sheet? or sheet?, net?, label?. Places matching TO and FROM arrows.",
     "delete_component": "Args: ref, sheet?",
     "duplicate_component": "Copy a device offset 10 mm. Args: ref, sheet?",
     "rotate_component": "Rotate 90° clockwise (or degrees=). Args: ref, degrees?=90, sheet?",
@@ -445,13 +456,22 @@ OP_HELP: dict[str, dict[str, str]] = {
     "assign_item_numbers": "Store BOM item numbers for panel balloons. No args.",
     "cable_schedule": "Field cable schedule when the project has cables, else wires grouped by wire.cable. Args: path?",
     "propose_cables": "Group field wires from panel terminals to each field device into one cable. Spare conductors are configurable. Does not invent manufacturer part numbers. Args: spares?, replace?=false, show_tags?=true, route?",
-    "add_cable": "Add one field cable. Args: tag?, to_device?, from_strip?, from_device? (drive when the panel end is VFD1.U), from_terminals?, cable_type?, conductors?, gauge?, shield?, drain?, shield_bond?=both|panel|field|none, shield_source?, length?, length_unit?=ft|m, slack_pct?, gland? (blank unless entered), route?, part_number?, part_source? (http URL), show_tag?, assignments?",
+    "add_cable": "Add one field cable. Args: tag?, to_device?, from_strip?, from_device? (drive when the panel end is VFD1.U), from_terminals?, cable_type?, conductors?, gauge?, shield?, drain?, shield_bond?=both|panel|field|none, shield_source?, length?, length_unit?=ft|m, slack_pct?, gland? (blank unless entered), route?, part_number?, part_source? (http URL), show_tag?, assignments?, kind?=field|interpanel, from_panel?, to_panel?, to_strip?, to_terminals?. Use add_interconnect for a cable between panels.",
     "update_cable": "Edit one cable. Args: tag, plus any add_cable field. Empty length clears it.",
     "assign_cable_conductors": "Replace the conductor map. Args: tag, conductors[] {id, color, panel_terminal, field_terminal, wire_id?, wire_number?, spare?, shield?, role?}",
     "export_cable_schedule": "Schedule CSV, or PDF when path ends in .pdf. Args: path, pull? (pull-list CSV), terminations? (conductor-to-terminal CSV)",
     "panel_wire_annotation": "Wire number/color/gauge at each panel footprint. Args: path?",
     "set_wire_route": "Keep a wire on an elbow instead of wandering. Args: from, to, points:[{x,y}], sheet?",
-    "add_sheet": "Args: sheet_id, title?, kind?=schematic|panel_layout|network|io|door_layout|terminal",
+    "add_sheet": "Args: sheet_id, title?, kind?=schematic|panel_layout|network|io|door_layout|terminal. A layout, door, or terminal sheet lands on the active panel when one is set.",
+    "list_panels": "Control panels in this project. Empty means one implicit panel (legacy file). No args.",
+    "add_panel": "Add a panel (CP1, RIO2, MCC). Creates its backpanel, door, and terminal sheets. The first panel claims an existing unassigned layout and that sheet's unassigned devices. enclosure_id is an id or catalog number from libraries/enclosures.yaml — never a free millimetre size. Args: tag, name?, enclosure_id? or enclosure? or catalog?, system? (IEC =system).",
+    "delete_panel": "Remove a panel record. Sheets, devices, and cable ends move to reassign, or become unassigned. Does not delete sheets or devices. One undo. Args: panel or tag, reassign? (another panel tag).",
+    "set_panel_enclosure": "Write a catalog enclosure onto a panel's backpanel. Args: panel, enclosure_id or enclosure or catalog, replace?=false. Refuses a width or height. Does not run Size Enclosure.",
+    "set_active_panel": "The panel new devices belong to. Args: panel or tag.",
+    "assign_panel": "Assign a device tag to a panel. Does not rename the tag. Args: ref, panel.",
+    "assign_sheet_panel": "Put a sheet on a panel. Args: sheet, panel.",
+    "add_interconnect": "Cable between two panels (not a field cable). Args: from_panel, to_panel, from_strip?, to_strip?, cable_type?, conductors?, gauge?, length?, tag?, route?.",
+    "interconnect_schedule": "Inter-panel cable schedule. Args: path? (csv).",
     "set_active_sheet": "Args: sheet_id",
     "set_sheet_title": "Args: title, sheet?",
     "delete_sheet": "Args: sheet_id? Permanently removes the page.",
@@ -477,7 +497,7 @@ OP_HELP: dict[str, dict[str, str]] = {
     "export_pdf": "Drawing sheets only unless sheet= is set. Args: path, sheet?",
     "export_svg": "Args: path, sheet?",
     "export_dxf": "One AutoCAD DXF (R2010, mm) per call. Active sheet unless sheet= is set. Args: path, sheet?",
-    "export_bom": "Args: path, grouped?",
+    "export_bom": "Args: path, grouped?, panel? (a panel tag, or project for the summed bill). A single-panel file omits the panel column.",
     "import_bom": "Parts-list CSV. Columns: Tag/Ref, Part Number, Manufacturer, Description, Qty, library_id (optional). A row with a part number or description and no tag or library id becomes needs-info (no millimetres; off the BOM, quote, and cutouts; print is NOT FOR BUILD). Args: path, place_missing?",
     "quote_build": "Quote from the drawing. Prices only from an imported list, library fields, or manual lines. Labor minutes are example defaults until edited. Nothing is sent. Args: today?",
     "quote_set_rates": "Edit labor minutes, shop rates, markup, tax, freight, contingency, quote number, customer, project, or manual prices. Args: scope?=project|user|both, labor?, shop_rates?, parts_markup_percent?, labor_markup_percent?, category_markups?, tax_percent?, freight?, contingency_percent?, stale_after_days?, price_mode?=cheapest|preferred, preferred_vendor?, number?, customer?, project?, currency?, manual?{line_key:{unit_cost,vendor,lead_time,price_date}}. Nothing is sent.",
@@ -487,7 +507,7 @@ OP_HELP: dict[str, dict[str, str]] = {
     "import_wires": "Args: path",
     "export_json": "Full project JSON. Args: path",
     "export_package": "Folder package (yaml/json/bom/wires/library/svg/dxf + print-package PDF). Args: path, pdf?=true, paper?, sections?",
-    "print_package": "One customer/shop PDF: cover, index, revisions, drawings, BOM, wires, device index, PLC I/O list, terminals, checks. Blocked (NOT FOR BUILD) while any layout occupant lacks catalog dims or a confirmed envelope. Args: path, paper?=mixed, sections?",
+    "print_package": "One customer/shop PDF: cover, index, revisions, drawings, BOM, wires, device index, PLC I/O list, terminals, interconnect, checks. Two or more panels group the drawings by panel and split the BOM per panel plus a project total. Blocked (NOT FOR BUILD) while any layout occupant lacks catalog dims or a confirmed envelope. Args: path, paper?=mixed, sections?",
     "import_any": "Auto-detect package, yaml, json, csv, library, sheet. Args: path, replace?",
     "import_library": "Args: path",
     "import_sheet": "Args: path",
@@ -507,7 +527,7 @@ OP_HELP: dict[str, dict[str, str]] = {
     "add_rail": "DIN rail on a panel_layout sheet. Args: rail_id, x, y, length_mm?, sheet?",
     "delete_rail": "Args: rail_id, sheet?",
     "list_rails": "Args: sheet?",
-    "set_enclosure": "Backplate size. Args: width_mm?, height_mm?, depth_mm?, x?, y?, name?, sheet?",
+    "set_enclosure": "Backplate size. Args: width_mm?, height_mm?, depth_mm?, x?, y?, name?, sheet?, enclosure_id? or enclosure? or catalog?. A backpanel that belongs to a panel accepts only an enclosure id from libraries/enclosures.yaml. Typed millimetres are refused there.",
     "layout_from_schematic": "Pack unique schematic devices onto a panel_layout sheet. Keeps a sized enclosure and does not invent a box size. The page outline is not a size: result.needs_info is set and nothing is placed until the enclosure is sized. Generic/placeholder parts are left unplaced (result.unplaced). Args: sheet?",
     "recommend_cabinet": "Cabinet W×H×D from BOM incabinet=yes. Args: sheet?, apply?=false",
     "size_enclosure": "Shop enclosure auto-size from footprints, wire duct, spare space, and a 60-70% fill target. Picks the next real catalog size up when the tightest library box is too full. Never invents a width or height. Never writes unless apply=true. Args: apply?=false, place_parts?=false, sheet?, spare_pct?, fill_target?, fill_min?, fill_max?, nema?, material?, ambient_c?, max_internal_c?, duct_face_in?, duct_depth_in?, rail_to_duct_in?, wall_gutter_in?, separate_control_rail?=false",
@@ -722,6 +742,11 @@ _CABLE_FIELDS = {
     "show_tag",
     "pairs",
     "assignments",
+    "kind",
+    "from_panel",
+    "to_panel",
+    "to_strip",
+    "to_terminals",
 }
 
 
@@ -1244,6 +1269,78 @@ class Agent:
             )
         return {"id": sheet.id}
 
+    def op_list_panels(self, msg: dict[str, Any]) -> dict[str, Any]:
+        return {"panels": self._need().list_panels(), "active": self._need().project.active_panel}
+
+    def op_add_panel(self, msg: dict[str, Any]) -> dict[str, Any]:
+        tag = str(msg.get("tag") or msg.get("panel") or "").strip()
+        if not tag:
+            raise ValueError("tag is required")
+        enclosure = msg.get("enclosure_id") or msg.get("enclosure") or msg.get("catalog") or ""
+        return self._need().add_panel(
+            tag,
+            name=str(msg.get("name") or msg.get("title") or ""),
+            enclosure_id=str(enclosure or ""),
+            system=str(msg.get("system") or ""),
+        )
+
+    def op_delete_panel(self, msg: dict[str, Any]) -> dict[str, Any]:
+        panel = str(msg.get("panel") or msg.get("tag") or "").strip()
+        if not panel:
+            raise ValueError("panel is required")
+        reassign = msg.get("reassign") or msg.get("to_panel") or msg.get("to")
+        if reassign is not None and not str(reassign).strip():
+            reassign = None
+        return self._need().delete_panel(panel, reassign=None if reassign is None else str(reassign))
+
+    def op_set_panel_enclosure(self, msg: dict[str, Any]) -> dict[str, Any]:
+        panel = str(msg.get("panel") or msg.get("tag") or "").strip()
+        enclosure = str(msg.get("enclosure_id") or msg.get("enclosure") or msg.get("catalog") or "").strip()
+        if not panel or not enclosure:
+            raise ValueError("panel and enclosure_id are required")
+        replace = msg.get("replace", False)
+        if isinstance(replace, str):
+            replace = replace.lower() in {"1", "true", "yes"}
+        return self._need().set_panel_enclosure(panel, enclosure, replace=bool(replace))
+
+    def op_set_active_panel(self, msg: dict[str, Any]) -> dict[str, Any]:
+        panel = str(msg.get("panel") or msg.get("tag") or "").strip()
+        if not panel:
+            raise ValueError("panel is required")
+        return self._need().set_active_panel(panel)
+
+    def op_assign_panel(self, msg: dict[str, Any]) -> dict[str, Any]:
+        ref = str(msg.get("ref") or "").strip()
+        panel = str(msg.get("panel") or msg.get("location") or "").strip()
+        if not ref or not panel:
+            raise ValueError("ref and panel are required")
+        return self._need().assign_device(ref, panel, sheet_id=msg.get("sheet"))
+
+    def op_assign_sheet_panel(self, msg: dict[str, Any]) -> dict[str, Any]:
+        sheet = str(msg.get("sheet") or msg.get("sheet_id") or "").strip()
+        panel = str(msg.get("panel") or "").strip()
+        if not sheet or not panel:
+            raise ValueError("sheet and panel are required")
+        return self._need().assign_sheet(sheet, panel)
+
+    def op_add_interconnect(self, msg: dict[str, Any]) -> dict[str, Any]:
+        src = str(msg.get("from_panel") or msg.get("from") or "").strip()
+        dst = str(msg.get("to_panel") or msg.get("to") or "").strip()
+        if not src or not dst:
+            raise ValueError("from_panel and to_panel are required")
+        fields = _cable_fields(msg)
+        fields.pop("from_panel", None)
+        fields.pop("to_panel", None)
+        fields.pop("kind", None)
+        return self._need().add_interconnect(src, dst, **fields)
+
+    def op_interconnect_schedule(self, msg: dict[str, Any]) -> dict[str, Any]:
+        rows = self._need().interconnect_rows()
+        result: dict[str, Any] = {"rows": rows, "count": len(rows)}
+        if msg.get("path"):
+            result["path"] = str(self._need().export_interconnect(msg["path"]))
+        return result
+
     def op_set_active_sheet(self, msg: dict[str, Any]) -> dict[str, Any]:
         sheet = self._need().set_active_sheet(str(msg.get("sheet_id") or msg.get("sheet")))
         return {"id": sheet.id, "title": sheet.title}
@@ -1301,6 +1398,7 @@ class Agent:
             properties=msg.get("properties"),
             rail_id=msg.get("rail_id"),
             snap=msg.get("snap", True),
+            panel=msg.get("panel") or msg.get("location"),
         )
         return _placed(self._need(), comp)
 
@@ -1394,6 +1492,14 @@ class Agent:
             y=msg.get("y"),
             name=msg.get("name"),
             sheet_id=msg.get("sheet"),
+            nema_type=msg.get("nema_type") or msg.get("nema"),
+            material=msg.get("material"),
+            catalog=msg.get("catalog"),
+            manufacturer=msg.get("manufacturer"),
+            mount=msg.get("mount"),
+            panel_width_mm=msg.get("panel_width_mm"),
+            panel_height_mm=msg.get("panel_height_mm"),
+            enclosure_id=msg.get("enclosure_id") or msg.get("enclosure"),
         )
         return enc.model_dump()
 
@@ -1514,6 +1620,19 @@ class Agent:
         if not opts:
             raise ValueError("set_ambient needs at least one temperature or mount setting")
         return self._need().set_ambient(**opts)
+
+    def op_wire_offpage(self, msg: dict[str, Any]) -> dict[str, Any]:
+        to_sheet = msg.get("to_sheet") or msg.get("dest_sheet")
+        if not str(to_sheet or "").strip():
+            raise ValueError("to_sheet is required")
+        return self._need().wire_offpage(
+            frm=msg.get("from") or msg.get("frm"),
+            to=msg["to"],
+            net=msg.get("net"),
+            from_sheet=msg.get("from_sheet") or msg.get("sheet"),
+            to_sheet=str(to_sheet),
+            label=msg.get("label"),
+        )
 
     def op_wire(self, msg: dict[str, Any]) -> dict[str, Any]:
         w = self._need().wire(
@@ -2295,7 +2414,11 @@ class Agent:
         )
 
     def op_export_bom(self, msg: dict[str, Any]) -> dict[str, Any]:
-        path = self._need().export_bom(msg["path"], grouped=bool(msg.get("grouped")))
+        path = self._need().export_bom(
+            msg["path"],
+            grouped=bool(msg.get("grouped")),
+            panel=msg.get("panel"),
+        )
         return {"path": str(path)}
 
     def op_quote_build(self, msg: dict[str, Any]) -> dict[str, Any]:

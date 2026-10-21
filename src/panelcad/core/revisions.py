@@ -230,6 +230,9 @@ def snapshot_body(project: Any) -> dict[str, Any]:
     """Project JSON without nested revision snapshots."""
 
     data = project.model_dump(mode="json", by_alias=True, exclude_none=True)
+    from panelcad.io.yaml_format import omit_default_panel_fields
+
+    omit_default_panel_fields(data)
     data.pop("activity", None)
     data.pop("last_saved", None)
     control = data.get("revision_control")

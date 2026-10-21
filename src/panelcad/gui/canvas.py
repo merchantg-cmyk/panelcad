@@ -535,6 +535,34 @@ class ComponentItem(QGraphicsItem):
             self._tag_layout = (local.x(), local.y(), str(layout[2]), float(layout[3]))
         self.update()
 
+    def _sheet_and_component(self):
+        view = self.scene().views()[0] if self.scene() and self.scene().views() else None
+        if not isinstance(view, SchematicView) or self.layout:
+            return None, None
+        try:
+            sheet = view.session.sheet()
+            return view.session.project, sheet.component(self.component_id)
+        except Exception:  # noqa: BLE001
+            return None, None
+
+    def _shown_tag(self) -> str:
+        project, comp = self._sheet_and_component()
+        if project is None or comp is None:
+            return self.component_id
+        view = self.scene().views()[0]
+        from panelcad.core.panels import schematic_tag_text
+
+        return schematic_tag_text(project, view.session.sheet(), comp)
+
+    def _panel_location_caption(self) -> str:
+        project, comp = self._sheet_and_component()
+        if project is None or comp is None:
+            return ""
+        view = self.scene().views()[0]
+        from panelcad.core.panels import schematic_location_caption
+
+        return schematic_location_caption(project, view.session.sheet(), comp)
+
     def boundingRect(self) -> QRectF:
         rect = QRectF(-28, -16, self._w + 56, self._h + 24)
         if self._tag_layout is not None:
@@ -961,6 +989,7 @@ class ComponentItem(QGraphicsItem):
         painter.setBrush(Qt.BrushStyle.NoBrush)
         from panelcad.core.ladder import is_aux_library
 
+        shown = self._shown_tag()
         if self._hide_tag or (column_drawn and self._tag_layout is None):
             pass
         elif self._tag_layout is not None:
@@ -969,7 +998,7 @@ class ComponentItem(QGraphicsItem):
                 painter,
                 lx,
                 ly,
-                self.component_id,
+                shown,
                 size,
                 align=align,
                 rotate=-float(self.rotation() or 0),
@@ -979,7 +1008,7 @@ class ComponentItem(QGraphicsItem):
                 painter,
                 self._w * 0.5,
                 self._h + 3.2 * self._scale,
-                self.component_id,
+                shown,
                 2.6,
                 align="middle",
             )
@@ -992,12 +1021,15 @@ class ComponentItem(QGraphicsItem):
                     painter,
                     self._w * 0.5,
                     -2.5 * self._scale,
-                    self.component_id,
+                    shown,
                     3.0,
                     align="middle",
                 )
             else:
-                draw_world_text(painter, 0.0, -2.5 * self._scale, self.component_id, 3.0, align="start")
+                draw_world_text(painter, 0.0, -2.5 * self._scale, shown, 3.0, align="start")
+        loc = self._panel_location_caption()
+        if loc and not self.layout:
+            draw_world_text(painter, 0.0, -8.2 * self._scale, loc, 2.0, align="start")
         if column_drawn:
             return
         try:

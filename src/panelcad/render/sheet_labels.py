@@ -353,18 +353,31 @@ def _place_device_tags(
                 return True
         return False
 
+    from panelcad.core.panels import schematic_location_caption, schematic_tag_text
+
+    def _label(comp) -> str:
+        if project is None:
+            return comp.id
+        return schematic_tag_text(project, sheet, comp)
+
+    def _location(comp) -> str:
+        if project is None:
+            return ""
+        return schematic_location_caption(project, sheet, comp)
+
     taken: list[tuple[float, float, float, float]] = []
     order = sorted(sheet.components, key=lambda comp: (comp.y, comp.x, comp.id))
     for comp in order:
+        label = _label(comp)
         layout = layouts.get(comp.id)
         if layout is None or layout[2] != "start":
             if layout is not None:
-                box = text_box(layout[0], layout[1], comp.id, layout[3], layout[2])
+                box = text_box(layout[0], layout[1], label, layout[3], layout[2])
                 if box is not None:
                     taken.append(box)
             continue
         if int(comp.rotation or 0) % 360 != 0 or comp.mirror:
-            box = text_box(layout[0], layout[1], comp.id, layout[3], layout[2])
+            box = text_box(layout[0], layout[1], label, layout[3], layout[2])
             if box is not None:
                 taken.append(box)
             continue
@@ -373,7 +386,7 @@ def _place_device_tags(
         if comp.properties.get("ref_dx") not in (None, "") or comp.properties.get("ref_dy") not in (None, ""):
             layout = _clear_tag_of_earth(layout, comp.id, bodies.get(comp.id), earth)
             layouts[comp.id] = layout
-            box = text_box(layout[0], layout[1], comp.id, layout[3], layout[2])
+            box = text_box(layout[0], layout[1], label, layout[3], layout[2])
             if box is not None:
                 taken.append(box)
             continue
@@ -386,7 +399,7 @@ def _place_device_tags(
             for side in range(56):
                 anchor = comp.x - (0.8 + side * 0.7) * scale
                 baseline = comp.y - margin * scale - size * TEXT_DESCENT * scale
-                box = text_box(anchor, baseline, comp.id, size, "start")
+                box = text_box(anchor, baseline, label, size, "start")
                 if box is None or box[3] > comp.y - 0.25 * scale or box[0] >= comp.x - 0.15 * scale:
                     continue
                 trial = (anchor, baseline, "start", size)
@@ -399,6 +412,15 @@ def _place_device_tags(
                             clear = False
                             break
                         extra.append(cbox)
+                if clear:
+                    loc = _location(comp)
+                    if loc:
+                        lx, ly, lalign, _lsize = trial
+                        lbox = text_box(lx, ly - 3.4, loc, 2.0, lalign)
+                        if lbox is None or blocked(lbox, comp.id, taken):
+                            clear = False
+                        else:
+                            extra.append(lbox)
                 if not clear:
                     continue
                 found = trial
@@ -410,7 +432,7 @@ def _place_device_tags(
             layouts[comp.id] = found
             taken.extend(found_boxes)
         else:
-            current = text_box(layout[0], layout[1], comp.id, layout[3], layout[2])
+            current = text_box(layout[0], layout[1], label, layout[3], layout[2])
             if current is not None:
                 taken.append(current)
             for cx, cy, calign, csize, line in caption_layouts(comp, layout):
@@ -537,6 +559,8 @@ def sheet_text_boxes(
 
     items: list[tuple[str, tuple[float, float, float, float]]] = []
     resolved = resolve_labels(project, catalog, sheet, ladder=ladder, sheet_no=sheet_no)
+    from panelcad.core.panels import schematic_tag_text
+
     tags = resolved.tags
     for comp in sheet.components:
         device = catalog.devices.get(comp.library_id)
@@ -545,7 +569,7 @@ def sheet_text_boxes(
         layout = tags.get(comp.id)
         if layout is not None:
             x, y, talign, size = layout
-            box = text_box(x, y, comp.id, size, talign)
+            box = text_box(x, y, schematic_tag_text(project, sheet, comp), size, talign)
             if box is not None:
                 items.append((f"tag:{comp.id}", box))
         for cx, cy, calign, csize, line in caption_layouts(comp, layout):

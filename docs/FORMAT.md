@@ -40,6 +40,8 @@ NEMA tags are `W101`, `W102`, …. IEC tags are `-W1`, `-W2`, …. `ref_prefixes
 
 `cable_type` is a standard description (`3C+G #12 VFD shielded`, `3C+G #14 TC-ER`, `2PR #18 shielded instrument`). The shield is extra; it is not inside the conductor count. `3C+G` is three phase conductors plus the ground. `part_number` is empty unless someone typed it or the part library has that description with an `http` source URL. Conductor colors follow that same rule: a color already on the wire, typed in the editor, or named by one library cable part (`colors: 1=BLK, 2=RED, G=GRN` in the notes, with an `http` source) is kept. Otherwise the color stays empty and the termination list prints `per cable`. The ground conductor's role prints as `GND`; it is not given a jacket color. `gland` stays empty unless someone enters a cord grip. A library cable part that states an OD in its description or notes, and has an `http` source, fills `od` / `od_source`. The schedule then prints that OD. It does not guess an NPT or metric trade size; with no OD and no entered gland the schedule says `size per cable OD`.
 
+`kind` is `field` (omitted) or `interpanel`. An inter-panel cable sets `from_panel` and `to_panel` to panel ids, plus `to_strip` and `to_terminals` at the far end. Field cables omit those keys.
+
 `shield_bond` is `both`, `panel`, `field`, or `none`. A VFD output cable defaults to `both`: the drain lands on the drive PE / EMC shield clamp (or the strip PE when the cable leaves a strip) and on the motor frame. An instrument cable defaults to `panel`: the drain lands on a ground terminal of that strip when one exists, otherwise `panel chassis ground`, and the field end is `cut back and insulated`. Those two defaults cite Rockwell 520-UM001 and 1756-IN063 on `shield_source`. A shielded cable with no cited default leaves the drain ends blank so the design check can flag it. Spare conductors read `spare, coiled and taped` at both ends until someone assigns a terminal. Length is user-entered (`ft` on NEMA, `m` on IEC) with an optional `slack_pct`. Pull length is length × (1 + slack/100).
 
 ```yaml
@@ -74,11 +76,34 @@ cables:
 | net_wire_specs | map | Optional. Per-net defaults `{size, color, type}` that a wire inherits when its own field is blank. Key `*` is the global fallback (`panelcad electrical net-spec --net all` stores that same key). Keys `control` and `power` are the class defaults used by the from-to report. Empty fields and an empty map are omitted. |
 | cross_reference | map | Optional. `{enabled: true, nc_mark: underline\|bar\|parentheses, rung_pitch_mm: 12.7, rung_numbers: used\|all}`. NEMA line = `sheet*100 + rung` at `rung_pitch_mm` (default 12.7 mm / 0.5 in). IEC uses `/sheet.column`. Opening a file never writes `properties.xref`. Omitted when it is the default. `update_cross_references` / `panelcad electrical xref --write` persist the last computed text. |
 | revision_control | map | Optional. Offline customer revisions stored in the project file (no git). `{scheme: letter\|number, clear_clouds_on_issue: true, issued: [...], clouds: [...]}`. Each issued row is `{rev, date, description, drawn, checked, approved, snapshot}`. `snapshot` is the project at issue time and does not nest further snapshots. Clouds are `{id, sheet, x, y, w, h, rev, manual, note}` in sheet millimetres. `note` is optional shop text drawn in an empty cloud, such as a removal (`S2 deleted`) or a moved-from mark (`K9 moved`). Empty notes are omitted. Omitted when unused. The current rev is `title_block.revisions[0]` and is drawn on every sheet. |
-| cables | list | Optional. Field cables that leave the panel. Omitted when empty. See below. |
+| cables | list | Optional. Field cables that leave a panel, and inter-panel cables. Omitted when empty. See below. |
+| panels | list | Optional. One physical panel (`CP1`, `RIO2`). Omitted when empty. A file with no `panels` list is a single unnamed panel and loads unchanged. Saving that file does not add the list. There is no rewrite migration. |
+| active_panel | string | Optional. Panel id the GUI and `place` assign new devices to. Omitted when empty. |
+| location_system | string | Optional. Default IEC `=system` aspect. A panel's own `system` wins. Omitted when empty. |
 | reconstruct | map | Optional. As-built reconstruction from **phone photos of a physical panel**. Omitted when unused. Photos live in `photos/` next to the project. `{photos, items, checklist, prints, mismatches}`. A part is layout-ready only with a catalog match that has W×H×D or a tech-confirmed envelope (W, H, D, mount). Unidentified items become reconstruct-only `needs_info` / INFO NEEDED markers — never generic bodies. A `.reconstruct.yaml` sidecar keeps this block if a main build opens the file. An old print under `prints` is a secondary cross-check only. |
-| sheets | list | One entry per print page. Panel jobs are multi-sheet. |
+| sheets | list | One entry per print page. Panel jobs are multi-sheet. Each sheet may name a `panel`. |
 | last_saved | map | Optional. `{user, host, time, summary}` of the last save. Omitted until a save records it. Not copied into customer revision snapshots. |
 | activity | list | Optional. Newest 100 saves: `{user, host, time, summary}`. Omitted when empty. Same exclusion from revision snapshots. See `docs/SHARED_FOLDERS.md`. |
+
+### panels
+
+Several enclosures in one project: a main panel, a remote I/O panel, an MCC section, an operator station. Each panel has a tag, an optional name, a catalog enclosure, a backpanel sheet, a door sheet, and a terminal-strip sheet.
+
+```yaml
+panels:
+  - { id: cp1, tag: CP1, name: Main, enclosure_id: wall-20x12x8-n12, system: A1 }
+  - { id: rio2, tag: RIO2, name: Remote I/O, enclosure_id: wall-20x16x8-n12 }
+active_panel: rio2
+location_system: A1
+```
+
+`enclosure_id` is a row in `libraries/enclosures.yaml` (id or confirmed catalog number). The backpanel sheet stores that row's millimetres. A typed width, height, or depth is not a panel enclosure. A table row with no confirmed catalog number still supplies the standard size and leaves `catalog` blank.
+
+Devices carry `panel: cp1` (the panel id). The device tag stays `K1` or `CR1`. On an IEC drawing the schematic shows `=A1+CP1-K1`. On a NEMA drawing the tag stays `CR1` and the location line is `CP1`. A single-panel file leaves `panel` off the component, so the drawing does not change.
+
+Sheets use the same `panel` id. The print package, when there are two or more panels, prints unassigned sheets first and then each panel's sheets together. The bill is one section per panel plus a project total.
+
+An inter-panel cable is a `cables` row with `kind: interpanel`, `from_panel`, `to_panel`, and the strip at each end. `kind: field` is omitted. Off-page arrows between those panels include the other panel's tag (`TO RIO2 4 / K1`).
 
 ### title_block
 
@@ -115,6 +140,7 @@ Drawn as labeled boxes on the bottom of the sheet, plus zone coordinates (number
 | enclosure | map | `{x, y, width_mm, height_mm, depth_mm, name}` backplate outline |
 | network | map | `{name, medium, protocol}` on `kind: network` sheets |
 | closed | bool | Optional. `true` hides the tab; the page stays in the print set. Omit or `false` when open. |
+| panel | string | Optional. Panel id (`cp1`). Omitted when empty. Layout, door, and terminal sheets created while a panel is active are assigned to it. |
 
 A `terminal` sheet does not copy the terminal blocks. It projects every terminal whose strip name matches `strip`, in schematic reading order (sheet, then top to bottom, then left to right), at catalog block width. A strip that does not fit continues on the next row and then on `strip_part` 2, 3, …. Pin A is the internal side (rotated text above the block) and pin B is the field side (rotated text below). End stops, end plates, and partitions are on the panel DIN rail with the terminal footprints, touching at catalog width:
 
@@ -190,6 +216,7 @@ Standard box sizes live in `libraries/enclosures.yaml` (not the device catalog).
 | pins_locked | bool | Default `true`. Unlock to slide connection points on this instance. |
 | pin_overrides | map | `{ pin_id: {x, y, side?} }` in symbol-local mm. Omit pins that still use the library. |
 | picture | string | Photo for **panel_layout / door_layout** only. Empty shows a PHOTO slot on the footprint. |
+| panel | string | Optional. Panel id this device belongs to. Omitted when empty. Same tag on another sheet is the same device and the same panel. |
 
 Pin references are `{component_id}.{pin_id}` → `Q1.2`, `K1.A1`. Comms port refs on network sheets use the same form: `A2.ETH`, `A2.COM2`.
 

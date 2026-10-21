@@ -147,6 +147,7 @@ def pack_circuit_layouts(
         "placed": True,
         "accessories": panel.get("accessories", []),
         "preexisting": bool(panel.get("preexisting")),
+        "enclosure_chosen": bool(panel.get("enclosure_chosen")),
     }
     if warnings:
         result["resize"] = "recommend_enclosure"
@@ -167,12 +168,34 @@ def _append_panel(
     dest_id = _ensure_kind_sheet(session, "panel_layout", "enclosure", "Enclosure")
     dest = session.sheet(dest_id)
     preexisting = bool(dest.components)
-    if dest.enclosure is None or not dest.rails:
-        enc, rails = default_enclosure_and_rails(dest.page)
-        if dest.enclosure is None:
-            dest.enclosure = enc
+    from panelcad.core.panels import find_panel, panel_backpanel_chosen
+
+    panel = find_panel(session.project, dest.panel) if dest.kind == "panel_layout" else None
+    chosen = bool(panel is not None and panel_backpanel_chosen(session.project, dest))
+    if panel is not None and chosen and dest.enclosure is not None and not dest.components:
+        from panelcad.core.layout import seat_enclosure_on_sheet
+        from panelcad.core.panels import fit_backpanel_rails
+
+        seat_enclosure_on_sheet(dest)
+        fit_backpanel_rails(dest)
+    elif panel is not None and not chosen:
+        rec = session.recommend_enclosure()
+        box = rec.get("enclosure") or {}
+        if box.get("id"):
+            session._write_enclosure_recommendation(rec, sheet_id=dest.id, place_parts=False)
+        if dest.enclosure is not None and not dest.rails:
+            from panelcad.core.panels import fit_backpanel_rails
+
+            fit_backpanel_rails(dest)
+    if not dest.rails:
+        if panel is None and (dest.enclosure is None or not dest.rails):
+            enc, rails = default_enclosure_and_rails(dest.page)
+            if dest.enclosure is None:
+                dest.enclosure = enc
+            if not dest.rails:
+                dest.rails = rails
         if not dest.rails:
-            dest.rails = rails
+            _seed_rail(dest)
 
     already = {comp.id for comp in dest.components}
     occupied = _occupied(session, dest)
@@ -233,6 +256,7 @@ def _append_panel(
         "field": field,
         "accessories": accessories,
         "preexisting": preexisting,
+        "enclosure_chosen": chosen,
     }
 
 
@@ -1327,11 +1351,34 @@ def _candidate_starts(rail: Rail, occupied: list[tuple[float, float, float, floa
     return ordered or [float(rail.x)]
 
 
+def _seed_rail(dest: Any) -> None:
+    """One rail on an empty backpanel so the next row has a rail to copy."""
+
+    if dest.rails:
+        return
+    plate = _plate_box(dest)
+    if plate is None:
+        dest.rails.append(Rail(id="r1", x=40.0, y=80.0, length_mm=180.0))
+        return
+    left, top, right, _bottom = plate
+    inset = 12.0
+    dest.rails.append(
+        Rail(
+            id="r1",
+            x=left + inset,
+            y=top + 36.0,
+            length_mm=max(40.0, right - left - 2.0 * inset),
+        )
+    )
+
+
 def _add_rail(
     dest: Any,
     occupied: list[tuple[float, float, float, float]],
     warnings: list[str],
 ) -> Rail:
+    if not dest.rails:
+        _seed_rail(dest)
     last = dest.rails[-1]
     rh = rail_height(last)
     scale = _sheet_scale(dest)
@@ -1529,13 +1576,27 @@ def _furniture_fits(dest: Any, rail: Rail, trays_before: list[Any]) -> bool:
     return True
 
 
+_BACKPLATE_MISS = " not fit in the free backplate"
+
+
 def _fit_warning(pieces: list[Any]) -> str:
     names = ", ".join(str(getattr(piece, "ref", piece)) for piece in pieces)
     verb = "does" if len(pieces) == 1 else "do"
-    return (
-        f"{names} {verb} not fit in the free backplate; "
-        "recommend_enclosure can size a larger box"
-    )
+    return f"{names} {verb}{_BACKPLATE_MISS}; recommend_enclosure can size a larger box"
+
+
+def backplate_fit_refs(line: str) -> list[str]:
+    """Tags named by a free-backplate fit warning. Other warnings return none."""
+
+    text = str(line)
+    if _BACKPLATE_MISS not in text:
+        return []
+    head = text.split(_BACKPLATE_MISS, 1)[0]
+    if head.endswith(" does"):
+        head = head[: -len(" does")]
+    elif head.endswith(" do"):
+        head = head[: -len(" do")]
+    return [part.strip() for part in head.split(",") if part.strip()]
 
 
 def _occupied(session: Any, dest: Any) -> list[tuple[float, float, float, float]]:

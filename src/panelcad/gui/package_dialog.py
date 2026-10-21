@@ -34,6 +34,7 @@ _SECTION_LABELS = {
     "xref": "Device index / cross-reference (page-zone, terminals, wires)",
     "plc_io": "PLC I/O list (address, type, tag, device, spares)",
     "terminals": "Terminal strip lists",
+    "interconnect": "Inter-panel cable schedule (when the project has one)",
     "checks": "Design checks (open findings; suppressed noted)",
     "power": "Control power budget (one page per supply)",
     "thermal": "Enclosure thermal (watt loss, rise, cooling)",
@@ -64,8 +65,9 @@ class PrintPackageDialog(QDialog):
         layout.addWidget(title)
         note = QLabel(
             "Cover, index, revision history, every drawing at its real sheet size "
-            "(with the title block), then BOM, wire lists, PLC I/O list, terminal strips, and "
-            "open design checks. Vector PDF — text stays selectable."
+            "(with the title block), then BOM, wire lists, PLC I/O list, terminal strips, "
+            "inter-panel cables, and open design checks. Two or more panels group the "
+            "drawings and split the bill by panel. Vector PDF — text stays selectable."
         )
         note.setWordWrap(True)
         layout.addWidget(note)

@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QHBoxLayout, QMenu, QPushButton, QTabBar, QWidget
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QMenu, QPushButton, QTabBar, QWidget
 
 from panelcad.api.session import Session
 
@@ -13,6 +13,7 @@ class SheetBar(QWidget):
     """Tab strip for open sheets. X closes a tab; the page stays in the project."""
 
     sheet_selected = Signal(str)
+    panel_selected = Signal(str)
     add_requested = Signal()
     close_requested = Signal(str)
     delete_requested = Signal(str)
@@ -40,6 +41,12 @@ class SheetBar(QWidget):
         self.tabs.customContextMenuRequested.connect(self._tab_menu)
         self._applying_order = False
         layout.addWidget(self.tabs, 1)
+        self.panel_combo = QComboBox()
+        self.panel_combo.setFixedHeight(22)
+        self.panel_combo.setMinimumWidth(128)
+        self.panel_combo.setToolTip("Active control panel. New devices are assigned here.")
+        self.panel_combo.currentIndexChanged.connect(self._panel_changed)
+        layout.addWidget(self.panel_combo)
         add = QPushButton("+ Sheet")
         add.setFixedHeight(22)
         add.setToolTip("Add a sheet (schematic, panel, communications, door, terminal)")
@@ -69,7 +76,14 @@ class SheetBar(QWidget):
         for i, sheet in enumerate(self._session.project.sheets):
             if sheet.closed:
                 continue
-            label = f"{i + 1}  {sheet.title or sheet.id}"
+            prefix = ""
+            if sheet.panel and len(self._session.project.panels) >= 2:
+                from panelcad.core.panels import find_panel, panel_tag
+
+                home = find_panel(self._session.project, sheet.panel)
+                if home is not None:
+                    prefix = f"{panel_tag(home)} · "
+            label = f"{prefix}{i + 1}  {sheet.title or sheet.id}"
             idx = self.tabs.addTab(label)
             self.tabs.setTabData(idx, sheet.id)
             self.tabs.setTabToolTip(
@@ -81,6 +95,7 @@ class SheetBar(QWidget):
             visible_i += 1
         self.tabs.setCurrentIndex(current)
         self.tabs.blockSignals(False)
+        self._fill_panels()
         self._applying_order = False
         n_closed = len(self._session.closed_sheets())
         self.closed_btn.setEnabled(n_closed > 0)
@@ -91,6 +106,36 @@ class SheetBar(QWidget):
             self.closed_btn.setToolTip(
                 "Reopen is off: no pages are closed. Close a tab with X, then reopen it here."
             )
+
+    def _fill_panels(self) -> None:
+        if self._session is None:
+            return
+        combo = self.panel_combo
+        combo.blockSignals(True)
+        combo.clear()
+        panels = self._session.project.panels
+        if not panels:
+            combo.addItem("Single panel", "")
+            combo.setEnabled(False)
+            combo.setToolTip("One panel. Insert → Panel adds another.")
+        else:
+            combo.setEnabled(True)
+            combo.setToolTip("Active control panel. New devices are assigned here.")
+            current = 0
+            for index, panel in enumerate(panels):
+                label = panel.tag or panel.id
+                if panel.name:
+                    label = f"{label}  {panel.name}"
+                combo.addItem(label, panel.id)
+                if panel.id == self._session.project.active_panel:
+                    current = index
+            combo.setCurrentIndex(current)
+        combo.blockSignals(False)
+
+    def _panel_changed(self, _index: int) -> None:
+        pid = self.panel_combo.currentData()
+        if pid:
+            self.panel_selected.emit(str(pid))
 
     def _sheet_id(self, index: int) -> str | None:
         if index < 0:

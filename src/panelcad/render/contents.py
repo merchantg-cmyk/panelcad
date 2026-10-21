@@ -81,9 +81,13 @@ def draw_sheet_body(
             for pin in device.pins:
                 power_pins.append(pin_world(comp, pin))
 
+    from panelcad.core.panels import schematic_location_caption, schematic_tag_text
+
     for comp in sheet.components:
         device = catalog.get(comp.library_id)
         painter.set_layer("DEVICES")
+        tag_text = schematic_tag_text(project, sheet, comp) if project is not None else None
+        location_text = schematic_location_caption(project, sheet, comp) if project is not None else ""
         draw_device(
             painter,
             device,
@@ -91,6 +95,8 @@ def draw_sheet_body(
             coil_style=coil_style,
             ref_align="middle" if elementary else "start",
             tag_at=tag_at.get(comp.id),
+            tag_text=tag_text,
+            location_text=location_text,
         )
         if comp.properties.get("ladder_card") or comp.properties.get("ladder_coil"):
             continue

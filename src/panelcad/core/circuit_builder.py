@@ -1728,6 +1728,88 @@ def _layout_ghost(session: Any, part: _Part) -> Any:
 
 
 
+def _outside_component_ids(session: Any, sheet_id: str) -> list[str]:
+    """Placed in-cabinet parts whose body hangs outside the drawn enclosure."""
+
+    from panelcad.core.layout import footprint_size
+    from panelcad.library.panel import effective_footprint, is_incabinet
+
+    sheet = session.sheet(sheet_id)
+    enc = sheet.enclosure
+    if enc is None:
+        return []
+    outside: list[str] = []
+    scale = float(enc.draw_scale or 1.0) or 1.0
+    right = enc.x + enc.width_mm * scale
+    bottom = enc.y + enc.height_mm * scale
+    for comp in sheet.components:
+        device = session.catalog.devices.get(comp.library_id)
+        if device is None:
+            continue
+        if not is_incabinet(device, comp) and effective_footprint(device, comp).mount in {"none", "field"}:
+            continue
+        width, height = footprint_size(device, comp)
+        if width <= 0 and height <= 0:
+            continue
+        if (
+            comp.x + 0.05 < enc.x
+            or comp.y + 0.05 < enc.y
+            or comp.x + width - 0.05 > right
+            or comp.y + height - 0.05 > bottom
+        ):
+            outside.append(comp.id)
+    return outside
+
+
+def _devices_outside_enclosure(session: Any, sheet_id: str) -> bool:
+    """True when a placed in-cabinet part hangs outside the backpanel outline."""
+
+    return bool(_outside_component_ids(session, sheet_id))
+
+
+def _remember_panel_unplaced(
+    session: Any, sheet_id: str, refs: list[str], owners: list[str] | None = None
+) -> None:
+    """Remember in-cabinet tags the chosen box could not take, for Problems.
+
+    ``owners`` are the schematic tags of every circuit still waiting. Problems drops the entry once
+    none of them is left in the project, so deleting the circuit clears it.
+    """
+
+    stored = dict(session.project.properties.get("panel_unplaced") or {})
+    if refs:
+        if owners:
+            prior = stored.get(sheet_id)
+            earlier = list(prior.get("owners") or []) if isinstance(prior, dict) else []
+            stored[sheet_id] = {"refs": list(refs), "owners": list(dict.fromkeys([*earlier, *owners]))}
+        else:
+            stored[sheet_id] = list(refs)
+    else:
+        stored.pop(sheet_id, None)
+    if stored:
+        session.project.properties["panel_unplaced"] = stored
+    else:
+        session.project.properties.pop("panel_unplaced", None)
+
+
+def _kept_enclosure_warning(session: Any, sheet_id: str) -> str:
+    from panelcad.core.panels import find_panel, panel_tag
+
+    sheet = session.sheet(sheet_id)
+    panel = find_panel(session.project, sheet.panel)
+    tag = panel_tag(panel) if panel is not None else sheet.id
+    name = ""
+    if sheet.enclosure is not None:
+        name = str(sheet.enclosure.catalog or sheet.enclosure.name or "").strip()
+    if not name and panel is not None:
+        name = str(panel.enclosure_id or "").strip()
+    which = f" {name}" if name else ""
+    return (
+        f"{tag} keeps enclosure{which}. The circuit does not fit. "
+        "Run Size Enclosure to choose a larger box."
+    )
+
+
 def _pack_layouts(session: Any, parts: list[_Part], *, kind: str, place_layout: bool = True) -> dict[str, Any]:
     """Add this circuit to panel and door layouts without wiping hand-placed parts.
 
@@ -1744,6 +1826,68 @@ def _pack_layouts(session: Any, parts: list[_Part], *, kind: str, place_layout: 
     if not panel_id:
         return result
     sheet_ids = [panel_id, result.get("door")]
+    if result.get("enclosure_chosen"):
+        # Keep the catalog box. Draw it at the same page scale as Size
+        # Enclosure, and lay the circuit out in that outline. Drop a fit
+        # warning only when every in-cabinet part landed inside the box.
+        # A part that was never placed is not inside.
+        from panelcad.core.circuit_layout import backplate_fit_refs
+
+        rec = session.recommend_enclosure()
+        if rec.get("enclosure"):
+            written = session._write_enclosure_recommendation(
+                rec, sheet_id=panel_id, place_parts=True, keep_size=True
+            )
+            result["draw_scale"] = written.get("draw_scale")
+        sheet = session.sheet(panel_id)
+        on_sheet = {comp.id for comp in sheet.components}
+        outside_ids = set(_outside_component_ids(session, panel_id))
+        missing: list[str] = []
+        for line in result.get("warnings") or []:
+            for ref in backplate_fit_refs(str(line)):
+                if ref in on_sheet and ref not in outside_ids:
+                    continue
+                if ref not in missing:
+                    missing.append(ref)
+        for ref in outside_ids:
+            if ref not in missing:
+                missing.append(ref)
+        if missing:
+            kept: list[str] = []
+            for line in result.get("warnings") or []:
+                text = str(line)
+                if "not fit" not in text:
+                    kept.append(text)
+                    continue
+                refs = backplate_fit_refs(text)
+                if refs and all(ref in on_sheet and ref not in outside_ids for ref in refs):
+                    continue
+                kept.append(text)
+            listed: set[str] = set()
+            for line in kept:
+                listed.update(backplate_fit_refs(line))
+            absent = [ref for ref in missing if ref not in on_sheet and ref not in listed]
+            if absent:
+                names = ", ".join(absent)
+                verb = "does" if len(absent) == 1 else "do"
+                kept.append(
+                    f"{names} {verb} not fit in the free backplate; "
+                    "recommend_enclosure can size a larger box"
+                )
+            note = _kept_enclosure_warning(session, panel_id)
+            if note not in kept:
+                kept.append(note)
+            result["warnings"] = kept
+            _remember_panel_unplaced(
+                session, panel_id, missing, [str(part.ref) for part in parts if part.ref and not part.reuse]
+            )
+        else:
+            result["warnings"] = [
+                line for line in (result.get("warnings") or []) if "not fit" not in str(line)
+            ]
+            _remember_panel_unplaced(session, panel_id, [])
+        result["enclosure_kept"] = True
+        return result
     misses = any(sheet_id and _sheet_misses_frame(session, sheet_id) for sheet_id in sheet_ids)
     omitted = any("not fit" in str(line) for line in (result.get("warnings") or []))
     shrunk = any(sheet_id and _sheet_has_shrunk_device(session, sheet_id) for sheet_id in sheet_ids)

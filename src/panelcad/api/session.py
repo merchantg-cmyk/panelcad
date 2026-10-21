@@ -889,10 +889,492 @@ class Session:
             sheet.network = NetworkInfo(name=title or sid, medium="mixed")
         if kind == "schematic":
             sheet.drawing_style = self.project.title_block.drawing_style
+        if kind in {"panel_layout", "door_layout", "terminal"} and self.project.active_panel:
+            from panelcad.core.panels import find_panel
+
+            if find_panel(self.project, self.project.active_panel) is not None:
+                sheet.panel = self.project.active_panel
         self.project.sheets.append(sheet)
         if make_active:
             self.active_sheet_id = sid
         return sheet
+
+    def _stamp_device_panel(self, sheet: Sheet, comp: Component, explicit: str | None) -> None:
+        """Record which panel a new device belongs to. A single-panel file stays blank."""
+
+        if "offpage" in (comp.library_id or ""):
+            return
+        from panelcad.core.panels import find_panel
+
+        token = str(explicit or "").strip()
+        if not token:
+            token = str(sheet.panel or "").strip()
+        if not token:
+            token = str(self.project.active_panel or "").strip()
+        if not token:
+            return
+        if not self.project.panels:
+            raise ValueError(f"no panel '{token}'. Add a panel before assigning a device.")
+        panel = find_panel(self.project, token)
+        if panel is None:
+            raise ValueError(f"no panel '{token}'")
+        comp.panel = panel.id
+
+    def list_panels(self) -> list[dict[str, Any]]:
+        from panelcad.core.panels import panel_tag
+
+        rows: list[dict[str, Any]] = []
+        for panel in self.project.panels:
+            sheets = [sheet.id for sheet in self.project.sheets if sheet.panel == panel.id]
+            refs: list[str] = []
+            for sheet in self.project.sheets:
+                for comp in sheet.components:
+                    if comp.panel == panel.id and comp.id not in refs:
+                        refs.append(comp.id)
+            layout = next(
+                (sheet for sheet in self.project.sheets if sheet.panel == panel.id and sheet.kind == "panel_layout"),
+                None,
+            )
+            enclosure = None
+            if layout is not None and layout.enclosure is not None:
+                enc = layout.enclosure
+                enclosure = {
+                    "catalog": enc.catalog,
+                    "manufacturer": enc.manufacturer,
+                    "name": enc.name,
+                    "width_mm": enc.width_mm,
+                    "height_mm": enc.height_mm,
+                    "depth_mm": enc.depth_mm,
+                    "panel_width_mm": enc.panel_width_mm,
+                    "panel_height_mm": enc.panel_height_mm,
+                    "sized": bool(enc.sized),
+                    "enclosure_id": panel.enclosure_id,
+                }
+            rows.append(
+                {
+                    "id": panel.id,
+                    "tag": panel_tag(panel),
+                    "name": panel.name,
+                    "system": panel.system or self.project.location_system,
+                    "enclosure_id": panel.enclosure_id,
+                    "enclosure": enclosure,
+                    "sheets": sheets,
+                    "devices": refs,
+                    "active": panel.id == self.project.active_panel,
+                }
+            )
+        return rows
+
+    def add_panel(
+        self,
+        tag: str,
+        *,
+        name: str = "",
+        enclosure_id: str = "",
+        system: str = "",
+        make_sheets: bool = True,
+    ) -> dict[str, Any]:
+        """Add a control panel. The first one claims an existing unassigned layout.
+
+        ``enclosure_id`` is an id or catalog number from libraries/enclosures.yaml.
+        Millimetres are copied from that row. A free width or height is not accepted.
+        """
+
+        label = str(tag or "").strip()
+        if not label:
+            raise ValueError("panel tag is required")
+
+        def run() -> dict[str, Any]:
+            return self._add_panel(
+                label,
+                name=str(name or "").strip(),
+                enclosure_id=str(enclosure_id or "").strip(),
+                system=str(system or "").strip(),
+                make_sheets=bool(make_sheets),
+            )
+
+        return self._undoable("add_panel", f"add panel {label}", run)
+
+    def _add_panel(
+        self,
+        tag: str,
+        *,
+        name: str,
+        enclosure_id: str,
+        system: str,
+        make_sheets: bool,
+    ) -> dict[str, Any]:
+        from panelcad.core.models import Panel
+        from panelcad.core.panels import find_panel, panel_tag, require_catalog_box
+
+        if enclosure_id:
+            require_catalog_box(enclosure_id, self.path.parent if self.path else None)
+        if find_panel(self.project, tag) is not None:
+            raise ValueError(f"panel '{tag}' already exists")
+        pid = _slug(tag)
+        if any(panel.id == pid for panel in self.project.panels):
+            raise ValueError(f"panel '{tag}' already exists")
+        first = not self.project.panels
+        panel = Panel(id=pid, tag=tag, name=name, system=system.lstrip("="))
+        self.project.panels.append(panel)
+        self.project.active_panel = pid
+        back_id = ""
+        door_id = ""
+        term_id = ""
+        if make_sheets:
+            back = door = term = None
+            if first:
+                layouts = [sheet for sheet in self.project.sheets if sheet.kind == "panel_layout" and not sheet.panel]
+                doors = [sheet for sheet in self.project.sheets if sheet.kind == "door_layout" and not sheet.panel]
+                terms = [sheet for sheet in self.project.sheets if sheet.kind == "terminal" and not sheet.panel]
+                if len(layouts) == 1:
+                    back = layouts[0]
+                    back.panel = pid
+                    self._bind_sheet_devices(back, pid, force=False)
+                if len(doors) == 1:
+                    door = doors[0]
+                    door.panel = pid
+                    self._bind_sheet_devices(door, pid, force=False)
+                if len(terms) == 1:
+                    term = terms[0]
+                    term.panel = pid
+                    self._bind_sheet_devices(term, pid, force=False)
+            if first:
+                for sheet in self.project.sheets:
+                    self._bind_sheet_devices(sheet, pid, force=False)
+            if back is None:
+                back = self.add_sheet(
+                    self._unique_sheet_id(f"{pid}-backpanel"),
+                    title=f"{tag} backpanel",
+                    kind="panel_layout",
+                    make_active=False,
+                )
+                back.panel = pid
+            if door is None:
+                door = self.add_sheet(
+                    self._unique_sheet_id(f"{pid}-door"),
+                    title=f"{tag} door",
+                    kind="door_layout",
+                    make_active=False,
+                )
+                door.panel = pid
+            if term is None:
+                term = self.add_sheet(
+                    self._unique_sheet_id(f"{pid}-terminals"),
+                    title=f"{tag} terminals",
+                    kind="terminal",
+                    make_active=False,
+                )
+                term.panel = pid
+                if not term.strip:
+                    term.strip = f"{tag}-TB"
+            back_id, door_id, term_id = back.id, door.id, term.id
+            self.active_sheet_id = back.id
+            if back is not None and not enclosure_id:
+                self._drop_unsized_backpanel(back)
+        if enclosure_id:
+            self._apply_panel_enclosure(panel, enclosure_id, replace=False)
+        return {
+            "id": panel.id,
+            "tag": panel_tag(panel),
+            "name": panel.name,
+            "sheets": {"backpanel": back_id, "door": door_id, "terminals": term_id},
+            "sheet": back_id or self.active_sheet_id,
+            "enclosure_id": panel.enclosure_id,
+            "active": True,
+        }
+
+    def _unique_sheet_id(self, base: str) -> str:
+        sid = _slug(base)
+        if not any(sheet.id == sid for sheet in self.project.sheets):
+            return sid
+        number = 2
+        while any(sheet.id == f"{sid}-{number}" for sheet in self.project.sheets):
+            number += 1
+        return f"{sid}-{number}"
+
+    def _panel_layout_sheet(self, panel: Any) -> Sheet | None:
+        return next(
+            (sheet for sheet in self.project.sheets if sheet.panel == panel.id and sheet.kind == "panel_layout"),
+            None,
+        )
+
+    def set_panel_enclosure(self, panel: str, enclosure_id: str, *, replace: bool = False) -> dict[str, Any]:
+        """Write a catalog enclosure onto this panel's backpanel. No free millimetres."""
+
+        from panelcad.core.panels import require_panel
+
+        target = require_panel(self.project, panel)
+        box_id = str(enclosure_id or "").strip()
+
+        def run() -> dict[str, Any]:
+            return self._apply_panel_enclosure(target, box_id, replace=replace)
+
+        return self._undoable("set_panel_enclosure", f"enclosure {target.tag or target.id}", run)
+
+    def _apply_panel_enclosure(self, panel: Any, enclosure_id: str, *, replace: bool) -> dict[str, Any]:
+        from panelcad.core.layout import enclosure_is_sized
+        from panelcad.core.panels import fit_backpanel_rails, panel_tag, require_catalog_box
+
+        sheet = self._panel_layout_sheet(panel)
+        if sheet is None:
+            raise ValueError(f"panel '{panel_tag(panel)}' has no backpanel sheet")
+        project_dir = self.path.parent if self.path else None
+        box = require_catalog_box(enclosure_id, project_dir)
+        enc = sheet.enclosure
+        if sheet.components and not replace:
+            raise ValueError(
+                f"{sheet.id} already has devices. Pass replace=true to write {box.id} over them."
+            )
+        if (
+            not replace
+            and enclosure_is_sized(enc, sheet.page)
+            and (str(enc.catalog or "").strip() or str(enc.manufacturer or "").strip())
+        ):
+            raise ValueError(
+                f"{sheet.id} already has catalog enclosure {enc.catalog or enc.name}. "
+                f"Pass replace=true to write {box.id}."
+            )
+        self._write_enclosure(
+            sheet,
+            width_mm=box.width_mm,
+            height_mm=box.height_mm,
+            depth_mm=box.depth_mm,
+            panel_width_mm=box.panel_width_mm,
+            panel_height_mm=box.panel_height_mm,
+            name=box.catalog or box.id,
+            nema_type=box.nema,
+            material=box.material,
+            catalog=box.catalog,
+            manufacturer=box.manufacturer,
+            mount=box.mount,
+        )
+        panel.enclosure_id = box.id
+        fit_backpanel_rails(sheet)
+        written = sheet.enclosure
+        return {
+            "panel": panel.id,
+            "tag": panel_tag(panel),
+            "sheet": sheet.id,
+            "enclosure_id": box.id,
+            "catalog": box.catalog,
+            "manufacturer": box.manufacturer,
+            "width_mm": written.width_mm if written else box.width_mm,
+            "height_mm": written.height_mm if written else box.height_mm,
+            "depth_mm": written.depth_mm if written else box.depth_mm,
+            "panel_width_mm": written.panel_width_mm if written else box.panel_width_mm,
+            "panel_height_mm": written.panel_height_mm if written else box.panel_height_mm,
+        }
+
+    def set_active_panel(self, panel: str) -> dict[str, Any]:
+        from panelcad.core.panels import panel_tag, require_panel
+
+        target = require_panel(self.project, panel)
+        self.project.active_panel = target.id
+        current = self.sheet()
+        if current.panel and current.panel != target.id:
+            layout = self._panel_layout_sheet(target)
+            if layout is not None:
+                self.set_active_sheet(layout.id)
+        return {
+            "id": target.id,
+            "tag": panel_tag(target),
+            "active_sheet": self.active_sheet_id,
+        }
+
+    def assign_device(self, ref: str, panel: str, *, sheet_id: str | None = None) -> dict[str, Any]:
+        """Put every copy of this device tag on a panel. The tag itself does not change."""
+
+        from panelcad.core.panels import panel_tag, require_panel
+
+        target = require_panel(self.project, panel)
+        want = str(ref or "").strip()
+        if not want:
+            raise ValueError("ref is required")
+        only = str(sheet_id or "").strip()
+
+        def run() -> dict[str, Any]:
+            found: list[str] = []
+            for sheet in self.project.sheets:
+                if only and sheet.id != only:
+                    continue
+                for comp in sheet.components:
+                    if comp.id != want:
+                        continue
+                    comp.panel = target.id
+                    if sheet.id not in found:
+                        found.append(sheet.id)
+            if not found:
+                raise KeyError(f"no component '{want}'")
+            return {"ref": want, "panel": target.id, "tag": panel_tag(target), "sheets": found}
+
+        return self._undoable("assign_device", f"assign {want} to {panel_tag(target)}", run)
+
+    def _drop_unsized_backpanel(self, sheet: Sheet) -> None:
+        """A new panel does not keep the page-outline box (261×348 on A3)."""
+
+        from panelcad.core.layout import enclosure_is_sized
+
+        if sheet.kind != "panel_layout":
+            return
+        if enclosure_is_sized(sheet.enclosure, sheet.page):
+            return
+        sheet.enclosure = None
+        if not sheet.components:
+            sheet.rails = []
+            sheet.trays = []
+
+    def _bind_sheet_devices(self, sheet: Sheet, panel_id: str, *, force: bool) -> list[str]:
+        """Put devices on *sheet* onto *panel_id*.
+
+        ``force`` moves devices that already name a panel. Off-page arrows stay put.
+        """
+
+        moved: list[str] = []
+        for comp in sheet.components:
+            if "offpage" in (comp.library_id or ""):
+                continue
+            if not force and comp.panel:
+                continue
+            if comp.panel == panel_id:
+                continue
+            comp.panel = panel_id
+            moved.append(comp.id)
+        return moved
+
+    def _only_backpanel(self, sheet: Sheet) -> bool:
+        if sheet.kind != "panel_layout" or not sheet.panel:
+            return False
+        others = [
+            other
+            for other in self.project.sheets
+            if other.kind == "panel_layout" and other.panel == sheet.panel and other.id != sheet.id
+        ]
+        return not others
+
+    def assign_sheet(self, sheet_id: str, panel: str) -> dict[str, Any]:
+        from panelcad.core.panels import find_panel, panel_tag, require_panel
+
+        target = require_panel(self.project, panel)
+        sheet = self.project.sheet(sheet_id)
+
+        def run() -> dict[str, Any]:
+            if sheet.panel != target.id and self._only_backpanel(sheet):
+                home = find_panel(self.project, sheet.panel)
+                tag = panel_tag(home) if home is not None else sheet.panel
+                raise ValueError(
+                    f"{sheet.id} is {tag}'s only backpanel. Add another backpanel before moving this sheet."
+                )
+            sheet.panel = target.id
+            force = sheet.kind in {"panel_layout", "door_layout"}
+            devices = self._bind_sheet_devices(sheet, target.id, force=force)
+            return {
+                "sheet": sheet.id,
+                "panel": target.id,
+                "tag": panel_tag(target),
+                "kind": sheet.kind,
+                "devices": devices,
+            }
+
+        return self._undoable("assign_sheet", f"sheet {sheet.id} on {panel_tag(target)}", run)
+
+    def delete_panel(self, panel: str, *, reassign: str | None = None) -> dict[str, Any]:
+        """Remove a panel. Its sheets and devices move to *reassign*, or become unassigned.
+
+        Nothing is deleted except the panel record. Cable ends that named it
+        follow the same reassign or clear, so no sheet, device, or cable keeps
+        the removed id.
+        """
+
+        from panelcad.core.panels import panel_tag, require_panel
+
+        target = require_panel(self.project, panel)
+        dest = require_panel(self.project, reassign) if str(reassign or "").strip() else None
+        if dest is not None and dest.id == target.id:
+            raise ValueError("reassign must be a different panel")
+
+        def run() -> dict[str, Any]:
+            new_id = dest.id if dest is not None else ""
+            sheets: list[str] = []
+            devices: list[str] = []
+            for sheet in self.project.sheets:
+                if sheet.panel == target.id:
+                    sheet.panel = new_id
+                    sheets.append(sheet.id)
+                for comp in sheet.components:
+                    if comp.panel == target.id:
+                        comp.panel = new_id
+                        devices.append(comp.id)
+            for cable in self.project.cables:
+                if cable.from_panel == target.id:
+                    cable.from_panel = new_id
+                if cable.to_panel == target.id:
+                    cable.to_panel = new_id
+            from panelcad.core.cables import delete_cable
+
+            dropped: list[str] = []
+            for cable in list(self.project.cables):
+                if cable.kind != "interpanel":
+                    continue
+                if cable.from_panel and cable.to_panel and cable.from_panel == cable.to_panel:
+                    dropped.append(cable.tag)
+            for tag in dropped:
+                delete_cable(self.project, tag)
+            self.project.panels = [item for item in self.project.panels if item.id != target.id]
+            if self.project.active_panel == target.id:
+                if new_id:
+                    self.project.active_panel = new_id
+                elif self.project.panels:
+                    self.project.active_panel = self.project.panels[0].id
+                else:
+                    self.project.active_panel = ""
+            return {
+                "deleted": target.id,
+                "tag": panel_tag(target),
+                "reassign": panel_tag(dest) if dest is not None else "",
+                "sheets": sheets,
+                "devices": devices,
+                "dropped_cables": dropped,
+            }
+
+        label = panel_tag(target)
+        summary = f"delete panel {label}" if dest is None else f"delete panel {label} → {panel_tag(dest)}"
+        return self._undoable("delete_panel", summary, run)
+
+    def add_interconnect(self, from_panel: str, to_panel: str, **fields: Any) -> dict[str, Any]:
+        """A cable from one panel's terminal strip to another's. Not a field cable."""
+
+        from panelcad.core.panels import panel_tag, require_panel
+
+        src = require_panel(self.project, from_panel)
+        dst = require_panel(self.project, to_panel)
+        if src.id == dst.id:
+            raise ValueError("an interconnect needs two different panels")
+        payload = dict(fields)
+        payload["kind"] = "interpanel"
+        payload["from_panel"] = src.id
+        payload["to_panel"] = dst.id
+        if not str(payload.get("to_device") or "").strip():
+            payload["to_device"] = panel_tag(dst)
+        if not str(payload.get("to_kind") or "").strip():
+            payload["to_kind"] = "panel"
+        if not str(payload.get("from_device") or "").strip():
+            payload["from_device"] = panel_tag(src)
+        return self.add_cable(**payload)
+
+    def interconnect_rows(self) -> list[dict[str, str]]:
+        from panelcad.core.panels import interconnect_rows
+
+        return interconnect_rows(self.project)
+
+    @_traced_path("export_interconnect")
+    def export_interconnect(self, path: Path | str) -> Path:
+        from panelcad.core.panels import INTERCONNECT_COLUMNS
+        from panelcad.core.cables import write_rows_csv
+
+        dest = Path(path)
+        write_rows_csv(dest, self.interconnect_rows(), INTERCONNECT_COLUMNS)
+        return dest
 
     def set_active_sheet(self, sheet_id: str) -> Sheet:
         raw = str(sheet_id or "").strip()
@@ -938,6 +1420,15 @@ class Session:
 
     def delete_sheet(self, sheet_id: str | None = None) -> None:
         sid = sheet_id or self.active_sheet_id
+        sheet = self.project.sheet(sid)
+        if self._only_backpanel(sheet):
+            from panelcad.core.panels import find_panel, panel_tag
+
+            home = find_panel(self.project, sheet.panel)
+            tag = panel_tag(home) if home is not None else sheet.panel
+            raise ValueError(
+                f"{sheet.id} is {tag}'s only backpanel. Add another backpanel before deleting this sheet."
+            )
         if len(self.project.sheets) <= 1:
             raise ValueError("cannot delete the last sheet")
         self.project.sheets = [s for s in self.project.sheets if s.id != sid]
@@ -1058,6 +1549,7 @@ class Session:
         from_reconstruct_confirm: bool = False,
         _sanitize: bool = True,
         allow_needs_info: bool = False,
+        panel: str | None = None,
     ) -> Component:
         device = self.catalog.get(library_id)
         sheet = self.sheet(sheet_id)
@@ -1130,6 +1622,7 @@ class Session:
             scale=stored_scale,
         )
         sheet.components.append(comp)
+        self._stamp_device_panel(sheet, comp, panel)
         return comp
 
     def place_from_bom(
@@ -1247,6 +1740,8 @@ class Session:
                 if rail is not None:
                     comp.x, comp.y = place_on_rail(device, rail, px)
             sheet.components.append(comp)
+            if not comp.panel:
+                self._stamp_device_panel(sheet, comp, None)
         else:
             comp = self.place(
                 library_id, ref=cid, x=px, y=py, sheet_id=sheet.id, properties=props, snap=snap
@@ -1414,11 +1909,20 @@ class Session:
         _ax, ay = _xy(src, frm)
         _dx, dy = _xy(dest, to)
 
+        from panelcad.core.panels import cross_panel_tag
+
+        src_comp = src.component(src_cid)
+        dst_comp = dest.component(dst_cid)
+        to_panel = cross_panel_tag(self.project, src, src_comp, dest, dst_comp)
+        from_panel = cross_panel_tag(self.project, dest, dst_comp, src, src_comp)
+        to_callout = f"TO {to_panel} {dst_no} / {dst_cid}" if to_panel else f"TO {dst_no} / {dst_cid}"
+        from_callout = f"FROM {from_panel} {src_no} / {src_cid}" if from_panel else f"FROM {src_no} / {src_cid}"
+
         op_src_id = self.next_ref("iec.connection.offpage", src.id)
         op_dst_id = self.next_ref("iec.connection.offpage_from", dest.id)
         src_props = {
             "tag": cap,
-            "callout": f"TO {dst_no} / {dst_cid}",
+            "callout": to_callout,
             "dest_sheet": dest.id,
             "dest_title": dest.title,
             "dest_ref": dst_cid,
@@ -1428,7 +1932,7 @@ class Session:
         }
         dst_props = {
             "tag": cap,
-            "callout": f"FROM {src_no} / {src_cid}",
+            "callout": from_callout,
             "dest_sheet": src.id,
             "dest_title": src.title,
             "dest_ref": src_cid,
@@ -1490,7 +1994,7 @@ class Session:
             "from_wire": w1.id,
             "to_wire": w2.id,
             "link": link,
-            "callout": f"TO {dst_no} / {dst_cid}",
+            "callout": to_callout,
         }
 
     def insert_circuit(
@@ -1737,6 +2241,8 @@ class Session:
         dest.rail_return = sheet.rail_return
         dest.standard = sheet.standard
         dest.description = f"Continuation of {sheet.id}"
+        # A continuation stays on its source sheet's panel (multi-panel projects).
+        dest.panel = sheet.panel
 
         def _owner(end: str) -> str | None:
             ref = str(end).split(".", 1)[0]
@@ -4268,11 +4774,26 @@ class Session:
         return dest
 
     @_traced_path("export_bom")
-    def export_bom(self, path: Path | str, grouped: bool = False) -> Path:
-        from panelcad.io.bom import grouped_rows, instance_rows, with_needs_info_section, write_bom_csv
+    def export_bom(
+        self,
+        path: Path | str,
+        grouped: bool = False,
+        panel: str | None = None,
+    ) -> Path:
+        """Write the bill. ``panel`` is a panel tag, or ``project`` for the summed total."""
+
+        from panelcad.io.bom import bom_for_panel, grouped_rows, instance_rows, with_needs_info_section, write_bom_csv
 
         dest = Path(path)
-        rows = grouped_rows(self.project, self.catalog) if grouped else instance_rows(self.project, self.catalog)
+        scope = str(panel or "").strip()
+        if scope.casefold() in {"project", "all", "*"}:
+            rows = grouped_rows(self.project, self.catalog, by_panel=False)
+        elif scope:
+            rows = bom_for_panel(self.project, self.catalog, scope)
+        elif grouped:
+            rows = grouped_rows(self.project, self.catalog)
+        else:
+            rows = instance_rows(self.project, self.catalog)
         write_bom_csv(dest, with_needs_info_section(rows, self.project, self.catalog))
         return dest
 
@@ -4791,6 +5312,12 @@ class Session:
                     "address": network_address(c),
                 }
             )
+            if self.project.panels:
+                from panelcad.core.panels import component_panel_tag
+
+                tag = component_panel_tag(self.project, sheet, c)
+                if tag:
+                    rows[-1]["location_panel"] = tag
         return rows
 
     def list_wires(self, sheet_id: str | None = None) -> list[dict[str, Any]]:
@@ -5364,6 +5891,75 @@ class Session:
         sheet = self.sheet(sheet_id)
         return [r.model_dump() for r in sheet.rails]
 
+    def _owned_backpanel(self, sheet: Sheet):
+        """The panel that owns this backpanel, or None for a legacy layout sheet."""
+
+        from panelcad.core.panels import find_panel
+
+        if sheet.kind != "panel_layout":
+            return None
+        return find_panel(self.project, sheet.panel)
+
+    def _set_owned_enclosure(
+        self,
+        sheet: Sheet,
+        panel: Any,
+        *,
+        width_mm: float | None,
+        height_mm: float | None,
+        depth_mm: float | None,
+        x: float | None,
+        y: float | None,
+        name: str | None,
+        nema_type: str | None,
+        material: str | None,
+        catalog: str | None,
+        manufacturer: str | None,
+        mount: str | None,
+        panel_width_mm: float | None,
+        panel_height_mm: float | None,
+        enclosure_id: str | None,
+    ) -> Enclosure:
+        """A panel backpanel takes a catalog enclosure id, never typed millimetres."""
+
+        from panelcad.core.panels import lookup_box, panel_tag
+        from panelcad.library.enclosures import load_enclosures
+
+        typed = [
+            ("width_mm", width_mm),
+            ("height_mm", height_mm),
+            ("depth_mm", depth_mm),
+            ("panel_width_mm", panel_width_mm),
+            ("panel_height_mm", panel_height_mm),
+        ]
+        given = [label for label, value in typed if value is not None]
+        if given:
+            raise ValueError(
+                f"{sheet.id} belongs to {panel_tag(panel)}. "
+                "Pass an enclosure id from libraries/enclosures.yaml. "
+                f"Typed millimetres ({', '.join(given)}) are refused."
+            )
+        token = str(enclosure_id or catalog or "").strip()
+        if not token and name:
+            boxes = load_enclosures(self.path.parent if self.path else None).boxes
+            if lookup_box(boxes, str(name)) is not None:
+                token = str(name).strip()
+        identity = [nema_type, material, manufacturer, mount, name]
+        if any(value is not None for value in identity) and not token:
+            raise ValueError(
+                f"{sheet.id} belongs to {panel_tag(panel)}. "
+                "Pass an enclosure id from libraries/enclosures.yaml."
+            )
+        if token:
+            self._apply_panel_enclosure(panel, token, replace=not sheet.components)
+        enc = sheet.enclosure or Enclosure()
+        if x is not None:
+            enc.x = float(x)
+        if y is not None:
+            enc.y = float(y)
+        sheet.enclosure = enc
+        return enc
+
     def set_enclosure(
         self,
         width_mm: float | None = None,
@@ -5380,8 +5976,64 @@ class Session:
         mount: str | None = None,
         panel_width_mm: float | None = None,
         panel_height_mm: float | None = None,
+        enclosure_id: str | None = None,
     ) -> Enclosure:
         sheet = self.sheet(sheet_id)
+        owned = self._owned_backpanel(sheet)
+        if owned is not None:
+            return self._set_owned_enclosure(
+                sheet,
+                owned,
+                width_mm=width_mm,
+                height_mm=height_mm,
+                depth_mm=depth_mm,
+                x=x,
+                y=y,
+                name=name,
+                nema_type=nema_type,
+                material=material,
+                catalog=catalog,
+                manufacturer=manufacturer,
+                mount=mount,
+                panel_width_mm=panel_width_mm,
+                panel_height_mm=panel_height_mm,
+                enclosure_id=enclosure_id,
+            )
+        return self._write_enclosure(
+            sheet,
+            width_mm=width_mm,
+            height_mm=height_mm,
+            depth_mm=depth_mm,
+            x=x,
+            y=y,
+            name=name,
+            nema_type=nema_type,
+            material=material,
+            catalog=catalog,
+            manufacturer=manufacturer,
+            mount=mount,
+            panel_width_mm=panel_width_mm,
+            panel_height_mm=panel_height_mm,
+        )
+
+    def _write_enclosure(
+        self,
+        sheet: Sheet,
+        *,
+        width_mm: float | None = None,
+        height_mm: float | None = None,
+        depth_mm: float | None = None,
+        x: float | None = None,
+        y: float | None = None,
+        name: str | None = None,
+        nema_type: str | None = None,
+        material: str | None = None,
+        catalog: str | None = None,
+        manufacturer: str | None = None,
+        mount: str | None = None,
+        panel_width_mm: float | None = None,
+        panel_height_mm: float | None = None,
+    ) -> Enclosure:
         enc = sheet.enclosure or Enclosure()
         if width_mm is not None:
             enc.width_mm = float(width_mm)
@@ -6049,6 +6701,7 @@ class Session:
         *,
         sheet_id: str | None,
         place_parts: bool,
+        keep_size: bool = False,
     ) -> dict[str, Any]:
         from panelcad.core.enclosure import classify_role, furniture_from_arrangement
         from panelcad.core.layout import (
@@ -6090,29 +6743,64 @@ class Session:
             return classify_role(device, comp) == "door"
 
         wx, wy, ww, wh = working_rect(dest)
-        width = float(box["width_mm"])
-        height = float(box["height_mm"])
-        depth = float(box["depth_mm"])
+        kept = dest.enclosure if keep_size and dest.enclosure is not None else None
+        if kept is not None and kept.width_mm > 1.0 and kept.height_mm > 1.0:
+            width = float(kept.width_mm)
+            height = float(kept.height_mm)
+            depth = float(kept.depth_mm)
+        else:
+            width = float(box["width_mm"])
+            height = float(box["height_mm"])
+            depth = float(box["depth_mm"])
         scale = fit_standard_enclosure_scale(width, height, ww, wh)
         ox, oy = center_in_frame((wx, wy, ww, wh), width * scale, height * scale)
-        self.set_enclosure(
-            width_mm=width,
-            height_mm=height,
-            depth_mm=depth,
-            x=ox,
-            y=oy,
-            name=str(box.get("name") or ""),
-            sheet_id=dest.id,
-            nema_type=str(box.get("nema") or ""),
-            material=str(box.get("material") or ""),
-            catalog=str(box.get("catalog") or ""),
-            manufacturer=str(box.get("manufacturer") or ""),
-            mount=str(box.get("mount") or ""),
-            panel_width_mm=float(box.get("panel_width_mm") or 0.0),
-            panel_height_mm=float(box.get("panel_height_mm") or 0.0),
-        )
+        from panelcad.core.panels import find_panel
+
+        owned = find_panel(self.project, dest.panel) if dest.kind == "panel_layout" else None
+        box_id = str(box.get("id") or "").strip()
+        if keep_size and kept is not None:
+            kept.x = ox
+            kept.y = oy
+            kept.draw_scale = scale
+            dest.enclosure = kept
+        elif owned is not None:
+            if not box_id:
+                raise ValueError(
+                    f"{dest.id} belongs to a panel. Size Enclosure did not name a library enclosure."
+                )
+            self._apply_panel_enclosure(owned, box_id, replace=True)
+            dest.enclosure.x = ox
+            dest.enclosure.y = oy
+        else:
+            self.set_enclosure(
+                width_mm=width,
+                height_mm=height,
+                depth_mm=depth,
+                x=ox,
+                y=oy,
+                name=str(box.get("name") or ""),
+                sheet_id=dest.id,
+                nema_type=str(box.get("nema") or ""),
+                material=str(box.get("material") or ""),
+                catalog=str(box.get("catalog") or ""),
+                manufacturer=str(box.get("manufacturer") or ""),
+                mount=str(box.get("mount") or ""),
+                panel_width_mm=float(box.get("panel_width_mm") or 0.0),
+                panel_height_mm=float(box.get("panel_height_mm") or 0.0),
+            )
         dest.enclosure.draw_scale = scale
         items = list((rec.get("arrangement") or {}).get("items") or [])
+        if keep_size and kept is not None:
+            from panelcad.core.layout import spread_arrangement_onto_plate
+
+            plate_w = float(kept.panel_width_mm or 0.0) or width
+            plate_h = float(kept.panel_height_mm or 0.0) or height
+            inset_x = max(0.0, (width - plate_w) / 2.0)
+            inset_y = max(0.0, (height - plate_h) / 2.0)
+            items = spread_arrangement_onto_plate(
+                items,
+                (inset_x, inset_y, inset_x + plate_w, inset_y + plate_h),
+            )
         rails, trays = furniture_from_arrangement(items, ox, oy, scale)
         dest.rails = rails
         dest.trays = trays
@@ -6216,8 +6904,16 @@ class Session:
             door_enc.width_mm = width
             door_enc.height_mm = height
             door_enc.depth_mm = min(depth, 80.0)
-            door_enc.name = str(box.get("name") or door_enc.name)
-            door_enc.nema_type = str(box.get("nema") or "")
+            if keep_size and kept is not None:
+                door_enc.name = kept.name or door_enc.name
+                door_enc.nema_type = kept.nema_type
+                door_enc.catalog = kept.catalog
+                door_enc.manufacturer = kept.manufacturer
+                door_enc.material = kept.material
+                door_enc.mount = kept.mount
+            else:
+                door_enc.name = str(box.get("name") or door_enc.name)
+                door_enc.nema_type = str(box.get("nema") or "")
             door.enclosure = door_enc
             if place_parts:
                 dwx, dwy, dww, dwh = working_rect(door)
@@ -6676,6 +7372,8 @@ class Session:
             "name": self.project.name,
             "path": str(self.path) if self.path else None,
             "active_sheet": self.active_sheet_id,
+            "panels": self.list_panels(),
+            "active_panel": self.project.active_panel,
             "sheet_count": total,
             "title_block": self.get_title_block(),
             "wire_numbering": self.wire_numbering(),
@@ -6690,6 +7388,7 @@ class Session:
                     "id": s.id,
                     "title": s.title,
                     "kind": s.kind,
+                    "panel": s.panel,
                     "closed": s.closed,
                     "description": s.description,
                     "components": self.list_components(s.id),
@@ -6966,6 +7665,8 @@ _ACTIVITY_METHODS: dict[str, Any] = {
     "set_pin": lambda s, r, a, k: f"slide pin {a[0] if a else k.get('ref')}.{a[1] if len(a) > 1 else k.get('pin_id')}",
     "reset_pins": _summary_generic("reset pins"),
     "set_panel": _summary_generic("panel dims"),
+    "set_active_panel": lambda s, r, a, k: f"active panel {r.get('tag')}",
+    "add_interconnect": lambda s, r, a, k: f"interconnect {r.get('tag')}",
     "confirm_envelope": _summary_generic("confirm envelope"),
     "assign_part": lambda s, r, a, k: f"catalog {r.get('manufacturer')} {r.get('catalog')} → {r.get('id')}",
     "set_control_power_margin": lambda s, r, a, k: f"control power margin {r.get('margin')}",

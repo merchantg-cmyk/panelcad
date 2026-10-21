@@ -745,6 +745,107 @@ def center_in_frame(
     )
 
 
+def spread_arrangement_onto_plate(
+    items: list[dict],
+    plate: tuple[float, float, float, float],
+) -> list[dict]:
+    """Stretch a compact arrangement out to a larger backplate.
+
+    Device bodies stay their true millimetres. Rails and ducts grow so the
+    furniture uses the plate instead of sitting in the corner of a chosen box
+    that is bigger than the circuit. A layout already as large as the plate,
+    or larger on either axis, is unchanged.
+    """
+
+    if not items:
+        return items
+    rows = [dict(item) for item in items]
+    try:
+        boxes = [(float(row["x"]), float(row["y"]), float(row["w"]), float(row["h"])) for row in rows]
+    except (KeyError, TypeError, ValueError):
+        return items
+    minx = min(box[0] for box in boxes)
+    miny = min(box[1] for box in boxes)
+    maxx = max(box[0] + box[2] for box in boxes)
+    maxy = max(box[1] + box[3] for box in boxes)
+    span_w = maxx - minx
+    span_h = maxy - miny
+    left, top, right, bottom = plate
+    plate_w = right - left
+    plate_h = bottom - top
+    if span_w < 1.0 or span_h < 1.0 or plate_w < 1.0 or plate_h < 1.0:
+        return items
+    if span_w >= plate_w * 0.9 and span_h >= plate_h * 0.9:
+        return items
+    scale_x = plate_w / span_w
+    scale_y = plate_h / span_h
+    if scale_x < 1.0 or scale_y < 1.0:
+        return items
+
+    def _vertical(width: float, height: float) -> bool:
+        return height >= width and height > 0.0
+
+    side = 0.0
+    for _x, _y, width, height in boxes:
+        if _vertical(width, height):
+            side = max(side, width)
+    if side * 2.0 >= plate_w - 40.0:
+        side = 0.0
+    inner_w = max(1.0, plate_w - 2.0 * side)
+    field_left = minx + side
+    field_w = max(1.0, span_w - 2.0 * side)
+
+    spread: list[dict] = []
+    for row, (x, y, width, height) in zip(rows, boxes):
+        kind = str(row.get("kind") or "")
+        mapped_y = top + (y - miny) * scale_y
+        if kind == "duct" and _vertical(width, height):
+            on_left = (x - minx) <= (maxx - (x + width))
+            row["x"] = left if on_left else right - width
+            row["y"] = mapped_y
+            row["h"] = height * scale_y
+        elif kind == "duct":
+            outer = width >= span_w * 0.85
+            row["y"] = mapped_y
+            if outer:
+                row["x"] = left
+                row["w"] = plate_w
+            else:
+                row["x"] = left + side
+                row["w"] = inner_w
+        elif kind == "rail":
+            row["x"] = left + side
+            row["y"] = mapped_y
+            row["w"] = inner_w
+        else:
+            row["x"] = left + side + (x - field_left) * (inner_w / field_w)
+            row["y"] = mapped_y
+            if width <= plate_w and height <= plate_h:
+                row["x"] = min(max(float(row["x"]), left), right - width)
+                row["y"] = min(max(float(row["y"]), top), bottom - height)
+        spread.append(row)
+    return spread
+
+
+def seat_enclosure_on_sheet(sheet: Sheet) -> float:
+    """Draw a true-size box so it fits the page. Width, height, and depth stay.
+
+    Same scale and centering Size Enclosure uses. A 36×30 in box is not left
+    at 1:1, where it runs off an A3 sheet.
+    """
+
+    enc = sheet.enclosure
+    if enc is None or enc.width_mm <= 1.0 or enc.height_mm <= 1.0:
+        return 1.0
+    from panelcad.render.titleblock import working_rect
+
+    wx, wy, ww, wh = working_rect(sheet)
+    scale = fit_standard_enclosure_scale(float(enc.width_mm), float(enc.height_mm), ww, wh)
+    enc.x, enc.y = center_in_frame((wx, wy, ww, wh), float(enc.width_mm) * scale, float(enc.height_mm) * scale)
+    enc.draw_scale = scale
+    return scale
+
+
 def recommend_cabinet_size(
     din: list[tuple[Device, Component | None]],
     field: list[tuple[Device, Component | None]],

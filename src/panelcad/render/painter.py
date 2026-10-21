@@ -413,6 +413,8 @@ def draw_device(
     captions: bool = True,
     ref_align: str = "start",
     tag_at: tuple[float, float, str, float] | None = None,
+    tag_text: str | None = None,
+    location_text: str = "",
 ) -> None:
     painter.set_stroke("#111111", 0.35)
     painter.set_fill(None)
@@ -473,6 +475,7 @@ def draw_device(
     from panelcad.core.ladder import is_aux_library
 
     painter.set_layer("TEXT")
+    shown = tag_text or component.id
     tag_layout: tuple[float, float, str, float] | None = None
     hide_tag = bool(component.properties.get("hide_tag")) or cat.startswith("connection.node")
     if hide_tag:
@@ -491,7 +494,7 @@ def draw_device(
         layout = device_ref_layout(device, component, ref_align=ref_align)
         if layout is not None:
             rx, ry, align, size = layout
-            painter.text(rx, ry, component.id, size, align=align)
+            painter.text(rx, ry, shown, size, align=align)
     elif is_aux_library(component.library_id) or component.properties.get("tag_below"):
         tag_layout = (
             component.x + device.schematic_width * s * 0.5,
@@ -499,12 +502,16 @@ def draw_device(
             "middle",
             2.6,
         )
-        painter.text(tag_layout[0], tag_layout[1], component.id, tag_layout[3], align="middle")
+        painter.text(tag_layout[0], tag_layout[1], shown, tag_layout[3], align="middle")
     else:
         tag_layout = tag_at if tag_at is not None else device_ref_layout(device, component, ref_align=ref_align)
         if tag_layout is not None:
             rx, ry, align, size = tag_layout
-            painter.text(rx, ry, component.id, size, align=align)
+            painter.text(rx, ry, shown, size, align=align)
+    if location_text:
+        painter.set_fill("#111111")
+        painter.text(component.x, component.y - 8.0 * s, location_text, 2.0)
+        painter.set_fill(None)
     if not captions:
         return
     label = str(component.properties.get("function_label") or "").strip()

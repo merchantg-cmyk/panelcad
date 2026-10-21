@@ -43,6 +43,22 @@ class ObjectEditor(QDialog):
         layout.addWidget(QLabel(f"{ref}  ·  {device.name}  ·  {device.library_id}"))
 
         form = QFormLayout()
+        self._panel_combo: QComboBox | None = None
+        if session.project.panels:
+            from panelcad.core.panels import panel_tag
+
+            self._panel_combo = QComboBox()
+            self._panel_combo.addItem("(unassigned)", "")
+            current = 0
+            for index, panel in enumerate(session.project.panels, start=1):
+                label = panel_tag(panel)
+                if panel.name:
+                    label = f"{label}  {panel.name}"
+                self._panel_combo.addItem(label, panel.id)
+                if panel.id == comp.panel:
+                    current = index
+            self._panel_combo.setCurrentIndex(current)
+            form.addRow("Panel", self._panel_combo)
         self.notes = QLineEdit(str(comp.properties.get("notes", "") or device.properties.get("notes", "") or ""))
         self.ip = QLineEdit(str(comp.properties.get("ip") or comp.properties.get("address") or ""))
         self.station = QLineEdit(str(comp.properties.get("station") or comp.properties.get("node") or ""))
@@ -166,6 +182,17 @@ class ObjectEditor(QDialog):
             if pid not in keep:
                 self.session.delete_port(self.ref, pid)
         self.session.set_address(self.ref, ip=self.ip.text(), node=self.station.text())
+        if self._panel_combo is not None:
+            chosen = str(self._panel_combo.currentData() or "")
+            current = str(self.session.sheet().component(self.ref).panel or "")
+            if chosen != current:
+                if chosen:
+                    self.session.assign_device(self.ref, chosen)
+                else:
+                    for sheet in self.session.project.sheets:
+                        for comp in sheet.components:
+                            if comp.id == self.ref:
+                                comp.panel = ""
         if self.notes.text().strip():
             self.session.set_component_properties(self.ref, {"notes": self.notes.text().strip()})
         pic = self.picture.text().strip()

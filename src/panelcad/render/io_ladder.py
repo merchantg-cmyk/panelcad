@@ -233,6 +233,12 @@ def draw_io_sheet(
         # Wire already carries the PLC tag. Drawing it again on the coil stacks onto the next rung.
         draw_device(painter, device, c, coil_style=coil_style, captions=False)
         callout = str(c.properties.get("callout") or "")
+        if project is not None and "offpage" in (c.library_id or ""):
+            from panelcad.core.xref import offpage_callout
+
+            live = offpage_callout(project, catalog, sheet, c)
+            if live:
+                callout = live
         s = c.visual_scale()
         if callout:
             painter.text(c.x + device.schematic_width * s + 2.0, c.y + 4.0, callout, 2.2, align="start")

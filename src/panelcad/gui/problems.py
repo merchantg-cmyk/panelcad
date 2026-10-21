@@ -167,6 +167,8 @@ _CHECK_LABELS = {
     "overload_outside_fla": "Overload range misses the motor current",
     "coil_voltage_mismatch": "Coil voltage does not match",
     "outside_enclosure": "Part outside the enclosure",
+    "panel_needs_enclosure": "Panel needs an enclosure",
+    "panel_enclosure_tight": "Enclosure does not fit the circuit",
     "heat_rise_over_limit": "Enclosure too hot",
     "above_max_ambient": "Above the part's max temperature",
     "nema4_filter_fan": "Filter fan on a sealed box",

@@ -620,6 +620,7 @@ class MainWindow(QMainWindow):
         self.sheet_bar.move_requested.connect(self.move_sheet_id)
         self.sheet_bar.order_changed.connect(self.reorder_open_sheets)
         self.sheet_bar.sheet_selected.connect(self._switch_sheet)
+        self.sheet_bar.panel_selected.connect(self._choose_active_panel)
         self.sheet_bar.add_requested.connect(self.new_sheet)
         self.sheet_bar.set_session(self.session)
 
@@ -1444,6 +1445,7 @@ class MainWindow(QMainWindow):
 
         insert = self.menuBar().addMenu("&Insert")
         insert.addAction(self._act("&Sheet…", None, self.new_sheet))
+        insert.addAction(self._act("&Panel…", None, self.new_panel))
         insert.addAction(self._act("Circuit &Builder…", None, self.insert_circuit))
         insert.addAction(self._act("PLC &I/O sheets…", None, self.insert_io_sheets))
         insert.addAction(self._act("&Terminal strip…", None, self.open_terminal_strip))
@@ -2188,6 +2190,43 @@ class MainWindow(QMainWindow):
         self.bom.refresh()
         self._sync_empty_states()
         self._status(f"sheet {self.session.sheet_index() + 1} / {len(self.session.project.sheets)}  {self.session.sheet().title}")
+
+    def new_panel(self) -> None:
+        from panelcad.gui.panel_dialog import NewPanelDialog
+
+        dialog = NewPanelDialog(self.session, self)
+        if dialog.exec() != dialog.DialogCode.Accepted:
+            return
+        values = dialog.values()
+        try:
+            result = self.session.add_panel(
+                values["tag"],
+                name=values["name"],
+                enclosure_id=values["enclosure_id"],
+                system=values["system"],
+            )
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Panel", str(exc))
+            return
+        self.sheet_bar.refresh()
+        sheet_id = str(result.get("sheet") or "")
+        if sheet_id:
+            self._switch_sheet(sheet_id)
+        self._status(f"panel {result.get('tag')}")
+
+    def _choose_active_panel(self, panel_id: str) -> None:
+        before = self.session.active_sheet_id
+        try:
+            result = self.session.set_active_panel(panel_id)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Panel", str(exc))
+            self.sheet_bar.refresh()
+            return
+        active = str(result.get("active_sheet") or before)
+        if active != before:
+            self._switch_sheet(active)
+        else:
+            self.sheet_bar.refresh()
 
     def new_sheet(self) -> None:
         kind_labels = [

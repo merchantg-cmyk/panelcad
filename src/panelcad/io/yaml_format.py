@@ -162,6 +162,13 @@ def _clean_cable(raw: dict) -> dict:
             item.pop(key, None)
     if not item.get("from_terminals"):
         item.pop("from_terminals", None)
+    if not item.get("to_terminals"):
+        item.pop("to_terminals", None)
+    if item.get("kind", "field") in {"", "field"}:
+        item.pop("kind", None)
+    for key in ("from_panel", "to_panel", "to_strip"):
+        if not item.get(key):
+            item.pop(key, None)
     if not item.get("conductors"):
         item.pop("conductors", None)
     if not item.get("pairs"):
@@ -214,6 +221,7 @@ def dump_project(project: Project) -> str:
         data["cables"] = [_clean_cable(item) for item in cables]
     if _default_phase_colors(data.get("phase_colors")):
         data.pop("phase_colors", None)
+    _prune_panels(data)
     for sheet in data.get("sheets", []):
         if not sheet.get("rails"):
             sheet.pop("rails", None)
@@ -254,6 +262,8 @@ def dump_project(project: Project) -> str:
             sheet.pop("strip_part", None)
         if not sheet.get("io_cont"):
             sheet.pop("io_cont", None)
+        if not sheet.get("panel"):
+            sheet.pop("panel", None)
         if sheet.get("kind") not in ("schematic", "network") and not sheet.get("wires"):
             sheet.pop("wires", None)
         for wire in sheet.get("wires") or []:
@@ -275,6 +285,8 @@ def dump_project(project: Project) -> str:
                 comp.pop("pin_overrides", None)
             if not comp.get("picture"):
                 comp.pop("picture", None)
+            if not comp.get("panel"):
+                comp.pop("panel", None)
     specs = data.get("net_wire_specs") or {}
     cleaned: dict = {}
     if isinstance(specs, dict):
@@ -294,6 +306,59 @@ def dump_project(project: Project) -> str:
         data.pop("net_wire_specs", None)
     _prune_share(data)
     return yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+
+
+def omit_default_panel_fields(data: dict) -> None:
+    """Drop empty multi-panel fields from a dumped project, including a revision snapshot."""
+
+    _prune_panels(data)
+    for sheet in data.get("sheets") or []:
+        if isinstance(sheet, dict) and not sheet.get("panel"):
+            sheet.pop("panel", None)
+        for comp in (sheet.get("components") or []) if isinstance(sheet, dict) else []:
+            if isinstance(comp, dict) and not comp.get("panel"):
+                comp.pop("panel", None)
+    cables = data.get("cables") or []
+    if isinstance(cables, list):
+        for cable in cables:
+            if not isinstance(cable, dict):
+                continue
+            if cable.get("kind", "field") in {"", "field"}:
+                cable.pop("kind", None)
+            for key in ("from_panel", "to_panel", "to_strip"):
+                if not cable.get(key):
+                    cable.pop(key, None)
+            if not cable.get("to_terminals"):
+                cable.pop("to_terminals", None)
+
+
+def _prune_panels(data: dict) -> None:
+    """Drop an unused panel list so a single-panel file stays byte-stable."""
+
+    if not str(data.get("active_panel") or "").strip():
+        data.pop("active_panel", None)
+    if not str(data.get("location_system") or "").strip():
+        data.pop("location_system", None)
+    panels = data.get("panels")
+    if not isinstance(panels, list) or not panels:
+        data.pop("panels", None)
+        return
+    cleaned = []
+    for raw in panels:
+        if not isinstance(raw, dict):
+            continue
+        item = {"id": str(raw.get("id") or "").strip()}
+        if not item["id"]:
+            continue
+        for key in ("tag", "name", "enclosure_id", "system"):
+            text = str(raw.get(key) or "").strip()
+            if text:
+                item[key] = text
+        cleaned.append(item)
+    if cleaned:
+        data["panels"] = cleaned
+    else:
+        data.pop("panels", None)
 
 
 def _prune_share(data: dict) -> None:
