@@ -602,16 +602,53 @@ def offpage_peer(project: Project, catalog: Catalog, sheet: Sheet, comp: Compone
             pass
     link = str(comp.properties.get("link") or "")
     if "|" in link:
-        other = link.split("|", 1)[1]
-        if ":" in other:
+        # The link names both ends. Use the far end: the end on this sheet is
+        # the arrow's own conductor, and resolving it made an arrow point at
+        # its own page.
+        for other in link.split("|", 1):
+            if ":" not in other:
+                continue
             sid, rest = other.split(":", 1)
+            if sid == sheet.id or rest.startswith("rail:"):
+                continue
             ref = rest.split(".", 1)[0]
             try:
                 page = project.sheet(sid)
                 return page, page.component(ref)
             except KeyError:
-                pass
+                continue
     del catalog
+    return None
+
+
+def offpage_partner(project: Project, catalog: Catalog, sheet: Sheet, comp: Component) -> tuple[Sheet, Component] | None:
+    """The matching arrow on the far page: same link, on the sheet this one names.
+
+    A continuation feed (``sheet:rail:0V|sheet-2:rail:0V``) ends on a rail, not
+    a device. Its pair of arrows is still one valid reference.
+    """
+
+    link = str(comp.properties.get("link") or "").strip()
+    dest_sheet_id = str(comp.properties.get("dest_sheet") or "").strip()
+    if "|" not in link or not dest_sheet_id or dest_sheet_id == sheet.id:
+        return None
+    # Only a rail-to-rail feed pairs by arrows alone. An end that names a
+    # device must resolve to that device, so deleting it is still broken.
+    far_ends = [part.split(":", 1)[1] for part in link.split("|") if part.split(":", 1)[0] == dest_sheet_id and ":" in part]
+    if not far_ends or not all(end.startswith("rail:") for end in far_ends):
+        return None
+    try:
+        page = project.sheet(dest_sheet_id)
+    except KeyError:
+        return None
+    for other in page.components:
+        if other is comp or str(other.properties.get("link") or "").strip() != link:
+            continue
+        if not is_offpage_component(other, _device(catalog, other)):
+            continue
+        if str(other.properties.get("dest_sheet") or "").strip() != sheet.id:
+            continue
+        return page, other
     return None
 
 
@@ -1178,6 +1215,8 @@ def xref_problems(project: Project, catalog: Catalog) -> list[dict[str, Any]]:
             if not (dest_sheet or dest_ref or dest_pin or link):
                 continue
             if offpage_peer(project, catalog, sheet, comp) is not None:
+                continue
+            if offpage_partner(project, catalog, sheet, comp) is not None:
                 continue
             out.append(
                 {

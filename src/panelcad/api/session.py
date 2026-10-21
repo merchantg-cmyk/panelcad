@@ -2230,6 +2230,7 @@ class Session:
 
         sheet = self.sheet(sheet_id)
         move_ids = set(plan.get("move") or [])
+        move_ids |= self._split_attached_arrows(sheet, move_ids)
         moving = [comp for comp in sheet.components if comp.id in move_ids]
         if not moving:
             plan["applied"] = False
@@ -2286,6 +2287,7 @@ class Session:
         for wire in moved_wires:
             wire.points = []
             dest.wires.append(wire)
+        self._repoint_moved_references(sheet.id, dest, move_ids)
         from panelcad.core.circuit_ladder import link_split_feeds
 
         links = link_split_feeds(self, sheet, dest, crossing)
@@ -2300,6 +2302,70 @@ class Session:
             page_fullness(dest, self.catalog),
         ]
         return plan
+
+    def _split_attached_arrows(self, sheet: Any, move_ids: set[str]) -> set[str]:
+        """Off-page arrows wired only to devices that are moving go with them.
+
+        Leaving the arrow behind turns its one wire into a relay pair and the
+        far page then names a device that is no longer on this sheet.
+        """
+
+        from panelcad.core.xref import _device, is_offpage_component
+
+        extra: set[str] = set()
+        for comp in sheet.components:
+            if comp.id in move_ids or not is_offpage_component(comp, _device(self.catalog, comp)):
+                continue
+            others: list[str] = []
+            for wire in sheet.wires:
+                ends = [str(wire.frm).split(".", 1)[0], str(wire.to).split(".", 1)[0]]
+                if comp.id not in ends:
+                    continue
+                ends.remove(comp.id)
+                others.append(ends[0])
+            if others and all(ref in move_ids for ref in others):
+                extra.add(comp.id)
+        return extra
+
+    def _repoint_moved_references(self, source_id: str, dest: Any, move_ids: set[str]) -> None:
+        """Off-page references to a moved device follow it to the continuation."""
+
+        from panelcad.core.xref import _device, is_offpage_component, offpage_callout
+
+        def _end(text: str) -> str:
+            sid, sep, rest = text.partition(":")
+            if sep and sid == source_id and not rest.startswith("rail:"):
+                if rest.split(".", 1)[0] in move_ids:
+                    return f"{dest.id}:{rest}"
+            return text
+
+        touched: list[tuple[Any, Any]] = []
+        for page in self.project.sheets:
+            for comp in page.components:
+                if not is_offpage_component(comp, _device(self.catalog, comp)):
+                    continue
+                props = comp.properties
+                changed = False
+                link = str(props.get("link") or "")
+                if "|" in link:
+                    relinked = "|".join(_end(part) for part in link.split("|"))
+                    if relinked != link:
+                        props["link"] = relinked
+                        changed = True
+                if str(props.get("dest_sheet") or "") == source_id:
+                    ref = str(props.get("dest_ref") or "") or str(props.get("dest_pin") or "").split(".", 1)[0]
+                    if ref in move_ids:
+                        props["dest_sheet"] = dest.id
+                        if "dest_title" in props:
+                            props["dest_title"] = dest.title
+                        changed = True
+                if changed:
+                    touched.append((page, comp))
+        for page, comp in touched:
+            if "callout" in comp.properties:
+                text = offpage_callout(self.project, self.catalog, page, comp)
+                if text:
+                    comp.properties["callout"] = text
 
     def delete_component(self, ref: str, sheet_id: str | None = None) -> None:
         sheet = self.sheet(sheet_id)
