@@ -2189,6 +2189,7 @@ class MainWindow(QMainWindow):
         self.props.show_project(self.session)
         self.bom.refresh()
         self._sync_empty_states()
+        self._refresh_command_state()
         self._status(f"sheet {self.session.sheet_index() + 1} / {len(self.session.project.sheets)}  {self.session.sheet().title}")
 
     def new_panel(self) -> None:
@@ -3856,6 +3857,12 @@ class MainWindow(QMainWindow):
     def _refresh_command_state(self) -> None:
         from panelcad.gui.guidance import enable_action, explain_disabled
 
+        session = getattr(self, "session", None)
+        watch = getattr(session, "watch_history", None)
+        if callable(watch):
+            # Every session this window shows, including one opened or
+            # recovered later. watch_history ignores a repeat.
+            watch(self._refresh_command_state)
         undo = getattr(self, "_undo_action", None)
         redo = getattr(self, "_redo_action", None)
         if undo is not None:

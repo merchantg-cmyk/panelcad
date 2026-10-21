@@ -5,6 +5,7 @@ import functools
 import json
 import shutil
 import tempfile
+import weakref
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -328,6 +329,9 @@ class Session:
         self._history_lock = 0
         self._command_name = ""
         self._command_before: dict[str, Any] | None = None
+        # Called with no arguments after the undo or redo list changes, so a
+        # window can turn its Undo/Redo buttons on or off.
+        self._history_watchers: list[Callable[[], Any]] = []
         self.recovered = False
         self.read_only = False
         self.lock_holder = None
@@ -344,6 +348,43 @@ class Session:
         self._listeners.append(fn)
 
     MAX_UNDO = 80
+
+    def watch_history(self, fn: Callable[[], None]) -> None:
+        """Call ``fn`` after every change to the undo or redo list.
+
+        A drag closes its step without emitting a drawing event. Without this
+        the toolbar Undo stayed greyed out while the stack held the moves.
+        """
+
+        # A bound method is held weakly, so a closed window is never kept
+        # alive (or called) by a session that outlives it.
+        ref: Callable[[], Any]
+        if getattr(fn, "__self__", None) is not None:
+            ref = weakref.WeakMethod(fn)  # type: ignore[arg-type]
+        else:
+            ref = lambda fn=fn: fn  # noqa: E731
+        watchers = self.__dict__.setdefault("_history_watchers", [])
+        watchers[:] = [w for w in watchers if w() is not None]
+        if any(w() == fn for w in watchers):
+            return
+        watchers.append(ref)
+
+    def _history_changed(self) -> None:
+        watchers = self.__dict__.get("_history_watchers")
+        if not watchers:
+            return
+        for ref in list(watchers):
+            fn = ref()
+            if fn is None:
+                try:
+                    watchers.remove(ref)
+                except ValueError:
+                    pass
+                continue
+            try:
+                fn()
+            except Exception:  # noqa: BLE001
+                continue
 
     def _history_snapshot(self) -> dict[str, Any]:
         return {
@@ -401,6 +442,7 @@ class Session:
         self._trim_history(self._undo, "_undo_tip")
         self._redo.clear()
         self._redo_tip = None
+        self._history_changed()
 
     def _store_history(self, stack: list[dict[str, Any]], snap: dict[str, Any], name: str, tip_attr: str) -> None:
         """Append one step. Most steps store a diff against the previous snapshot."""
@@ -593,6 +635,7 @@ class Session:
         if not self._drawing_changed(self._undo_tip or self._entry_snap(self._undo[-1])):
             self._undo.pop()
             self._sync_history_tip(self._undo, "_undo_tip")
+            self._history_changed()
 
     def command_open(self) -> bool:
         """True while a drag or other edit has not been closed."""
@@ -653,6 +696,7 @@ class Session:
         self._store_history(self._redo, self._history_snapshot(), name, "_redo_tip")
         self._trim_history(self._redo, "_redo_tip")
         self._restore_history(restore)
+        self._history_changed()
         return True
 
     def redo(self) -> bool:
@@ -666,6 +710,7 @@ class Session:
         self._store_history(self._undo, self._history_snapshot(), name, "_undo_tip")
         self._trim_history(self._undo, "_undo_tip")
         self._restore_history(restore)
+        self._history_changed()
         return True
 
     def _restore_history(self, snap: dict[str, Any]) -> None:
