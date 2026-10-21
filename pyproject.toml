@@ -1,6 +1,6 @@
 [project]
 name = "panelcad"
-version = "0.5.11"
+version = "0.5.12"
 description = "CAD for industrial control panels, PLCs, HMIs, and power distribution"
 readme = "README.md"
 requires-python = ">=3.11"

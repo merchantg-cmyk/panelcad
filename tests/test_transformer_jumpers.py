@@ -39,7 +39,7 @@ def test_240v_supply_puts_the_windings_in_parallel():
 
 def test_jumpers_are_drawn_between_the_right_terminals():
     pins = {}
-    for volts, want in ((480, {(28.0, 34.0)}), (240, {(12.0, 34.0), (28.0, 46.0)})):
+    for volts, want in ((480, {(28.0, 34.0)}), (240, {(12.0, 34.0), (28.0, 50.0)})):
         _session, device, comp = _cpt(volts)
         pins = {p.id: p for p in device.pins}
         lines = [p for p in jumper_primitives(device, comp) if p.type == "line"]

@@ -7,7 +7,7 @@ import yaml
 
 from panelcad.core.block import parse_attributes
 from panelcad.core.models import Device, PinDef
-from panelcad.core.primitives import Primitive, expand_draw_item
+from panelcad.core.primitives import Primitive, expand_draw_item, land_leads_on_circle
 from panelcad.library.panel import resolve_panel
 from panelcad.library.paths import library_search_paths
 from panelcad.library.ports import parse_port
@@ -250,6 +250,7 @@ def _device_from_raw(lib_name: str, raw: dict[str, Any]) -> Device:
     primitives: list[Primitive] = []
     for item in schematic.get("draw", []):
         primitives.append(expand_draw_item(item))
+    primitives = land_leads_on_circle(str(raw.get("category", "")), pins, primitives)
     attributes = parse_attributes(schematic.get("attributes"))
     footprint_primitives: list[Primitive] = []
     footprint_attributes = []

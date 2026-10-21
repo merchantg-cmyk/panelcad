@@ -46,7 +46,7 @@ def _assert_clean(session: Session, payload: dict) -> None:
 
 
 def test_version_is_0_5_5():
-    assert __version__ == "0.5.11"
+    assert __version__ == "0.5.12"
 
 
 def test_seal_in_path_cites_only_drawing_wires():

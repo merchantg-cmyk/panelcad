@@ -167,3 +167,82 @@ def expand_draw_item(item: dict[str, Any]) -> Primitive:
     if "type" in item:
         return Primitive.model_validate(item)
     raise ValueError(f"unknown draw item: {item!r}")
+
+
+def land_leads_on_circle(category: str, pins: list[Any], primitives: list[Primitive], tol: float = 0.05) -> list[Primitive]:
+    """Make every motor lead end exactly on the motor circle.
+
+    A lead is a line with one end on a pin. When its far end stops short of the
+    circle, or pokes inside it, the end is moved to where the line meets the circle.
+    When the line, extended, would miss the circle, a short connector runs from the
+    lead end to the nearest point on the circle. Only load.motor symbols are touched,
+    and a symbol whose leads already land is returned unchanged.
+    """
+
+    if not str(category or "").lower().startswith("load.motor"):
+        return primitives
+    circles = [p for p in primitives if p.type == "circle" and not p.fill and p.r > 0]
+    if not circles:
+        return primitives
+    body = max(circles, key=lambda p: p.r)
+    cx, cy, r = float(body.x), float(body.y), float(body.r)
+    pin_pts = [(float(getattr(p, "x", 0.0)), float(getattr(p, "y", 0.0))) for p in pins]
+
+    def at_pin(x: float, y: float) -> bool:
+        return any(abs(x - px) <= tol and abs(y - py) <= tol for px, py in pin_pts)
+
+    line_ends: list[tuple[float, float]] = []
+    for p in primitives:
+        if p.type == "line":
+            line_ends += [(float(p.x), float(p.y)), (float(p.x2), float(p.y2))]
+
+    def joins_other(x: float, y: float) -> bool:
+        # The far end meets another line (a ground symbol, terminal box, bend).
+        hits = sum(1 for ex, ey in line_ends if abs(x - ex) <= tol and abs(y - ey) <= tol)
+        return hits > 1
+
+    out: list[Primitive] = []
+    for prim in primitives:
+        if prim.type != "line":
+            out.append(prim)
+            continue
+        (ax, ay), (bx, by) = (prim.x, prim.y), (prim.x2, prim.y2)
+        if not at_pin(ax, ay) and at_pin(bx, by):
+            (ax, ay), (bx, by) = (bx, by), (ax, ay)
+        if (
+            not at_pin(ax, ay)
+            or at_pin(bx, by)
+            or joins_other(bx, by)
+            or math.hypot(ax - cx, ay - cy) <= r + tol
+            # Only a lead that stops near the body is a motor lead; a long line
+            # that ends far from the circle belongs to something else.
+            or math.hypot(bx - cx, by - cy) - r > max(6.0, 0.75 * r)
+        ):
+            out.append(prim)
+            continue
+        if abs(math.hypot(bx - cx, by - cy) - r) <= tol:
+            out.append(prim)
+            continue
+        dx, dy = bx - ax, by - ay
+        length = math.hypot(dx, dy)
+        if length <= 1e-9:
+            out.append(prim)
+            continue
+        ux, uy = dx / length, dy / length
+        fx, fy = ax - cx, ay - cy
+        b = fx * ux + fy * uy
+        disc = b * b - (fx * fx + fy * fy - r * r)
+        if disc >= 0 and -b - math.sqrt(disc) > 0:
+            t = -b - math.sqrt(disc)
+            out.append(Primitive(type="line", x=ax, y=ay, x2=round(ax + ux * t, 4), y2=round(ay + uy * t, 4)))
+            continue
+        # The straight lead misses the circle: keep it, then bend onto the circle.
+        if math.hypot(bx - cx, by - cy) < r:
+            out.append(prim)
+            continue
+        out.append(Primitive(type="line", x=ax, y=ay, x2=bx, y2=by))
+        d = math.hypot(bx - cx, by - cy)
+        out.append(
+            Primitive(type="line", x=bx, y=by, x2=round(cx + (bx - cx) * r / d, 4), y2=round(cy + (by - cy) * r / d, 4))
+        )
+    return out

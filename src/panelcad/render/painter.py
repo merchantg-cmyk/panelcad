@@ -587,10 +587,11 @@ def _draw_rating_lines(painter: Painter, device: Device, component: Component, s
     cx = component.x + float(device.schematic_width) * s * 0.50
     cy = component.y + float(device.schematic_height) * s * 0.34
     if (device.category or "").lower().startswith("power.transformer"):
-        # Coils and the core run through the middle. The open corner under the
-        # secondary winding holds the rating, inside the symbol's own outline.
-        cx = component.x + float(device.schematic_width) * s * 0.78
-        cy = component.y + (float(device.schematic_height) - 4.0) * s
+        # Coils and the core run through the middle and the secondary spans the
+        # full height. The open band right of the secondary, between the X leads,
+        # holds the rating inside the symbol's own outline.
+        cx = component.x + float(device.schematic_width) * s * 0.82
+        cy = component.y + float(device.schematic_height) * s * 0.52
     for i, line in enumerate(raw.splitlines()[:3]):
         text = line.strip()
         if not text:

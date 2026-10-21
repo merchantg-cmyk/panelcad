@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.5.12 — 2026-10-21
+
+- **Undo** — The toolbar Undo button and Ctrl+Z now work after dragging parts.
+- **Freeform sheets** — Sheets set to freeform keep their drawing style when a project is opened and saved.
+- **Motor leads** — 3-phase and 1-phase motor leads now land on the motor circle.
+- **Control transformer** — The control transformer is redrawn with two equal primary windings (H1-H2, H3-H4) and one secondary (X1-X2), with clearer labels.
+
 ## 0.5.11 — 2026-10-21
 
 - **Overload heaters** — Smoother overload heaters and OL contacts.

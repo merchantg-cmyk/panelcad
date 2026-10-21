@@ -315,39 +315,42 @@ devices:
     tags: [transformer]
     schematic:
       width: 40
-      height: 48
+      height: 52
       pins:
         - { id: H1, x: 0, y: 12, side: left, electrical: power }
         - { id: H2, x: 0, y: 28, side: left, electrical: power }
         - { id: H3, x: 0, y: 34, side: left, electrical: power }
-        - { id: H4, x: 0, y: 46, side: left, electrical: power }
+        - { id: H4, x: 0, y: 50, side: left, electrical: power }
         - { id: X1, x: 40, y: 12, side: right, electrical: power }
-        - { id: X2, x: 40, y: 28, side: right, electrical: power }
+        - { id: X2, x: 40, y: 50, side: right, electrical: power }
       draw:
-        - arc: [16, 14.667, 2.667, 90, -180]
-        - arc: [16, 20.0, 2.667, 90, -180]
-        - arc: [16, 25.333, 2.667, 90, -180]
-        - arc: [16, 36.0, 2.0, 90, -180]
-        - arc: [16, 40.0, 2.0, 90, -180]
-        - arc: [16, 44.0, 2.0, 90, -180]
-        - arc: [24, 14.667, 2.667, 90, 180]
-        - arc: [24, 20.0, 2.667, 90, 180]
-        - arc: [24, 25.333, 2.667, 90, 180]
+        # Two equal primary windings (H1-H2, H3-H4) and one secondary across both.
+        - arc: [16, 14.6667, 2.6667, 90, -180]
+        - arc: [16, 20.0000, 2.6667, 90, -180]
+        - arc: [16, 25.3333, 2.6667, 90, -180]
+        - arc: [16, 36.6667, 2.6667, 90, -180]
+        - arc: [16, 42.0000, 2.6667, 90, -180]
+        - arc: [16, 47.3333, 2.6667, 90, -180]
+        - arc: [24, 15.1667, 3.1667, 90, 180]
+        - arc: [24, 21.5000, 3.1667, 90, 180]
+        - arc: [24, 27.8333, 3.1667, 90, 180]
+        - arc: [24, 34.1667, 3.1667, 90, 180]
+        - arc: [24, 40.5000, 3.1667, 90, 180]
+        - arc: [24, 46.8333, 3.1667, 90, 180]
         - line: [0, 12, 16, 12]
         - line: [0, 28, 16, 28]
         - line: [0, 34, 16, 34]
-        - line: [0, 46, 16, 46]
+        - line: [0, 50, 16, 50]
         - line: [24, 12, 40, 12]
-        - line: [24, 28, 40, 28]
-        - line: [19.4, 11, 19.4, 47]
-        - line: [20.6, 11, 20.6, 47]
-        - text: [7, 11.2, "H1", 1.8]
-        - text: [7, 27.2, "H2", 1.8]
-        - text: [7, 33.2, "H3", 1.8]
-        - text: [7, 45.2, "H4", 1.8]
-        - text: [33, 11.2, "X1", 1.8]
-        - text: [33, 27.2, "X2", 1.8]
-        - text: [31, 40, "T", 2.2]
+        - line: [24, 50, 40, 50]
+        - line: [19.4, 10, 19.4, 52]
+        - line: [20.6, 10, 20.6, 52]
+        - text: [9, 11.0, "H1", 2.2]
+        - text: [9, 27.0, "H2", 2.2]
+        - text: [9, 33.0, "H3", 2.2]
+        - text: [9, 49.0, "H4", 2.2]
+        - text: [33, 11.0, "X1", 2.2]
+        - text: [33, 49.0, "X2", 2.2]
     panel: { w: 78, h: 72, d: 75, din: true }
     props: { primary: 480/240V, secondary: 120V, VA: 150 }
 

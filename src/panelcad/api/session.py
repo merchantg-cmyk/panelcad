@@ -5300,6 +5300,10 @@ class Session:
                     from panelcad.core.primitives import expand_draw_item
 
                     device.primitives = [expand_draw_item(item) for item in spec["draw"] or []]
+                if "draw" in spec or "pins" in spec:
+                    from panelcad.core.primitives import land_leads_on_circle
+
+                    device.primitives = land_leads_on_circle(device.category, device.pins, device.primitives)
                 from panelcad.core.block import apply_symbol_spec
 
                 apply_symbol_spec(device, spec)
