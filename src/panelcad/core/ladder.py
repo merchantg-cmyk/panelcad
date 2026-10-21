@@ -43,6 +43,10 @@ def rail_names(sheet: Sheet, project: Project | None = None) -> tuple[str, str]:
     return hot or "L1", ret or "L2"
 
 
+# Per-sheet styles that a title-block stamp must not overwrite.
+SHEET_OWN_STYLES: frozenset[str] = frozenset({"ladder", "iec", "freeform"})
+
+
 def stamp_drawing_style(project: Project) -> None:
     """Copy the title-block style onto schematic sheets so the router can see it."""
 
@@ -50,8 +54,14 @@ def stamp_drawing_style(project: Project) -> None:
     for sheet in project.sheets:
         if sheet.kind != "schematic":
             continue
-        # Motor control keeps ladder or IEC columns when the title block differs.
-        if sheet.drawing_style in {"ladder", "iec"} and sheet.drawing_style != style:
+        own = str(getattr(sheet, "drawing_style", "") or "")
+        # A blank title block means "not chosen yet". It never erases a style
+        # the sheet already has, or the next save drops that sheet's style.
+        if not style and own:
+            continue
+        # A sheet that chose its own layout (ladder, IEC columns, freeform)
+        # keeps it when the title block differs.
+        if own in SHEET_OWN_STYLES and own != style:
             continue
         sheet.drawing_style = style  # type: ignore[assignment]
 

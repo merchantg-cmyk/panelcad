@@ -3371,7 +3371,13 @@ class Session:
             elif key == "drawing_style":
                 from panelcad.core.models import normalize_drawing_style
 
+                previous = str(tb.drawing_style or "")
                 tb.drawing_style = normalize_drawing_style(str(value))  # type: ignore[assignment]
+                if previous == "freeform" and tb.drawing_style != previous:
+                    # Sheets that took freeform from the title block keep following it.
+                    for sheet in self.project.sheets:
+                        if sheet.kind == "schematic" and sheet.drawing_style == "freeform":
+                            sheet.drawing_style = tb.drawing_style  # type: ignore[assignment]
             elif key == "coil_style":
                 token = str(value).strip().lower()
                 tb.coil_style = "square" if token == "square" else "circle"
