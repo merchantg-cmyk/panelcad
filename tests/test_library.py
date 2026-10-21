@@ -14,7 +14,7 @@ def test_builtin_library_loads():
     assert mpcb.category == "protection.mpcb"
     assert mpcb.ref_prefix == "Q"
     assert {p.id for p in mpcb.pins} >= {"1", "2", "3", "4", "5", "6", "95", "96"}
-    assert any(p.type == "polyline" for p in mpcb.primitives)
+    assert any(p.type == "arc" for p in mpcb.primitives)
     nema_mpcb = cat.get("nema.breakers.mpcb_3p")
     assert nema_mpcb.category == "protection.mpcb"
     assert nema_mpcb.ref_prefix == "MCP"
@@ -383,6 +383,24 @@ def _on_circle(device, x: float, y: float, tol: float = 1.5) -> bool:
     return False
 
 
+def _lead_meets_arc(device) -> int:
+    from panelcad.core.primitives import arc_point
+
+    arcs = [p for p in device.primitives if p.type == "arc"]
+    hits = 0
+    for prim in device.primitives:
+        if prim.type != "line":
+            continue
+        for x, y in ((prim.x, prim.y), (prim.x2, prim.y2)):
+            for arc in arcs:
+                for deg in (arc.start, arc.start + arc.sweep):
+                    ax, ay = arc_point(arc.x, arc.y, arc.r, deg)
+                    if abs(x - ax) <= 0.05 and abs(y - ay) <= 0.05:
+                        hits += 1
+                        break
+    return hits
+
+
 def _lead_meets_circle(device) -> int:
     hits = 0
     for prim in device.primitives:
@@ -454,9 +472,9 @@ def test_power_symbols_match_print_contacts():
             p.type == "line" and p.y == p.y2 and abs(p.x - p.x2) >= 12 for p in device.primitives
         ), library_id
     ol = cat.get("iec.protection.overload_9a")
-    assert any(p.type == "polyline" for p in ol.primitives)
+    assert any(p.type == "arc" for p in ol.primitives)
     mpcb = cat.get("iec.breakers.mpcb_3p")
-    assert any(p.type == "polyline" for p in mpcb.primitives)
+    assert any(p.type == "arc" for p in mpcb.primitives)
     assert not any(p.type == "text" and p.text == "F" for p in ol.primitives)
     nema_ol = cat.get("nema.protection.overload")
     assert {p.id for p in nema_ol.pins} >= {"T1", "T2", "T3", "2", "4", "6", "95", "96"}
@@ -476,8 +494,8 @@ def test_power_symbols_match_print_contacts():
         assert not _endpoint_inside_circle(motor), library_id
     for library_id in ("iec.power.control_transformer", "nema.power.control_transformer"):
         xfmr = cat.get(library_id)
-        assert sum(1 for p in xfmr.primitives if p.type == "circle") == 2, library_id
-        assert _lead_meets_circle(xfmr) >= 4, library_id
+        assert sum(1 for p in xfmr.primitives if p.type == "arc") >= 6, library_id
+        assert _lead_meets_arc(xfmr) >= 6, library_id
     for library_id in (
         "iec.relays.k_4co_24vdc",
         "iec.relays.safety_24vdc",

@@ -40,6 +40,21 @@ class SvgPainter(Painter):
     def circle(self, x: float, y: float, r: float) -> None:
         self.parts.append(f'<circle cx="{x:.3f}" cy="{y:.3f}" r="{r:.3f}" {self._style()} />')
 
+    def arc(self, cx: float, cy: float, radius: float, start_deg: float, sweep_deg: float) -> None:
+        from panelcad.core.primitives import arc_point
+
+        if radius <= 0 or abs(sweep_deg) < 1e-9:
+            return
+        x1, y1 = arc_point(cx, cy, radius, start_deg)
+        x2, y2 = arc_point(cx, cy, radius, start_deg + sweep_deg)
+        large = 1 if abs(sweep_deg) > 180.0 else 0
+        # SVG sweep-flag 1 is clockwise on the page. Our positive sweep is the other way.
+        sweep_flag = 0 if sweep_deg > 0 else 1
+        self.parts.append(
+            f'<path d="M {x1:.3f} {y1:.3f} A {radius:.3f} {radius:.3f} 0 {large} {sweep_flag} {x2:.3f} {y2:.3f}" '
+            f'{self._style()} />'
+        )
+
     def polyline(self, points: list[tuple[float, float]]) -> None:
         if len(points) < 2:
             return

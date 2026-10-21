@@ -294,7 +294,7 @@ def _device_from_raw(lib_name: str, raw: dict[str, Any]) -> Device:
 def _primitive_to_draw(prim: Any) -> dict[str, Any]:
     if not isinstance(prim, Primitive):
         if isinstance(prim, dict):
-            if any(k in prim for k in ("rect", "line", "circle", "polyline", "text")):
+            if any(k in prim for k in ("rect", "line", "circle", "arc", "polyline", "text")):
                 return dict(prim)
             prim = expand_draw_item(prim)
         else:
@@ -311,6 +311,8 @@ def _primitive_to_draw(prim: Any) -> dict[str, Any]:
         if prim.fill:
             item["fill"] = True
         return item
+    if prim.type == "arc":
+        return {"arc": [prim.x, prim.y, prim.r, prim.start, prim.sweep]}
     if prim.type == "polyline":
         return {"polyline": [list(p) for p in prim.points]}
     if prim.type == "text":

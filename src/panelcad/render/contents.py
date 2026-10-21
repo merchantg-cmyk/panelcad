@@ -165,10 +165,15 @@ def draw_sheet_body(
         # Paper under the phase color hides the black symbol ink: the supply
         # lead, and each pole's own blade, heater, and load lead. The trip bar
         # is not in this list.
-        for run in [*line_side_runs(project, sheet, catalog), *pole_runs(project, sheet, catalog)]:
-            painter.set_layer("WIRES")
+        runs = [*line_side_runs(project, sheet, catalog), *pole_runs(project, sheet, catalog)]
+        # All paper first. A run's paper laid after its neighbour's colour cut a
+        # white seam into every joint of a heater drawn as arcs.
+        painter.set_layer("WIRES")
+        for run in runs:
             painter.set_stroke("#ffffff", 0.75)
             painter.polyline(run.points)
+        for run in runs:
+            painter.set_layer("WIRES")
             if run.pen.outline:
                 painter.set_stroke(run.pen.outline, run.pen.outline_width)
                 painter.polyline(run.points)

@@ -101,6 +101,14 @@ def manhattan_route(
             return (x, y - stub)
         return (x, y + stub)
 
+    # Stubs that pass each other reverse the stroke: down past the next pin, then back.
+    # A motor a few millimetres under an overload was that hook. Stop at mid-gap.
+    if (a_side == "bottom" and b_side == "top" and by > ay) or (
+        a_side == "top" and b_side == "bottom" and ay > by
+    ):
+        gap = abs(by - ay)
+        if stub > gap / 2.0:
+            stub = gap / 2.0
     sx, sy = stub_end(ax, ay, a_side)
     ex, ey = stub_end(bx, by, b_side)
     pts = [Point(x=ax, y=ay), Point(x=sx, y=sy)]

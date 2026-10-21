@@ -178,6 +178,19 @@ class DxfPainter(Painter):
     def line(self, x1: float, y1: float, x2: float, y2: float) -> None:
         self.msp.add_line(self._pt(x1, y1), self._pt(x2, y2), dxfattribs=self._attribs())
 
+    def arc(self, cx: float, cy: float, radius: float, start_deg: float, sweep_deg: float) -> None:
+        radius_u = abs(radius) * self.unit_scale
+        if radius_u <= 0 or abs(sweep_deg) < 1e-9:
+            return
+        # Y flip in ``_pt`` plus the page-up angle convention lands on DXF's CCW angles.
+        start = float(start_deg) % 360.0
+        end = (float(start_deg) + float(sweep_deg)) % 360.0
+        if sweep_deg < 0:
+            start, end = end, start
+        if abs(start - end) < 1e-6:
+            end = (start + 359.999) % 360.0
+        self.msp.add_arc(self._pt(cx, cy), radius_u, start, end, dxfattribs=self._attribs())
+
     def circle(self, x: float, y: float, r: float) -> None:
         radius = abs(r) * self.unit_scale
         if radius <= 0:

@@ -47,6 +47,37 @@ def pin_caption(pin: PinDef, component: Component | None = None) -> str:
     return label or pin.id
 
 
+def shadowed_terminal_texts(device, component: Component | None, reach: float = 8.0) -> set[int]:
+    """Indexes of static symbol texts that would contradict this component's pin captions.
+
+    A symbol may print its own terminal markings (``H2``, ``X1``) beside the pins.
+    When the instance relabels a pin, the printed id beside that pin is stale, and a
+    printed marking equal to another pin's new caption would show the same name twice.
+    Only a text that names a pin and sits within ``reach`` mm of that pin counts as a
+    terminal marking, so lens letters or legends inside a body are left alone.
+    """
+    if component is None:
+        return set()
+    pins = {str(pin.id): pin for pin in getattr(device, "pins", None) or []}
+    captions = {pid: pin_caption(pin, component) for pid, pin in pins.items()}
+    relabelled = {pid for pid, cap in captions.items() if cap and cap != pid}
+    if not relabelled:
+        return set()
+    taken = {captions[pid] for pid in relabelled}
+    out: set[int] = set()
+    for index, prim in enumerate(getattr(device, "primitives", None) or []):
+        if getattr(prim, "type", "") != "text":
+            continue
+        text = str(getattr(prim, "text", "") or "").strip()
+        pin = pins.get(text)
+        if pin is None or not (text in relabelled or text in taken):
+            continue
+        # Symbol texts and pins share the symbol's own frame.
+        if abs(float(prim.x) - float(pin.x)) <= reach and abs(float(prim.y) - float(pin.y)) <= 3.0:
+            out.add(index)
+    return out
+
+
 def scheme_labels(name: str) -> dict[str, str]:
     return dict(SCHEMES.get(name, {}))
 

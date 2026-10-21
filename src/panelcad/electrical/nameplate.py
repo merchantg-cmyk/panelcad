@@ -1230,6 +1230,27 @@ def _supply_hertz(
     return None, ""
 
 
+def _primary_volts(props: dict[str, Any], supply_voltage: float | None) -> float | None:
+    """The voltage the primary is fed at.
+
+    primary_voltage is the applied voltage and wins. A dual rating such as
+    "480/240V" is not one voltage: take the tap nearest the supply, so a
+    480/240 V transformer on a 480 V input counts at 480 V.
+    """
+
+    applied = _num(props.get("primary_voltage"))
+    if applied is not None:
+        return applied
+    rating = _first(props, "primary", "voltage")
+    if isinstance(rating, str) and "/" in rating:
+        taps = [v for v in (_num(piece) for piece in rating.split("/")) if v is not None and v > 0]
+        if taps:
+            if supply_voltage is None:
+                return max(taps)
+            return min(taps, key=lambda v: abs(v - supply_voltage))
+    return _num(rating)
+
+
 def _transformer_line(
     part: _Part,
     supply_id: str,
@@ -1237,7 +1258,7 @@ def _transformer_line(
     supply_phases: int | None,
 ) -> list[WorkingLine]:
     va = _va(part.props)
-    primary = _num(_first(part.props, "primary", "primary_voltage", "voltage"))
+    primary = _primary_volts(part.props, supply_voltage)
     if primary is None:
         primary = supply_voltage
         primary_src = "supply voltage"

@@ -5140,6 +5140,14 @@ def _symbol_segments(
         elif prim.type == "polyline" and len(prim.points) >= 2:
             pts = [(ox + px * s, oy + py * s) for px, py in prim.points]
             found.extend(zip(pts, pts[1:], strict=False))
+        elif prim.type == "arc" and prim.r > 0 and abs(prim.sweep) > 1e-6:
+            from panelcad.core.primitives import arc_polyline
+
+            pts = [
+                (ox + px * s, oy + py * s)
+                for px, py in arc_polyline(prim.x, prim.y, prim.r, prim.start, prim.sweep)
+            ]
+            found.extend(zip(pts, pts[1:], strict=False))
     return found
 
 

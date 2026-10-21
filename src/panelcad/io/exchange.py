@@ -52,6 +52,8 @@ def _prim_draw(prim: Any) -> dict[str, Any]:
         if prim.fill:
             item["fill"] = True
         return item
+    if prim.type == "arc":
+        return {"arc": [prim.x, prim.y, prim.r, prim.start, prim.sweep]}
     if prim.type == "polyline":
         return {"polyline": [list(p) for p in prim.points]}
     if prim.type == "text":

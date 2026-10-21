@@ -978,11 +978,20 @@ class ComponentItem(QGraphicsItem):
             painter.scale(self._scale, self._scale)
             painter.setPen(QPen(_qc("ink"), 0.35))
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            for prim in self.device.primitives:
+            from panelcad.core.pins import shadowed_terminal_texts
+
+            shadowed = shadowed_terminal_texts(self.device, comp)
+            for index, prim in enumerate(self.device.primitives):
+                if index in shadowed:
+                    continue
                 if not isinstance(prim, Primitive):
                     prim = Primitive.model_validate(prim)
                 if self._hidden_pins and _primitive_is_lower_pole(prim):
                     continue
+                _paint_primitive(painter, prim)
+            from panelcad.core.transformer_jumpers import jumper_primitives
+
+            for prim in jumper_primitives(self.device, comp):
                 _paint_primitive(painter, prim)
             painter.restore()
         painter.setPen(QPen(_qc("ink"), 0.35))
@@ -1516,6 +1525,14 @@ def _paint_primitive(painter: QPainter, prim: Primitive) -> None:
         painter.setBrush(QBrush(_qc("paper")))
         painter.drawEllipse(QPointF(prim.x, prim.y), prim.r, prim.r)
         painter.setBrush(Qt.BrushStyle.NoBrush)
+    elif prim.type == "arc":
+        from PySide6.QtGui import QPainterPath
+
+        rect = QRectF(prim.x - prim.r, prim.y - prim.r, prim.r * 2.0, prim.r * 2.0)
+        path = QPainterPath()
+        path.arcMoveTo(rect, prim.start)
+        path.arcTo(rect, prim.start, prim.sweep)
+        painter.strokePath(path, painter.pen())
     elif prim.type == "polyline":
         path = QPainterPath()
         if not prim.points:
@@ -1585,7 +1602,7 @@ def _primitive_ink_rect(prim: Primitive, scale: float) -> QRectF:
     pad = 0.45
     if prim.type == "rect":
         return QRectF(prim.x * s - pad, prim.y * s - pad, prim.w * s + 2 * pad, prim.h * s + 2 * pad)
-    if prim.type == "circle":
+    if prim.type == "circle" or prim.type == "arc":
         return QRectF(
             (prim.x - prim.r) * s - pad,
             (prim.y - prim.r) * s - pad,

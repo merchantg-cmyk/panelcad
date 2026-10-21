@@ -188,6 +188,16 @@ def _graphic_points(prim: object) -> list[tuple[float, float]]:
         return [(float(prim.x), float(prim.y)), (float(prim.x2), float(prim.y2))]
     if kind == "polyline":
         return [(float(x), float(y)) for x, y in (getattr(prim, "points", None) or [])]
+    if kind == "arc":
+        from panelcad.core.primitives import arc_polyline
+
+        return arc_polyline(
+            float(prim.x),
+            float(prim.y),
+            float(prim.r),
+            float(getattr(prim, "start", 0.0)),
+            float(getattr(prim, "sweep", 0.0)),
+        )
     return []
 
 

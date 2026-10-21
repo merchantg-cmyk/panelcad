@@ -559,7 +559,10 @@ def _candidates(
         elif length >= 6.0:
             ts = [0.5, 0.4, 0.6]
         elif vertical:
-            ts = [0.5, 0.35, 0.65]
+            # A short straight drop beside the next phase's terminal: the middle
+            # seats can all touch that dot by a fraction. A seat nearer the far
+            # end keeps the mark beside its own wire instead of past the next one.
+            ts = [0.5, 0.35, 0.65, 0.75, 0.25]
         # A short drop with a phase swap through it has no clear middle.
         # Sample the ends only then, so an uncrossed NEMA drop keeps its seat.
         if vertical and length < 14.0 and _foreign_crosses_vertical(a, b, foreign):
@@ -1543,25 +1546,48 @@ def _almost(a: float, b: float, tol: float = 0.65) -> bool:
     return abs(a - b) <= tol
 
 
-def routes_share_line(pts_a: list[Point], pts_b: list[Point]) -> bool:
-    """True when two routes have a horizontal or vertical segment on the same line.
+def _line_spans(pts: list[Point]) -> list[tuple[str, float, float, float]]:
+    """Axis-aligned runs longer than 1 mm: (h|v, fixed, lo, hi)."""
 
-    Same-net labels on one rung (same Y) or one riser (same X) print once, even
-    when the segments do not overlap.
+    spans: list[tuple[str, float, float, float]] = []
+    for start, end in zip(pts, pts[1:]):
+        if _almost(start.y, end.y) and abs(start.x - end.x) > 1.0:
+            lo, hi = (start.x, end.x) if start.x <= end.x else (end.x, start.x)
+            spans.append(("h", start.y, lo, hi))
+        elif _almost(start.x, end.x) and abs(start.y - end.y) > 1.0:
+            lo, hi = (start.y, end.y) if start.y <= end.y else (end.y, start.y)
+            spans.append(("v", start.x, lo, hi))
+    return spans
+
+
+def _spans_read_as_one(
+    left: tuple[str, float, float, float],
+    right: tuple[str, float, float, float],
+) -> bool:
+    """Same line, and close enough that one number stands for both.
+
+    A straight drop on each side of an overload shares an x but the symbol
+    sits between them. Each side keeps its number. A jog that only breaks
+    the riser for a few millimetres still prints once.
     """
 
-    def horiz_ys(pts: list[Point]) -> list[float]:
-        return [a.y for a, b in zip(pts, pts[1:]) if _almost(a.y, b.y) and abs(a.x - b.x) > 1.0]
+    if left[0] != right[0] or not _almost(left[1], right[1]):
+        return False
+    gap = max(left[2], right[2]) - min(left[3], right[3])
+    return gap <= 8.0
 
-    def vert_xs(pts: list[Point]) -> list[float]:
-        return [a.x for a, b in zip(pts, pts[1:]) if _almost(a.x, b.x) and abs(a.y - b.y) > 1.0]
 
-    for ya in horiz_ys(pts_a):
-        if any(_almost(ya, yb) for yb in horiz_ys(pts_b)):
-            return True
-    for xa in vert_xs(pts_a):
-        if any(_almost(xa, xb) for xb in vert_xs(pts_b)):
-            return True
+def routes_share_line(pts_a: list[Point], pts_b: list[Point]) -> bool:
+    """True when two routes share a rung or riser that reads as one conductor.
+
+    Same-net labels on that run print once. Segments separated by a device
+    do not: the number has to show on both sides of the symbol.
+    """
+
+    for left in _line_spans(pts_a):
+        for right in _line_spans(pts_b):
+            if _spans_read_as_one(left, right):
+                return True
     return False
 
 

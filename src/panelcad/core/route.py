@@ -859,6 +859,40 @@ def runs_along_lanes(points: list[Point], lanes: list[Rect]) -> bool:
     return False
 
 
+def _collapse_collinear(points: list[Point]) -> list[Point]:
+    """Drop vertices that do not change direction. A straight lead stays two points."""
+
+    pts = _dedupe_pts(points)
+    if len(pts) < 3:
+        return pts
+    out = [pts[0]]
+    for index in range(1, len(pts) - 1):
+        prev, cur, nxt = out[-1], pts[index], pts[index + 1]
+        same_x = abs(prev.x - cur.x) <= 0.05 and abs(cur.x - nxt.x) <= 0.05
+        same_y = abs(prev.y - cur.y) <= 0.05 and abs(cur.y - nxt.y) <= 0.05
+        if same_x or same_y:
+            continue
+        out.append(cur)
+    out.append(pts[-1])
+    return _dedupe_pts(out)
+
+
+def _on_page(points: list[Point], bounds: Rect | None) -> bool:
+    if bounds is None:
+        return True
+    x0, y0, x1, y1 = bounds
+    pad = 8.0
+    return all(x0 - pad <= p.x <= x1 + pad and y0 - pad <= p.y <= y1 + pad for p in points)
+
+
+def _short_drop_clear(points: list[Point], obstacles: list[Rect], lanes: list[Rect]) -> bool:
+    """True when a facing drop only clips the pin pad, not another symbol or lane."""
+
+    if lanes and runs_along_lanes(points, lanes):
+        return False
+    return not path_hits_obstacles(points, obstacles, skip_ends=True, end_clearance=1.2)
+
+
 def route_orthogonal(
     ax: float,
     ay: float,
@@ -882,6 +916,12 @@ def route_orthogonal(
         _open_stub(ax, ay, a_side, obstacles, stub),
         _open_stub(bx, by, b_side, obstacles, stub),
     )
+    facing = (a_side == "bottom" and b_side == "top" and by > ay) or (
+        a_side == "top" and b_side == "bottom" and ay > by
+    )
+    # The symbol pad sticks 0.8 mm past the pin. A straight drop starts on that
+    # edge, so the ordinary hit test calls it a body crossing. Trim that pad.
+    short_gap = facing and abs(by - ay) < 2.0 * STUB + 0.4
 
     def clear(pts: list[Point], *, allow_lane: bool = False) -> bool:
         # Same test the geometry check uses: a stub at the pin is exempt, a run through a body is not.
@@ -899,6 +939,10 @@ def route_orthogonal(
 
     raw = manhattan_route(ax, ay, a_side, bx, by, b_side, stub=stub)
     naive = shown(raw)
+    if short_gap and _short_drop_clear(naive, obstacles, lane_boxes) and _on_page(naive, bounds):
+        # Keep the stub vertices. A bare two-point segment reads as symbol ink to the
+        # print importer and merges the wire into the overload pole beside it.
+        return _dedupe_pts(naive)
     if clear(naive):
         return naive
     short_stub = min(2.0, stub)

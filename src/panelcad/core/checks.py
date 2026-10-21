@@ -426,6 +426,9 @@ def run_checks(
     findings.extend(_print_import_findings(project))
     findings.extend(_power_column_overflow(project))
     findings.extend(_page_density(project, catalog))
+    from panelcad.core.transformer_jumpers import jumper_findings
+
+    findings.extend(jumper_findings(project, catalog))
     hidden = set(suppressed_ids(project))
     out: list[Finding] = []
     seen: set[str] = set()

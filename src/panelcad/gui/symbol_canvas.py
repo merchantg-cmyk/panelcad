@@ -5,18 +5,33 @@ from __future__ import annotations
 import copy
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen, QKeyEvent
+from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QInputDialog, QWidget
 
+from panelcad.core.primitives import arc_through
 from panelcad.gui.symbol_draw import DrawModel
 
-TOOLS = ("select", "line", "box", "circle", "poly", "attr", "pin")
+TOOLS = ("select", "line", "box", "circle", "arc", "poly", "attr", "pin")
 
 
 def _c(role: str) -> QColor:
     from panelcad.gui.theme import canvas_qcolor
 
     return canvas_qcolor(role)
+
+
+def _stroke_arc(
+    p: QPainter, cx: float, cy: float, radius: float, start: float, sweep: float
+) -> None:
+    """Same Qt arc the sheet painter strokes. Not a snapped polyline."""
+
+    if radius <= 0 or abs(sweep) < 1e-6:
+        return
+    rect = QRectF(cx - radius, cy - radius, radius * 2.0, radius * 2.0)
+    path = QPainterPath()
+    path.arcMoveTo(rect, start)
+    path.arcTo(rect, start, sweep)
+    p.strokePath(path, p.pen())
 
 
 class SymbolCanvas(QWidget):
@@ -39,6 +54,7 @@ class SymbolCanvas(QWidget):
         self._press: tuple[float, float] | None = None
         self._cur: tuple[float, float] | None = None
         self._poly: list[tuple[float, float]] = []
+        self._arc: list[tuple[float, float]] = []
         self.selected: int | None = None
         self.selected_pin: int | None = None
         self.selected_attr: int | None = None
@@ -77,6 +93,7 @@ class SymbolCanvas(QWidget):
         self.tool = tool if tool in TOOLS else "select"
         self._press = None
         self._poly = []
+        self._arc = []
         self._move_from = None
         self._move_pin_from = None
         self._move_attr_from = None
@@ -201,6 +218,21 @@ class SymbolCanvas(QWidget):
                 p.drawLine(QPointF(*a), QPointF(*b))
             if self._cur:
                 p.drawLine(QPointF(*self._poly[-1]), QPointF(*self._cur))
+        if self._arc:
+            ghost = QPen(_c("review"))
+            ghost.setWidthF(0.3)
+            p.setPen(ghost)
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            preview = list(self._arc)
+            if self._cur:
+                preview.append(self._cur)
+            if len(preview) >= 3:
+                solved = arc_through(preview[0], preview[1], preview[2])
+                if solved is not None:
+                    _stroke_arc(p, *solved)
+            else:
+                for a, b in zip(preview, preview[1:]):
+                    p.drawLine(QPointF(*a), QPointF(*b))
 
     def _paint_item(self, p: QPainter, item: dict) -> None:
         p.setBrush(Qt.BrushStyle.NoBrush)
@@ -213,6 +245,9 @@ class SymbolCanvas(QWidget):
         elif "circle" in item:
             cx, cy, r = item["circle"]
             p.drawEllipse(QPointF(cx, cy), r, r)
+        elif "arc" in item:
+            cx, cy, r, start, sweep = item["arc"]
+            _stroke_arc(p, cx, cy, r, start, sweep)
         elif "polyline" in item:
             pts = item["polyline"]
             for a, b in zip(pts, pts[1:]):
@@ -229,6 +264,7 @@ class SymbolCanvas(QWidget):
                 self.model.add_polyline(self._poly)
                 self._poly = []
                 self.draw_changed.emit()
+            self._arc = []
             self.tool = "select"
             self.update()
             return
@@ -272,6 +308,14 @@ class SymbolCanvas(QWidget):
             return
         if self.tool == "poly":
             self._poly.append(mm)
+            self.update()
+            return
+        if self.tool == "arc":
+            self._arc.append(mm)
+            if len(self._arc) >= 3:
+                self.model.add_arc_through(self._arc[0], self._arc[1], self._arc[2])
+                self._arc = []
+                self.draw_changed.emit()
             self.update()
             return
         if self.tool == "label":
@@ -405,6 +449,7 @@ class SymbolCanvas(QWidget):
             return
         if event.key() == Qt.Key.Key_Escape:
             self._poly = []
+            self._arc = []
             self._press = None
             self._move_from = None
             self._move_pin_from = None

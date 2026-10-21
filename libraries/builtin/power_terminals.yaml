@@ -74,7 +74,7 @@ devices:
     tags: [transformer]
     schematic:
       width: 40
-      height: 40
+      height: 48
       pins:
         - { id: "1", x: 0, y: 12, side: left, electrical: power }
         - { id: "2", x: 0, y: 28, side: left, electrical: power }
@@ -82,18 +82,37 @@ devices:
         - { id: "22", x: 40, y: 28, side: right, electrical: power }
         - { id: H1, x: 0, y: 12, side: left, electrical: power }
         - { id: H2, x: 0, y: 28, side: left, electrical: power }
+        - { id: H3, x: 0, y: 34, side: left, electrical: power }
+        - { id: H4, x: 0, y: 46, side: left, electrical: power }
         - { id: X1, x: 40, y: 12, side: right, electrical: power }
         - { id: X2, x: 40, y: 28, side: right, electrical: power }
       draw:
-        - circle: [14, 20, 10]
-        - circle: [26, 20, 10]
-        - line: [0, 12, 8, 12]
-        - line: [0, 28, 8, 28]
-        - line: [32, 12, 40, 12]
-        - line: [32, 28, 40, 28]
-        - text: [20, 38, "T", 2.5]
+        - arc: [16, 14.667, 2.667, 90, -180]
+        - arc: [16, 20.0, 2.667, 90, -180]
+        - arc: [16, 25.333, 2.667, 90, -180]
+        - arc: [16, 36.0, 2.0, 90, -180]
+        - arc: [16, 40.0, 2.0, 90, -180]
+        - arc: [16, 44.0, 2.0, 90, -180]
+        - arc: [24, 14.667, 2.667, 90, 180]
+        - arc: [24, 20.0, 2.667, 90, 180]
+        - arc: [24, 25.333, 2.667, 90, 180]
+        - line: [0, 12, 16, 12]
+        - line: [0, 28, 16, 28]
+        - line: [0, 34, 16, 34]
+        - line: [0, 46, 16, 46]
+        - line: [24, 12, 40, 12]
+        - line: [24, 28, 40, 28]
+        - line: [19.4, 11, 19.4, 47]
+        - line: [20.6, 11, 20.6, 47]
+        - text: [7, 11.2, "H1", 1.8]
+        - text: [7, 27.2, "H2", 1.8]
+        - text: [7, 33.2, "H3", 1.8]
+        - text: [7, 45.2, "H4", 1.8]
+        - text: [33, 11.2, "X1", 1.8]
+        - text: [33, 27.2, "X2", 1.8]
+        - text: [31, 40, "T", 2.2]
     panel: { w: 78, h: 72, d: 75, din: true }
-    props: { primary: 230V, secondary: 24V, VA: 100 }
+    props: { primary: 400/230V, secondary: 24V, VA: 100 }
 
   - id: drives.vfd_1k5
     name: VFD 1.5 kW
@@ -197,14 +216,14 @@ devices:
       height: 40
       pins:
         - { id: U1, x: 8, y: 0, side: top, electrical: power }
-        - { id: V1, x: 20, y: 0, side: top, electrical: power }
-        - { id: W1, x: 32, y: 0, side: top, electrical: power }
+        - { id: V1, x: 18, y: 0, side: top, electrical: power }
+        - { id: W1, x: 28, y: 0, side: top, electrical: power }
       draw:
-        - circle: [20, 24, 14]
-        - text: [20, 26, "M", 4]
-        - line: [8, 0, 8, 16.8]
-        - line: [20, 0, 20, 10]
-        - line: [32, 0, 32, 16.8]
+        - circle: [18, 24, 14]
+        - text: [18, 26, "M", 4]
+        - line: [8, 0, 8, 14.202]
+        - line: [18, 0, 18, 10]
+        - line: [28, 0, 28, 14.202]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
     props: { poles: 3, type: induction, location: field }
 
@@ -224,19 +243,17 @@ devices:
         - { id: U2, x: 46, y: 26, side: right, electrical: power }
         - { id: V2, x: 46, y: 29, side: right, electrical: power }
       draw:
-        - circle: [18, 20, 10]
-        - text: [18, 22, "M", 3.4]
-        - line: [8, 0, 12, 4]
-        - line: [12, 4, 12, 12]
-        - line: [18, 0, 18, 10]
-        - line: [28, 0, 24, 4]
-        - line: [24, 4, 24, 12]
-        - line: [27.54, 23, 46, 23]
-        - line: [26.00, 26, 46, 26]
-        - line: [22.36, 29, 46, 29]
-        - text: [15.6, 7.4, "U1", 1.6]
-        - text: [21.4, 7.4, "V1", 1.6]
-        - text: [27.2, 7.4, "W1", 1.6]
+        - circle: [18, 22, 14]
+        - text: [18, 24, "M", 3.4]
+        - line: [8, 0, 8, 12.202]
+        - line: [18, 0, 18, 8]
+        - line: [28, 0, 28, 12.202]
+        - line: [31.964, 23, 46, 23]
+        - line: [31.416, 26, 46, 26]
+        - line: [30.124, 29, 46, 29]
+        - text: [10.2, 5.2, "U1", 1.6]
+        - text: [20.4, 5.2, "V1", 1.6]
+        - text: [25.2, 5.2, "W1", 1.6]
         - text: [36, 22.0, "W2", 1.6]
         - text: [36, 25.0, "U2", 1.6]
         - text: [36, 28.0, "V2", 1.6]

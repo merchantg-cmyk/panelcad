@@ -169,7 +169,7 @@ def dol_control_parts(symbols: Any, extra: dict[str, Any]) -> list[_Part]:
 
     pins = symbols.pins
     supply, supply_role, hot, _ret = _supply_spec(symbols, extra)
-    psu = _ctrl(supply, supply_role, hot)
+    psu = _ctrl(supply, supply_role, hot, properties=_primary_props(supply_role, extra))
     estop = _ctrl(symbols.estop, "estop", pins.estop_in)
     stop = _ctrl(symbols.pb_nc, "stop", pins.stop_in)
     start = _ctrl(symbols.pb_no, "start", pins.start_in)
@@ -207,6 +207,14 @@ def _supply_spec(symbols: Any, extra: dict[str, Any]) -> tuple[str, str, str, st
     if ctrl is not None and float(ctrl) >= 100:
         return symbols.transformer, "transformer", symbols.pins.cpt_hot, symbols.pins.cpt_ret
     return symbols.psu, "psu", symbols.pins.psu_plus, symbols.pins.psu_minus
+
+
+def _primary_props(role: str, extra: dict[str, Any]) -> dict[str, Any]:
+    """A control transformer is fed at line voltage; record it so the primary jumpers can be drawn."""
+    volts = extra.get("voltage")
+    if role != "transformer" or volts is None:
+        return {}
+    return {"primary_voltage": f"{float(volts):g} V"}
 
 
 def _ctrl(
@@ -310,7 +318,7 @@ def _layout_reversing(
 def _reversing_control(session: Any, symbols: Any, extra: dict[str, Any]) -> list[_Part]:
     pins = symbols.pins
     supply, supply_role, hot, _ret = _supply_spec(symbols, extra)
-    psu = _ctrl(supply, supply_role, hot)
+    psu = _ctrl(supply, supply_role, hot, properties=_primary_props(supply_role, extra))
     estop = _ctrl(symbols.estop, "estop", pins.estop_in)
     stop = _ctrl(symbols.pb_nc, "stop", pins.stop_in)
     olc = _ctrl(symbols.ol_contact, "ol_contact", pins.ol_nc_in, family="overload", suffix="-95", skip_layout=True)
@@ -534,7 +542,7 @@ def _layout_star_delta(
 def _star_delta_control(session: Any, symbols: Any, extra: dict[str, Any]) -> list[_Part]:
     pins = symbols.pins
     supply, supply_role, hot, _ret = _supply_spec(symbols, extra)
-    psu = _ctrl(supply, supply_role, hot)
+    psu = _ctrl(supply, supply_role, hot, properties=_primary_props(supply_role, extra))
     estop = _ctrl(symbols.estop, "estop", pins.estop_in)
     stop = _ctrl(symbols.pb_nc, "stop", pins.stop_in)
     olc = _ctrl(symbols.ol_contact, "ol_contact", pins.ol_nc_in, family="overload", suffix="-95", skip_layout=True)
@@ -693,7 +701,7 @@ def _soft_starter_control(session: Any, symbols: Any, extra: dict[str, Any]) -> 
     pins = symbols.pins
     supply, supply_role, hot, _ret = _supply_spec(symbols, extra)
     wiring = extra.get("control_wiring") or "3wire"
-    psu = _ctrl(supply, supply_role, hot)
+    psu = _ctrl(supply, supply_role, hot, properties=_primary_props(supply_role, extra))
     estop = _ctrl(symbols.estop, "estop", pins.estop_in)
     coil = _ctrl(symbols.coil, "ss_coil", "A1", family="softstarter", suffix="", skip_layout=True)
     parts = [psu, estop, coil]
@@ -800,7 +808,7 @@ def _plc_control(session: Any, symbols: Any, extra: dict[str, Any], *, starter: 
     io_run = extra.get("io_run") or "I0_0"
     io_ol = extra.get("io_ol") or "I0_1"
     io_auto = extra.get("io_auto") or "I0_2"
-    psu = _ctrl(supply, supply_role, hot)
+    psu = _ctrl(supply, supply_role, hot, properties=_primary_props(supply_role, extra))
     estop = _ctrl(symbols.estop, "estop", pins.estop_in)
     stop = _ctrl(symbols.pb_nc, "stop", pins.stop_in)
     hoa = None

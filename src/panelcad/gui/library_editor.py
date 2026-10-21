@@ -42,6 +42,7 @@ TOOL_LABELS = {
     "line": "Line",
     "box": "Box",
     "circle": "Circle",
+    "arc": "Arc",
     "poly": "Points",
     "attr": "Attribute",
     "pin": "Connection",
@@ -155,6 +156,7 @@ class LibraryEditor(QDialog):
         layout.addWidget(
             QLabel(
                 "Draw the block on the millimetre grid. Line, Box, and Circle drag. "
+                "Arc: click the start, a point on the curve, then the end. The curve stays an arc. "
                 "Points: click corners, Enter or right-click to finish. "
                 "Attribute: pick a name above, then click where it sits on the block. "
                 "Connection: click an edge. Select drags geometry, attributes, and connections. "

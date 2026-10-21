@@ -23,6 +23,16 @@ class Painter(ABC):
     @abstractmethod
     def circle(self, x: float, y: float, r: float) -> None: ...
 
+    def arc(self, cx: float, cy: float, radius: float, start_deg: float, sweep_deg: float) -> None:
+        """True curve when the painter has one. Otherwise a smooth polyline.
+
+        0° is +X. Positive sweep runs toward the top of the page.
+        """
+
+        from panelcad.core.primitives import arc_polyline
+
+        self.polyline(arc_polyline(cx, cy, radius, start_deg, sweep_deg))
+
     @abstractmethod
     def polyline(self, points: list[tuple[float, float]]) -> None: ...
 
@@ -86,6 +96,12 @@ def draw_primitive(
         painter.set_fill("#222222" if prim.fill else "#f7f4ea")
         painter.circle(c[0], c[1], prim.r * s)
         painter.set_fill(None)
+    elif prim.type == "arc":
+        c = xf(prim.x, prim.y)
+        # rotate_point 90° is clockwise on the page, which subtracts from this angle.
+        delta = {0: 0.0, 90: -90.0, 180: 180.0, 270: 90.0}.get(int(rotation) % 360, 0.0)
+        painter.set_fill(None)
+        painter.arc(c[0], c[1], prim.r * s, prim.start + delta, prim.sweep)
     elif prim.type == "polyline":
         painter.polyline([xf(x, y) for x, y in prim.points])
     elif prim.type == "text":
@@ -356,6 +372,8 @@ def _primitive_is_lower_pole(prim: Primitive) -> bool:
         ys.append(float(prim.y2))
     if prim.type == "rect":
         ys.append(float(prim.y) + float(prim.h))
+    if prim.type == "arc":
+        ys.extend((float(prim.y) - abs(float(prim.r)), float(prim.y) + abs(float(prim.r))))
     if prim.points:
         ys.extend(float(point[1]) for point in prim.points)
     return min(ys) >= 33.0
@@ -461,13 +479,22 @@ def draw_device(
     else:
         hidden = {str(pin_id) for pin_id in (component.properties.get("hidden_pins") or [])}
         lamp = "light" in cat or "pilot" in (device.id or "").lower()
-        for prim in device.primitives:
+        from panelcad.core.pins import shadowed_terminal_texts
+
+        shadowed = shadowed_terminal_texts(device, component)
+        for index, prim in enumerate(device.primitives):
+            if index in shadowed:
+                continue
             if not isinstance(prim, Primitive):
                 prim = Primitive.model_validate(prim)
             if hidden and _primitive_is_lower_pole(prim):
                 continue
             if lamp and component.rotation and prim.type == "text" and str(prim.text).strip() == "H":
                 continue
+            draw_primitive(painter, prim, component.x, component.y, component.rotation, scale=s)
+        from panelcad.core.transformer_jumpers import jumper_primitives
+
+        for prim in jumper_primitives(device, component):
             draw_primitive(painter, prim, component.x, component.y, component.rotation, scale=s)
         _draw_rating_lines(painter, device, component, s)
     from panelcad.core.block import has_tag_attribute
@@ -559,6 +586,11 @@ def _draw_rating_lines(painter: Painter, device: Device, component: Component, s
     painter.set_fill("#111111")
     cx = component.x + float(device.schematic_width) * s * 0.50
     cy = component.y + float(device.schematic_height) * s * 0.34
+    if (device.category or "").lower().startswith("power.transformer"):
+        # Coils and the core run through the middle. The open corner under the
+        # secondary winding holds the rating, inside the symbol's own outline.
+        cx = component.x + float(device.schematic_width) * s * 0.78
+        cy = component.y + (float(device.schematic_height) - 4.0) * s
     for i, line in enumerate(raw.splitlines()[:3]):
         text = line.strip()
         if not text:

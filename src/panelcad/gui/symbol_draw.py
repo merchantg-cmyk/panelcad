@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from panelcad.core.primitives import arc_polyline, arc_through
+
 
 def _snap(value: float, step: float) -> float:
     if step <= 0:
@@ -48,6 +50,38 @@ class DrawModel:
     def add_circle(self, cx: float, cy: float, r: float) -> None:
         self.items.append({"circle": [self._s(cx), self._s(cy), max(self._s(abs(r)), self.snap or 1)]})
 
+    def add_arc(self, cx: float, cy: float, r: float, start_deg: float, sweep_deg: float) -> None:
+        """Store a true arc. The curve is not flattened onto the 1 mm grid.
+
+        Snapping every chord to 1 mm is what made coils and heaters stair-step.
+        Center and radius stay at the solved values. A full turn is a circle.
+        """
+
+        radius = abs(float(r))
+        sweep = float(sweep_deg)
+        if radius < 0.2 or abs(sweep) < 1.0:
+            return
+        if abs(abs(sweep) - 360.0) < 1.0 or abs(sweep) > 359.0:
+            self.add_circle(cx, cy, radius)
+            return
+        self.items.append(
+            {"arc": [float(cx), float(cy), radius, float(start_deg), sweep]}
+        )
+
+    def add_arc_through(
+        self,
+        p1: tuple[float, float],
+        p2: tuple[float, float],
+        p3: tuple[float, float],
+    ) -> bool:
+        solved = arc_through(p1, p2, p3)
+        if solved is None:
+            self.add_line(p1[0], p1[1], p3[0], p3[1])
+            return False
+        cx, cy, radius, start, sweep = solved
+        self.add_arc(cx, cy, radius, start, sweep)
+        return True
+
     def add_polyline(self, points: list[tuple[float, float]]) -> None:
         pts = [[self._s(x), self._s(y)] for x, y in (_as_xy(p) for p in points)]
         if len(pts) >= 2:
@@ -89,6 +123,9 @@ def _translated(item: dict[str, Any], dx: float, dy: float) -> dict[str, Any]:
     elif "circle" in item:
         cx, cy, r = item["circle"]
         out["circle"] = [cx + dx, cy + dy, r]
+    elif "arc" in item:
+        cx, cy, r, start, sweep = item["arc"]
+        out["arc"] = [cx + dx, cy + dy, r, start, sweep]
     elif "polyline" in item:
         out["polyline"] = [[px + dx, py + dy] for px, py in item["polyline"]]
     elif "text" in item:
@@ -111,6 +148,13 @@ def _item_hits(item: dict[str, Any], x: float, y: float, slop: float) -> bool:
         return abs(((x - cx) ** 2 + (y - cy) ** 2) ** 0.5 - r) <= slop or (
             (x - cx) ** 2 + (y - cy) ** 2
         ) ** 0.5 <= r + slop
+    if "arc" in item:
+        cx, cy, r, start, sweep = item["arc"]
+        pts = arc_polyline(cx, cy, r, start, sweep)
+        for a, b in zip(pts, pts[1:]):
+            if _near_segment(x, y, a[0], a[1], b[0], b[1], slop):
+                return True
+        return False
     if "polyline" in item:
         pts = item["polyline"]
         for a, b in zip(pts, pts[1:]):

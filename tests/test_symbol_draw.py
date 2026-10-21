@@ -11,7 +11,7 @@ def test_library_editor_draw_tools_feed_spec():
     app = QApplication.instance() or QApplication([])
     dlg = LibraryEditor(Session.create("Lib"))
     labels = [dlg._tool_group.button(i).text() for i in range(len(TOOLS))]
-    assert labels == ["Select", "Line", "Box", "Circle", "Points", "Attribute", "Connection"]
+    assert labels == ["Select", "Line", "Box", "Circle", "Arc", "Points", "Attribute", "Connection"]
     assert dlg.windowTitle() == "Symbol Builder"
     dlg.canvas.model.add_line(0, 8, 28, 8)
     dlg.canvas.model.add_rect(6, 2, 16, 10)
