@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import functools
 import json
 import shutil
@@ -317,6 +318,11 @@ class Session:
         self._listeners: list[Callable[[dict[str, Any]], None]] = []
         self._undo: list[dict[str, Any]] = []
         self._redo: list[dict[str, Any]] = []
+        # Latest full snapshot for each stack. Older steps keep only the diff.
+        self._undo_tip: dict[str, Any] | None = None
+        self._redo_tip: dict[str, Any] | None = None
+        # Bumped when the drawing changes so a sheet scene is not reused stale.
+        self._drawing_generation = 0
         self._convert_workspace: Path | None = None
         self._restoring = False
         self._history_lock = 0
@@ -353,6 +359,13 @@ class Session:
     def _entry_snap(self, entry: Any) -> dict[str, Any]:
         if isinstance(entry, dict) and isinstance(entry.get("snap"), dict):
             return entry["snap"]
+        if isinstance(entry, dict) and "patch" in entry:
+            for stack, tip in ((self._undo, self._undo_tip), (self._redo, self._redo_tip)):
+                try:
+                    index = stack.index(entry)
+                except ValueError:
+                    continue
+                return self._materialize(stack, index, tip if index == len(stack) - 1 else None)
         return entry if isinstance(entry, dict) else {}
 
     def _entry_name(self, entry: Any) -> str:
@@ -384,10 +397,74 @@ class Session:
         return before.get("catalog") is not self.catalog
 
     def _push_undo(self, snap: dict[str, Any], name: str) -> None:
-        self._undo.append({"name": name or "edit", "snap": snap})
-        if len(self._undo) > self.MAX_UNDO:
-            del self._undo[: len(self._undo) - self.MAX_UNDO]
+        self._store_history(self._undo, snap, name, "_undo_tip")
+        self._trim_history(self._undo, "_undo_tip")
         self._redo.clear()
+        self._redo_tip = None
+
+    def _store_history(self, stack: list[dict[str, Any]], snap: dict[str, Any], name: str, tip_attr: str) -> None:
+        """Append one step. Most steps store a diff against the previous snapshot."""
+
+        from panelcad.api.history import FULL_EVERY, diff_snap
+
+        tip = getattr(self, tip_attr)
+        label = name or "edit"
+        use_full = not stack or tip is None or len(stack) % FULL_EVERY == 0
+        if use_full:
+            stack.append({"name": label, "snap": snap})
+        else:
+            patch = diff_snap(tip, snap)
+            if patch is None:
+                stack.append({"name": label, "snap": snap})
+            else:
+                stack.append({"name": label, "patch": patch})
+        setattr(self, tip_attr, snap)
+
+    def _trim_history(self, stack: list[dict[str, Any]], tip_attr: str) -> None:
+        extra = len(stack) - self.MAX_UNDO
+        if extra <= 0:
+            return
+        tip = getattr(self, tip_attr) if extra == len(stack) - 1 else None
+        head = self._materialize(stack, extra, tip)
+        stack[extra] = {"name": self._entry_name(stack[extra]), "snap": head}
+        del stack[:extra]
+
+    def _materialize(
+        self,
+        stack: list[dict[str, Any]],
+        index: int,
+        tip: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        from panelcad.api.history import apply_snap
+
+        if index < 0 or index >= len(stack):
+            return {}
+        if index == len(stack) - 1 and tip is not None:
+            return tip
+        full_at = index
+        while full_at >= 0 and not isinstance(stack[full_at].get("snap"), dict):
+            full_at -= 1
+        if full_at < 0:
+            return {}
+        current = stack[full_at]["snap"]
+        for cursor in range(full_at + 1, index + 1):
+            patch = stack[cursor].get("patch")
+            if patch is None:
+                stored = stack[cursor].get("snap")
+                if isinstance(stored, dict):
+                    current = stored
+                continue
+            current = apply_snap(current, patch)
+        return current
+
+    def _sync_history_tip(self, stack: list[dict[str, Any]], tip_attr: str) -> None:
+        if not stack:
+            setattr(self, tip_attr, None)
+            return
+        if isinstance(stack[-1].get("snap"), dict):
+            setattr(self, tip_attr, stack[-1]["snap"])
+            return
+        setattr(self, tip_attr, self._materialize(stack, len(stack) - 1, None))
 
     def checkpoint(self, name: str = "edit") -> None:
         """Remember the drawing so the editor can undo. No-op during undo/redo.
@@ -399,8 +476,8 @@ class Session:
         if self._restoring or self._history_lock:
             return
         snap = self._history_snapshot()
-        if self._undo:
-            last = self._entry_snap(self._undo[-1])
+        if self._undo and self._undo_tip is not None:
+            last = self._undo_tip
             if last.get("project") == snap.get("project") and last.get("catalog") is snap.get("catalog"):
                 return
         self._push_undo(snap, name)
@@ -513,8 +590,9 @@ class Session:
 
         if self._history_lock or not self._undo:
             return
-        if not self._drawing_changed(self._entry_snap(self._undo[-1])):
+        if not self._drawing_changed(self._undo_tip or self._entry_snap(self._undo[-1])):
             self._undo.pop()
+            self._sync_history_tip(self._undo, "_undo_tip")
 
     def command_open(self) -> bool:
         """True while a drag or other edit has not been closed."""
@@ -543,9 +621,15 @@ class Session:
     def can_redo(self) -> bool:
         return bool(self._redo)
 
+    def _touch_drawing(self) -> None:
+        """The picture on screen may be stale. Sheet scenes check this."""
+
+        self._drawing_generation = int(getattr(self, "_drawing_generation", 0)) + 1
+
     def _invalidate_sheet_cache(self) -> None:
         """Routes and marks follow the model. An edit, undo, redo, or import starts over."""
 
+        self._touch_drawing()
         try:
             from panelcad.render.label_avoid import clear_resolved_labels
 
@@ -562,28 +646,34 @@ class Session:
         self._abandon_open_command()
         if not self._undo:
             return False
-        entry = self._undo.pop()
-        name = self._entry_name(entry)
-        self._redo.append({"name": name, "snap": self._history_snapshot()})
-        self._restore_history(self._entry_snap(entry))
+        name = self._entry_name(self._undo[-1])
+        restore = self._undo_tip if self._undo_tip is not None else self._entry_snap(self._undo[-1])
+        self._undo.pop()
+        self._sync_history_tip(self._undo, "_undo_tip")
+        self._store_history(self._redo, self._history_snapshot(), name, "_redo_tip")
+        self._trim_history(self._redo, "_redo_tip")
+        self._restore_history(restore)
         return True
 
     def redo(self) -> bool:
         self._abandon_open_command()
         if not self._redo:
             return False
-        entry = self._redo.pop()
-        name = self._entry_name(entry)
-        self._undo.append({"name": name, "snap": self._history_snapshot()})
-        if len(self._undo) > self.MAX_UNDO:
-            del self._undo[: len(self._undo) - self.MAX_UNDO]
-        self._restore_history(self._entry_snap(entry))
+        name = self._entry_name(self._redo[-1])
+        restore = self._redo_tip if self._redo_tip is not None else self._entry_snap(self._redo[-1])
+        self._redo.pop()
+        self._sync_history_tip(self._redo, "_redo_tip")
+        self._store_history(self._undo, self._history_snapshot(), name, "_undo_tip")
+        self._trim_history(self._undo, "_undo_tip")
+        self._restore_history(restore)
         return True
 
     def _restore_history(self, snap: dict[str, Any]) -> None:
         self._restoring = True
         try:
-            self.project = Project.model_validate(snap["project"])
+            # The patch shares unchanged dicts with older steps. Copy before
+            # the model reads them so a later edit cannot rewrite history.
+            self.project = Project.model_validate(copy.deepcopy(snap["project"]))
             aid = str(snap.get("active_sheet_id") or "")
             if aid and any(s.id == aid for s in self.project.sheets):
                 self.active_sheet_id = aid
@@ -1697,6 +1787,7 @@ class Session:
         )
         wire.points = orthogonal_interior(ax, ay, bx, by, out)
         clear_route_cache()
+        self._touch_drawing()
         self.emit("set_wire_route", f"route {wire.id}")
         return wire
 
@@ -1729,6 +1820,8 @@ class Session:
                 wire.points = []
                 n += 1
         clear_route_cache()
+        if n:
+            self._touch_drawing()
         return n
 
     def clear_wire_route(self, wire_id: str, sheet_id: str | None = None) -> Wire:
@@ -1739,6 +1832,7 @@ class Session:
         wire.from_at = None
         wire.to_at = None
         clear_route_cache()
+        self._touch_drawing()
         self.emit("clear_wire_route", f"auto-route {wire.id}")
         return wire
 

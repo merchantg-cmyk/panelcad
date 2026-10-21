@@ -8,8 +8,8 @@ from typing import Any
 from PIL import Image
 
 from panelcad.importer.imageutil import auto_rotate, prepare_scan
-from panelcad.importer.read import dxf_pages, tokens_from_pdf
-from panelcad.importer.vectors import strokes_from_pdf
+from panelcad.importer.read import dxf_pages, release_mupdf_store, tokens_from_page
+from panelcad.importer.vectors import strokes_from_page
 from panelcad.importer.workspace import Workspace
 
 PRINT_EXTS = {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".dxf", ".svg"}
@@ -187,10 +187,14 @@ def rasterize_pdf(path: Path | str, dest_dir: Path, *, dpi: int = 170) -> list[P
         for index, page in enumerate(doc):
             pix = page.get_pixmap(matrix=matrix, alpha=False)
             out = dest_dir / f"page_{index + 1:03d}.png"
-            pix.save(str(out))
+            try:
+                pix.save(str(out))
+            finally:
+                release_pixmap(pix)
             written.append(out)
     finally:
         doc.close()
+        release_mupdf_store()
     return written
 
 
@@ -208,8 +212,9 @@ def _ingest_pdf(
         for offset, _page in enumerate(doc):
             index = start + offset
             page_id = f"page_{index + 1:03d}"
+            page_obj = doc[offset]
             try:
-                tokens, meta = tokens_from_pdf(path, offset)
+                tokens, meta = tokens_from_page(page_obj)
             except Exception as exc:  # noqa: BLE001 — the open already passed; this is a bad page
                 raise ValueError(plain_print_error(exc, path)) from None
             if pdf_page_is_scan(doc[offset]):
@@ -220,15 +225,22 @@ def _ingest_pdf(
                 tokens = []
             folder = workspace.page_dir(page_id)
             preview = folder / "page.png"
-            page_obj = doc[offset]
             raster_dpi = preview_dpi if meta.get("vector") else _native_scan_dpi(page_obj, preview_dpi)
             _save_pdf_preview(page_obj, preview, raster_dpi)
             if not meta.get("vector"):
                 image = Image.open(preview)
-                turned, quarters = auto_rotate(image)
-                applied = int(quarters) * 90 % 360
-                if applied:
-                    _save_upright(turned, preview, image)
+                turned = image
+                try:
+                    turned, quarters = auto_rotate(image)
+                    applied = int(quarters) * 90 % 360
+                    if applied:
+                        _save_upright(turned, preview, image)
+                finally:
+                    image.close()
+                    if turned is not image:
+                        closer = getattr(turned, "close", None)
+                        if callable(closer):
+                            closer()
                 meta = dict(meta)
                 meta["rotation"] = applied
                 if applied in {90, 270}:
@@ -248,11 +260,12 @@ def _ingest_pdf(
             record["dpi"] = int(raster_dpi)
             record["pdf_page"] = offset
             workspace.write_json(tokens, "pages", page_id, "words.json")
-            workspace.write_json(strokes_from_pdf(path, offset), "pages", page_id, "strokes.json")
+            workspace.write_json(strokes_from_page(page_obj), "pages", page_id, "strokes.json")
             workspace.write_json(record, "pages", page_id, "page.json")
             pages.append(record)
     finally:
         doc.close()
+        release_mupdf_store()
     return pages
 
 
@@ -293,12 +306,28 @@ def _native_scan_dpi(page: Any, preview_dpi: int) -> int:
     return int(preview_dpi)
 
 
+def release_pixmap(pix: Any) -> None:
+    """Free a MuPDF pixmap buffer. Saving it does not release the pixels."""
+
+    if pix is None:
+        return
+    closer = getattr(pix, "close", None)
+    if callable(closer):
+        try:
+            closer()
+        except Exception:  # noqa: BLE001 — dropping the reference still frees it
+            pass
+
+
 def _save_pdf_preview(page: Any, dest: Path, dpi: int) -> None:
     zoom = dpi / 72.0
     import pymupdf
 
     pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
-    pix.save(str(dest))
+    try:
+        pix.save(str(dest))
+    finally:
+        release_pixmap(pix)
 
 
 def _ingest_dxf(path: Path, workspace: Workspace, *, index: int) -> list[dict[str, Any]]:

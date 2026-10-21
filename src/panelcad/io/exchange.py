@@ -309,6 +309,9 @@ def import_project_file(session: Any, path: Path, *, replace: bool = True) -> No
         session.project = project
         session.active_sheet_id = project.sheets[0].id if project.sheets else ""
         session.catalog.load_defaults(path.parent)
+        touch = getattr(session, "_touch_drawing", None)
+        if callable(touch):
+            touch()
     else:
         for sheet in project.sheets:
             if any(s.id == sheet.id for s in session.project.sheets):
@@ -317,6 +320,9 @@ def import_project_file(session: Any, path: Path, *, replace: bool = True) -> No
         tb = project.title_block
         if not session.project.title_block.company and tb.company:
             session.project.title_block = tb
+        touch = getattr(session, "_touch_drawing", None)
+        if callable(touch):
+            touch()
 
 
 def import_package(session: Any, root: Path | str, *, replace: bool = True) -> dict[str, Any]:

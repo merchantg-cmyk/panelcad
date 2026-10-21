@@ -127,7 +127,6 @@ _ASSIGN_SIZE_KEYS = frozenset(
     {"width_mm", "height_mm", "depth_mm", "dim_source", "catalog_depth_missing"}
 )
 _ASSIGN_MOUNT_KEYS = frozenset({"mount", "din_rail"})
-_PARTS_CACHE: Any = None
 
 
 class LayoutNotReadyError(ValueError):
@@ -615,16 +614,13 @@ def should_skip_layout_occupant(
 
 
 def _parts_for_lookup(parts: Any = None) -> Any:
-    """Session catalog when given; otherwise the cached builtin parts library."""
+    """Session catalog when given; otherwise the builtin parts library for this search path."""
 
     if parts is not None:
         return parts
-    global _PARTS_CACHE
-    if _PARTS_CACHE is None:
-        from panelcad.library.parts import default_parts_catalog
+    from panelcad.library.parts import default_parts_catalog
 
-        _PARTS_CACHE = default_parts_catalog()
-    return _PARTS_CACHE
+    return default_parts_catalog()
 
 
 def resolve_assigned_part(props: dict[str, Any] | None, parts: Any = None) -> Any:

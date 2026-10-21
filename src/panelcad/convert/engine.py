@@ -1086,6 +1086,9 @@ def _resume_working(session: Any, ws: dict[str, Any]) -> None:
 def _install(session: Any, project: Project) -> None:
     aid = str(getattr(session, "active_sheet_id", "") or "")
     session.project = project
+    touch = getattr(session, "_touch_drawing", None)
+    if callable(touch):
+        touch()
     if aid and any(sheet.id == aid for sheet in project.sheets):
         return
     if project.sheets:

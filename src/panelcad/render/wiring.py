@@ -18,6 +18,7 @@ from panelcad.core.route import (
     runs_along_lanes,
 )
 from panelcad.library.catalog import Catalog
+from panelcad.memory import CountLRU, sheet_cache_limit
 from panelcad.render.sheet import parse_pin_ref, pin_side_world, pin_world, resolve_pin
 from panelcad.render.titleblock import title_block_rect, working_rect
 
@@ -556,8 +557,7 @@ def route_wire(
     return plain
 
 
-_ROUTE_CACHE: dict[tuple, dict[str, list[Point]]] = {}
-_ROUTE_MAX = 24
+_ROUTE_CACHE: CountLRU[tuple, dict[str, list[Point]]] = CountLRU(sheet_cache_limit)
 _IN_ROUTE = False
 
 
@@ -952,6 +952,4 @@ def route_sheet_wires(
         finally:
             _IN_ROUTE = False
     _ROUTE_CACHE[key] = routed
-    if len(_ROUTE_CACHE) > _ROUTE_MAX:
-        _ROUTE_CACHE.pop(next(iter(_ROUTE_CACHE)))
     return routed

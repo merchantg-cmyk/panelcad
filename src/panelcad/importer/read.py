@@ -240,35 +240,58 @@ def tokens_from_pdf(path: Path | str, page_index: int) -> tuple[list[dict[str, A
 
     doc = pymupdf.open(str(path))
     try:
-        page = doc[page_index]
-        rect = page.rect
-        width_mm = float(rect.width) * PT_TO_MM
-        height_mm = float(rect.height) * PT_TO_MM
-        tokens: list[dict[str, Any]] = []
-        for word in page.get_text("words"):
-            x0, y0, x1, y1, text = word[:5]
-            label = str(text or "").strip()
-            if not label:
-                continue
-            tokens.append(
-                {
-                    "text": label,
-                    "x": (float(x0) + float(x1)) * 0.5 * PT_TO_MM,
-                    "y": (float(y0) + float(y1)) * 0.5 * PT_TO_MM,
-                    "w": max(0.2, (float(x1) - float(x0)) * PT_TO_MM),
-                    "h": max(0.2, (float(y1) - float(y0)) * PT_TO_MM),
-                }
-            )
-        meta = {
-            "width_mm": round(width_mm, 3),
-            "height_mm": round(height_mm, 3),
-            "rotation": int(page.rotation or 0),
-            "vector": _has_drawing_text(tokens, width_mm, height_mm),
-            "text": page.get_text("text") or "",
-        }
-        return tokens, meta
+        return tokens_from_page(doc[page_index])
     finally:
         doc.close()
+        release_mupdf_store()
+
+
+def tokens_from_page(page: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Words and page size from an already-open page. The caller closes the document."""
+
+    rect = page.rect
+    width_mm = float(rect.width) * PT_TO_MM
+    height_mm = float(rect.height) * PT_TO_MM
+    tokens: list[dict[str, Any]] = []
+    for word in page.get_text("words"):
+        x0, y0, x1, y1, text = word[:5]
+        label = str(text or "").strip()
+        if not label:
+            continue
+        tokens.append(
+            {
+                "text": label,
+                "x": (float(x0) + float(x1)) * 0.5 * PT_TO_MM,
+                "y": (float(y0) + float(y1)) * 0.5 * PT_TO_MM,
+                "w": max(0.2, (float(x1) - float(x0)) * PT_TO_MM),
+                "h": max(0.2, (float(y1) - float(y0)) * PT_TO_MM),
+            }
+        )
+    meta = {
+        "width_mm": round(width_mm, 3),
+        "height_mm": round(height_mm, 3),
+        "rotation": int(page.rotation or 0),
+        "vector": _has_drawing_text(tokens, width_mm, height_mm),
+        "text": page.get_text("text") or "",
+    }
+    return tokens, meta
+
+
+def release_mupdf_store() -> None:
+    """Drop MuPDF's decoded-page cache after a document is closed."""
+
+    try:
+        import pymupdf
+    except ImportError:
+        return
+    tools = getattr(pymupdf, "TOOLS", None)
+    shrink = getattr(tools, "store_shrink", None)
+    if not callable(shrink):
+        return
+    try:
+        shrink(100)
+    except Exception:  # noqa: BLE001 — a cache clear must not fail the import
+        return
 
 
 def tokens_from_dxf(path: Path | str) -> tuple[list[dict[str, Any]], dict[str, Any]]:

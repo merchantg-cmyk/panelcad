@@ -24,78 +24,86 @@ LABEL_MM = 16.0
 def strokes_from_pdf(path: Path | str, page_index: int) -> list[dict[str, Any]]:
     import pymupdf
 
+    from panelcad.importer.read import release_mupdf_store
+
     doc = pymupdf.open(str(path))
     try:
-        page = doc[page_index]
-        width = float(page.rect.width) * PT_TO_MM
-        height = float(page.rect.height) * PT_TO_MM
-        strokes: list[dict[str, Any]] = []
-        raw_lines: list[dict[str, Any]] = []
-        for drawing in page.get_drawings():
-            role = _role(drawing.get("color"), drawing.get("width"))
-            width_pt = _width_pt(drawing.get("width"))
-            color = drawing.get("color")
-            for item in drawing.get("items") or []:
-                kind = item[0]
-                if kind == "l":
-                    a = _pt(item[1])
-                    b = _pt(item[2])
-                    line_role = stroke_role(color, drawing.get("width"))
-                    raw_lines.append(
-                        {
-                            "a": a,
-                            "b": b,
-                            "role": line_role,
-                            "pt": width_pt,
-                            "color": color,
-                            "span": _span(a, b),
-                        }
-                    )
-                elif kind == "re":
-                    rect = item[1]
-                    x0, y0 = float(rect.x0) * PT_TO_MM, float(rect.y0) * PT_TO_MM
-                    x1, y1 = float(rect.x1) * PT_TO_MM, float(rect.y1) * PT_TO_MM
-                    if omit_border_rect(abs(x1 - x0), abs(y1 - y0)):
-                        continue
-                    rx, ry = min(x0, x1), min(y0, y1)
-                    rw, rh = abs(x1 - x0), abs(y1 - y0)
-                    strokes.append({"kind": "rect", "role": role, "x": _r(rx), "y": _r(ry), "w": _r(rw), "h": _r(rh)})
-                    corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
-                    for p, q in zip(corners, corners[1:] + corners[:1], strict=True):
-                        aa = [_r(p[0]), _r(p[1])]
-                        bb = [_r(q[0]), _r(q[1])]
-                        raw_lines.append(
-                            {
-                                "a": aa,
-                                "b": bb,
-                                "role": role,
-                                "pt": width_pt,
-                                "color": color,
-                                "span": _span(aa, bb),
-                                "from_rect": True,
-                            }
-                        )
-                elif kind == "c":
-                    points = [_pt(p) for p in item[1:]]
-                    if points:
-                        strokes.append({"kind": "curve", "role": role, "points": points})
-        _promote_conductors(raw_lines)
-        _promote_orthogonal(raw_lines)
-        for line in raw_lines:
-            # Sheet borders are long. A conductor across the sheet is long too,
-            # and dropping it splits the net in the middle of the run.
-            if omit_border_line(line["role"], line["a"], line["b"]):
-                continue
-            item = {"kind": "line", "role": line["role"], "a": line["a"], "b": line["b"]}
-            if line.get("bus"):
-                item["bus"] = True
-            if line.get("geom"):
-                item["geom"] = True
-            strokes.append(item)
-        _ = (width, height)
-        return strokes
+        return strokes_from_page(doc[page_index])
     finally:
         doc.close()
+        release_mupdf_store()
+
+
+def strokes_from_page(page: Any) -> list[dict[str, Any]]:
+    """Vector ink from an already-open page. The caller closes the document."""
+
+    width = float(page.rect.width) * PT_TO_MM
+    height = float(page.rect.height) * PT_TO_MM
+    strokes: list[dict[str, Any]] = []
+    raw_lines: list[dict[str, Any]] = []
+    for drawing in page.get_drawings():
+        role = _role(drawing.get("color"), drawing.get("width"))
+        width_pt = _width_pt(drawing.get("width"))
+        color = drawing.get("color")
+        for item in drawing.get("items") or []:
+            kind = item[0]
+            if kind == "l":
+                a = _pt(item[1])
+                b = _pt(item[2])
+                line_role = stroke_role(color, drawing.get("width"))
+                raw_lines.append(
+                    {
+                        "a": a,
+                        "b": b,
+                        "role": line_role,
+                        "pt": width_pt,
+                        "color": color,
+                        "span": _span(a, b),
+                    }
+                )
+            elif kind == "re":
+                rect = item[1]
+                x0, y0 = float(rect.x0) * PT_TO_MM, float(rect.y0) * PT_TO_MM
+                x1, y1 = float(rect.x1) * PT_TO_MM, float(rect.y1) * PT_TO_MM
+                if omit_border_rect(abs(x1 - x0), abs(y1 - y0)):
+                    continue
+                rx, ry = min(x0, x1), min(y0, y1)
+                rw, rh = abs(x1 - x0), abs(y1 - y0)
+                strokes.append({"kind": "rect", "role": role, "x": _r(rx), "y": _r(ry), "w": _r(rw), "h": _r(rh)})
+                corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+                for p, q in zip(corners, corners[1:] + corners[:1], strict=True):
+                    aa = [_r(p[0]), _r(p[1])]
+                    bb = [_r(q[0]), _r(q[1])]
+                    raw_lines.append(
+                        {
+                            "a": aa,
+                            "b": bb,
+                            "role": role,
+                            "pt": width_pt,
+                            "color": color,
+                            "span": _span(aa, bb),
+                            "from_rect": True,
+                        }
+                    )
+            elif kind == "c":
+                points = [_pt(p) for p in item[1:]]
+                if points:
+                    strokes.append({"kind": "curve", "role": role, "points": points})
+    _promote_conductors(raw_lines)
+    _promote_orthogonal(raw_lines)
+    for line in raw_lines:
+        # Sheet borders are long. A conductor across the sheet is long too,
+        # and dropping it splits the net in the middle of the run.
+        if omit_border_line(line["role"], line["a"], line["b"]):
+            continue
+        item = {"kind": "line", "role": line["role"], "a": line["a"], "b": line["b"]}
+        if line.get("bus"):
+            item["bus"] = True
+        if line.get("geom"):
+            item["geom"] = True
+        strokes.append(item)
+    _ = (width, height)
+    return strokes
 
 
 def strokes_from_dxf(path: Path | str) -> list[dict[str, Any]]:

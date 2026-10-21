@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import math
 import re
+from collections import OrderedDict
+from dataclasses import dataclass
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import (
@@ -1883,6 +1885,16 @@ class TraceWireMark(QGraphicsPathItem):
         self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
 
 
+@dataclass
+class _SheetScene:
+    """One built sheet. Inactive slots are released when the cache is over its cap."""
+
+    sheet_id: str
+    stamp: str
+    scene: QGraphicsScene
+    items: list[QGraphicsItem]
+
+
 class SchematicView(QGraphicsView):
     status = Signal(str)
     pin_clicked = Signal(str)
@@ -1947,6 +1959,8 @@ class SchematicView(QGraphicsView):
         self._closing_gesture = False
         self._applying_model_pos = False
         self._shown_sheet_id = ""
+        self._sheet_scenes: OrderedDict[str, _SheetScene] = OrderedDict()
+        self._spare_scenes: list[tuple[QGraphicsScene, list[QGraphicsItem]]] = []
         self._strip_caption = ""
         self._findings: list[dict[str, str]] = []
         self._trace_highlight = None
@@ -1990,13 +2004,282 @@ class SchematicView(QGraphicsView):
             return {}
 
     def reload(self) -> None:
-        """Redraw the active sheet. Wire marks are placed once and shared."""
+        """Redraw the active sheet. A recent sheet is shown again without rebuilding.
 
+        Only a few scenes stay in memory. The rest are released. A scene is
+        reused only when the project, the library symbols, and the theme still
+        match the picture that was built.
+        """
+
+        from panelcad.memory import scene_cache_slots
         from panelcad.render.label_avoid import share_resolved_labels
         from panelcad.render.wire_labels import share_wire_marks
 
+        self._discard_preview()
+        self._drop_deleted_sheets()
+        sheet = self.session.sheet()
+        stamp = self._scene_stamp()
+        self._drop_stale_sheet_scenes(stamp)
+        cached = self._sheet_scenes.get(sheet.id)
+        if (
+            cached is not None
+            and cached.stamp == stamp
+            and cached.scene is not None
+            and self._cached_picture_matches(cached)
+        ):
+            self._mount_sheet_scene(cached)
+            self._sheet_scenes.move_to_end(sheet.id)
+            self._draw_finding_markers()
+            self._draw_trace_highlight()
+            self.status.emit(self._status_text())
+            self.project_changed.emit()
+            return
+        self._prepare_build_scene(scene_cache_slots())
         with share_wire_marks(), share_resolved_labels():
             self._reload_sheet()
+        self._remember_sheet_scene(sheet.id, stamp)
+        self._evict_sheet_scenes(scene_cache_slots())
+
+    def _scene_stamp(self) -> str:
+        """Project stamp, reused while the drawing and the theme stay put.
+
+        Hashing the whole project on every sheet change made a walk slower
+        than clearing the one scene. The hash is taken again when an edit
+        bumps the generation, the project object is replaced, or a symbol changes.
+        """
+
+        from panelcad.render.label_avoid import _digest, _library_key, project_drawing_stamp
+        from panelcad.theme import get_canvas, get_theme
+
+        project = self.session.project
+        catalog = self.session.catalog
+        theme = (get_theme(), get_canvas())
+        key = (
+            int(getattr(self.session, "_drawing_generation", 0)),
+            id(project),
+            id(catalog),
+            _digest(_library_key(project, catalog)),
+            theme,
+        )
+        if key == getattr(self, "_scene_stamp_key", None):
+            return self._scene_stamp_value
+        stamp = f"{project_drawing_stamp(project, catalog)}|{theme[0]}|{theme[1]}"
+        self._scene_stamp_key = key
+        self._scene_stamp_value = stamp
+        return stamp
+
+    def _discard_preview(self) -> None:
+        """Drop a rubber-band so a parked sheet does not keep it."""
+
+        self._clear_wire_hover()
+        self._wire_hit_scale = -1.0
+        for attr in ("_wire_preview", "_cloud_preview"):
+            item = getattr(self, attr, None)
+            if item is None:
+                continue
+            if item in self._items:
+                self._items.remove(item)
+            scene = item.scene()
+            if scene is not None:
+                scene.removeItem(item)
+            setattr(self, attr, None)
+        self._cloud_origin = None
+
+    def _scene_is_cached(self, scene: QGraphicsScene | None) -> bool:
+        return any(slot.scene is scene for slot in self._sheet_scenes.values())
+
+    def _prepare_build_scene(self, cap: int) -> None:
+        """Keep a cached picture, and draw the next sheet on a scene we already own.
+
+        Allocating a new scene for every sheet made switching slower than
+        clearing the one scene. The pool stays at the cache cap.
+        """
+
+        if not self._scene_is_cached(self.scene) or cap <= 1:
+            return
+        if self._spare_scenes:
+            scene, items = self._spare_scenes.pop()
+            self.scene = scene
+            self._items = items
+            self.setScene(scene)
+            return
+        if len(self._sheet_scenes) >= cap:
+            for sid, slot in self._sheet_scenes.items():
+                if slot.scene is self.scene:
+                    continue
+                self._sheet_scenes.pop(sid)
+                self.scene = slot.scene
+                self._items = slot.items
+                self.setScene(slot.scene)
+                return
+        scene = QGraphicsScene(self)
+        scene.selectionChanged.connect(self.selection_changed)
+        self.scene = scene
+        self._items = []
+        self.setScene(scene)
+
+    def _mount_sheet_scene(self, slot: _SheetScene) -> None:
+        self._items = slot.items
+        self._shown_sheet_id = slot.sheet_id
+        if self.scene is not slot.scene:
+            self.scene = slot.scene
+            self.setScene(slot.scene)
+        # A full rebuild used to clear the scene, which dropped the selection.
+        slot.scene.blockSignals(True)
+        try:
+            slot.scene.clearSelection()
+        finally:
+            slot.scene.blockSignals(False)
+        # The parked picture can still sit where a drag left it. The model wins.
+        self._resync_items_from_model()
+
+    def _release_mouse_grab(self) -> None:
+        scene = self.scene
+        if scene is None:
+            return
+        grabber = scene.mouseGrabberItem()
+        if grabber is not None:
+            grabber.ungrabMouse()
+
+    def _resync_items_from_model(self) -> None:
+        """Move the devices on the open scene to the coordinates in the model."""
+
+        if self.scene is None:
+            return
+        try:
+            sheet = self.session.sheet()
+        except KeyError:
+            return
+        by_id = {comp.id: comp for comp in sheet.components}
+        self._applying_model_pos = True
+        try:
+            for item in self.scene.items():
+                if not isinstance(item, ComponentItem):
+                    continue
+                if item.sheet_id and item.sheet_id != sheet.id:
+                    continue
+                comp = by_id.get(item.component_id)
+                if comp is None:
+                    continue
+                item.setPos(float(comp.x), float(comp.y))
+                item._model_xy = (float(comp.x), float(comp.y))
+        finally:
+            self._applying_model_pos = False
+
+    def settle_before_sheet_change(self) -> None:
+        """Drop a half-finished drag before its scene is parked.
+
+        The mouse button may still be down. Ungrabbing stops the later release
+        from sliding the device again after the model has stayed put.
+        """
+
+        self._release_mouse_grab()
+        self._resync_items_from_model()
+        self._moved_since_press = False
+        self._dragged_ids.clear()
+
+    def _remember_sheet_scene(self, sheet_id: str, stamp: str) -> None:
+        # Reusing the live scene means it no longer belongs to the sheet that
+        # was on it. Drop that slot or a one-slot cache keeps both names.
+        for sid, slot in list(self._sheet_scenes.items()):
+            if slot.scene is self.scene:
+                self._sheet_scenes.pop(sid, None)
+        previous = self._sheet_scenes.pop(sheet_id, None)
+        if previous is not None and previous.scene is not self.scene:
+            self._release_sheet_scene(previous)
+        self._sheet_scenes[sheet_id] = _SheetScene(sheet_id, stamp, self.scene, self._items)
+        self._sheet_scenes.move_to_end(sheet_id)
+
+    def _cached_picture_matches(self, slot: _SheetScene) -> bool:
+        """A parked scene is reused only when its devices still sit on the model.
+
+        A drag, a wizard cancel, or a direct edit can move the model without
+        rebuilding the picture. The numbers on the model win.
+        """
+
+        sheet = self.session.sheet()
+        if slot.sheet_id != sheet.id:
+            return False
+        by_id = {comp.id: comp for comp in sheet.components}
+        devices = [item for item in slot.items if isinstance(item, ComponentItem)]
+        if {item.component_id for item in devices} != set(by_id):
+            return False
+        for item in devices:
+            comp = by_id[item.component_id]
+            if abs(float(item.pos().x()) - float(comp.x)) > 0.05:
+                return False
+            if abs(float(item.pos().y()) - float(comp.y)) > 0.05:
+                return False
+        return True
+
+    def _drop_deleted_sheets(self) -> None:
+        """A deleted page does not keep an empty scene."""
+
+        live = {sheet.id for sheet in self.session.project.sheets}
+        removed = False
+        for sid in [sid for sid in self._sheet_scenes if sid not in live]:
+            slot = self._sheet_scenes.pop(sid)
+            self._destroy_sheet_scene(slot)
+            removed = True
+        if removed:
+            self._trim_spare_scenes()
+
+    def _destroy_sheet_scene(self, slot: _SheetScene) -> None:
+        scene = slot.scene
+        items = slot.items
+        slot.items = []
+        slot.scene = None  # type: ignore[assignment]
+        items.clear()
+        if scene is None:
+            return
+        self._spare_scenes = [(kept, bag) for kept, bag in self._spare_scenes if kept is not scene]
+        if scene is self.scene:
+            return
+        scene.clear()
+        scene.deleteLater()
+
+    def _trim_spare_scenes(self) -> None:
+        while self._spare_scenes:
+            scene, items = self._spare_scenes.pop()
+            items.clear()
+            if scene is self.scene:
+                continue
+            scene.clear()
+            scene.deleteLater()
+
+    def _drop_stale_sheet_scenes(self, stamp: str) -> None:
+        stale = [sid for sid, slot in self._sheet_scenes.items() if slot.stamp != stamp]
+        for sid in stale:
+            slot = self._sheet_scenes.pop(sid)
+            if slot.scene is self.scene:
+                continue
+            self._release_sheet_scene(slot)
+
+    def _evict_sheet_scenes(self, cap: int) -> None:
+        cap = max(1, int(cap))
+        guard = len(self._sheet_scenes) + 1
+        while len(self._sheet_scenes) > cap and guard:
+            guard -= 1
+            sid, slot = self._sheet_scenes.popitem(last=False)
+            if slot.scene is self.scene:
+                self._sheet_scenes[sid] = slot
+                self._sheet_scenes.move_to_end(sid)
+                if len(self._sheet_scenes) == 1:
+                    return
+                continue
+            self._release_sheet_scene(slot)
+
+    def _release_sheet_scene(self, slot: _SheetScene) -> None:
+        scene = slot.scene
+        items = slot.items
+        slot.items = []
+        slot.scene = None  # type: ignore[assignment]
+        if scene is None or scene is self.scene:
+            items.clear()
+            return
+        items.clear()
+        scene.clear()
+        self._spare_scenes.append((scene, items))
 
     def _reload_sheet(self) -> None:
         self._clear_wire_hover()
@@ -2102,6 +2385,7 @@ class SchematicView(QGraphicsView):
         while x <= wx + ww + 0.01:
             line = self.scene.addLine(x, wy, x, wy + wh, major if index % 5 == 0 else minor)
             _ignore_mouse(line)
+            self._items.append(line)
             x += 10
             index += 1
         y = wy
@@ -2109,6 +2393,7 @@ class SchematicView(QGraphicsView):
         while y <= wy + wh + 0.01:
             line = self.scene.addLine(wx, y, wx + ww, y, major if index % 5 == 0 else minor)
             _ignore_mouse(line)
+            self._items.append(line)
             y += 10
             index += 1
 
@@ -3063,6 +3348,7 @@ class SchematicView(QGraphicsView):
             self._left_press_pos = None
             self._left_select_drag = False
             self.setDragMode(QGraphicsView.DragMode.NoDrag)
+            self._resync_items_from_model()
             event.accept()
             return
         if event.button() == Qt.MouseButton.MiddleButton:
@@ -3164,6 +3450,9 @@ class SchematicView(QGraphicsView):
         self._finish_gesture(moved=bool(moved or user_moved))
         self._moved_since_press = False
         self.setDragMode(QGraphicsView.DragMode.NoDrag)
+        # A cached scene can still be mid-drag when the button comes up.
+        # The commit wrote the model; the picture has to follow it.
+        self._resync_items_from_model()
 
     def leaveEvent(self, event) -> None:  # noqa: N802
         self._clear_wire_hover()

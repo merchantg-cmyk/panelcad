@@ -1432,6 +1432,7 @@ _TITLE_ROW_HEIGHTS = 2.0
 # Nearest horizontals and verticals considered for one title rectangle.
 _TITLE_LINE_CAP = 24
 # Title boxes for one prep page, shared by every fresh record of that file.
+# Bounded so a long import does not keep every page's geometry.
 _TITLE_FILE_CACHE: dict[tuple[str, int], list[dict[str, float]]] = {}
 
 
@@ -1496,13 +1497,18 @@ def _title_label_boxes(tokens: list[dict[str, Any]], page: dict[str, Any] | None
         return cached
     key = _title_file_key(page)
     if key is not None and key in _TITLE_FILE_CACHE:
-        stored = _TITLE_FILE_CACHE[key]
+        stored = _TITLE_FILE_CACHE.pop(key)
+        _TITLE_FILE_CACHE[key] = stored
         page["_title_label_cache"] = stored
         return stored
     boxes = _compute_title_label_boxes(tokens, page)
     page["_title_label_cache"] = boxes
     if key is not None:
         _TITLE_FILE_CACHE[key] = boxes
+        from panelcad.memory import import_cache_limit
+
+        while len(_TITLE_FILE_CACHE) > import_cache_limit():
+            _TITLE_FILE_CACHE.pop(next(iter(_TITLE_FILE_CACHE)))
     return boxes
 
 

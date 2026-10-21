@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any, Iterable, Literal
@@ -826,10 +827,60 @@ def _article_sources(text: str) -> dict[str, str]:
     return found
 
 
+_PARTS_CACHE: dict[tuple, PartsCatalog] = {}
+_PARTS_CACHE_MAX = 4
+
+
+def _parts_source_key(project_dir: Path | None) -> tuple:
+    """Search path plus file mtimes. An overlay, a user library, or a saved edit misses."""
+
+    env = os.environ.get("PANELCAD_LIBRARY_PATH", "")
+    root = "" if project_dir is None else str(Path(project_dir).resolve())
+    files: list[tuple[str, int, int]] = []
+    for directory in parts_overlay_dirs(project_dir):
+        try:
+            folder = directory.stat()
+        except OSError:
+            files.append((str(directory), 0, 0))
+            continue
+        files.append((str(directory.resolve()), int(folder.st_mtime_ns), 0))
+        names = sorted(directory.glob("*.yaml")) + sorted(directory.glob("*.yml"))
+        for path in names:
+            try:
+                stat = path.stat()
+            except OSError:
+                files.append((str(path), 0, 0))
+            else:
+                files.append((str(path.resolve()), int(stat.st_mtime_ns), int(stat.st_size)))
+    return (env, root, tuple(files))
+
+
+def _detach_parts(source: PartsCatalog) -> PartsCatalog:
+    """A new catalog dict. Replacing a row in one session does not change the next."""
+
+    copy = PartsCatalog()
+    copy.parts = dict(source.parts)
+    copy.suffix_rules = dict(source.suffix_rules)
+    copy._loaded_files = list(source._loaded_files)
+    return copy
+
+
 def default_parts_catalog(project_dir: Path | None = None) -> PartsCatalog:
-    cat = PartsCatalog()
-    cat.load_defaults(project_dir)
-    return cat
+    """Builtin parts library, plus user, project, and PANELCAD_LIBRARY_PATH overlays.
+
+    The parsed files are kept while that search path and those mtimes stay put.
+    Each call gets its own parts dict.
+    """
+
+    key = _parts_source_key(project_dir)
+    found = _PARTS_CACHE.get(key)
+    if found is None:
+        found = PartsCatalog()
+        found.load_defaults(project_dir)
+        _PARTS_CACHE[key] = found
+        while len(_PARTS_CACHE) > _PARTS_CACHE_MAX:
+            _PARTS_CACHE.pop(next(iter(_PARTS_CACHE)))
+    return _detach_parts(found)
 
 
 def write_parts_csv(path: Path | str, parts: Iterable[CatalogPart]) -> Path:

@@ -899,6 +899,11 @@ class ReconstructWizard(QDialog):
             setattr(project, name, getattr(restored, name))
         self.session._undo = [dict(item) for item in self._snap_undo]
         self.session._redo = [dict(item) for item in self._snap_redo]
+        # The lists are the steps. The cached tips are the pictures those steps
+        # restore. Leaving the tips from the discarded edits undoes back into them.
+        self.session._sync_history_tip(self.session._undo, "_undo_tip")
+        self.session._sync_history_tip(self.session._redo, "_redo_tip")
+        self.session._touch_drawing()
         super().reject()
 
     def _part_items(self) -> list[ObservedItem]:

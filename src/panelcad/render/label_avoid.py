@@ -7,6 +7,7 @@ is. A wire number stays beside its own conductor.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -24,6 +25,7 @@ from panelcad.render.sheet_labels import (
 )
 from panelcad.render.titleblock import title_block_rect, working_rect
 from panelcad.render.wire_labels import boxes_overlap, bundle_spec_plan, mark_box
+from panelcad.memory import CountLRU, sheet_cache_limit
 from panelcad.render.wiring import route_sheet_wires
 from panelcad.render.xref import annotation_box
 
@@ -33,8 +35,8 @@ ON_WIRE = 12.0
 _CACHE: ContextVar[dict | None] = ContextVar("panelcad_resolved_labels", default=None)
 # Survives a sheet switch. Keyed on the sheet, the project, and the library
 # geometry those labels were built from. An edit, undo, redo, or import drops it.
-_STORED: dict[tuple, ResolvedLabels] = {}
-_STORED_MAX = 24
+# The key is a hash so the cache does not keep a second copy of the project.
+_STORED: CountLRU[tuple, "ResolvedLabels"] = CountLRU(sheet_cache_limit)
 _COMPUTES = 0
 
 
@@ -111,6 +113,24 @@ def _project_key(project: Project) -> str:
     return _blob({"name": project.name, "title": title, "sheets": pages})
 
 
+def _digest(value: object) -> str:
+    """Short stable hash. The cache keeps this instead of the JSON it came from."""
+
+    hasher = hashlib.blake2s(digest_size=16)
+    hasher.update(_blob(value).encode())
+    return hasher.hexdigest()
+
+
+def project_drawing_stamp(project: Project, catalog: Catalog) -> str:
+    """Changes when the drawing or the symbols on it change.
+
+    Sheet scenes use this so a cached picture is dropped when the model moves,
+    including a revision cloud or a library pin that the route key also sees.
+    """
+
+    return _digest((project.model_dump(mode="json"), _library_key(project, catalog)))
+
+
 def drawing_key(
     project: Project,
     catalog: Catalog,
@@ -121,14 +141,15 @@ def drawing_key(
 ) -> tuple:
     """Everything that moves a route, a wire number, or a tag on this sheet."""
 
-    return (
+    payload = (
         sheet.id,
         bool(ladder),
         int(sheet_no),
-        _blob(sheet.model_dump(mode="json")),
+        sheet.model_dump(mode="json"),
         _project_key(project),
         _library_key(project, catalog),
     )
+    return (sheet.id, bool(ladder), int(sheet_no), _digest(payload))
 
 
 @contextmanager
@@ -186,8 +207,6 @@ def resolve_labels(
     _avoid(sheet, catalog, project, tags, marks, xrefs, routes, ladder=ladder, sheet_no=sheet_no)
     resolved = ResolvedLabels(tags=tags, marks=marks, xrefs=xrefs, routes=routes)
     _STORED[key] = resolved
-    if len(_STORED) > _STORED_MAX:
-        _STORED.pop(next(iter(_STORED)))
     if cache is not None:
         cache[key] = resolved
     return resolved

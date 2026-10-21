@@ -2174,6 +2174,7 @@ class MainWindow(QMainWindow):
     def _switch_sheet(self, sheet_id: str) -> None:
         if sheet_id == self.session.active_sheet_id:
             return
+        self.canvas.settle_before_sheet_change()
         self.canvas.sync_positions()
         self.session.set_active_sheet(sheet_id)
         # Reload redraws the sheet. Next steps must not recompute on that redraw.

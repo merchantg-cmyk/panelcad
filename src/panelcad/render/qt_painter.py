@@ -252,7 +252,9 @@ class QtPainter(Painter):
             if renderer.isValid():
                 renderer.render(self.qp, target)
             return
-        img = QImage(path)
+        from panelcad.render.images import cached_qimage
+
+        img = cached_qimage(path)
         if img.isNull():
             return
         iw, ih = img.width(), img.height()
