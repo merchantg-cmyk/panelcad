@@ -21,6 +21,14 @@ if TYPE_CHECKING:
 IO_FIELD_MAX_H = 12.0
 GAP = 2.0
 SCHEMATIC_GAP = 18.0
+# Visible wire lead between the last output on a rung and the return rail.
+# Outputs sit close to the rail in one right-aligned column, never against
+# it. Same margin the circuit builder and arrange_ladder use (rail - 14 mm).
+OUTPUT_RAIL_GAP = 14.0
+# Widest gap kept between outputs in series at the rail (coil + OL): the
+# builder's symbol spacing, so built rungs are not re-spaced.
+OUTPUT_SERIES_GAP = SCHEMATIC_GAP
+OUTPUT_SEAT_BENDS = 2
 
 
 def is_offpage(library_id: str) -> bool:
@@ -729,6 +737,128 @@ def clamp_working(sheet: Sheet, catalog: Catalog, skip: set[str] | None = None) 
     return n
 
 
+def _rail_wired(sheet: Sheet, ref: str, rail: str) -> bool:
+    from panelcad.core.ladder import _head
+
+    for wire in sheet.wires:
+        ends = (str(wire.frm or ""), str(wire.to or ""))
+        heads = {_head(end).upper() for end in ends}
+        if ref.upper() in heads and rail.upper() in {end.strip().upper() for end in ends}:
+            return True
+    return False
+
+
+def _output_runs(session: Session, sheet: Sheet) -> list[list[Component]]:
+    """Per rung, the outputs at its right end that land on the return rail.
+
+    A rung is the set of symbols sharing one pin line. Its trailing outputs
+    (coil, relay, timer, pilot light, OL contact; see _is_rung_output) are the
+    run, in x order, provided the last one is wired to the return rail. A rung
+    that ends in anything else (a terminal, a PLC card) has no run.
+    """
+
+    from panelcad.core.ladder import rail_names
+    from panelcad.core.power_layout import _cluster_rungs, _movable
+
+    _hot, ret = rail_names(sheet, session.project)
+    devices, comps = _movable(sheet, session.catalog)
+    runs: list[list[Component]] = []
+    for group in _cluster_rungs(comps, devices):
+        ordered = sorted(group, key=lambda comp: (comp.x, comp.id))
+        run: list[Component] = []
+        for comp in reversed(ordered):
+            if not _is_rung_output(comp.library_id) or int(comp.rotation or 0) % 180:
+                break
+            run.insert(0, comp)
+        if run and _rail_wired(sheet, run[-1].id, ret):
+            runs.append(run)
+    return runs
+
+
+def seat_outputs_at_rail(session: Session, sheet: Sheet, *, gap: float = OUTPUT_RAIL_GAP) -> int:
+    """Slide each rung's outputs right so the last one sits *gap* from the return rail.
+
+    Outputs only ever move right, along their own rung; the rung's left part
+    stays put, so the wire to them just gets longer. Each rung is kept only
+    when sheet_quality is no worse (overlaps and wires through symbols first,
+    then crossings). Returns the number of symbols moved.
+    """
+
+    from panelcad.core.ladder import rail_xs
+    from panelcad.core.power_layout import _body
+    from panelcad.core.sheet_quality import sheet_quality
+    from panelcad.render.wiring import clear_route_cache
+
+    catalog = session.catalog
+    _left, right = rail_xs(sheet)
+    target = right - gap
+    moved = 0
+    quality = None
+    for run in _output_runs(session, sheet):
+        boxes = [_body(comp, catalog.get(comp.library_id)) for comp in run]
+        # Close series gaps first, then shift the packed run to the rail.
+        new_x: list[float] = []
+        edge = target
+        for comp, box in reversed(list(zip(run, boxes))):
+            width = box[2] - box[0]
+            left_edge = edge - width
+            new_x.insert(0, comp.x + (left_edge - box[0]))
+            index = run.index(comp)
+            if index > 0:
+                spacing = box[0] - boxes[index - 1][2]
+                edge = left_edge - max(2.0, min(spacing, OUTPUT_SERIES_GAP))
+        if all(abs(nx - comp.x) < 0.5 for nx, comp in zip(new_x, run)):
+            continue
+        inside_gap = boxes[-1][2] > target + 0.5
+        if not inside_gap and any(nx < comp.x - 0.01 for nx, comp in zip(new_x, run)):
+            continue  # only pull back an output that crowds the rail
+        if quality is None:
+            quality = sheet_quality(sheet, catalog, session.project)
+        saved = [(comp, comp.x) for comp in run]
+        points = [(wire, list(wire.points)) for wire in sheet.wires]
+        for comp, nx in zip(run, new_x):
+            comp.x = nx
+        for wire in sheet.wires:
+            wire.points = []
+        clear_route_cache()
+        after = sheet_quality(sheet, catalog, session.project)
+        if _seat_ok(after, quality):
+            quality = after
+            moved += len(run)
+        else:
+            for comp, x in saved:
+                comp.x = x
+            for wire, pts in points:
+                wire.points = pts
+            clear_route_cache()
+    return moved
+
+
+def _seat_ok(after: dict[str, int], before: dict[str, int]) -> bool:
+    """Overlaps and wires through symbols first, then crossings: none may rise.
+
+    A rung whose pins already sit on two lines keeps its jog; moving the
+    output re-draws that jog, so up to OUTPUT_SEAT_BENDS extra bends are allowed.
+    """
+
+    if any(after[key] > before[key] for key in ("overlaps", "through", "crossings")):
+        return False
+    return after["bends"] <= before["bends"] + OUTPUT_SEAT_BENDS
+
+
+def _seats_outputs(session: Session, sheet: Sheet) -> bool:
+    from panelcad.core.ladder import is_iec_column_sheet, sheet_drawing_style
+    from panelcad.core.power_layout import has_rotated_phase_stacks, layout_left_alone
+
+    if sheet.kind != "schematic" or is_io_sheet(sheet) or is_layout_sheet(sheet):
+        return False
+    # Freeform may be chosen per sheet (SHEET_OWN_STYLES) as well as in the title block.
+    style = str(getattr(session.project.title_block, "drawing_style", "") or "")
+    if "freeform" in {style, sheet_drawing_style(sheet, session.project)} or is_iec_column_sheet(sheet, session.project):
+        return False
+    return not layout_left_alone(sheet.id) and not has_rotated_phase_stacks(sheet, session.catalog)
+
+
 def _keeps_rungs(session: Session, sheet: Sheet) -> bool:
     from panelcad.core.power_layout import count_rung_rows
 
@@ -857,6 +987,7 @@ def cleanup_sheet(session: Session, sheet: Sheet) -> dict[str, Any]:
         from panelcad.core.spacing import apply_spacing_grid
 
         spaced = apply_spacing_grid(sheet, catalog)
+    seated = seat_outputs_at_rail(session, sheet) if not powered and _seats_outputs(session, sheet) else 0
     if not layout_left_alone(sheet.id):
         _clear_routes(sheet)
     from panelcad.core.spacing import page_fullness
@@ -869,6 +1000,7 @@ def cleanup_sheet(session: Session, sheet: Sheet) -> dict[str, Any]:
         "unstacked": unstacked,
         "clamped": clamped,
         "spaced": spaced,
+        "seated": seated,
         "density": density,
     }
 
@@ -1159,13 +1291,18 @@ def _guarded_cleanup(session: Session, sheet_id: str) -> dict[str, Any]:
                     moved += open_column_gaps(page, session.catalog)
                 if name == "nudge":
                     moved += nudge_overlaps(session, page)
-                result = {**idle, "unstacked": moved}
+                seated = seat_outputs_at_rail(session, page) if _seats_outputs(session, page) else 0
+                result = {**idle, "unstacked": moved, "seated": seated}
         except Exception:  # noqa: BLE001
             # A page this tidy cannot read (a symbol with no pins, a rung the
             # reflow does not recognise) just loses that candidate.
             continue
         after = sheet_quality(session.sheet(sheet_id), session.catalog, session.project)
-        if no_worse(after, before) and (best is None or _rank(after) < best[0]):
+        seated = int(result.get("seated") or 0)
+        relaxed = {**before, "bends": before["bends"] + OUTPUT_SEAT_BENDS * seated}
+        if (no_worse(after, before) or (seated and no_worse(after, relaxed))) and (
+            best is None or _rank(after) < best[0]
+        ):
             best = (_rank(after), session.project.model_copy(deep=True), {**result, "method": name}, after)
     def _keep_overflow_note() -> None:
         # Cleanup records branches that do not fit the power columns. That
@@ -1182,6 +1319,17 @@ def _guarded_cleanup(session: Session, sheet_id: str) -> dict[str, Any]:
         else:
             session.project.properties.pop("power_column_overflow", None)
 
+    if best is None:
+        # Every tidy made the page harder to read. Seating the outputs alone
+        # is still offered: it is guarded rung by rung against the page as built.
+        _restore_project(session, saved.model_copy(deep=True))
+        page = session.sheet(sheet_id)
+        seated = seat_outputs_at_rail(session, page) if _seats_outputs(session, page) else 0
+        if seated:
+            # Each rung was already checked against the page as built.
+            after = sheet_quality(page, session.catalog, session.project)
+            result = {**idle, "seated": seated, "method": "seat_outputs"}
+            best = (_rank(after), session.project.model_copy(deep=True), result, after)
     if best is not None:
         _restore_project(session, best[1])
         _keep_overflow_note()
