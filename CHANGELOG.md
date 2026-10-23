@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.5.14 — 2026-10-23
+
+- **Memory** — Windows are freed when they close, so long sessions no longer build up closed windows.
+- **Theme listeners** — Theme change listeners are held weakly and no longer keep closed widgets alive.
+- **Background threads** — Background check threads keep safe lifetimes and finish cleanly when their window closes.
+- **Delayed calls** — Delayed calls are tied to their widget and are dropped if the widget is gone.
+- **Tests** — Added a window-leak test.
+- **Requirements** — PanelCAD now requires PySide6 6.7 or newer.
+
 ## 0.5.13 — 2026-10-23
 
 - **Cleanup** — Cleanup seats ladder outputs (coils) 14 mm from the right rail.
