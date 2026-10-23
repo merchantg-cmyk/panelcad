@@ -72,7 +72,7 @@ def launch_gui(project: Path | str | None = None):
                 raise
 
         # One timer, so the welcome cannot open inside the recovery dialog's loop.
-        QTimer.singleShot(0, _prompts)
+        QTimer.singleShot(0, win, _prompts)
         app.aboutToQuit.connect(lambda: mark_clean_exit(force=True))
         return app
     except BaseException:

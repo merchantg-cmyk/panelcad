@@ -932,7 +932,7 @@ class PropertiesDock(QWidget):
             return
         from PySide6.QtCore import QTimer
 
-        QTimer.singleShot(0, lambda: self.show_component(session, ref) if self._session is session else None)
+        QTimer.singleShot(0, self, lambda: self.show_component(session, ref) if self._session is session else None)
 
     def _commit_include_key(self, ref: str, include: bool) -> None:
         if self._session is None:

@@ -325,6 +325,10 @@ def about_text(version: str) -> str:
 class MainWindow(QMainWindow):
     def __init__(self, session: Session | None = None, *, show_start: bool = False) -> None:
         super().__init__()
+        # Free the C++ window, its docks, timers and children once it closes.
+        # Nothing touches the window after closeEvent; app.py's startup timer
+        # uses the window as its context so it is dropped with it.
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         from panelcad.gui import gc_control
 
         gc_control.install()
@@ -383,7 +387,7 @@ class MainWindow(QMainWindow):
             # stay on their own branch; this only redirects the existing row.
             self._start.recent_opened.connect(self._open_recent)
             self._start.open_sample.connect(self.open_sample_project)
-            self._start.tour_requested.connect(lambda: self.start_tour(True))
+            self._start.tour_requested.connect(self._restart_tour)
             self._stack = QStackedWidget()
             self._stack.addWidget(self._start)
             self._stack.addWidget(self._editor)
@@ -604,9 +608,9 @@ class MainWindow(QMainWindow):
 
         self.library_dock.device_chosen.connect(self.canvas.set_place_mode)
         self.library_dock.place_now_requested.connect(self._place_from_library)
-        self.library_dock.new_requested.connect(lambda: self.edit_library_device(None))
-        self.library_dock.edit_requested.connect(lambda lid: self.edit_library_device(lid, duplicate=False))
-        self.library_dock.duplicate_requested.connect(lambda lid: self.edit_library_device(lid, duplicate=True))
+        self.library_dock.new_requested.connect(self._new_library_device)
+        self.library_dock.edit_requested.connect(self._edit_library_device_in_place)
+        self.library_dock.duplicate_requested.connect(self._duplicate_library_device)
         self.library_dock.parts_requested.connect(self.browse_catalog_parts)
         self.props.select_requested.connect(self.canvas.select_ref)
         self.props.edit_requested.connect(self.edit_object)
@@ -623,7 +627,7 @@ class MainWindow(QMainWindow):
         self.bom.oem_all_requested.connect(self._oem_update_all)
         self.bom.catalog_requested.connect(self._add_from_catalog)
         self.bom.resolve_requested.connect(self._needs_action)
-        self.bom.lookup_all_requested.connect(lambda: self._needs_action("lookup_all", ""))
+        self.bom.lookup_all_requested.connect(self._lookup_all_needs)
         self.problems.print_requested.connect(self.print_package)
         self.canvas.status.connect(self._status)
         self.canvas.selection_changed.connect(self._on_selection)
@@ -867,6 +871,43 @@ class MainWindow(QMainWindow):
             self._status(f"could not save settings: {exc}")
             self._sync_theme_checks()
 
+    # Bound slots instead of lambdas that capture ``self``: a lambda holds the
+    # window from the sender's connection; a bound slot is dropped with it.
+    def _restart_tour(self) -> None:
+        self.start_tour(True)
+
+    def _new_library_device(self) -> None:
+        self.edit_library_device(None)
+
+    def _edit_library_device_in_place(self, library_id: str) -> None:
+        self.edit_library_device(library_id, duplicate=False)
+
+    def _duplicate_library_device(self, library_id: str) -> None:
+        self.edit_library_device(library_id, duplicate=True)
+
+    def _lookup_all_needs(self) -> None:
+        self._needs_action("lookup_all", "")
+
+    def _sender_action_data(self) -> str | None:
+        action = self.sender()
+        data = action.data() if isinstance(action, QAction) else None
+        return str(data) if data is not None else None
+
+    def _theme_action_triggered(self, _checked: bool = False) -> None:
+        name = self._sender_action_data()
+        if name is not None:
+            self._choose_theme(name)
+
+    def _canvas_action_triggered(self, _checked: bool = False) -> None:
+        name = self._sender_action_data()
+        if name is not None:
+            self._choose_canvas(name)
+
+    def _reopen_sheet_action_triggered(self, _checked: bool = False) -> None:
+        sheet_id = self._sender_action_data()
+        if sheet_id is not None:
+            self.reopen_sheet_id(sheet_id)
+
     def _choose_theme(self, name: str) -> None:
         from panelcad.theme import set_theme
 
@@ -981,7 +1022,7 @@ class MainWindow(QMainWindow):
             self._layout_applied = True
         self._hide_print_review_until_import()
         self._refresh_status_widgets()
-        QTimer.singleShot(0, self.canvas.fit_drawing)
+        QTimer.singleShot(0, self.canvas, self.canvas.fit_drawing)
 
     def open_path(self, path: str) -> None:
         try:
@@ -1116,6 +1157,13 @@ class MainWindow(QMainWindow):
         self._ai_timer.stop()
         self._check_runner.stop()
         unsubscribe(self.refresh_theme)
+        # The window is freed on close (WA_DeleteOnClose). Drop the canvas's
+        # item wrappers before the scenes go, so none dangles.
+        self.canvas.release_scenes()
+        # The session can outlive this window; do not leave it calling in.
+        listeners = getattr(self.session, "_listeners", None)
+        if isinstance(listeners, list):
+            listeners[:] = [fn for fn in listeners if fn != self._on_ai_event]
         mark_clean_exit(force=True)
         super().closeEvent(event)
 
@@ -1452,7 +1500,7 @@ class MainWindow(QMainWindow):
             act.setCheckable(True)
             act.setData(key)
             theme_group.addAction(act)
-            act.triggered.connect(lambda _checked=False, name=key: self._choose_theme(name))
+            act.triggered.connect(self._theme_action_triggered)
             self._theme_actions[key] = act
         canvas_menu = view.addMenu("&Sheet")
         canvas_group = QActionGroup(self)
@@ -1462,7 +1510,7 @@ class MainWindow(QMainWindow):
             act.setCheckable(True)
             act.setData(key)
             canvas_group.addAction(act)
-            act.triggered.connect(lambda _checked=False, name=key: self._choose_canvas(name))
+            act.triggered.connect(self._canvas_action_triggered)
             self._canvas_actions[key] = act
         self._phase_action = QAction("Phase colors on screen", self)
         self._phase_action.setCheckable(True)
@@ -2387,7 +2435,8 @@ class MainWindow(QMainWindow):
         for sheet in closed:
             i = self.session.project.sheets.index(sheet) + 1
             act = self._closed_menu.addAction(f"{i}  {sheet.title or sheet.id}")
-            act.triggered.connect(lambda _=False, sid=sheet.id: self.reopen_sheet_id(sid))
+            act.setData(sheet.id)
+            act.triggered.connect(self._reopen_sheet_action_triggered)
 
     def move_sheet_id(self, sheet_id: str, direction: str) -> None:
         try:
@@ -3226,7 +3275,7 @@ class MainWindow(QMainWindow):
                 # A saved layout is not the narrow arrangement. Apply it again.
                 self._narrow_docks_on = False
             if not self._on_start_page():
-                QTimer.singleShot(0, self.canvas.fit_drawing)
+                QTimer.singleShot(0, self.canvas, self.canvas.fit_drawing)
         self._apply_screen_docks()
         self._hide_duplicate_dock_tabs()
         self._schedule_dock_tab_hide()

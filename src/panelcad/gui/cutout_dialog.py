@@ -264,7 +264,7 @@ class CutoutDialog(QDialog):
         super().showEvent(event)
         # __init__ fits before the layout has a viewport. Fit again once shown.
         self._refit_preview()
-        QTimer.singleShot(0, self._refit_preview)
+        QTimer.singleShot(0, self, self._refit_preview)
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)

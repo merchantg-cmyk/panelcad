@@ -90,6 +90,9 @@ class TroubleshootDock(QWidget):
         self._marks: dict[str, str] = {}
         self._cards: QVBoxLayout | None = None
         self._explain_worker: _ExplainWorker | None = None
+        # Every started worker stays referenced until its thread has finished.
+        # A QThread deleted while running aborts the process.
+        self._explain_threads: set[_ExplainWorker] = set()
         self._explain_call: Any = None
         self._explain_generation = 0
         self._explain_running = False
@@ -293,7 +296,7 @@ class TroubleshootDock(QWidget):
         self._marks[str(check_id)] = str(result)
         from PySide6.QtCore import QTimer
 
-        QTimer.singleShot(0, self._rebuild)
+        QTimer.singleShot(0, self, self._rebuild)
 
     def readings(self) -> list[dict[str, str]]:
         return [{"id": ident, "result": result} for ident, result in self._marks.items() if result]
@@ -373,11 +376,26 @@ class TroubleshootDock(QWidget):
             call,
         )
         self._explain_worker = worker
+        self._explain_threads.add(worker)
         worker.finished_result.connect(
             self._explain_finished,
             Qt.ConnectionType.QueuedConnection,
         )
+        worker.finished.connect(self._explain_thread_ended, Qt.ConnectionType.QueuedConnection)
         worker.start()
+
+    def _explain_thread_ended(self) -> None:
+        """The thread has stopped. Drop the reference and free it."""
+
+        sender = self.sender()
+        ended = [w for w in self._explain_threads if w is sender or w.isFinished()]
+        for worker in ended:
+            # ``finished`` is the thread's last act, so this returns at once.
+            worker.wait()
+            self._explain_threads.discard(worker)
+            if self._explain_worker is worker:
+                self._explain_worker = None
+            worker.deleteLater()
 
     def cancel_explain(self) -> None:
         """Stop the in-flight explanation. A late reply is not shown."""
@@ -401,18 +419,24 @@ class TroubleshootDock(QWidget):
         if call is not None:
             call.cancel()
         self._explain_generation += 1
-        worker = self._explain_worker
-        if worker is not None and worker.isRunning():
-            worker.wait(1500)
+        workers = list(self._explain_threads)
+        for worker in workers:
+            worker.requestInterruption()
+        for worker in workers:
+            # A full wait: a QThread must not be freed while it runs.
+            worker.wait()
         QCoreApplication.processEvents()
+        for worker in workers:
+            if worker in self._explain_threads:
+                self._explain_threads.discard(worker)
+                worker.deleteLater()
+        self._explain_worker = None
         self._explain_running = False
         self._set_explain_busy(False)
 
     def _explain_finished(self, generation: int, result: dict[str, Any]) -> None:
-        worker = self._explain_worker
-        if worker is not None:
-            self._explain_worker = None
-            worker.deleteLater()
+        # The thread may still be running here; ``_explain_thread_ended``
+        # frees it once it has finished.
         self._explain_running = False
         self._set_explain_busy(False)
         if generation != self._explain_generation:

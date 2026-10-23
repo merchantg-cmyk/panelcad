@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 
 import pytest
+import shiboken6
 
 
 def _app():
@@ -150,6 +151,7 @@ def test_saved_layout_restores_sizes_and_stays_draggable(tmp_path, monkeypatch) 
             again.close()
             app.processEvents()
     finally:
-        if window.isVisible():
+        # MainWindow deletes itself once closed; skip it if already gone.
+        if shiboken6.isValid(window) and window.isVisible():
             window.close()
             app.processEvents()

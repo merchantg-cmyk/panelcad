@@ -53,6 +53,7 @@ https://www.w3.org/WAI/GL/wiki/Relative_luminance
 from __future__ import annotations
 
 import re
+import weakref
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Callable
@@ -452,7 +453,9 @@ _SCREEN_INK: ContextVar[str | None] = ContextVar("panelcad_screen_ink", default=
 MARGIN_PX = 8
 SPACING_PX = 6
 
-_listeners: list[Callable[[], None]] = []
+# Bound methods are held through ``weakref.WeakMethod`` so a window that is
+# never closed is not pinned by the theme. Plain functions are held strongly.
+_listeners: list[Callable[[], Callable[[], None] | None]] = []
 _notify_depth = 0
 
 
@@ -797,16 +800,59 @@ def recent_projects() -> list[str]:
     return list(_appearance()["recent"])
 
 
+def _listener_ref(callback: Callable[[], None]) -> Callable[[], Callable[[], None] | None]:
+    if getattr(callback, "__self__", None) is not None and hasattr(callback, "__func__"):
+        return weakref.WeakMethod(callback)
+
+    def _strong() -> Callable[[], None]:
+        return callback
+
+    return _strong
+
+
+def _owner_deleted(callback: Callable[[], None]) -> bool:
+    """True for a bound method of a Qt object whose C++ side is gone."""
+
+    owner = getattr(callback, "__self__", None)
+    if owner is None:
+        return False
+    try:
+        import shiboken6
+    except ImportError:
+        return False
+    try:
+        return isinstance(owner, shiboken6.Shiboken.Object) and not shiboken6.isValid(owner)
+    except Exception:  # noqa: BLE001 — a half-destroyed wrapper is not a listener
+        return True
+
+
+def _live_listeners() -> list[Callable[[], None]]:
+    live = []
+    for ref in list(_listeners):
+        target = ref()
+        if target is None or _owner_deleted(target):
+            try:
+                _listeners.remove(ref)
+            except ValueError:
+                pass
+            continue
+        live.append(target)
+    return live
+
+
 def subscribe(callback: Callable[[], None]) -> None:
-    if callback not in _listeners:
-        _listeners.append(callback)
+    if callback not in _live_listeners():
+        _listeners.append(_listener_ref(callback))
 
 
 def unsubscribe(callback: Callable[[], None]) -> None:
-    try:
-        _listeners.remove(callback)
-    except ValueError:
-        return
+    for ref in list(_listeners):
+        target = ref()
+        if target is None or target == callback:
+            try:
+                _listeners.remove(ref)
+            except ValueError:
+                pass
 
 
 def banner_roles(status: str) -> tuple[str, str]:
@@ -855,7 +901,7 @@ def _notify() -> None:
         return
     _notify_depth += 1
     try:
-        for callback in list(_listeners):
+        for callback in _live_listeners():
             callback()
     finally:
         _notify_depth -= 1

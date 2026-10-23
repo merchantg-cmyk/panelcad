@@ -45,7 +45,22 @@ from panelcad.guidance import (
     help_topic,
 )
 
+# Keyed by ``id(action)``. An entry is dropped when its action is destroyed,
+# so a dead window's fixes are released and a reused id never finds a stale fix.
 _FIXES: dict[int, Callable[[], None]] = {}
+
+
+def _drop_fix(key: int) -> None:
+    _FIXES.pop(key, None)
+
+
+def _watch_action(action: QAction) -> None:
+    if action.property("guidance_fix_watched"):
+        return
+    action.setProperty("guidance_fix_watched", True)
+    key = id(action)
+    # A closure over an int only: it holds no widget, so it pins nothing.
+    action.destroyed.connect(lambda *_args, key=key: _drop_fix(key))
 
 
 def explain_disabled(action: QAction, reason: str, fix_callable: Callable[[], None] | None = None) -> None:
@@ -65,6 +80,7 @@ def explain_disabled(action: QAction, reason: str, fix_callable: Callable[[], No
         _FIXES.pop(id(action), None)
         action.setProperty("guidance_has_fix", False)
     else:
+        _watch_action(action)
         _FIXES[id(action)] = fix_callable
         action.setProperty("guidance_has_fix", True)
 

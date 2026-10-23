@@ -94,4 +94,4 @@ def fit_when_shown(dialog: QDialog) -> None:
         if dialog.isVisible():
             fit_dialog_to_work_area(dialog)
 
-    QTimer.singleShot(0, _again)
+    QTimer.singleShot(0, dialog, _again)

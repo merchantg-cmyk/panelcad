@@ -189,13 +189,61 @@ def _gc_garbage_summary() -> str:
         del garbage
 
 
+def _live_main_windows() -> list:
+    """MainWindows whose C++ side still exists. Empty if the GUI was never imported."""
+
+    module = sys.modules.get("panelcad.gui.main_window")
+    if module is None:
+        return []
+    import shiboken6
+
+    cls = module.MainWindow
+    # ``type()`` rather than ``isinstance``: reading ``__class__`` on a lazy
+    # proxy in the heap imports the module behind it.
+    return [w for w in gc.get_objects() if issubclass(type(w), cls) and shiboken6.isValid(w)]
+
+
+def _close_test_windows(before: set[int]) -> list[str]:
+    """Close MainWindows this test opened and left up. Return the ones still alive.
+
+    Windows that existed before the test (module or session fixtures) are not
+    touched. A window still alive after close and one deferred-delete flush is
+    pinned somewhere, which is what the guard reports.
+    """
+
+    import shiboken6
+
+    opened = [w for w in _live_main_windows() if id(w) not in before]
+    for window in opened:
+        try:
+            window.close()
+        except RuntimeError:  # already gone
+            continue
+    if opened:
+        _flush_deferred_deletes()
+    leftover = []
+    for window in opened:
+        if shiboken6.isValid(window):
+            leftover.append(f"{type(window).__qualname__}@{id(window):x}")
+            # Do not leak into the next test: force the C++ delete.
+            window.deleteLater()
+    if leftover:
+        _flush_deferred_deletes()
+    del opened
+    return leftover
+
+
 @pytest.fixture(autouse=True)
 def _gc_between_tests(request):
     gc.disable()
     _gc_diag(f"start {request.node.nodeid}")
+    windows_before = {id(w) for w in _live_main_windows()}
     yield
     gc.disable()
     _gc_diag(f"end {request.node.nodeid} counts={gc.get_count()}")
+    # Teardown runs before the collection below, so closed windows are freed
+    # by their own deferred delete, not by the collector at a random point.
+    leftover = _close_test_windows(windows_before)
     _flush_deferred_deletes()
     _gc_diag("deferred-deletes flushed")
     if _GC_DIAG:
@@ -204,6 +252,12 @@ def _gc_between_tests(request):
     # collection of stale Qt wrappers long after their owners went away.
     found = gc.collect()
     _gc_diag(f"collected {found}")
+    if leftover:
+        pytest.fail(
+            "MainWindow still alive after close and a deferred-delete flush: "
+            + ", ".join(leftover),
+            pytrace=False,
+        )
 
 
 def _qt_instances(cls: type) -> list:

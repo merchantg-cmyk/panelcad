@@ -2316,6 +2316,38 @@ class SchematicView(QGraphicsView):
                 continue
             self._release_sheet_scene(slot)
 
+    def release_scenes(self) -> None:
+        """Drop every Python reference to scene items, then clear the scenes.
+
+        Called when the window closes, before Qt frees the canvas. Same order
+        as ``_release_sheet_scene``: lists first, then ``scene.clear()``, so
+        no item wrapper outlives the C++ item it points at.
+        """
+
+        scenes: list[QGraphicsScene] = []
+
+        def keep(scene) -> None:
+            if scene is not None and all(scene is not known for known in scenes):
+                scenes.append(scene)
+
+        keep(self.scene)
+        for slot in list(self._sheet_scenes.values()):
+            keep(slot.scene)
+            slot.items.clear()
+            slot.scene = None  # type: ignore[assignment]
+        self._sheet_scenes.clear()
+        for scene, items in self._spare_scenes:
+            keep(scene)
+            items.clear()
+        self._spare_scenes = []
+        self._items.clear()
+        self._wire_preview = None
+        self._cloud_preview = None
+        self._cloud_origin = None
+        for scene in scenes:
+            scene.blockSignals(True)
+            scene.clear()
+
     def _release_sheet_scene(self, slot: _SheetScene) -> None:
         scene = slot.scene
         items = slot.items

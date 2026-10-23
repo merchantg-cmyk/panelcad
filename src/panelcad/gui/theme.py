@@ -674,7 +674,7 @@ class _ThemeHooks(QObject):
             from panelcad.theme import refresh_appearance
 
             refresh_appearance()
-        QTimer.singleShot(0, self.arm)
+        QTimer.singleShot(0, self, self.arm)
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802
         if not isinstance(watched, QWidget):

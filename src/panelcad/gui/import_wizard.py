@@ -72,6 +72,15 @@ def _review_crop(prep: Path | None, item: dict) -> QPixmap:
     return pix.copy(x0, y0, x1 - x0, y1 - y0)
 
 
+_RUNNING_IMPORTS: set[QThread] = set()
+
+
+def _release_import_thread(thread: QThread) -> None:
+    if thread in _RUNNING_IMPORTS:
+        _RUNNING_IMPORTS.discard(thread)
+        thread.deleteLater()
+
+
 class _ImportThread(QThread):
     """Run the tile pool off the UI thread. Cancel kills the grok processes from the GUI thread."""
 
@@ -84,6 +93,18 @@ class _ImportThread(QThread):
         super().__init__()
         self.job = job
         self.built = None
+        self.finished.connect(self._release)
+
+    def start(self, *args) -> None:
+        # Held here until the thread has finished, not only by the wizard: a
+        # wizard hidden with Esc and then freed with its window must not take
+        # a running QThread with it (that aborts the process).
+        _RUNNING_IMPORTS.add(self)
+        super().start(*args)
+
+    def _release(self) -> None:
+        self.wait()  # ``finished`` is the thread's last act; returns at once
+        _release_import_thread(self)
 
     def run(self) -> None:
         try:
@@ -730,6 +751,7 @@ class ImportWizard(QDialog):
         self._cost_ok = False
         self.job._on_cost_guard = self._ask_cost_guard
         self._thread = _ImportThread(self.job)
+        self._thread.finished.connect(self._thread_ended)
         self._thread.tick.connect(self._tick)
         self._thread.failed.connect(self._import_failed)
         self._thread.ready.connect(self._import_ready)
@@ -741,6 +763,8 @@ class ImportWizard(QDialog):
 
         if QThread.currentThread() is self.thread():
             return self._confirm_cost_guard(info)
+        if self._closing:
+            return False
         self._cost_done.clear()
         self._cost_ok = False
         thread = self._thread
@@ -775,10 +799,27 @@ class ImportWizard(QDialog):
         box.exec()
         return box.clickedButton() is go
 
+    def _thread_ended(self) -> None:
+        """The import thread has stopped. Drop the reference and free it."""
+
+        thread = self._thread
+        if thread is None or thread is not self.sender():
+            return
+        self._thread = None  # the thread frees itself in ``_release``
+
     def closeEvent(self, event) -> None:  # noqa: N802
         self._closing = True
         self.cancel_import()
+        # Release a worker parked on the cost question so the wait below ends.
+        self._cost_ok = False
+        done = getattr(self, "_cost_done", None)
+        if done is not None:
+            done.set()
         thread = self._thread
-        if thread is not None and thread.isRunning():
-            thread.wait(3000)
+        if thread is not None:
+            thread.requestInterruption()
+            # A full wait: freeing a running QThread aborts the process.
+            thread.wait()
+            self._thread = None
+            _release_import_thread(thread)
         super().closeEvent(event)

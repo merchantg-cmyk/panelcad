@@ -364,7 +364,7 @@ class BugReportDialog(QDialog):
         self.preview.setMaximumHeight(16777215)
         self.preview.setVisible(False)
         self.setMinimumSize(0, 0)
-        QTimer.singleShot(0, self._collapse_to_contents)
+        QTimer.singleShot(0, self, self._collapse_to_contents)
 
     def _collapse_to_contents(self) -> None:
         """Shrink after the layout has dropped the preview. A direct resize stays tall."""
