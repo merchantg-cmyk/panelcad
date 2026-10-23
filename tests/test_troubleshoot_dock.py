@@ -198,13 +198,13 @@ def test_session_csv_and_pdf_keep_the_project_file(tmp_path: Path):
         tmp_path / "log.csv",
         ref="M1",
         symptom="motor_wont_start",
-        who="George",
+        who="Alex",
         note="first pass",
     )
     with csv_path.open(encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
     assert rows
-    assert rows[0]["who"] == "George"
+    assert rows[0]["who"] == "Alex"
     assert rows[0]["ref"] == "M1"
     assert "lockout" in rows[0]["safety"].casefold()
     assert any(row["row_kind"] == "check" for row in rows)
@@ -213,7 +213,7 @@ def test_session_csv_and_pdf_keep_the_project_file(tmp_path: Path):
         tmp_path / "log.pdf",
         ref="M1",
         symptom="motor_wont_start",
-        who="George",
+        who="Alex",
     )
     from pypdf import PdfReader
 

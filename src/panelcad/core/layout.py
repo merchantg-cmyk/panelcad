@@ -49,11 +49,22 @@ def symbol_body_size(sheet: Sheet, device: Device, component: Component | None =
     if is_layout_sheet(sheet):
         return footprint_size(device, component)
     scale = component.visual_scale() if component is not None else 1.0
+    if component is not None and is_notes_device(device):
+        # Notes draw a box fitted to their text, not the library default rectangle.
+        from panelcad.render.painter import notes_box
+
+        return notes_box(component, scale)
     width = float(device.schematic_width) * scale
     height = float(device.schematic_height) * scale
     if component is not None and int(component.rotation or 0) in {90, 270}:
         width, height = height, width
     return (max(0.0, width), max(0.0, height))
+
+
+def is_notes_device(device: Device) -> bool:
+    """A free-text notes block (drawn as a box fitted to its text)."""
+
+    return (device.category or "").lower().startswith("connection.notes")
 
 
 def is_network_sheet(sheet: Sheet) -> bool:

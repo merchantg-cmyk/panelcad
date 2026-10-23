@@ -652,6 +652,60 @@ def offpage_partner(project: Project, catalog: Catalog, sheet: Sheet, comp: Comp
     return None
 
 
+def offpage_from_match(project: Project, catalog: Catalog, sheet: Sheet, comp: Component) -> tuple[Sheet, Component] | None:
+    """The FROM arrow on the far page that answers this TO arrow (same link, names this page)."""
+
+    link = str(comp.properties.get("link") or "").strip()
+    dest_sheet_id = str(comp.properties.get("dest_sheet") or "").strip()
+    if not link or not dest_sheet_id or dest_sheet_id == sheet.id:
+        return None
+    try:
+        page = project.sheet(dest_sheet_id)
+    except KeyError:
+        return None
+    for other in page.components:
+        if other is comp or str(other.properties.get("link") or "").strip() != link:
+            continue
+        if not is_offpage_component(other, _device(catalog, other)):
+            continue
+        return page, other
+    # A FROM arrow drawn by hand may carry its own link. It still answers this
+    # TO arrow when it points back at this page under the same tag.
+    tag = str(comp.properties.get("tag") or "").strip()
+    if tag:
+        for other in page.components:
+            if other is comp or str(other.properties.get("tag") or "").strip() != tag:
+                continue
+            if str(other.properties.get("dest_sheet") or "").strip() != sheet.id:
+                continue
+            role = str(other.properties.get("role") or "").lower()
+            if role != "from" and "offpage_from" not in (other.library_id or "").lower():
+                continue
+            if not is_offpage_component(other, _device(catalog, other)):
+                continue
+            return page, other
+    return None
+
+
+def offpage_needs_from(project: Project, catalog: Catalog, sheet: Sheet, comp: Component) -> bool:
+    """A TO arrow that names a device pin on another page, with no FROM arrow there."""
+
+    role = str(comp.properties.get("role") or "").lower()
+    lid = (comp.library_id or "").lower()
+    if role == "from" or "offpage_from" in lid:
+        return False
+    if role != "to":
+        return False
+    if not str(comp.properties.get("dest_pin") or "").strip():
+        return False
+    if not str(comp.properties.get("link") or "").strip():
+        return False
+    peer = offpage_peer(project, catalog, sheet, comp)
+    if peer is None:
+        return False
+    return offpage_from_match(project, catalog, sheet, comp) is None
+
+
 def offpage_callout(project: Project, catalog: Catalog, sheet: Sheet, comp: Component) -> str:
     peer = offpage_peer(project, catalog, sheet, comp)
     role = str(comp.properties.get("role") or "").lower()
@@ -1215,6 +1269,22 @@ def xref_problems(project: Project, catalog: Catalog) -> list[dict[str, Any]]:
             if not (dest_sheet or dest_ref or dest_pin or link):
                 continue
             if offpage_peer(project, catalog, sheet, comp) is not None:
+                if offpage_needs_from(project, catalog, sheet, comp):
+                    out.append(
+                        {
+                            "check": "offpage_missing_from",
+                            "severity": "warning",
+                            "message": (
+                                f"{sheet.id}:{comp.id} TO arrow has no matching FROM arrow on "
+                                f"{dest_sheet} at {dest_ref}.{dest_pin} (pair_offpage adds it)"
+                            ),
+                            "sheet": sheet.id,
+                            "ref": comp.id,
+                            "target": f"{dest_sheet}:{dest_ref}.{dest_pin}",
+                            "x": comp.x,
+                            "y": comp.y,
+                        }
+                    )
                 continue
             if offpage_partner(project, catalog, sheet, comp) is not None:
                 continue

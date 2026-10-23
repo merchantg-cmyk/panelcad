@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from panelcad.core.geometry import Point, rotate_point
 from panelcad.core.models import CommPort, Component, Device, Sheet
 from panelcad.library.catalog import Catalog
@@ -90,7 +92,9 @@ def network_endpoint(sheet: Sheet, catalog: Catalog, ref: str) -> tuple[float, f
         return (comp.x + w, comp.y + h / 2.0)
 
 
-def draw_network_node(painter: Painter, device: Device, component: Component, medium: str = "") -> None:
+def draw_network_node(
+    painter: Painter, device: Device, component: Component, medium: str = "", see: str = ""
+) -> None:
     ports = effective_ports(device, component)
     w, h = node_size(len(ports))
     s = component.visual_scale()
@@ -113,6 +117,8 @@ def draw_network_node(painter: Painter, device: Device, component: Component, me
         2.2,
         align="middle",
     )
+    if see:
+        painter.text(component.x + w / 2.0, component.y + h + 3.5, see, 2.0, align="middle")
     layout = port_layout(ports, w, h)
     for p in ports:
         lx, ly = layout[p.id]
@@ -129,16 +135,21 @@ def draw_network_node(painter: Painter, device: Device, component: Component, me
             painter.text(px, py - 3.5, label, 2.0, align="middle")
 
 
-def draw_network_sheet(painter: Painter, sheet: Sheet, catalog: Catalog) -> None:
+def draw_network_sheet(painter: Painter, sheet: Sheet, catalog: Catalog, project: Any = None) -> None:
     medium = ""
     if sheet.network is not None:
         medium = sheet.network.medium
         title = sheet.network.name or sheet.title
         proto = sheet.network.protocol
         painter.text(20, 22, title + (f"  ·  {proto}" if proto else ""), 4.0, align="start")
+    marks: dict[str, str] = {}
+    if project is not None:
+        from panelcad.render.xref import reference_marks
+
+        marks = reference_marks(project, sheet, catalog)
     for comp in sheet.components:
         device = catalog.get(comp.library_id)
-        draw_network_node(painter, device, comp, medium)
+        draw_network_node(painter, device, comp, medium, see=marks.get(comp.id, ""))
     color = _KIND_INK.get(medium, "#0b4ea2")
     painter.set_stroke(color, 0.55)
     painter.set_fill(None)

@@ -264,6 +264,8 @@ def dump_project(project: Project) -> str:
             sheet.pop("io_cont", None)
         if not sheet.get("panel"):
             sheet.pop("panel", None)
+        if not sheet.get("overview"):
+            sheet.pop("overview", None)
         if sheet.get("kind") not in ("schematic", "network") and not sheet.get("wires"):
             sheet.pop("wires", None)
         for wire in sheet.get("wires") or []:

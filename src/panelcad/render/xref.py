@@ -910,3 +910,37 @@ def draw_cross_references(
     for ann, x, y, align in placed:
         draw_annotation(painter, ann, x, y, align)
     return placed
+
+
+def reference_marks(project: Project, sheet: Sheet, catalog: Catalog) -> dict[str, str]:
+    """Component id → "SEE <sheet-zone>" for each reference copy on ``sheet``."""
+
+    from panelcad.core.references import reference_links, see_label
+
+    out: dict[str, str] = {}
+    for link in reference_links(project, catalog):
+        if link.sheet is sheet:
+            out[link.comp.id] = f"SEE {see_label(project, link, catalog)}"
+    return out
+
+
+def draw_reference_marks(painter: Painter, project: Project, sheet: Sheet, catalog: Catalog) -> None:
+    """Print "SEE <sheet-zone>" under each schematic reference copy on this sheet."""
+
+    from panelcad.core.ink import schematic_ink_rect
+
+    marks = reference_marks(project, sheet, catalog)
+    if not marks:
+        return
+    painter.set_layer("XREF")
+    painter.set_fill("#111111")
+    for comp in sheet.components:
+        text = marks.get(comp.id)
+        if not text:
+            continue
+        device = catalog.devices.get(comp.library_id)
+        if device is None:
+            continue
+        x0, _y0, x1, y1 = schematic_ink_rect(device, comp.x, comp.y, component=comp)
+        painter.text((x0 + x1) / 2.0, y1 + 3.0, text, 2.0, align="middle")
+    painter.set_fill(None)

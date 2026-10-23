@@ -260,7 +260,7 @@ def test_nema_4x_uses_stainless_k():
 
 def _multi_motor_session() -> Session:
     s = Session.create("Several DOL + VFD")
-    s.set_title_block(standard="NEMA/ANSI", company="George's Shop", drawing_number="E-SIZE")
+    s.set_title_block(standard="NEMA/ANSI", company="Example Shop", drawing_number="E-SIZE")
     s.insert_circuit(kind="dol", control="local", kw=1.5)
     s.insert_circuit(kind="dol", control="local", kw=4.0)
     s.insert_circuit(kind="vfd", drive="generic_1k5", control="local", kw=5.5)

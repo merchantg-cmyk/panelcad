@@ -110,7 +110,20 @@ def _is_sketch(library_id: str) -> bool:
     return "connection.offpage" in lib or "connection.notes" in lib
 
 
+def _notes_size(comp: Component, device: Device) -> tuple[float, float] | None:
+    from panelcad.core.layout import is_notes_device
+
+    if not is_notes_device(device):
+        return None
+    from panelcad.render.painter import notes_box
+
+    return notes_box(comp, comp.visual_scale())
+
+
 def _body_width(comp: Component, device: Device) -> float:
+    fitted = _notes_size(comp, device)
+    if fitted is not None:
+        return fitted[0]
     scale = comp.visual_scale()
     width = float(device.schematic_width) * scale
     height = float(device.schematic_height) * scale
@@ -150,6 +163,9 @@ def _row_gap(comp: Component, device: Device) -> float:
 
 
 def _body_height(comp: Component, device: Device) -> float:
+    fitted = _notes_size(comp, device)
+    if fitted is not None:
+        return fitted[1]
     scale = comp.visual_scale()
     width = float(device.schematic_width) * scale
     height = float(device.schematic_height) * scale

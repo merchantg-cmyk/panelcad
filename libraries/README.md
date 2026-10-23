@@ -15,7 +15,7 @@ do not copy them into a parts file. Overlay order for parts is builtin →
 `PANELCAD_LIBRARY_PATH` → `~/.panelcad/library` → `<project>/library` (later
 wins).
 
-Device tags: each device has a catalog `ref_prefix` (IEC 81346 on `iec.*`). When the project or sheet standard is NEMA/ANSI, new tags use the JIC / NFPA 79 map in `builtin/ref_prefixes.yaml` (breaker `CB`, motor `MTR`, …). George can change a prefix without a code change: edit that file, drop `library/ref_prefixes.yaml` next to the project, or set `ref_prefixes:` on the project YAML. Existing ids are never rewritten on load.
+Device tags: each device has a catalog `ref_prefix` (IEC 81346 on `iec.*`). When the project or sheet standard is NEMA/ANSI, new tags use the JIC / NFPA 79 map in `builtin/ref_prefixes.yaml` (breaker `CB`, motor `MTR`, …). You can change a prefix without a code change: edit that file, drop `library/ref_prefixes.yaml` next to the project, or set `ref_prefixes:` on the project YAML. Existing ids are never rewritten on load.
 
 Environment override: `PANELCAD_LIBRARY_PATH` (path-separator list).
 
@@ -23,6 +23,6 @@ Standard enclosures are a separate table, `libraries/enclosures.yaml` (override 
 
 See `docs/FORMAT.md` for the draw shorthand.
 
-Terminal jumpers are a compact `jumpers:` table in `builtin/jumpers.yaml` (family, pitch, poles, manufacturer, part number). The engine expands each row into a `connection.jumper` device. Copy a row to add Phoenix / WAGO / Weidmüller / Dinkle parts George stocks. Matching uses the terminal's `jumper_family` and `pitch_mm` (see `oem_terminals.yaml` and `iec.terminals.x_2p5`).
+Terminal jumpers are a compact `jumpers:` table in `builtin/jumpers.yaml` (family, pitch, poles, manufacturer, part number). The engine expands each row into a `connection.jumper` device. Copy a row to add Phoenix / WAGO / Weidmüller / Dinkle parts your shop stocks. Matching uses the terminal's `jumper_family` and `pitch_mm` (see `oem_terminals.yaml` and `iec.terminals.x_2p5`).
 
 Do not encode symbols in Python. If a symbol is wrong, fix the YAML.

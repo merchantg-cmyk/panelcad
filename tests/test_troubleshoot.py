@@ -205,7 +205,7 @@ def test_csv_timestamp_is_local_time_with_offset(monkeypatch: pytest.MonkeyPatch
     )
     session = Session.open(SEAL)
     payload = session.troubleshoot_guide("M1", "motor_wont_start")
-    rows = session_rows(payload, who="George")
+    rows = session_rows(payload, who="Alex")
     assert rows
     assert rows[0]["when"] == "2026-10-16T11:04:05-04:00"
     assert rows[0]["when"].endswith("-04:00")

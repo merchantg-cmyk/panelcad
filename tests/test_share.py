@@ -93,7 +93,7 @@ def test_synced_folder_detection(tmp_path: Path) -> None:
     assert folder_is_shared(_shared(tmp_path, "My Drive")) is True
     assert folder_is_shared(_shared(tmp_path, "OneDrive - Shop")) is True
     assert folder_is_shared(_shared(tmp_path, "Dropbox")) is True
-    assert folder_is_shared(_shared(tmp_path, "GoogleDrive-george@shop.com")) is True
+    assert folder_is_shared(_shared(tmp_path, "GoogleDrive-alex@shop.com")) is True
     assert folder_is_shared(r"G:\Jobs\line.pcad.yaml") is True
     assert folder_is_shared("G:/Jobs/line.pcad.yaml") is True
     marked = tmp_path / "custom" / "line.pcad.yaml"
@@ -340,7 +340,7 @@ def test_conflict_copy_names(tmp_path: Path) -> None:
         "line (1).pcad.yaml",
         "line.pcad (1).yaml",
         "line (conflicted copy).pcad.yaml",
-        "line (George's conflicted copy 2026-10-16).pcad.yaml",
+        "line (Alex's conflicted copy 2026-10-16).pcad.yaml",
         "Copy of line.pcad.yaml",
         "notes (1).yaml",
     ]
@@ -352,7 +352,7 @@ def test_conflict_copy_names(tmp_path: Path) -> None:
         "line (1).pcad.yaml",
         "line.pcad (1).yaml",
         "line (conflicted copy).pcad.yaml",
-        "line (George's conflicted copy 2026-10-16).pcad.yaml",
+        "line (Alex's conflicted copy 2026-10-16).pcad.yaml",
         "Copy of line.pcad.yaml",
     }
 

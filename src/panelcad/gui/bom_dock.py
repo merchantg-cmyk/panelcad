@@ -7,17 +7,21 @@ from PySide6.QtCore import QMimeData, Qt, Signal
 from PySide6.QtGui import QDrag
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QMenu,
     QPushButton,
+    QStyle,
     QStyleFactory,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
+
+from shiboken6 import isValid
 
 from panelcad.api.session import Session
 from panelcad.gui.canvas import BOM_MIME
@@ -68,6 +72,29 @@ HEADERS = {
     "library_id": "Library",
     "sheet": "Sheet",
 }
+
+
+_FUSION: QStyle | None = None
+
+
+def _shared_fusion_style() -> QStyle | None:
+    """One Fusion style for every BOM table, owned by the application.
+
+    ``setStyle`` does not take ownership and the style sheet wrapper keeps a
+    raw pointer, so the style must outlive every table that used it.
+    """
+
+    global _FUSION
+    style = _FUSION
+    if style is None or not isValid(style):
+        style = QStyleFactory.create("Fusion")
+        if style is None:
+            return None
+        app = QApplication.instance()
+        if app is not None:
+            style.setParent(app)
+        _FUSION = style
+    return style
 
 
 class BomTable(QTableWidget):
@@ -188,9 +215,8 @@ class BomDock(QWidget):
         self.empty.clicked.connect(self._empty_clicked)
         layout.addWidget(self.empty)
         self.table = BomTable(0, len(COLUMNS))
-        fusion = QStyleFactory.create("Fusion")
+        fusion = _shared_fusion_style()
         if fusion is not None:
-            fusion.setParent(self.table)
             self.table.setStyle(fusion)
         self.table.setHorizontalHeaderLabels([HEADERS[key] for key in COLUMNS])
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)

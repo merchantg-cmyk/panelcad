@@ -1,6 +1,6 @@
 # Terminal jumpers (plug-in bridges / comb bars).
 #
-# George: add a row under jumpers: → items. Matching uses jumper_family + pitch_mm
+# To add a jumper: add a row under jumpers: → items. Matching uses jumper_family + pitch_mm
 # + poles. Old projects still store only properties.jumper on the terminal; the
 # BOM and strip export derive the part from this table.
 #

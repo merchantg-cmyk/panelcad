@@ -295,7 +295,7 @@ def test_zip_contents_and_redaction(tmp_path, monkeypatch):
         "Coil vanished",
         f"What happened near {Path.home()} with {token}",
         steps="Place a coil",
-        contact="George",
+        contact="Alex",
         include_project=True,
         include_screenshot=True,
         screenshot_png=png,
@@ -317,7 +317,7 @@ def test_zip_contents_and_redaction(tmp_path, monkeypatch):
         assert token not in raw_report
         assert webhook not in raw_report
         assert report["title"] == "Coil vanished"
-        assert report["contact"] == "George"
+        assert report["contact"] == "Alex"
         assert report["steps"] == "Place a coil"
         assert report["version"] == __version__
         assert report["system"]["version"] == __version__
@@ -527,7 +527,7 @@ def test_report_text_and_zip_keep_context_and_drop_secrets(http_server, monkeypa
         "Coil vanished",
         f"The coil tag disappeared after numbering. token {token} key {ai_key} env {env_key} {hook}",
         steps="1. Open the job\n2. Number the wires",
-        contact="George at the shop",
+        contact="Alex at the shop",
         include_log=True,
         traceback=traceback,
         send=True,
@@ -537,7 +537,7 @@ def test_report_text_and_zip_keep_context_and_drop_secrets(http_server, monkeypa
     posted = json.loads(http_server.hits[-1]["body"])["text"]
     assert posted.splitlines()[0] == "*Coil vanished*"
     assert f"version: {__version__}" in posted
-    assert "contact: George at the shop" in posted
+    assert "contact: Alex at the shop" in posted
     assert "What happened\nThe coil tag disappeared after numbering." in posted
     assert "Steps to reproduce\n1. Open the job\n2. Number the wires" in posted
     assert "Recent actions\n" in posted
@@ -554,7 +554,7 @@ def test_report_text_and_zip_keep_context_and_drop_secrets(http_server, monkeypa
         assert secret.encode() not in blob
     with zipfile.ZipFile(sent["path"]) as archive:
         report = json.loads(archive.read("report.json"))
-    assert report["contact"] == "George at the shop"
+    assert report["contact"] == "Alex at the shop"
     assert "Number the wires" in report["steps"]
     assert "set_title_block" in report["recent_actions"]
     assert report["version"] == __version__
@@ -573,7 +573,7 @@ def test_bot_uploads_screenshot_and_zip(http_server, monkeypatch):
     set_slack_api_base(f"http://127.0.0.1:{port}/api")
     logging.getLogger("panelcad").info("recent-log-marker before the report")
     session = Session.create("Upload")
-    session.set_title_block(drawn_by="George")
+    session.set_title_block(drawn_by="Alex")
     png = b"\x89PNG\r\n\x1a\n" + b"screenshot-bytes"
     traceback = "Traceback (most recent call last):\nRuntimeError: screen froze"
     sent = session.report_bug(
@@ -645,7 +645,7 @@ def test_webhook_text_when_upload_fails(http_server, monkeypatch):
         "Upload failed",
         f"Still tell the channel. {token}",
         steps="Click Send",
-        contact="George",
+        contact="Alex",
         traceback="RuntimeError: upload broke",
         send=True,
         settings=BugSettings(slack_bot_token=token, slack_channel="C0TESTBUGS01"),
@@ -664,7 +664,7 @@ def test_webhook_text_when_upload_fails(http_server, monkeypatch):
     text = posted["text"]
     assert "What happened\nStill tell the channel." in text
     assert "Steps to reproduce\nClick Send" in text
-    assert "contact: George" in text
+    assert "contact: Alex" in text
     assert f"version: {__version__}" in text
     assert "RuntimeError: upload broke" in text
     assert "fallback-log-marker" in text
@@ -862,7 +862,7 @@ def test_slack_message_includes_full_context():
         title="Coil tag",
         description="The full story stays in the zip.",
         steps="1. Open the job\n2. Number the wires",
-        contact="George",
+        contact="Alex",
         traceback='Traceback (most recent call last):\n  File "job.py"\nRuntimeError: boom',
         recent_actions="undo steps: 2; redo steps: 0\nplace M1",
         crash_id="abc123",
@@ -874,7 +874,7 @@ def test_slack_message_includes_full_context():
     assert text.splitlines()[0] == "*Coil tag*"
     assert "What happened\nThe full story stays in the zip." in text
     assert "Steps to reproduce\n1. Open the job\n2. Number the wires" in text
-    assert "contact: George" in text
+    assert "contact: Alex" in text
     assert "version:" in text
     assert "os:" in text
     assert "screenshot: screenshot.png" in text

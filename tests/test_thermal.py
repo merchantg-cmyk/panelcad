@@ -35,7 +35,7 @@ def _response(tool_name: str, args: dict, call_id: str) -> ModelResponse:
 
 def vfd_panel() -> Session:
     s = Session.create("VFD panel")
-    s.set_title_block(company="George's Shop", drawing_number="E-VFD", standard="NEMA/ANSI", rev="A")
+    s.set_title_block(company="Example Shop", drawing_number="E-VFD", standard="NEMA/ANSI", rev="A")
     s.place("adc.durapulse.gs21_20p5", ref="U1", x=40, y=30)
     s.place("adc.click.c2_03cpu", ref="A1", x=140, y=30)
     s.place("adc.click.c0_16nd3", ref="A2", x=240, y=30)
@@ -61,7 +61,7 @@ def vfd_panel() -> Session:
 
 def small_dol() -> Session:
     s = Session.create("Small DOL")
-    s.set_title_block(company="George's Shop", drawing_number="E-DOL", standard="NEMA/ANSI", rev="A")
+    s.set_title_block(company="Example Shop", drawing_number="E-DOL", standard="NEMA/ANSI", rev="A")
     s.place("iec.breakers.mcb_3p_32a", ref="Q1", x=40, y=24)
     s.place("iec.contactors.ac3_9a", ref="K1", x=40, y=90)
     s.place("iec.protection.overload_9a", ref="F1", x=40, y=160)

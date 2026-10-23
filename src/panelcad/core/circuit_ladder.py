@@ -866,6 +866,7 @@ def _link_each_crossing(
                 label=net or None,
                 src_rung_y=src_y,
                 dst_rung_y=move_y,
+                make_room=True,
             )
         )
     return links
@@ -918,6 +919,7 @@ def _link_ladder_feeds(
                 label=net or None,
                 src_rung_y=stay_y,
                 dst_rung_y=move_y,
+                make_room=True,
             )
         )
     return links
@@ -1187,12 +1189,16 @@ def seat_offpage_arrow(
     side: str,
     properties: dict[str, Any],
     along: float | None = None,
+    make_room: bool = True,
 ) -> Any:
     """Park one off-page arrow on its rung, at the rail, inside the border.
 
     ``side`` is ``left`` or ``right`` on a ladder, ``top`` or ``bottom`` on an
-    IEC column. A second arrow for the same rung steps inward, then devices
-    that still cover the arrow move off it.
+    IEC column. A second arrow for the same rung steps inward. With
+    ``make_room`` (a builder laying out its own page) devices that still cover
+    the arrow move off it. Without it (a wire the user asked for on a drawn
+    page) no device moves: the arrow steps along the rail to the nearest clear
+    slot, or stays on its rung when there is none.
     """
 
     from panelcad.core.ladder import iec_rail_ys, rail_xs
@@ -1228,8 +1234,51 @@ def seat_offpage_arrow(
         snap=False,
         properties=properties,
     )
-    _open_arrow_slot(sheet, session.catalog, ref, side, _body_box, _boxes_hit)
+    if make_room:
+        _open_arrow_slot(sheet, session.catalog, ref, side, _body_box, _boxes_hit)
+    else:
+        _step_arrow_clear(sheet, session.catalog, ref, side, _body_box, _boxes_hit)
     return sheet.component(ref)
+
+
+def _step_arrow_clear(
+    sheet: Any,
+    catalog: Any,
+    arrow_id: str,
+    side: str,
+    body_box: Any,
+    boxes_hit: Any,
+) -> None:
+    """Slide the arrow along its rail to the nearest slot no device covers. Devices stay put."""
+
+    arrow = sheet.component(arrow_id)
+    try:
+        symbol = catalog.get(arrow.library_id)
+    except KeyError:
+        return
+    if not _arrow_hits_device(sheet, catalog, body_box(arrow, symbol), body_box, boxes_hit):
+        return
+    wx, wy, ww, wh = working_rect(sheet)
+    horizontal = side in {"left", "right"}
+    span = float(symbol.schematic_height or 12.0) if horizontal else float(symbol.schematic_width or 32.0)
+    step = 2.5
+    home = float(arrow.y if horizontal else arrow.x)
+    low, high = (wy, wy + wh) if horizontal else (wx, wx + ww)
+    for index in range(1, 200):
+        for sign in (1.0, -1.0):
+            pos = home + sign * index * step
+            if pos < low + 0.4 or pos + span > high - 0.4:
+                continue
+            if horizontal:
+                arrow.y = pos
+            else:
+                arrow.x = pos
+            if not _arrow_hits_device(sheet, catalog, body_box(arrow, symbol), body_box, boxes_hit):
+                return
+    if horizontal:
+        arrow.y = home
+    else:
+        arrow.x = home
 
 
 def _rail_arrow_origin(

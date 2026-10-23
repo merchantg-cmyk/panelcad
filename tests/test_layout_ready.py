@@ -1,4 +1,4 @@
-"""George's rule: layout never packs a generic/placeholder size."""
+"""Shop rule: layout never packs a generic/placeholder size."""
 
 import math
 from pathlib import Path
@@ -90,13 +90,13 @@ def test_confirmed_envelope_makes_generic_layout_ready():
         height_mm=89,
         depth_mm=69,
         mount="din_rail",
-        confirmed_by="George",
+        confirmed_by="Alex",
     )
     q1 = s.sheet().component("Q1")
     device = s.catalog.get(q1.library_id)
     assert is_layout_ready(device, q1)
     assert q1.properties["envelope_confirmed"] is True
-    assert q1.properties["envelope_confirmed_by"] == "George"
+    assert q1.properties["envelope_confirmed_by"] == "Alex"
     assert q1.properties["envelope_confirmed_at"]
     assert row["panel"]["dim_source"] == "measured"
     assert footprint_size(device, q1) == (17.5, 89.0)
@@ -394,13 +394,13 @@ def test_inspector_envelope_dialog_confirms(monkeypatch):
         dialog.height.setValue(89)
         dialog.depth.setValue(69)
         dialog.mount.setCurrentText("din_rail")
-        dialog.who.setText("George")
+        dialog.who.setText("Alex")
         monkeypatch.setattr(EnvelopeDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
         result = dialog.apply()
         assert result["confirmed"] is True
         q1 = next(comp for sheet in s.project.sheets for comp in sheet.components if comp.id == "Q1")
         assert is_layout_ready(s.catalog.get(q1.library_id), q1)
-        assert q1.properties["envelope_confirmed_by"] == "George"
+        assert q1.properties["envelope_confirmed_by"] == "Alex"
     finally:
         _dispose_qt(dialog, win)
         _ = app
@@ -1036,7 +1036,7 @@ def test_loaded_confirmed_envelope_over_max_is_not_ready():
 def test_unconfirmed_set_panel_after_confirm_drops_ready():
     s = _generic_session()
     s.confirm_envelope(
-        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="george"
+        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="alex"
     )
     s.set_panel("K1", width_mm=2000, height_mm=2000, depth_mm=2000)
     k1 = s.sheet().component("K1")
@@ -1048,7 +1048,7 @@ def test_unconfirmed_set_panel_after_confirm_drops_ready():
 def test_unconfirmed_set_properties_after_confirm_drops_ready():
     s = _generic_session()
     s.confirm_envelope(
-        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="george"
+        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="alex"
     )
     s.set_component_properties("K1", {"width_mm": 99999})
     k1 = s.sheet().component("K1")
@@ -1059,7 +1059,7 @@ def test_unconfirmed_set_properties_after_confirm_drops_ready():
 def test_set_panel_one_by_one_after_confirm_drops_ready():
     s = _generic_session()
     s.confirm_envelope(
-        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="george"
+        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="alex"
     )
     s.set_panel("K1", width_mm=1, height_mm=1)
     k1 = s.sheet().component("K1")
@@ -1342,7 +1342,7 @@ def test_agent_set_properties_nan_on_assigned_sku():
 def test_import_bom_size_change_clears_confirmation(tmp_path: Path):
     s = _generic_session()
     s.confirm_envelope(
-        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="george"
+        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="alex"
     )
     csv_path = tmp_path / "resize.csv"
     csv_path.write_text(
@@ -1463,7 +1463,7 @@ def test_assign_part_clears_confirmation_unknown_dock_sku_not_ready():
     app = QApplication.instance() or QApplication([])
     s = _generic_session()
     s.confirm_envelope(
-        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="george"
+        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="alex"
     )
     s.assign_part("K1", "MC-9b", manufacturer="LS Electric")
     device, k1, fp = _generic_fp(s, "K1")
@@ -1493,7 +1493,7 @@ def test_assign_part_clears_confirmation_unknown_dock_sku_not_ready():
 def test_import_bom_warnings_match_what_happened(tmp_path: Path):
     s = _generic_session()
     s.confirm_envelope(
-        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="george"
+        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="alex"
     )
     same = tmp_path / "same.csv"
     same.write_text(
@@ -1522,7 +1522,7 @@ def test_import_bom_warnings_match_what_happened(tmp_path: Path):
     assert not is_layout_ready(device, s.sheet().component("K1"))
 
     s.confirm_envelope(
-        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="george"
+        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="alex"
     )
     mount = tmp_path / "mount.csv"
     mount.write_text(
@@ -1622,7 +1622,7 @@ def test_assign_footprint_less_sku_keeps_confirmed_envelope():
     s = Session.create("PB confirm")
     s.place("iec.operators.pb_no", ref="S1", x=20, y=20)
     s.confirm_envelope(
-        "S1", width_mm=22, height_mm=22, depth_mm=50, mount="door", confirmed_by="george"
+        "S1", width_mm=22, height_mm=22, depth_mm=50, mount="door", confirmed_by="alex"
     )
     device = s.catalog.get("iec.operators.pb_no")
     assert is_layout_ready(device, s.sheet().component("S1"))
@@ -1636,7 +1636,7 @@ def test_assign_footprint_less_sku_keeps_confirmed_envelope():
 
     s = _generic_session()
     s.confirm_envelope(
-        "K1", width_mm=30, height_mm=40, depth_mm=50, mount="din_rail", confirmed_by="george"
+        "K1", width_mm=30, height_mm=40, depth_mm=50, mount="din_rail", confirmed_by="alex"
     )
     s.assign_part("K1", "SC-E02P-110VAC", manufacturer="AutomationDirect")
     device, k1, fp = _generic_fp(s, "K1")
@@ -1650,7 +1650,7 @@ def test_assign_footprint_less_sku_clears_confirmation_when_mount_differs():
     s = Session.create("PB mount")
     s.place("iec.operators.pb_no", ref="S1", x=20, y=20)
     s.confirm_envelope(
-        "S1", width_mm=22, height_mm=22, depth_mm=50, mount="din_rail", confirmed_by="george"
+        "S1", width_mm=22, height_mm=22, depth_mm=50, mount="din_rail", confirmed_by="alex"
     )
     s.assign_part("S1", "800FP-F3", manufacturer="Allen-Bradley")
     device = s.catalog.get("iec.operators.pb_no")
@@ -1724,7 +1724,7 @@ def test_bom_dock_part_number_mismatch_drops_assignment():
 def test_import_bom_catalog_ready_skips_confirmation_warning(tmp_path: Path):
     s = _generic_session()
     s.confirm_envelope(
-        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="george"
+        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="alex"
     )
     csv_path = tmp_path / "sku.csv"
     csv_path.write_text(
@@ -1807,7 +1807,7 @@ def test_cli_library_assign_unfit_prints_one_line_and_writes_no_crash(tmp_path: 
 def test_confirmed_flag_without_instance_sizes_is_not_ready():
     s = _generic_session()
     k1 = s.sheet().component("K1")
-    k1.properties.update({"envelope_confirmed": True, "envelope_confirmed_by": "george", "mount": "din_rail"})
+    k1.properties.update({"envelope_confirmed": True, "envelope_confirmed_by": "alex", "mount": "din_rail"})
     device = s.catalog.get(k1.library_id)
     assert not is_layout_ready(device, k1)
     assert "Confirmed envelope" in layout_ready_gap(device, k1)
@@ -1830,7 +1830,7 @@ def test_manufacturer_alias_keeps_assignment():
 def test_unchanged_size_edit_keeps_confirmation():
     s = _generic_session()
     s.confirm_envelope(
-        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="george"
+        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="alex"
     )
     s.set_component_properties("K1", {"width_mm": 45.0, "mount": "din_rail"})
     s.set_panel("K1", height_mm=85, mount="din_rail")

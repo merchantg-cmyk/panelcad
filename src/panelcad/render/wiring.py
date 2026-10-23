@@ -156,6 +156,13 @@ def _rail_end(
             x = float(stored.x)
         return x, y, side
     x, y, side = rail_point(sheet, ref, along, hot, ret)
+    if is_io_sheet(sheet) and not is_generated_io_sheet(sheet):
+        # A packed I/O sheet paints its own supply and 0V buses, not the ladder
+        # rails at the border. Land on the bus that is drawn.
+        from panelcad.render.io_ladder import io_bus_xs
+
+        supply_x, zero_x = io_bus_xs()
+        x = supply_x if side == "right" else zero_x
     if stored is not None:
         y = float(stored.y)
     return x, y, side

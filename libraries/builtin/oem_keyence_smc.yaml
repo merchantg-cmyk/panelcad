@@ -128,36 +128,57 @@ devices:
     category: control.plc
     ref_prefix: GC
     tags: [keyence, gc, safety]
+    # Terminals per the Keyence GC-1000 spec sheet: safety inputs Si, test
+    # outputs To0-To3 (pulse source for contact devices), safety outputs So0-So5.
     schematic:
       width: 90
-      height: 110
+      height: 142
       pins:
         - { id: Si0, x: 0, y: 22, side: left, electrical: input, label: "Si0-Si1" }
         - { id: Si2, x: 0, y: 34, side: left, electrical: input, label: "Si2-Si3" }
         - { id: Si4, x: 0, y: 46, side: left, electrical: input, label: "Si4-Si5" }
         - { id: Si8, x: 0, y: 58, side: left, electrical: input, label: "Si8-Si9" }
         - { id: Si10, x: 0, y: 70, side: left, electrical: input, label: "Si10-Si11" }
+        - { id: To0, x: 0, y: 82, side: left, electrical: output, label: To0 }
+        - { id: To1, x: 0, y: 94, side: left, electrical: output, label: To1 }
+        - { id: To2, x: 0, y: 106, side: left, electrical: output, label: To2 }
+        - { id: To3, x: 0, y: 118, side: left, electrical: output, label: To3 }
         - { id: So0, x: 90, y: 22, side: right, electrical: output, label: So0 }
         - { id: So1, x: 90, y: 34, side: right, electrical: output, label: So1 }
         - { id: So2, x: 90, y: 46, side: right, electrical: output, label: So2 }
+        - { id: So3, x: 90, y: 58, side: right, electrical: output, label: So3 }
         - { id: SOUTA, x: 90, y: 70, side: right, electrical: output, label: "S-OUT A" }
+        - { id: So4, x: 90, y: 82, side: right, electrical: output, label: So4 }
+        - { id: So5, x: 90, y: 94, side: right, electrical: output, label: So5 }
+        - { id: P24, x: 90, y: 106, side: right, electrical: power, label: "+24V" }
+        - { id: M, x: 90, y: 118, side: right, electrical: power, label: "0V" }
       draw:
-        - rect: [8, 6, 74, 98]
+        - rect: [8, 6, 74, 126]
         - rect: [14, 12, 62, 14]
         - text: [45, 22, "GC-1000", 3.2]
-        - text: [45, 100, "GC-1000", 1.8]
+        - text: [45, 130, "GC-1000", 1.8]
         - line: [0, 22, 8, 22]
         - line: [0, 34, 8, 34]
         - line: [0, 46, 8, 46]
         - line: [0, 58, 8, 58]
         - line: [0, 70, 8, 70]
+        - line: [0, 82, 8, 82]
+        - line: [0, 94, 8, 94]
+        - line: [0, 106, 8, 106]
+        - line: [0, 118, 8, 118]
         - line: [82, 22, 90, 22]
         - line: [82, 34, 90, 34]
         - line: [82, 46, 90, 46]
+        - line: [82, 58, 90, 58]
         - line: [82, 70, 90, 70]
+        - line: [82, 82, 90, 82]
+        - line: [82, 94, 90, 94]
+        - line: [82, 106, 90, 106]
+        - line: [82, 118, 90, 118]
     ports:
       - { id: ETH, kind: ethernet, medium: "10/100", protocol: Ethernet, connector: RJ45, side: right }
-    panel: { w: 70, h: 90, d: 70, din: true, in_panel: true, mount: din_rail, dims: generic }
+    # Keyence GC-1000 spec sheet: 60 x 95 x 90 mm (W x D x H).
+    panel: { w: 60, h: 90, d: 95, din: true, in_panel: true, mount: din_rail, dims: catalog }
     props:
       manufacturer: Keyence
       part_number: GC-1000

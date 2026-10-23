@@ -1526,8 +1526,6 @@ def _paint_primitive(painter: QPainter, prim: Primitive) -> None:
         painter.drawEllipse(QPointF(prim.x, prim.y), prim.r, prim.r)
         painter.setBrush(Qt.BrushStyle.NoBrush)
     elif prim.type == "arc":
-        from PySide6.QtGui import QPainterPath
-
         rect = QRectF(prim.x - prim.r, prim.y - prim.r, prim.r * 2.0, prim.r * 2.0)
         path = QPainterPath()
         path.arcMoveTo(rect, prim.start)

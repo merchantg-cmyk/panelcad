@@ -4,7 +4,7 @@ This is the configurable inserter (Circuit Builder). Control-versus-power
 wiring checks stay in ``panelcad.core.circuit``.
 
 Symbols follow the project (or sheet) drawing standard. The default is
-NEMA/ANSI — George's shop prints, and the same default as ``DESIGN.md`` and
+NEMA/ANSI — typical shop prints, and the same default as ``DESIGN.md`` and
 ``TitleBlock.standard``. An explicit IEC project or sheet keeps the original
 ``iec.*`` parts and pin pairs. NEMA / ANSI / JIC / NFPA resolve to ``nema.*``.
 """
@@ -32,7 +32,7 @@ WORKING_PAD = 1.0
 CLEAR = 8.0
 HP_TO_KW = 0.746
 
-# DESIGN.md and models.TitleBlock.standard: start NEMA/ANSI (George's prints).
+# DESIGN.md and models.TitleBlock.standard: start NEMA/ANSI (typical shop prints).
 DEFAULT_STANDARD = "NEMA/ANSI"
 
 DOOR_ROLES = frozenset(
@@ -2663,7 +2663,7 @@ def _wire(
             elif home_to and not home_from:
                 dest = home_to
         if to_sheet and to_sheet != dest:
-            item = session.wire(frm, to, net=net, sheet_id=dest, to_sheet=to_sheet)
+            item = session.wire(frm, to, net=net, sheet_id=dest, to_sheet=to_sheet, make_room=True)
         else:
             item = session.wire(frm, to, net=net, sheet_id=dest)
         if isinstance(item, dict):

@@ -1,6 +1,6 @@
 # Vendor terminal-strip export
 
-George's shop wants a file the vendor configurator will import so a rail can be ordered pre-assembled. This note is what public documentation actually allows, and what PanelCAD writes.
+A shop may want a file the vendor configurator will import so a rail can be ordered pre-assembled. This note is what public documentation actually allows, and what PanelCAD writes.
 
 Articles come from library data (`libraries/builtin/terminal_vendor_articles.yaml`, device `props.vendor_articles`, or component `manufacturer` + `part_number`). They are not hardcoded in the writer. Unmapped blocks keep a fallback value and appear in `result.warnings`. Each builtin article has a product-page URL in the YAML; those numbers were checked on phoenixcontact.com, wago.com, and weidmueller.com/eshop (2026-10-07).
 

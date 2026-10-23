@@ -22,6 +22,34 @@ def _invalidate_theme() -> None:
     invalidate()
 
 
+def _dispose_windows(windows) -> None:
+    """Delete windows made by ``launch_gui`` now, not from a later GC or sweep.
+
+    A closed MainWindow stays alive: its own signal connections hold it. Stop
+    its check thread and timers, then deliver ``deleteLater`` here.
+    """
+
+    from PySide6.QtCore import QCoreApplication, QEvent, QTimer
+    from PySide6.QtWidgets import QApplication
+
+    from panelcad.gui.problems import LiveCheckRunner
+
+    for window in windows:
+        try:
+            window._closing = True
+            for runner in window.findChildren(LiveCheckRunner):
+                runner.stop()
+            for timer in window.findChildren(QTimer):
+                timer.stop()
+            window.close()
+            window.deleteLater()
+        except RuntimeError:
+            continue
+    QApplication.processEvents()
+    QCoreApplication.sendPostedEvents(None, int(QEvent.Type.DeferredDelete))
+    QApplication.processEvents()
+
+
 def test_icon_files_and_qicon_load():
     svg = (ASSETS / "panelcad.svg").read_text(encoding="utf-8")
     assert svg.lstrip().startswith("<svg")
@@ -218,7 +246,6 @@ def test_launch_shows_splash_then_the_main_window(
     monkeypatch.setenv("PANELCAD_CONFIG", str(tmp_path))
     monkeypatch.setenv("PANELCAD_DATA_DIR", str(tmp_path / "data"))
     from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QApplication
 
     from panelcad.gui import splash as splash_mod
     from panelcad.gui.app import launch_gui
@@ -242,8 +269,10 @@ def test_launch_shows_splash_then_the_main_window(
         assert window.isVisible()
         assert not window.windowIcon().isNull()
         assert window.testAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen) is False
-        window.close()
-        QApplication.processEvents()
+        _dispose_windows(windows)
+        import shiboken6
+
+        assert not shiboken6.isValid(window)
     finally:
         splash_mod.reset_splash_state()
         _invalidate_theme()
@@ -257,7 +286,6 @@ def test_offscreen_launch_does_not_show_the_splash(
     monkeypatch.setenv("PANELCAD_NO_WELCOME", "1")
     monkeypatch.setenv("PANELCAD_CONFIG", str(tmp_path))
     monkeypatch.setenv("PANELCAD_DATA_DIR", str(tmp_path / "data"))
-    from PySide6.QtWidgets import QApplication
 
     from panelcad.gui import splash as splash_mod
     from panelcad.gui.app import launch_gui
@@ -275,9 +303,7 @@ def test_offscreen_launch_does_not_show_the_splash(
             if isinstance(widget, MainWindow) and widget.isVisible()
         ]
         assert len(windows) == 1
-        for window in windows:
-            window.close()
-        QApplication.processEvents()
+        _dispose_windows(windows)
     finally:
         splash_mod.reset_splash_state()
 
@@ -344,3 +370,139 @@ def test_installer_shortcuts_use_the_icon():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert 'panelcad = "panelcad.launch:main"' in pyproject
     assert "assets/*" in pyproject
+
+
+def test_splash_reuses_one_qt_class_so_gc_never_frees_a_qt_type(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Each splash used to define a new QSplashScreen subclass.
+
+    Those types (and their dynamic QMetaObjects) were left for the cyclic
+    garbage collector, and freeing them crashed the Windows test run with
+    0xC0000374. The splash and dialog-guard classes are now built once.
+    """
+
+    import gc
+
+    monkeypatch.setenv("PANELCAD_FORCE_SPLASH", "1")
+    from PySide6.QtWidgets import QApplication
+
+    from panelcad.gui import splash as splash_mod
+
+    app = QApplication.instance() or QApplication([])
+    gc.collect()
+    kinds = set()
+    for _ in range(3):
+        splash_mod.reset_splash_state()
+        card = splash_mod.show_splash(force=True, message="Loading parts library...")
+        assert card is not None
+        kinds.add(type(card))
+        del card
+        splash_mod.reset_splash_state()
+        app.processEvents()
+    assert len(kinds) == 1
+    assert splash_mod._dialog_guard_type() is splash_mod._dialog_guard_type()
+
+    gc.set_debug(gc.DEBUG_SAVEALL)
+    try:
+        gc.collect()
+        stale = [
+            obj
+            for obj in gc.garbage
+            if isinstance(obj, type) and obj.__name__ in {"_SplashScreen", "_DialogGuard"}
+        ]
+    finally:
+        gc.set_debug(0)
+        gc.garbage.clear()
+    assert stale == []
+
+
+def _live_qt_garbage() -> list[str]:
+    """Live Shiboken wrappers the next cyclic collect would destroy."""
+
+    import gc
+
+    import shiboken6
+
+    old = gc.get_debug()
+    gc.set_debug(old | gc.DEBUG_SAVEALL)
+    try:
+        gc.collect()
+        found = [
+            type(obj).__qualname__
+            for obj in gc.garbage
+            if isinstance(obj, shiboken6.Object) and shiboken6.isValid(obj)
+        ]
+    finally:
+        gc.garbage.clear()
+        gc.set_debug(old)
+        gc.collect()
+    return found
+
+
+@pytest.mark.parametrize("ending", ["close", "finish"])
+def test_closed_splash_card_is_deleted_by_qt_not_the_gc(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ending: str
+):
+    monkeypatch.setenv("PANELCAD_CONFIG", str(tmp_path))
+    monkeypatch.setenv("PANELCAD_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PANELCAD_FORCE_SPLASH", "1")
+    import shiboken6
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtWidgets import QApplication, QWidget
+
+    from panelcad.gui import splash as splash_mod
+
+    splash_mod.reset_splash_state()
+    app = QApplication.instance() or QApplication([])
+    host = None
+    try:
+        card = splash_mod.show_splash(force=True)
+        assert card is not None and card.isVisible()
+        # A closure cycle holding the card: before, the GC destroyed it.
+        holder = {}
+        holder["self"] = lambda: (card, holder)
+        if ending == "close":
+            splash_mod.close_splash()
+        else:
+            host = QWidget()
+            host.show()
+            app.processEvents()
+            splash_mod.finish_splash(host)
+        assert splash_mod.splash_is_visible() is False
+        QCoreApplication.sendPostedEvents(None, int(QEvent.Type.DeferredDelete))
+        app.processEvents()
+        assert not shiboken6.isValid(card)
+        del holder, card
+        assert _live_qt_garbage() == []
+    finally:
+        if host is not None:
+            host.close()
+            host.deleteLater()
+        splash_mod.reset_splash_state()
+        QCoreApplication.sendPostedEvents(None, int(QEvent.Type.DeferredDelete))
+
+
+def test_startup_dialog_raise_is_dropped_with_the_dialog(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("PANELCAD_CONFIG", str(tmp_path))
+    monkeypatch.setenv("PANELCAD_DATA_DIR", str(tmp_path))
+    import shiboken6
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtWidgets import QApplication, QDialog
+
+    from panelcad.gui import splash as splash_mod
+
+    app = QApplication.instance() or QApplication([])
+    dialog = QDialog()
+    dialog.show()
+    splash_mod._place_startup_dialog(dialog)
+    # Deleted before the queued raise runs: the call goes with it.
+    dialog.close()
+    dialog.deleteLater()
+    QCoreApplication.sendPostedEvents(None, int(QEvent.Type.DeferredDelete))
+    assert not shiboken6.isValid(dialog)
+    app.processEvents()
+    del dialog
+    assert _live_qt_garbage() == []

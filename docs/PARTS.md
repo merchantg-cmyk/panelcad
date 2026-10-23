@@ -1,6 +1,6 @@
 # Manufacturer part library
 
-Verified catalog SKUs that George assigns onto generic library symbols. The
+Verified catalog SKUs that the user assigns onto generic library symbols. The
 schematic symbol, tag, and wiring stay; manufacturer, catalog number, ratings,
 and panel footprint come from the SKU.
 

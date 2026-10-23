@@ -29,7 +29,7 @@ def draw_sheet_body(
         draw_panel_sheet(painter, sheet, catalog, base_dir=base_dir, project=project)
         return
     if is_network_sheet(sheet):
-        draw_network_sheet(painter, sheet, catalog)
+        draw_network_sheet(painter, sheet, catalog, project=project)
         return
     # A generated I/O sheet is a ladder diagram (kind io, style ladder). The
     # older card painter is only for a hand-drawn I/O page.
@@ -274,6 +274,10 @@ def draw_sheet_body(
         from panelcad.render.xref import draw_cross_references
 
         draw_cross_references(painter, project, sheet, catalog, ladder=elementary)
+    if project is not None and sheet.kind in {"schematic", "io"}:
+        from panelcad.render.xref import draw_reference_marks
+
+        draw_reference_marks(painter, project, sheet, catalog)
 
 
 def _stroke_wire(painter: Painter, points: list[tuple[float, float]], *, inferred: bool) -> None:

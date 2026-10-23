@@ -208,7 +208,7 @@ def test_i1_import_bom_size_change_clears_confirmation(tmp_path: Path):
     session = Session.create("BOM size")
     session.place("iec.contactors.ac3_9a", ref="K1", x=40, y=40, sheet_id="main")
     session.confirm_envelope(
-        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="george"
+        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="alex"
     )
     csv_path = tmp_path / "resize.csv"
     csv_path.write_text(

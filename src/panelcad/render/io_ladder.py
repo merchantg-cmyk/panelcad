@@ -19,6 +19,12 @@ RIGHT_X = 328.0
 TOP_Y = 32.0
 
 
+def io_bus_xs() -> tuple[float, float]:
+    """X of the painted supply bus (left) and 0V bus (right) on a packed I/O sheet."""
+
+    return (LEFT_X - 10.0, min(RIGHT_X + 48.0, 392.0))
+
+
 def is_io_module(device: Device) -> bool:
     cat = device.category.lower()
     if cat.startswith(("drive", "load", "operator", "switching", "connection", "protection", "power")):
@@ -210,9 +216,9 @@ def draw_io_sheet(
         else:
             bottom = max(bottom, c.y + device.schematic_height * c.visual_scale() + 8)
     painter.set_stroke("#c0392b", 0.7)
-    painter.line(LEFT_X - 10, top, LEFT_X - 10, bottom)
-    painter.text(LEFT_X - 10, top - 4, "24V", 2.4, align="middle")
-    zero_x = min(RIGHT_X + 48.0, 392.0)
+    supply_x, zero_x = io_bus_xs()
+    painter.line(supply_x, top, supply_x, bottom)
+    painter.text(supply_x, top - 4, "24V", 2.4, align="middle")
     painter.set_stroke("#2c3e50", 0.7)
     painter.line(zero_x, top, zero_x, bottom)
     painter.text(zero_x, top - 4, "0V", 2.4, align="middle")

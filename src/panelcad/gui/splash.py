@@ -29,6 +29,13 @@ _shown = False
 _message_color = None
 _dialog_guard = None
 _dialog_cls = None
+# Qt subclasses are built once per process and never freed. A class statement
+# inside a function made a new Shiboken type, with its own dynamic QMetaObject,
+# on every call. Python types always sit in reference cycles, so each stale
+# type was freed later by a cyclic gc.collect(), and on Windows that free hit
+# heap corruption (0xC0000374) right after the splash tests.
+_splash_cls = None
+_dialog_guard_cls = None
 
 _LIGHT = {
     "bg": "#F3F6FA",
@@ -189,6 +196,9 @@ def ensure_application():
     else:
         app = QApplication.instance()
     app.setApplicationName("PanelCAD")
+    from panelcad.gui import gc_control
+
+    gc_control.install(app)
     icon = application_icon()
     if not icon.isNull():
         app.setWindowIcon(icon)
@@ -263,10 +273,13 @@ def _splash_pixmap(app, icon):
     return pixmap, QColor(colors["muted"])
 
 
-def _show_new_splash(app, message: str):
-    global _splash, _shown, _message_color
-    from PySide6.QtCore import QEvent, Qt
-    from PySide6.QtGui import QFont
+def _splash_screen_type():
+    """The QSplashScreen subclass. Built on first use, then reused."""
+
+    global _splash_cls
+    if _splash_cls is not None:
+        return _splash_cls
+    from PySide6.QtCore import QEvent
     from PySide6.QtWidgets import QSplashScreen, QWidget
 
     class _SplashScreen(QSplashScreen):
@@ -283,6 +296,16 @@ def _show_new_splash(app, message: str):
                 return QWidget.event(self, event)
             return super().event(event)
 
+    _splash_cls = _SplashScreen
+    return _SplashScreen
+
+
+def _show_new_splash(app, message: str):
+    global _splash, _shown, _message_color
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QFont
+
+    _SplashScreen = _splash_screen_type()
     icon = application_icon()
     pixmap, color = _splash_pixmap(app, icon)
     # Stay above other programs while the library loads. A startup dialog
@@ -363,6 +386,22 @@ def _drop_stays_on_top(splash) -> None:
         return
 
 
+def _dispose_splash(splash) -> None:
+    """Let Qt delete a closed splash card on the next event-loop turn.
+
+    The card is parentless and owned by its Python wrapper, so without this
+    its C++ object was destroyed whenever Python dropped the last reference:
+    from a cyclic ``gc.collect()`` if a closure or traceback held it. A closed
+    card is never shown again (``show_splash`` makes a new one), so deleting
+    it here only makes that destruction happen at a known point.
+    """
+
+    try:
+        splash.deleteLater()
+    except RuntimeError:  # the C++ object is already gone
+        return
+
+
 def finish_splash(window) -> None:
     """Close the splash once ``window`` is on screen. ``QSplashScreen.finish``."""
 
@@ -382,6 +421,7 @@ def finish_splash(window) -> None:
             splash.close()
     except RuntimeError:
         pass
+    _dispose_splash(splash)
     app = QApplication.instance()
     if app is not None:
         app.processEvents()
@@ -411,6 +451,7 @@ def close_splash(*, flush: bool = True) -> None:
         splash.close()
     except RuntimeError:
         return
+    _dispose_splash(splash)
     if not flush:
         return
     app = QApplication.instance()
@@ -512,12 +553,20 @@ def _place_startup_dialog(dialog) -> None:
         except RuntimeError:
             return
 
-    QTimer.singleShot(0, _again)
+    # Bound to the dialog: Qt drops the call if the dialog is deleted first,
+    # and the closure is released with the dialog, not by the cyclic GC.
+    QTimer.singleShot(0, dialog, _again)
 
 
 def _dialog_guard_type():
-    """QObject subclass. Built on first use so importing this module stays light."""
+    """QObject subclass. Built on first use so importing this module stays light.
 
+    Cached like the splash class, so a second QApplication does not make a new type.
+    """
+
+    global _dialog_guard_cls
+    if _dialog_guard_cls is not None:
+        return _dialog_guard_cls
     from PySide6.QtCore import QEvent, QObject
 
     class _DialogGuard(QObject):
@@ -555,6 +604,7 @@ def _dialog_guard_type():
                 self._depth -= 1
             return False
 
+    _dialog_guard_cls = _DialogGuard
     return _DialogGuard
 
 

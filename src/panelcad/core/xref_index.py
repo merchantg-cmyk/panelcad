@@ -355,7 +355,10 @@ def _offpage_rows(project: Project, catalog: Catalog) -> list[dict[str, str]]:
 def _standalone_rows(project: Project, catalog: Catalog, ref: str | None) -> list[dict[str, str]]:
     """Lamps and other tagged parts that are not a coil/contact family."""
 
+    from panelcad.core.references import reference_map
+
     want = (ref or "").strip()
+    refs = reference_map(project, catalog)
     rows: list[dict[str, str]] = []
     for sheet in project.sheets:
         if sheet.kind not in SCHEMATIC_KINDS:
@@ -364,6 +367,8 @@ def _standalone_rows(project: Project, catalog: Catalog, ref: str | None) -> lis
         for comp in sheet.components:
             if want and comp.id.casefold() != want.casefold():
                 continue
+            if id(comp) in refs:
+                continue  # listed by _reference_rows
             device = _device(catalog, comp)
             if device is None or is_offpage_component(comp, device):
                 continue
@@ -393,6 +398,38 @@ def _standalone_rows(project: Project, catalog: Catalog, ref: str | None) -> lis
     return rows
 
 
+def _reference_rows(project: Project, catalog: Catalog, ref: str | None) -> list[dict[str, str]]:
+    """Copies on network/overview sheets or rack views: one row each, pointing at the primary."""
+
+    from panelcad.core.references import reference_links, see_label
+
+    want = (ref or "").strip()
+    rows: list[dict[str, str]] = []
+    for link in reference_links(project, catalog):
+        if want and link.comp.id.casefold() != want.casefold():
+            continue
+        device = _device(catalog, link.comp)
+        loc = component_location(project, link.sheet, link.comp, device)
+        row = _row(
+            device=link.comp.id,
+            ref=link.comp.id,
+            element="reference",
+            role="reference",
+            sheet=link.sheet,
+            loc=loc,
+            style=xref_style(project, link.sheet),
+            wires=",".join(_wires_on(link.sheet, link.comp.id)),
+            library_id=link.comp.library_id,
+            x=link.comp.x,
+            y=link.comp.y,
+        )
+        row["see"] = see_label(project, link, catalog)
+        row["see_sheet"] = link.primary_sheet.id
+        row["reference_reason"] = link.reason
+        rows.append(row)
+    return rows
+
+
 def device_index_rows(project: Project, catalog: Catalog, ref: str | None = None) -> list[dict[str, str]]:
     """Flat index: one row per device element (and pin group / PLC point / off-page)."""
 
@@ -407,6 +444,7 @@ def device_index_rows(project: Project, catalog: Catalog, ref: str | None = None
         rows.extend(_pin_group_rows(family, project))
     rows.extend(_standalone_rows(project, catalog, want or None))
     rows.extend(_plc_point_rows(project, catalog, want or None))
+    rows.extend(_reference_rows(project, catalog, want or None))
     if not want:
         rows.extend(_offpage_rows(project, catalog))
     else:

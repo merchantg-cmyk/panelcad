@@ -117,7 +117,7 @@ Drawn as labeled boxes on the bottom of the sheet, plus zone coordinates (number
 | drawing_number | DWG No. |
 | drawn_by, checked_by, approved_by | Sign-off boxes |
 | scale | Default `NTS` |
-| standard | Default `NEMA/ANSI` (DESIGN.md / models.py — George's prints). Circuit Builder uses this when the sheet has no `standard`. An explicit `IEC` project keeps `iec.*` and IEC 81346 tags (`Q`, `K`, …). `NEMA`, `ANSI`, `JIC`, and `NFPA` all mean the North American `nema.*` catalog and JIC / NFPA 79 tags (`CB`, `M`, `PB`, …). |
+| standard | Default `NEMA/ANSI` (DESIGN.md / models.py — typical shop prints). Circuit Builder uses this when the sheet has no `standard`. An explicit `IEC` project keeps `iec.*` and IEC 81346 tags (`Q`, `K`, …). `NEMA`, `ANSI`, `JIC`, and `NFPA` all mean the North American `nema.*` catalog and JIC / NFPA 79 tags (`CB`, `M`, `PB`, …). |
 | revisions | List of `{rev, date, description, drawn, checked, approved}` — up to 3 rows shown |
 
 ### Sheet
@@ -151,7 +151,7 @@ A `terminal` sheet does not copy the terminal blocks. It projects every terminal
 | end | `left` or `right` on end plates and end stops |
 | after | Terminal ref a partition sits after |
 
-Library ids are `iec.accessories.end_plate`, `iec.accessories.end_stop`, and `iec.accessories.partition` (`connection.accessory`, so they are not extra strip levels). A jumper is still `properties.jumper` on the terminal (old files load). The span (first to last marked terminal in strip order) picks a catalog part from `libraries/builtin/jumpers.yaml` by `jumper_family` and `pitch_mm`. That part is a BOM line, a strip-export accessory row, and the label on the drawn bar. George adds jumpers by appending a `jumpers:` table row (family, pitch, poles, manufacturer, part number).
+Library ids are `iec.accessories.end_plate`, `iec.accessories.end_stop`, and `iec.accessories.partition` (`connection.accessory`, so they are not extra strip levels). A jumper is still `properties.jumper` on the terminal (old files load). The span (first to last marked terminal in strip order) picks a catalog part from `libraries/builtin/jumpers.yaml` by `jumper_family` and `pitch_mm`. That part is a BOM line, a strip-export accessory row, and the label on the drawn bar. You add jumpers by appending a `jumpers:` table row (family, pitch, poles, manufacturer, part number).
 
 Vendor strip export maps each block to a catalog article in this order: component `properties.vendor_articles.<vendor>`, component `manufacturer` + `part_number` when the manufacturer is that vendor, the same fields on the library device, then `libraries/builtin/terminal_vendor_articles.yaml` (override by copying that file into the project `library/` folder). Anything that still has no article is exported with the fallback part number or library id and listed in `warnings`. See `docs/VENDOR_STRIP_EXPORT.md`.
 
@@ -200,7 +200,7 @@ A Symbol Builder file also has `block: parent|child|terminal|footprint` and sche
 
 The box / backplate drawn behind rails. Optional. `Session.add_sheet(..., kind="panel_layout")` creates a default enclosure plus three rails that fit the page. Optional fields `nema_type`, `material`, `catalog`, `manufacturer`, `mount` are written by **Size Enclosure** when you apply a standard box.
 
-Standard box sizes live in `libraries/enclosures.yaml` (not the device catalog). George can edit that table. `catalog` is blank unless the number was confirmed on the maker's official page.
+Standard box sizes live in `libraries/enclosures.yaml` (not the device catalog). You can edit that table. `catalog` is blank unless the number was confirmed on the maker's official page.
 
 ### Component
 

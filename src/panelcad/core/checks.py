@@ -61,6 +61,7 @@ CHECK_IDS: tuple[str, ...] = (
     "rail_length",
     "duplicate_tag",
     "duplicate_device_tag",
+    "reference_target_missing",
     "unknown_library",
     "footprint_overlap",
     "wire_same_pin",
@@ -95,6 +96,7 @@ CHECK_IDS: tuple[str, ...] = (
     "contact_count_exceeded",
     "duplicate_contact_number",
     "broken_offpage",
+    "offpage_missing_from",
     "control_power_margin",
     "control_power_inrush",
     "control_power_protection",
@@ -758,18 +760,46 @@ def _lands_on(sheet: Sheet, ref: str) -> list[Wire]:
 
 
 def _duplicate_device_tags(project: Project, catalog: Catalog) -> list[Finding]:
-    """Two independent schematic devices that reused a tag. Coil + contact is fine."""
+    """Two independent schematic devices that reused a tag. Coil + contact is fine.
 
+    A copy on a network or overview sheet, a rack view of an I/O module, or a
+    copy marked with ``mark_reference`` points at the primary device and is
+    not a second device (see ``core.references``).
+    """
+
+    from panelcad.core.references import reference_map, reference_target
+
+    refs = reference_map(project, catalog)
+    findings: list[Finding] = []
     groups: dict[str, list[tuple[Sheet, Component, Device | None]]] = {}
     for sheet in project.sheets:
         if sheet.kind not in SCHEMATIC_KINDS and sheet.kind != "network":
             continue
         for comp in sheet.components:
+            link = refs.get(id(comp))
+            target = reference_target(comp)
+            if link is not None and (not target or link.primary_sheet.id == target):
+                continue
+            if target:
+                findings.append(
+                    Finding(
+                        "reference_target_missing",
+                        "warning",
+                        f"{comp.id} on {sheet.id} is marked as a reference of sheet {target}, "
+                        f"but no primary {comp.id} was found there",
+                        sheet=sheet.id,
+                        ref=comp.id,
+                        target=target,
+                        x=comp.x,
+                        y=comp.y,
+                    )
+                )
+            if link is not None:
+                continue
             device = _device(catalog, comp)
             if _skip_device(device):
                 continue
             groups.setdefault(comp.id, []).append((sheet, comp, device))
-    findings: list[Finding] = []
     for ref, items in groups.items():
         if len(items) < 2:
             continue

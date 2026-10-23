@@ -1,6 +1,6 @@
 # pytest on every push and pull request.
 #
-# Honest status for this Origin-hosted repo (industryiq/panel-designer):
+# Honest status for this repo:
 # Origin does not execute GitHub Actions YAML by itself. Check runs show up
 # on a PR only when a connected CI app posts them (Depot CI reads
 # .depot/workflows/ after it is installed; the Origin Checks API is the

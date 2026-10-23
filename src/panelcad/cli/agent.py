@@ -132,6 +132,7 @@ OPS = {
     "set_properties",
     "wire",
     "wire_offpage",
+    "pair_offpage",
     "delete_component",
     "rename_component",
     "duplicate_component",
@@ -229,6 +230,9 @@ OPS = {
     "library_search",
     "parts_search",
     "assign_part",
+    "mark_reference",
+    "clear_reference",
+    "set_sheet_overview",
     "save_library_device",
     "validate",
     "save",
@@ -350,6 +354,7 @@ OP_HELP: dict[str, dict[str, str]] = {
     "move": "Args: ref, x, y, sheet?",
     "set_properties": "Args: ref, properties{}, sheet?",
     "wire": "Args: from, to, net?, sheet?, to_sheet?, number?. number locks that wire number, the same as Set wire number. to_sheet = other page, places TO/FROM arrows.",
+    "pair_offpage": "Add the FROM arrow (wired to the target pin) that each hand-placed TO arrow is missing. Args: sheet?, ref?. Devices do not move.",
     "wire_offpage": "Off-page wire between two sheets. Args: from, to, to_sheet, from_sheet? or sheet?, net?, label?. Places matching TO and FROM arrows.",
     "delete_component": "Args: ref, sheet?",
     "duplicate_component": "Copy a device offset 10 mm. Args: ref, sheet?",
@@ -487,6 +492,9 @@ OP_HELP: dict[str, dict[str, str]] = {
     "add_revision_cloud": "Manual revision cloud. Args: x, y, w, h, sheet?, rev?",
     "library_search": "Args: query?",
     "parts_search": "Search verified manufacturer catalog parts. Args: query?, manufacturer?, category?, library_id?, amps_min?, amps_max?. Returns manufacturer, catalog, ratings, verified, source, footprint, amps_min/amps_max.",
+    "mark_reference": "Mark a device copy as a reference of the same tag on another sheet (network, overview, rack view). Keeps library_id and wires; duplicate_device_tag skips it and the print shows SEE <sheet-zone>. One undo. Args: ref, sheet?, primary_sheet?.",
+    "clear_reference": "Undo mark_reference so the copy counts as its own device. Args: ref, sheet?.",
+    "set_sheet_overview": "Flag a sheet as an overview page; device copies on it become references. Args: overview?=true, sheet?.",
     "assign_part": "Assign a verified catalog SKU to a placed device. Keeps library_id, tag, and wiring. One undo. Args: ref, catalog, manufacturer?, sheet?. Writes ratings including amps_min/amps_max. Copies a published cutout when that SKU has one.",
     "cutouts_generate": "Cutout sheets for the door, backplate, and walls. Args: datum?, style?=ordinate|baseline, view?=front|back, units?=mm|inch, edge_clearance_mm?, flange_mm?, panel_thickness_mm?, surfaces?, persist?=false. persist stores settings (one undo).",
     "cutouts_export_dxf": "1:1 shop DXF per surface that has openings. Layers CUT, DRILL, DIM, TEXT, OUTLINE. Args: path, surface? or surfaces?, datum?, style?, view?, units?=mm|inch. Skipped faces are listed. Unknown openings are text only.",
@@ -1400,7 +1408,17 @@ class Agent:
             snap=msg.get("snap", True),
             panel=msg.get("panel") or msg.get("location"),
         )
-        return _placed(self._need(), comp)
+        out = _placed(self._need(), comp)
+        # A TO arrow placed by hand that names a target pin gets its FROM arrow.
+        props = msg.get("properties") or {}
+        if "offpage" in str(msg["library_id"]).lower() and str(props.get("role") or "").lower() == "to":
+            try:
+                paired = self._need().pair_offpage(sheet_id=self._need().sheet(msg.get("sheet")).id, ref=comp.id)
+            except (KeyError, ValueError) as exc:
+                out["pair_offpage"] = {"added": [], "error": str(exc)}
+            else:
+                out["pair_offpage"] = paired
+        return out
 
     def op_insert_circuit(self, msg: dict[str, Any]) -> dict[str, Any]:
         def _num(*keys: str) -> float | None:
@@ -1620,6 +1638,9 @@ class Agent:
         if not opts:
             raise ValueError("set_ambient needs at least one temperature or mount setting")
         return self._need().set_ambient(**opts)
+
+    def op_pair_offpage(self, msg: dict[str, Any]) -> dict[str, Any]:
+        return self._need().pair_offpage(sheet_id=msg.get("sheet") or None, ref=msg.get("ref") or None)
 
     def op_wire_offpage(self, msg: dict[str, Any]) -> dict[str, Any]:
         to_sheet = msg.get("to_sheet") or msg.get("dest_sheet")
@@ -2660,6 +2681,21 @@ class Agent:
                 amps_max=_opt_float(msg.get("amps_max")),
             )
         }
+
+    def op_mark_reference(self, msg: dict[str, Any]) -> dict[str, Any]:
+        return self._need().mark_reference(
+            str(_domain(msg, "ref")),
+            sheet_id=msg.get("sheet"),
+            primary_sheet=msg.get("primary_sheet"),
+        )
+
+    def op_clear_reference(self, msg: dict[str, Any]) -> dict[str, Any]:
+        return self._need().clear_reference(str(_domain(msg, "ref")), sheet_id=msg.get("sheet"))
+
+    def op_set_sheet_overview(self, msg: dict[str, Any]) -> dict[str, Any]:
+        raw = msg.get("overview", True)
+        flag = raw if isinstance(raw, bool) else str(raw).strip().lower() not in {"0", "false", "no", "off", ""}
+        return self._need().set_sheet_overview(flag, sheet_id=msg.get("sheet"))
 
     def op_assign_part(self, msg: dict[str, Any]) -> dict[str, Any]:
         catalog = str(msg.get("catalog") or msg.get("part_number") or "").strip()

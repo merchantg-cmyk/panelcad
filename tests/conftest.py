@@ -58,6 +58,153 @@ def enable_pytest_faulthandler() -> None:
 
 enable_pytest_faulthandler()
 
+# Same rule as the app (panelcad.gui.gc_control): no automatic cyclic GC.
+# A collection started inside a Qt callback, a widget destructor or a worker
+# thread frees PySide wrappers at the wrong moment (0xC0000374 / 0xC0000005 on
+# Windows). Collect between tests instead, at a point with no Qt frame active.
+_GC_THRESHOLD = gc.get_threshold()
+gc.disable()
+
+
+def _collect_if_due() -> None:
+    counts = gc.get_count()
+    gen = -1
+    for index in range(min(len(counts), len(_GC_THRESHOLD))):
+        if _GC_THRESHOLD[index] and counts[index] > _GC_THRESHOLD[index]:
+            gen = index
+        else:
+            break
+    if gen >= 0:
+        gc.collect(gen)
+
+
+_GC_DIAG = os.environ.get("PANELCAD_GC_DIAG", "").strip()
+_GC_DIAG_FILE = None
+
+
+def _gc_diag(line: str) -> None:
+    """Append one flushed line, so a fail-fast crash still shows the last step."""
+
+    global _GC_DIAG_FILE
+    if not _GC_DIAG:
+        return
+    try:
+        if _GC_DIAG_FILE is None:
+            _GC_DIAG_FILE = open(_GC_DIAG, "a", buffering=1, encoding="utf-8")  # noqa: SIM115
+        _GC_DIAG_FILE.write(line + "\n")
+        _GC_DIAG_FILE.flush()
+        os.fsync(_GC_DIAG_FILE.fileno())
+    except OSError:
+        pass
+
+
+def _flush_deferred_deletes() -> None:
+    """Deliver queued deleteLater before Python frees wrappers."""
+
+    qtcore = sys.modules.get("PySide6.QtCore")
+    if qtcore is None:
+        return
+    try:
+        if qtcore.QCoreApplication.instance() is None:
+            return
+        qtcore.QCoreApplication.sendPostedEvents(None, int(qtcore.QEvent.Type.DeferredDelete))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _gc_garbage_summary() -> str:
+    """Find what the next collect will free (DEBUG_SAVEALL), describe it, let it go.
+
+    Opt-in with ``PANELCAD_GC_DIAG``. The objects are only listed: they go back
+    to being unreachable cycles, and the normal ``gc.collect()`` right after
+    this frees them, so a crash in that free comes after a flushed line naming
+    what was in the garbage. Listed one by one: Shiboken wrappers whose C++
+    object is still alive (this collect destroys it), Qt types, and functions
+    whose closure holds a Qt object. Wrappers whose C++ object is already gone
+    are counted by type. Nothing here calls a method on a Qt object.
+    """
+
+    from collections import Counter
+
+    try:
+        import shiboken6
+    except Exception:  # noqa: BLE001 — no Qt in this run
+        shiboken6 = None
+    old_debug = gc.get_debug()
+    gc.set_debug(old_debug | gc.DEBUG_SAVEALL)
+    try:
+        gc.collect()
+        garbage = list(gc.garbage)
+    finally:
+        gc.garbage.clear()
+        gc.set_debug(old_debug)
+    try:
+        counts = Counter(type(obj).__qualname__ for obj in garbage)
+        live: list[str] = []
+        dead: Counter = Counter()
+        other: list[str] = []
+        if shiboken6 is not None:
+            base = shiboken6.Object
+            for obj in garbage:
+                kind = type(obj)
+                name = f"{kind.__module__}.{kind.__qualname__}"
+                if isinstance(obj, base):
+                    if shiboken6.isValid(obj):
+                        live.append(
+                            f"{name}@{id(obj):x}"
+                            f"(py_owned={shiboken6.ownedByPython(obj)},"
+                            f"py_created={shiboken6.createdByPython(obj)})"
+                        )
+                    else:
+                        dead[name] += 1
+                elif isinstance(obj, type) and issubclass(obj, base):
+                    other.append(f"type:{obj.__module__}.{obj.__qualname__}")
+                elif callable(obj) and getattr(obj, "__closure__", None):
+                    held = []
+                    for cell in obj.__closure__:
+                        try:
+                            value = cell.cell_contents
+                        except ValueError:
+                            continue
+                        if isinstance(value, base):
+                            state = "live" if shiboken6.isValid(value) else "dead"
+                            held.append(f"{type(value).__qualname__}:{state}")
+                    if held:
+                        other.append(
+                            f"fn:{getattr(obj, '__qualname__', '?')}->{','.join(held)}"
+                        )
+        top = ", ".join(f"{name}={n}" for name, n in counts.most_common(10))
+        line = f"garbage n={len(garbage)} types[{top}]"
+        line += f" qt_live={len(live)}[" + "; ".join(live[:40])
+        line += (f" +{len(live) - 40} more" if len(live) > 40 else "") + "]"
+        line += f" qt_dead={sum(dead.values())}["
+        line += ", ".join(f"{name}={n}" for name, n in dead.most_common(25)) + "]"
+        if other:
+            line += " other[" + "; ".join(other[:20])
+            line += (f" +{len(other) - 20} more" if len(other) > 20 else "") + "]"
+        return line
+    except Exception as exc:  # noqa: BLE001 — diagnostics must not raise
+        return f"garbage n={len(garbage)} summary-error={type(exc).__name__}"
+    finally:
+        del garbage
+
+
+@pytest.fixture(autouse=True)
+def _gc_between_tests(request):
+    gc.disable()
+    _gc_diag(f"start {request.node.nodeid}")
+    yield
+    gc.disable()
+    _gc_diag(f"end {request.node.nodeid} counts={gc.get_count()}")
+    _flush_deferred_deletes()
+    _gc_diag("deferred-deletes flushed")
+    if _GC_DIAG:
+        _gc_diag(_gc_garbage_summary())
+    # Full collection every test: garbage never piles up into one large
+    # collection of stale Qt wrappers long after their owners went away.
+    found = gc.collect()
+    _gc_diag(f"collected {found}")
+
 
 def _qt_instances(cls: type) -> list:
     """Live wrappers of ``cls``. Dead Shiboken objects raise and are skipped."""

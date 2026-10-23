@@ -79,10 +79,31 @@ def _assert_splash_yielded(seen: dict) -> None:
     assert seen["on_screen"] is True
 
 
-def _release(app: QApplication, *widgets) -> None:
-    """Close windows and stop their timers so a later splash is left alone."""
+def _stop_live_checks(widget) -> None:
+    """Wait out a running check thread before its window is deleted."""
 
-    from PySide6.QtCore import QTimer
+    try:
+        from panelcad.gui.problems import LiveCheckRunner
+
+        runners = widget.findChildren(LiveCheckRunner)
+    except (ImportError, RuntimeError):
+        return
+    for runner in runners:
+        try:
+            runner.stop()
+        except RuntimeError:
+            continue
+
+
+def _release(app: QApplication, *widgets) -> None:
+    """Close windows and stop their timers so a later splash is left alone.
+
+    Destruction is explicit: every window gets ``deleteLater`` and the
+    deferred deletes are delivered here, so no C++ object is left for the
+    cyclic garbage collector to destroy at some later point.
+    """
+
+    from PySide6.QtCore import QCoreApplication, QEvent, QTimer
 
     from panelcad.gui import splash as splash_mod
     from panelcad.gui.main_window import MainWindow
@@ -99,6 +120,7 @@ def _release(app: QApplication, *widgets) -> None:
             widget._defer_startup_updates = False
         except Exception:  # noqa: BLE001 — a plain dialog has neither flag
             pass
+        _stop_live_checks(widget)
         try:
             for timer in widget.findChildren(QTimer):
                 timer.stop()
@@ -110,6 +132,8 @@ def _release(app: QApplication, *widgets) -> None:
         except RuntimeError:
             pass
     splash_mod.reset_splash_state()
+    app.processEvents()
+    QCoreApplication.sendPostedEvents(None, int(QEvent.Type.DeferredDelete))
     app.processEvents()
 
 
@@ -352,6 +376,10 @@ def test_update_notice_waits_until_the_window_is_on_screen(
         assert seen.get("parent") is window
     finally:
         stop = True
+        # ``dismiss`` re-arms itself, so it sits in a closure cycle with the
+        # card and the loop. Break it here instead of leaving it to the GC.
+        dismiss = None  # noqa: F841
+        card = None  # noqa: F841
         _release(app, window)
 
 

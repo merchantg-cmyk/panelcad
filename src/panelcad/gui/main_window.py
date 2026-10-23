@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import QEvent, QObject, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QBrush, QKeySequence
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QDockWidget,
     QFileDialog,
@@ -54,6 +55,31 @@ class _DockSeparatorStyle(QProxyStyle):
         if metric == QStyle.PixelMetric.PM_DockWidgetSeparatorExtent:
             return self.EXTENT
         return super().pixelMetric(metric, option, widget)
+
+
+_DOCK_STYLE: QStyle | None = None
+
+
+def _shared_dock_style() -> QStyle:
+    """One splitter proxy for every window, owned by the application.
+
+    ``QWidget.setStyle`` does not take ownership, and with an application style
+    sheet Qt wraps the proxy in a QStyleSheetStyle that keeps a raw pointer to
+    it. A proxy parented to the window is its first child, so ``~QWidget``
+    deleted it before the docks and the canvas. Their teardown then called
+    through the freed proxy: 0xC0000005 in Qt6Widgets.dll on Windows, inside
+    ``MainWindow.event`` on DeferredDelete or whenever the wrapper was collected.
+    """
+
+    global _DOCK_STYLE
+    style = _DOCK_STYLE
+    if style is None or not isValid(style):
+        style = _DockSeparatorStyle()
+        app = QApplication.instance()
+        if app is not None:
+            style.setParent(app)
+        _DOCK_STYLE = style
+    return style
 
 
 def _release_dock_contents(widget: QWidget) -> None:
@@ -299,11 +325,13 @@ def about_text(version: str) -> str:
 class MainWindow(QMainWindow):
     def __init__(self, session: Session | None = None, *, show_start: bool = False) -> None:
         super().__init__()
-        # Own the proxy. QProxyStyle() with no base does not delete the application
-        # style on the way out; handing it the app style does, and the next window crashes.
-        handle_style = _DockSeparatorStyle()
-        handle_style.setParent(self)
-        self.setStyle(handle_style)
+        from panelcad.gui import gc_control
+
+        gc_control.install()
+        # QProxyStyle() with no base does not delete the application style on the
+        # way out; handing it the app style does, and the next window crashes.
+        # The proxy must outlive this window. See ``_shared_dock_style``.
+        self.setStyle(_shared_dock_style())
         self._hiding_dock_tabs = False
         self._hide_dock_tabs_again = False
         self._closing = False

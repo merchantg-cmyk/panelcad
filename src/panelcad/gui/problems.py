@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import gc
+
 from PySide6.QtCore import QObject, QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
@@ -31,6 +33,46 @@ _SEV_ROLE = {
     "warning": "sev_warning",
     "info": "sev_info",
 }
+
+
+class _GuiThreadGcPause:
+    """Keep Python's cyclic GC off while a check thread runs.
+
+    CPython runs a cyclic collection on whichever thread happens to allocate.
+    The check thread allocates a lot (model_validate, YAML, path lookups), so
+    a collection could start there and free PySide wrappers that own Qt GUI
+    objects (graphics items, paths, fonts) while the canvas paints them on the
+    GUI thread. On Windows that is an access violation in python312.dll or a
+    heap corruption. Automatic collection is paused for the life of a check
+    thread and resumed from the GUI thread afterwards, so a cycle holding Qt
+    objects is only ever collected on the GUI thread. Nested pauses count.
+    Only the GUI thread calls ``acquire`` and ``release``.
+    """
+
+    depth = 0
+    was_enabled = True
+
+    def __init__(self) -> None:
+        self._held = False
+
+    def acquire(self) -> None:
+        if self._held:
+            return
+        self._held = True
+        cls = type(self)
+        if cls.depth == 0:
+            cls.was_enabled = gc.isenabled()
+            gc.disable()
+        cls.depth += 1
+
+    def release(self) -> None:
+        if not self._held:
+            return
+        self._held = False
+        cls = type(self)
+        cls.depth = max(0, cls.depth - 1)
+        if cls.depth == 0 and cls.was_enabled:
+            gc.enable()
 
 
 class _CheckWorker(QThread):
@@ -85,6 +127,7 @@ class LiveCheckRunner(QObject):
         self._busy = False
         self._again = False
         self._generation = 0
+        self._gc_pause: _GuiThreadGcPause | None = None
 
     def schedule(self) -> None:
         self._timer.start()
@@ -99,7 +142,11 @@ class LiveCheckRunner(QObject):
         self._worker = None
         if worker is not None and worker.isRunning():
             worker.wait(5000)
-        if worker is not None:
+        pause = self._gc_pause
+        self._gc_pause = None
+        if pause is not None and (worker is None or not worker.isRunning()):
+            pause.release()
+        if worker is not None and not worker.isRunning():
             worker.deleteLater()
         self._busy = False
 
@@ -114,6 +161,8 @@ class LiveCheckRunner(QObject):
         self._busy = True
         self._generation += 1
         gen = self._generation
+        # The worker gets its own copy of the model. It never sees the live
+        # project the canvas paints.
         payload = self.session.project.model_dump(mode="python")
         worker = _CheckWorker(
             payload,
@@ -123,12 +172,15 @@ class LiveCheckRunner(QObject):
             self.session.path,
         )
         self._worker = worker
+        pause = _GuiThreadGcPause()
+        self._gc_pause = pause
 
         def _done(rows: list) -> None:
             if gen != self._generation:
                 return
             self._busy = False
-            worker.deleteLater()
+            # The thread may still be returning from run(). Its own
+            # ``finished`` signal deletes it, never this slot.
             if self._worker is worker:
                 self._worker = None
             self.rows_ready.emit(rows)
@@ -136,8 +188,15 @@ class LiveCheckRunner(QObject):
                 self._again = False
                 self.schedule()
 
+        def _thread_ended() -> None:
+            pause.release()
+            if self._gc_pause is pause:
+                self._gc_pause = None
+            worker.deleteLater()
+
         worker.finished_rows.connect(_done)
-        worker.finished.connect(worker.deleteLater)
+        worker.finished.connect(_thread_ended)
+        pause.acquire()
         worker.start()
 
 
@@ -149,6 +208,7 @@ _CHECK_LABELS = {
     "rail_length": "Rail length",
     "duplicate_tag": "Duplicate tag",
     "duplicate_device_tag": "Duplicate device tag",
+    "reference_target_missing": "Reference points at a missing device",
     "unknown_library": "Unknown symbol",
     "footprint_overlap": "Parts overlap",
     "wire_same_pin": "Wire lands twice on one pin",
@@ -178,6 +238,7 @@ _CHECK_LABELS = {
     "contact_count_exceeded": "Too many contacts",
     "duplicate_contact_number": "Duplicate contact number",
     "broken_offpage": "Off-page arrow is broken",
+    "offpage_missing_from": "Off-page arrow has no FROM arrow",
     "control_power_margin": "Control power margin",
     "control_power_inrush": "Control power inrush",
     "control_power_protection": "Control power protection",

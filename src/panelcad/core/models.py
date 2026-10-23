@@ -435,6 +435,9 @@ class Sheet(BaseModel):
     control_voltage: float | None = None
     # Panel.id this sheet belongs to. Empty on a single-panel file.
     panel: str = ""
+    # Overview page (network, rack, block overview). Devices on it are
+    # references to the primary device on its own sheet. Omitted when false.
+    overview: bool = False
 
     @field_validator("control_voltage", mode="before")
     @classmethod

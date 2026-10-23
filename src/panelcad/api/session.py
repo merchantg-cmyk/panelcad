@@ -1842,11 +1842,14 @@ class Session:
         wire_type: str | None = None,
         from_at: Any = None,
         to_at: Any = None,
+        make_room: bool = False,
     ) -> Wire | dict[str, Any]:
         src = self.sheet(sheet_id)
         dest_id = str(to_sheet or "").strip()
         if dest_id and dest_id != src.id:
-            return self.wire_offpage(frm, to, net=net, from_sheet=src.id, to_sheet=dest_id, label=label)
+            return self.wire_offpage(
+                frm, to, net=net, from_sheet=src.id, to_sheet=dest_id, label=label, make_room=make_room
+            )
         self._assert_pin(src, frm)
         self._assert_pin(src, to)
         if str(frm).strip().upper() == str(to).strip().upper():
@@ -1917,8 +1920,14 @@ class Session:
         label: str | None = None,
         src_rung_y: float | None = None,
         dst_rung_y: float | None = None,
+        make_room: bool = False,
     ) -> dict[str, Any]:
-        """Wire a pin on this page to a pin on another page via matching TO / FROM arrows."""
+        """Wire a pin on this page to a pin on another page via matching TO / FROM arrows.
+
+        Devices already drawn stay where they are: each arrow takes the nearest
+        clear slot on its rail. ``make_room`` is for builders laying out their
+        own page, where sliding devices off the arrow is wanted.
+        """
         from panelcad.core.cleanup import sheet_number
         from panelcad.core.layout import is_io_sheet
         from panelcad.render.io_ladder import LEFT_X, RIGHT_X, io_endpoint, io_pin_is_input, is_io_module
@@ -2017,6 +2026,7 @@ class Session:
                 rung_y=float(ay if src_rung_y is None else src_rung_y),
                 side="right" if leaving_right else "left",
                 properties=src_props,
+                make_room=make_room,
             )
             seat_offpage_arrow(
                 self,
@@ -2026,6 +2036,7 @@ class Session:
                 rung_y=float(dy if dst_rung_y is None else dst_rung_y),
                 side="left" if leaving_right else "right",
                 properties=dst_props,
+                make_room=make_room,
             )
         w1 = self.wire(frm, f"{op_src_id}.A", net=cap, sheet_id=src.id, label=cap)
         w2 = self.wire(f"{op_dst_id}.A", to, net=cap, sheet_id=dest.id, label=cap)
@@ -2041,6 +2052,106 @@ class Session:
             "link": link,
             "callout": to_callout,
         }
+
+    def pair_offpage(self, sheet_id: str | None = None, ref: str | None = None) -> dict[str, Any]:
+        """Add the FROM arrow each TO arrow is missing on its target page.
+
+        A TO arrow placed by hand (``place`` with ``dest_sheet``, ``dest_ref``,
+        ``dest_pin`` and ``link``) has no partner. This seats a FROM arrow on the
+        target page at the target pin's rung, wires it to that pin with the TO
+        arrow's tag, and leaves every drawn device where it is. One undo step.
+        """
+
+        from panelcad.core.circuit_ladder import seat_offpage_arrow
+        from panelcad.core.cleanup import sheet_number
+        from panelcad.core.layout import is_io_sheet
+        from panelcad.core.xref import offpage_needs_from
+        from panelcad.render.io_ladder import LEFT_X, io_endpoint
+        from panelcad.render.sheet import pin_world
+
+        todo: list[tuple[Sheet, Component]] = []
+        for sheet in self.project.sheets:
+            if sheet_id and sheet.id != sheet_id:
+                continue
+            for comp in sheet.components:
+                if ref and comp.id != ref:
+                    continue
+                if "offpage" not in (comp.library_id or "").lower():
+                    continue
+                if offpage_needs_from(self.project, self.catalog, sheet, comp):
+                    todo.append((sheet, comp))
+        added: list[dict[str, Any]] = []
+        if not todo:
+            return {"added": added}
+        self.begin_command("pair off-page arrows")
+        failed = True
+        try:
+            for sheet, comp in todo:
+                props = comp.properties
+                dest = self.project.sheet(str(props["dest_sheet"]).strip())
+                dst_cid = str(props.get("dest_ref") or "").strip()
+                dst_pid = str(props.get("dest_pin") or "").strip()
+                if "." in dst_pid and not dst_cid:
+                    dst_cid, dst_pid = dst_pid.split(".", 1)
+                to = f"{dst_cid}.{dst_pid}"
+                self._assert_pin(dest, to)
+                src_ref = ""
+                src_pin = ""
+                for part in str(props.get("link") or "").split("|"):
+                    if ":" in part and part.split(":", 1)[0] == sheet.id:
+                        end = part.split(":", 1)[1]
+                        src_ref, _, src_pin = end.partition(".")
+                src_ref = src_ref or comp.id
+                tag = str(props.get("tag") or "").strip()
+                from_props = {
+                    "tag": tag,
+                    "callout": f"FROM {sheet_number(self.project.sheets, sheet.id)} / {src_ref}",
+                    "dest_sheet": sheet.id,
+                    "dest_title": sheet.title,
+                    "dest_ref": src_ref,
+                    "dest_pin": src_pin,
+                    "link": str(props.get("link")),
+                    "role": "from",
+                }
+                for key in ("bom",):
+                    if key in props:
+                        from_props[key] = props[key]
+                new_ref = self.next_ref("iec.connection.offpage_from", dest.id)
+                if is_io_sheet(dest):
+                    _dx, dy = io_endpoint(dest, self.catalog, to)
+                    self.place(
+                        "iec.connection.offpage_from",
+                        ref=new_ref,
+                        x=LEFT_X,
+                        y=dy - 6.0,
+                        sheet_id=dest.id,
+                        properties=from_props,
+                        snap=False,
+                    )
+                else:
+                    target = dest.component(dst_cid)
+                    _px, py = pin_world(target, self.catalog.get(target.library_id).pin(dst_pid))
+                    seat_offpage_arrow(
+                        self,
+                        dest.id,
+                        "iec.connection.offpage_from",
+                        new_ref,
+                        rung_y=float(py),
+                        side="left",
+                        properties=from_props,
+                        make_room=False,
+                    )
+                wire = self.wire(f"{new_ref}.A", to, net=tag or None, sheet_id=dest.id, label=tag or None)
+                added.append(
+                    {"sheet": dest.id, "ref": new_ref, "to": to, "wire": wire.id, "for": f"{sheet.id}:{comp.id}"}
+                )
+            failed = False
+        finally:
+            if failed:
+                self._cancel_command()
+            else:
+                self.end_command()
+        return {"added": added}
 
     def insert_circuit(
         self,
@@ -7680,6 +7791,60 @@ class Session:
                     y += 70.0
         return {"sheet": dest.id, "medium": info.medium, "devices": placed}
 
+    def mark_reference(
+        self,
+        ref: str,
+        sheet_id: str | None = None,
+        primary_sheet: str | None = None,
+    ) -> dict[str, Any]:
+        """Mark the copy of ``ref`` on ``sheet_id`` as a reference of the primary device.
+
+        The copy keeps its library_id, position, and wires. It stops counting
+        as a second device for duplicate_device_tag, and the index and print
+        show "see <sheet-zone>" for it. ``primary_sheet`` defaults to the first
+        other sheet that has ``ref`` and is not itself a reference. One undo.
+        """
+
+        from panelcad.core.references import REFERENCE_PROP, reference_target
+
+        sheet = self.sheet(sheet_id)
+        comp = sheet.component(ref)
+        others = [
+            other
+            for other in self.project.sheets
+            if other is not sheet and any(c.id == comp.id for c in other.components)
+        ]
+        if primary_sheet:
+            target = self.project.sheet(primary_sheet)
+            if target is sheet:
+                raise ValueError(f"{comp.id}: the primary sheet must be a different sheet than {sheet.id}")
+            if target not in others:
+                raise KeyError(f"no component '{comp.id}' on sheet '{target.id}'")
+        else:
+            usable = [o for o in others if not reference_target(o.component(comp.id))]
+            if not usable:
+                raise ValueError(f"{comp.id} is not drawn on any other sheet to reference")
+            target = usable[0]
+        comp.properties[REFERENCE_PROP] = target.id
+        return {"id": comp.id, "sheet": sheet.id, "reference_of": target.id}
+
+    def clear_reference(self, ref: str, sheet_id: str | None = None) -> dict[str, Any]:
+        """Undo ``mark_reference``: the copy on ``sheet_id`` counts as its own device again."""
+
+        from panelcad.core.references import REFERENCE_PROP
+
+        sheet = self.sheet(sheet_id)
+        comp = sheet.component(ref)
+        was = str(comp.properties.pop(REFERENCE_PROP, "") or "")
+        return {"id": comp.id, "sheet": sheet.id, "cleared": bool(was)}
+
+    def set_sheet_overview(self, overview: bool = True, sheet_id: str | None = None) -> dict[str, Any]:
+        """Flag a sheet as an overview page. Its device copies become references. One undo."""
+
+        sheet = self.sheet(sheet_id)
+        sheet.overview = bool(overview)
+        return {"sheet": sheet.id, "overview": sheet.overview}
+
     def layout_io(self, sheet_id: str | None = None) -> dict[str, Any]:
         """ANSI I/O: field in from the left, loads out to the right.
 
@@ -7789,6 +7954,9 @@ _ACTIVITY_METHODS: dict[str, Any] = {
     "set_active_panel": lambda s, r, a, k: f"active panel {r.get('tag')}",
     "add_interconnect": lambda s, r, a, k: f"interconnect {r.get('tag')}",
     "confirm_envelope": _summary_generic("confirm envelope"),
+    "mark_reference": lambda s, r, a, k: f"reference {r.get('id')} on {r.get('sheet')} → {r.get('reference_of')}",
+    "clear_reference": lambda s, r, a, k: f"clear reference {r.get('id')} on {r.get('sheet')}",
+    "set_sheet_overview": lambda s, r, a, k: f"overview {r.get('sheet')} {'on' if r.get('overview') else 'off'}",
     "assign_part": lambda s, r, a, k: f"catalog {r.get('manufacturer')} {r.get('catalog')} → {r.get('id')}",
     "set_control_power_margin": lambda s, r, a, k: f"control power margin {r.get('margin')}",
     "set_power_estimate": lambda s, r, a, k: f"power estimate {r.get('id')}",
@@ -7809,6 +7977,7 @@ _ACTIVITY_METHODS: dict[str, Any] = {
     "cleanup": _summary_generic("cleanup"),
     "set_pin_labels": _summary_generic("pin labels"),
     "wire_offpage": _summary_generic("off-page wire"),
+    "pair_offpage": _summary_generic("pair off-page arrows"),
     "set_wire_route": _summary_generic("route"),
     "clear_wire_route": _summary_generic("reset route"),
     "save": _summary_generic("save"),

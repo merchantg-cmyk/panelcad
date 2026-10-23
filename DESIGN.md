@@ -117,6 +117,6 @@ Treat these as sequential slices we can review independently:
 
 ## Open questions (product, not blockers)
 
-- Default drawing standard: **NEMA/ANSI** (George's shop prints). IEC stays a first-class setting; Circuit Builder and the title block honor whichever is set. Symbols stay swappable by library.
+- Default drawing standard: **NEMA/ANSI** (typical shop prints). IEC stays a first-class setting; Circuit Builder and the title block honor whichever is set. Symbols stay swappable by library.
 - Whether manufacturer catalogs are shipped or downloaded
 - Plugin language: Python only, or also WASM later
