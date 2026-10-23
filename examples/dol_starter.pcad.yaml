@@ -3,7 +3,7 @@ version: '0.1'
 name: DOL Motor Starter
 properties: {}
 title_block:
-  company: Acme Process Controls
+  company: Example Controls
   address: 12 Industrial Way
   logo: ''
   customer: Riverside Pump Station

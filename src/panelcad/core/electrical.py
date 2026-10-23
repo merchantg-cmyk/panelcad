@@ -506,13 +506,61 @@ def _wire_text(wires: list[Wire]) -> str:
     return ",".join(parts)
 
 
-def _is_spare(comp: Component, internal: list[Wire], external: list[Wire]) -> str:
-    flag = str(comp.properties.get("spare") or "").strip().lower()
-    if flag in {"1", "true", "yes", "y", "spare"}:
+_SPARE_ON = {"1", "true", "yes", "y", "spare"}
+_SPARE_OFF = {"0", "false", "no", "n", "off", "none"}
+
+
+def is_pe_terminal(comp: Component, device: Device | None) -> bool:
+    """PE/ground terminal by type property, tags, or library id word."""
+    props = {**(device.properties if device is not None else {}), **comp.properties}
+    kind = str(props.get("type") or "").strip().upper()
+    if kind in {"PE", "GND", "GROUND", "EARTH"}:
+        return True
+    tags = {str(tag).lower() for tag in (device.tags if device is not None else [])}
+    if tags & {"pe", "ground", "earth"}:
+        return True
+    parts = re.split(r"[^a-z0-9]+", comp.library_id.lower())
+    return any(part in {"pe", "ground", "earth", "gnd"} for part in parts)
+
+
+def terminal_lands(sheet: Sheet, comp: Component, device: Device | None) -> tuple[list[Wire], list[Wire]]:
+    """(internal, external) wires on every pin of a terminal.
+
+    Pin A is internal and pin B is external. Any other pin (a one-pin ground
+    terminal's G, for example) goes by its side: right is external, anything
+    else is internal.
+    """
+    internal = _lands(sheet, comp.id, "A")
+    external = _lands(sheet, comp.id, "B")
+    pins = list(device.pins) if device is not None else []
+    for pin in pins:
+        pid = str(pin.id)
+        if pid.upper() in {"A", "B"}:
+            continue
+        target = external if pin.side == "right" else internal
+        for wire in _lands(sheet, comp.id, pid):
+            if not any(wire is seen for seen in internal + external):
+                target.append(wire)
+    return internal, external
+
+
+def _is_spare(
+    comp: Component,
+    internal: list[Wire],
+    external: list[Wire],
+    device: Device | None = None,
+) -> str:
+    raw = comp.properties.get("spare")
+    flag = str(raw if raw is not None else "").strip().lower()
+    if flag in _SPARE_ON:
         return "yes"
-    if not internal and not external:
-        return "yes"
-    return ""
+    if raw is False or flag in _SPARE_OFF:
+        return ""
+    if internal or external:
+        return ""
+    if is_pe_terminal(comp, device):
+        return ""
+    return "yes"
 
 
 def terminal_strip_rows(project: Project, catalog: Catalog) -> list[dict[str, str]]:
@@ -532,15 +580,14 @@ def terminal_strip_rows(project: Project, catalog: Catalog) -> list[dict[str, st
             if ident is None or device is None:
                 continue
             strip, terminal = ident
-            internal = _lands(sheet, comp.id, "A")
-            external = _lands(sheet, comp.id, "B")
+            internal, external = terminal_lands(sheet, comp, device)
             props = {**device.properties, **comp.properties}
             row = {
                 "strip": strip,
                 "terminal": terminal,
                 "ref": comp.id,
                 "sheet": sheet.id,
-                "spare": _is_spare(comp, internal, external),
+                "spare": _is_spare(comp, internal, external, device),
                 "jumper": str(comp.properties.get("jumper") or ""),
                 "internal": _wire_text(internal),
                 "external": _wire_text(external),

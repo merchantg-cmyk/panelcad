@@ -58,15 +58,15 @@ def _clear_then_number(session: Session) -> None:
 
 
 def build_nema_seal_in(name: str = "NEMA seal-in") -> Session:
-    """Sheet 1: stop / start / M1 + seal-in, CR coil to L2, CR NO off-page.
+    """Sheet 1: stop / start / M1 + seal-in, M1 NO picks up CR1, CR NO off-page.
 
     Sheet 2: FROM that contact output through CR1 NC and PL1 to L2.
     """
 
     s = Session.create(name, sheet_id="control", title="Control")
     s.set_title_block(
-        company="ECS Shop",
-        customer="Ada",
+        company="Example Company",
+        customer="Example Customer",
         location="MCC demo",
         drawing_number="E-XREF",
         drawn_by="PanelCAD",
@@ -93,10 +93,13 @@ def build_nema_seal_in(name: str = "NEMA seal-in") -> Session:
     s.wire("PB2.3", "M1-13.3")
     s.wire("M1-13.4", "M1.A1")
 
-    # Line 106 — CR1 coil straight L1 to L2
+    # Line 106 — M1 running (M1-23 NO) picks up CR1. A coil wired straight
+    # from L1 to L2 would be on whenever control power is.
     y106 = _rung_y(s, 6)
+    _on_rung(s, "nema.contactors.aux_no", "M1-23", 88, y106, "3")
     _on_rung(s, "nema.contactors.coil", "CR1", 210, y106, "A1")
-    s.wire("L1", "CR1.A1")
+    s.wire("L1", "M1-23.3")
+    s.wire("M1-23.4", "CR1.A1")
     s.wire("CR1.A2", "L2")
 
     # Line 108 — L1 CR1-13 (NO) TO sheet 2
@@ -156,7 +159,8 @@ def build_iec_mirror(name: str = "IEC contact mirror") -> Session:
 
     s = Session.create(name, sheet_id="main", title="Control")
     s.set_title_block(
-        company="Acme",
+        company="Example Company",
+        customer="Example Customer",
         drawing_number="E-IEC",
         standard="IEC",
         drawing_style="ladder",

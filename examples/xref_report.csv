@@ -1,5 +1,8 @@
 coil,coil_sheet,coil_location,coil_line,coil_zone,contact,contact_sheet,contact_location,contact_line,contact_zone,state,contact_no,style,nc_mark
-M1,control,102,102,A8,M1-13,control,104,104,B3,NO,13,nema,underline
-OL1,,,,,OL1,control,102,102,A10,NC,95,nema,underline
-CR1,control,106,106,C8,CR1-13,control,108,108,D3,NO,13,nema,underline
-CR1,control,106,106,C8,CR1-21,aux,202,202,A4,NC,21,nema,underline
+PB1,control,102,102,A1,,,,,,,,nema,underline
+PB2,control,102,102,A5,,,,,,,,nema,underline
+M1,control,102,102,A12,M1-13,control,104,104,B5,NO,13,nema,underline
+M1,control,102,102,A12,M1-23,control,106,106,C1,NO,23,nema,underline
+OL1,,,,,OL1,control,102,102,A14,NC,95,nema,underline
+CR1,control,106,106,C14,CR1-13,control,108,108,D1,NO,13,nema,underline
+CR1,control,106,106,C14,CR1-21,aux,205,205,C3,NC,21,nema,underline

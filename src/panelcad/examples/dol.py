@@ -39,7 +39,7 @@ def _assign_dol_catalog(session: Session) -> None:
 def build_dol(name: str = "DOL Motor Starter", *, confirm_envelopes: bool = True) -> Session:
     s = Session.create(name, sheet_id="power", title="Power")
     s.set_title_block(
-        company="Acme Process Controls",
+        company="Example Controls",
         address="12 Industrial Way",
         customer="Riverside Pump Station",
         location="MCC-1 / Pump 1",

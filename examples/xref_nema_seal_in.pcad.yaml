@@ -3,10 +3,10 @@ version: '0.1'
 name: NEMA seal-in
 properties: {}
 title_block:
-  company: ECS Shop
+  company: Example Company
   address: ''
   logo: ''
-  customer: Ada
+  customer: Example Customer
   location: MCC demo
   drawing_number: E-XREF
   drawn_by: PanelCAD
@@ -43,7 +43,7 @@ sheets:
     properties: {}
   - id: PB2
     library_id: nema.operators.pb_no
-    x: 141.66666666666666
+    x: 173.0
     y: 19.700000000000003
     rotation: 0
     mirror: false
@@ -64,8 +64,15 @@ sheets:
     properties: {}
   - id: M1-13
     library_id: nema.contactors.aux_no
-    x: 141.66666666666666
+    x: 173.0
     y: 59.099999999999994
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: M1-23
+    library_id: nema.contactors.aux_no
+    x: 37.0
+    y: 84.5
     rotation: 0
     mirror: false
     properties: {}
@@ -78,7 +85,7 @@ sheets:
     properties: {}
   - id: CR1-13
     library_id: nema.contactors.aux_no
-    x: 88.0
+    x: 37.0
     y: 109.89999999999999
     rotation: 0
     mirror: false
@@ -133,24 +140,29 @@ sheets:
     points: []
   - id: w8
     from: L1
-    to: CR1.A1
+    to: M1-23.3
     number: '101'
     points: []
   - id: w9
+    from: M1-23.4
+    to: CR1.A1
+    number: '106'
+    points: []
+  - id: w10
     from: CR1.A2
     to: L2
     number: '104'
     points: []
-  - id: w10
+  - id: w11
     from: L1
     to: CR1-13.3
     number: '101'
     points: []
-  - id: w11
+  - id: w12
     from: CR1-13.4
     to: OP1.A
     net: OP
-    number: '106'
+    number: '107'
     points: []
   rail_hot: L1
   rail_return: L2
@@ -165,8 +177,8 @@ sheets:
   components:
   - id: OP2
     library_id: iec.connection.offpage_from
-    x: 40.0
-    y: 37.7
+    x: 27.0
+    y: 79.0
     rotation: 0
     mirror: false
     properties:
@@ -177,7 +189,7 @@ sheets:
       link: control:CR1-13.4|aux:OP2.A
   - id: CR1-21
     library_id: nema.contactors.aux_nc
-    x: 37.0
+    x: 91.0
     y: 75.0
     rotation: 0
     mirror: false
@@ -190,18 +202,18 @@ sheets:
     mirror: false
     properties: {}
   wires:
-  - id: w12
+  - id: w13
     from: OP2.A
     to: CR1-21.1
     net: OP
-    number: '106'
+    number: '107'
     points: []
-  - id: w13
+  - id: w14
     from: CR1-21.2
     to: PL1.X1
     number: '201'
     points: []
-  - id: w14
+  - id: w15
     from: PL1.X2
     to: L2
     number: '104'

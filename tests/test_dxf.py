@@ -66,7 +66,7 @@ def test_dxf_schematic_has_layers_text_and_titleblock(tmp_path: Path):
     joined = " ".join(texts)
     assert "Q1" in joined
     assert "K1" in joined
-    assert "Acme Process Controls" in joined
+    assert "Example Controls" in joined
     assert "E-001" in joined
     assert any(entity.dxf.layer == "WIRES" for entity in doc.modelspace())
     assert any(entity.dxf.layer == "TITLEBLOCK" for entity in doc.modelspace())

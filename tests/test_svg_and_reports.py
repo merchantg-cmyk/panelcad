@@ -14,7 +14,7 @@ def test_dol_svg_and_csv(tmp_path: Path):
     assert "Q1" in svg
     assert "K1" in svg
     assert "COMPANY" in svg
-    assert "Acme Process Controls" in svg
+    assert "Example Controls" in svg
     assert "E-001" in svg
     assert "SHEET" in svg
     assert "REV" in svg

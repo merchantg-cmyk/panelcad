@@ -259,11 +259,11 @@ sheets:
     draw_scale: 1.0
 last_saved:
   user: box
-  host: grok-bot-vm-325352636
+  host: workstation
   time: '2026-10-17T11:11:03'
   summary: saved
 activity:
 - user: box
-  host: grok-bot-vm-325352636
+  host: workstation
   time: '2026-10-17T11:11:03'
   summary: saved

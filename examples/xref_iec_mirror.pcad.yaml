@@ -3,10 +3,10 @@ version: '0.1'
 name: IEC contact mirror
 properties: {}
 title_block:
-  company: Acme
+  company: Example Company
   address: ''
   logo: ''
-  customer: ''
+  customer: Example Customer
   location: ''
   drawing_number: E-IEC
   drawn_by: ''
@@ -52,14 +52,14 @@ sheets:
   - id: K1-21
     library_id: iec.contactors.aux_nc
     x: 37.0
-    y: 84.5
+    y: 97.0
     rotation: 0
     mirror: false
     properties: {}
   - id: H1
     library_id: iec.operators.pilot_light
     x: 359.0
-    y: 82.5
+    y: 95.0
     rotation: 0
     mirror: false
     properties: {}

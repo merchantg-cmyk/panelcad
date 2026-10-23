@@ -26,7 +26,9 @@ from panelcad.core.electrical import (
     _device,
     _is_spare,
     _lands,
+    is_pe_terminal,
     terminal_identity,
+    terminal_lands,
 )
 from panelcad.core.layout import clip_offset, footprint_size
 from panelcad.core.models import Component, Project, Rail, Sheet, Wire
@@ -578,15 +580,15 @@ def layout_terminal_strip(project: Project, catalog: Catalog, strip: str) -> dic
             "row": 0,
         }
         if kind == "terminal" and sheet is not None:
-            ident = terminal_identity(comp, _device(catalog, comp))
-            internal = _lands(sheet, comp.id, "A")
-            external = _lands(sheet, comp.id, "B")
+            device = _device(catalog, comp)
+            ident = terminal_identity(comp, device)
+            internal, external = terminal_lands(sheet, comp, device)
             item["level"] = ident[1] if ident else ""
             item["jumper"] = str(comp.properties.get("jumper") or "")
-            item["spare"] = _is_spare(comp, internal, external) == "yes"
+            item["spare"] = _is_spare(comp, internal, external, device) == "yes"
             item["internal"] = _caption(internal)
             item["external"] = _caption(external)
-            item["pe"] = "pe" in comp.library_id.lower()
+            item["pe"] = is_pe_terminal(comp, device)
         raw.append(item)
 
     rows: list[list[dict[str, Any]]] = []

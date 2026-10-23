@@ -861,7 +861,7 @@ def test_vector_and_fake_scan_round_trip(dol, tmp_path: Path):
     assert "network" in kinds.values()
     vector_built = vector_job.build()
     block = vector_built.project.title_block
-    assert block.company == "Acme Process Controls"
+    assert block.company == "Example Controls"
     assert vector_built.project.name == "DOL Motor Starter"
     assert block.customer == "Riverside Pump Station"
     assert block.location == "MCC-1 / Pump 1"

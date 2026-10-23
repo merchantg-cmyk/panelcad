@@ -420,8 +420,15 @@ def arrange_ladder(sheet: Sheet, catalog: Catalog) -> int:
     auxes: list[Component] = []
     lamps: list[Component] = []
     loads: list[Component] = []
+    wired = {str(end).split(".", 1)[0] for wire in sheet.wires for end in (wire.frm, wire.to)}
+    feeds: list[Component] = []
     for comp in sheet.components:
         if is_offpage(comp.library_id):
+            # A wired off-page FROM arrow is its rung's source. Left where it
+            # was, the contact it feeds sat at the hot rail with its input pin
+            # open and a wire dropping onto its far side.
+            if comp.id in wired and "offpage_from" in comp.library_id:
+                feeds.append(comp)
             continue
         if _is_power_load(comp.library_id) or _is_supply(comp.library_id):
             # A power supply already sits on its own rung above the ladder.
@@ -440,6 +447,7 @@ def arrange_ladder(sheet: Sheet, catalog: Catalog) -> int:
     if not (contacts or outputs or auxes or lamps or loads):
         return 0
     contacts.sort(key=lambda c: (_rung_rank(c.library_id), c.id))
+    feeds.sort(key=lambda c: c.id)
     # Coil and overload follow the wire, so the device that feeds the return
     # rail is the right-hand one. Rank alone parked the overload past the coil.
     path_at = {ref: index for index, ref in enumerate(_longest_path(_wire_graph(sheet)))}
@@ -492,7 +500,23 @@ def arrange_ladder(sheet: Sheet, catalog: Catalog) -> int:
             _drop(comp, x, pin_y)
             x += _width(comp) + gap
 
-    free = _place_left(contacts, rung_y, inner_left)
+    # An off-page source goes first on the row it feeds, so that rung reads
+    # FROM -> contacts -> output. It replaces the hot rail as the feed.
+    neighbours: dict[str, set[str]] = {}
+    for wire in sheet.wires:
+        a_ref = str(wire.frm).split(".", 1)[0]
+        b_ref = str(wire.to).split(".", 1)[0]
+        neighbours.setdefault(a_ref, set()).add(b_ref)
+        neighbours.setdefault(b_ref, set()).add(a_ref)
+    aux_ids = {c.id for c in auxes}
+    hold_feeds = [
+        f for f in feeds if lamps and (not contacts or neighbours.get(f.id, set()) & aux_ids)
+    ]
+    row_feeds = [f for f in feeds if f not in hold_feeds]
+    if row_feeds:
+        free = _place_left(row_feeds + contacts, rung_y, left + 4.0)
+    else:
+        free = _place_left(contacts, rung_y, inner_left)
     _place_right(outputs, rung_y, inner_right, free)
     anchor = next((c for c in contacts if "pb_no" in c.library_id.lower()), None)
     if anchor is None:
@@ -500,7 +524,10 @@ def arrange_ladder(sheet: Sheet, catalog: Catalog) -> int:
     if anchor is None and contacts:
         anchor = contacts[min(1, len(contacts) - 1)]
     if lamps:
-        free_p = _place_left(auxes, rung_y + HOLD_DROP, inner_left)
+        if hold_feeds:
+            free_p = _place_left(hold_feeds + auxes, rung_y + HOLD_DROP, left + 4.0)
+        else:
+            free_p = _place_left(auxes, rung_y + HOLD_DROP, inner_left)
         _place_right(lamps, rung_y + HOLD_DROP, inner_right, free_p)
     else:
         for i, aux in enumerate(auxes):
@@ -1015,6 +1042,8 @@ def cleanup_sheet(session: Session, sheet: Sheet) -> dict[str, Any]:
 
         spaced = apply_spacing_grid(sheet, catalog)
     seated = seat_outputs_at_rail(session, sheet) if not powered and _seats_outputs(session, sheet) else 0
+    if not layout_left_alone(sheet.id) and not powered:
+        spaced += open_mirror_room(session, sheet)
     if not layout_left_alone(sheet.id):
         _clear_routes(sheet)
     from panelcad.core.spacing import page_fullness
@@ -1148,6 +1177,100 @@ def open_rung_gaps(sheet: Sheet, catalog: Catalog, *, gap: float = 2.0) -> int:
                     point.y += dy
             for end in (wire.from_at, wire.to_at):
                 if end is not None and end.y > wire_cut:
+                    end.y += dy
+        moved += len(below)
+    return moved
+
+
+def open_mirror_room(session: Session, sheet: Sheet, *, gap: float = 5.0) -> int:
+    """Move the rungs under a coil down so its contact mirror fits under it.
+
+    The mirror table is drawn centred under its coil. When the next rung's
+    symbol (or its tag) sits in that space, the table was pushed sideways and
+    read as belonging to the lower device. Every rung below the coil moves
+    down together, so each rung keeps its shape. ``gap`` leaves room for the
+    lower device's tag, which is seated above its symbol. Nothing moves when
+    the page has no room below.
+    """
+
+    if not _measured(sheet) or is_layout_sheet(sheet):
+        return 0
+    from panelcad.core.ink import device_ref_layout
+    from panelcad.core.xref import xref_annotations
+    from panelcad.render.titleblock import working_rect
+    from panelcad.render.wire_labels import mark_box
+    from panelcad.render.xref import annotation_box
+
+    project = session.project
+    catalog = session.catalog
+    _wx, wy, _ww, wh = working_rect(sheet)
+    floor = wy + wh - 1.0
+    moved = 0
+    try:
+        anns = [a for a in xref_annotations(project, catalog, sheet) if a.kind == "mirror" and a.mirror_rows]
+    except (KeyError, ValueError, IndexError):
+        return 0
+    by_id = {comp.id: comp for comp in sheet.components}
+
+    def _boxes(comp: Component) -> list[Rect]:
+        try:
+            rect = _aabb(sheet, catalog, comp)
+        except KeyError:
+            return []
+        out = [rect]
+        device = catalog.devices.get(comp.library_id)
+        layout = device_ref_layout(device, comp, ref_align="middle") if device is not None else None
+        if layout is not None:
+            x, y, talign, size = layout
+            out.append(mark_box(x, y, comp.id, align=talign, size=size))
+        return out
+
+    for ann in sorted(anns, key=lambda item: (item.anchor_y, item.owner)):
+        owner = by_id.get(ann.owner)
+        if owner is None:
+            continue
+        try:
+            coil_box = _aabb(sheet, catalog, owner)
+        except KeyError:
+            continue
+        table = annotation_box(ann, ann.anchor_x, ann.anchor_y, "middle")
+        cut = coil_box[3]
+        need = 0.0
+        hit_rung: float | None = None
+        for comp in sheet.components:
+            if comp.id == owner.id:
+                continue
+            boxes = _boxes(comp)
+            if not boxes or boxes[0][1] <= cut:
+                continue
+            for box in boxes:
+                if box[2] <= table[0] or box[0] >= table[2] or box[3] <= table[1] or box[1] >= table[3]:
+                    continue
+                need = max(need, table[3] + gap - box[1])
+                rung = comp.y + _rung_pin_y_offset(catalog, comp)
+                hit_rung = rung if hit_rung is None else min(hit_rung, rung)
+        if need <= 0.05 or hit_rung is None:
+            continue
+        dy = float(int(need / 0.5 + 0.999) * 0.5)
+        below = [
+            comp
+            for comp in sheet.components
+            if comp.id != owner.id
+            and comp.y + _rung_pin_y_offset(catalog, comp) >= hit_rung - 0.5
+            and (_boxes(comp) or [(0, cut + 1, 0, 0)])[0][1] > cut
+        ]
+        lowest = max((_boxes(comp)[0][3] for comp in below if _boxes(comp)), default=cut)
+        if lowest + dy > floor:
+            continue
+        line = min(comp.y for comp in below) - 0.01
+        for comp in below:
+            comp.y += dy
+        for wire in sheet.wires:
+            for point in wire.points:
+                if point.y > line:
+                    point.y += dy
+            for end in (wire.from_at, wire.to_at):
+                if end is not None and end.y > line:
                     end.y += dy
         moved += len(below)
     return moved
@@ -1319,6 +1442,7 @@ def _guarded_cleanup(session: Session, sheet_id: str) -> dict[str, Any]:
                 if name == "nudge":
                     moved += nudge_overlaps(session, page)
                 seated = seat_outputs_at_rail(session, page) if _seats_outputs(session, page) else 0
+                moved += open_mirror_room(session, page)
                 result = {**idle, "unstacked": moved, "seated": seated}
         except Exception:  # noqa: BLE001
             # A page this tidy cannot read (a symbol with no pins, a rung the

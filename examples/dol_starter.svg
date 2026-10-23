@@ -90,7 +90,7 @@
 <rect x="8.000" y="249.000" width="404.000" height="40.000" stroke="#2a2a2a" stroke-width="0.4" fill="#f7f4ea" stroke-linejoin="round" stroke-linecap="round" />
 <rect x="8.000" y="249.000" width="92.000" height="40.000" stroke="#2a2a2a" stroke-width="0.28" fill="#f7f4ea" stroke-linejoin="round" stroke-linecap="round" />
 <text x="10.500" y="253.500" font-size="1.7" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">COMPANY</text>
-<text x="10.500" y="261.500" font-size="3.6" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">Acme Process Controls</text>
+<text x="10.500" y="261.500" font-size="3.6" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">Example Controls</text>
 <text x="10.500" y="268.500" font-size="2.3" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">12 Industrial Way</text>
 <text x="10.500" y="285.000" font-size="1.8" font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="start" fill="#111111">PanelCAD 0.1.0</text>
 <rect x="100.000" y="249.000" width="144.000" height="40.000" stroke="#2a2a2a" stroke-width="0.28" fill="#f7f4ea" stroke-linejoin="round" stroke-linecap="round" />
