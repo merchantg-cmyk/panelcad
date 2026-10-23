@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.5.13 — 2026-10-23
+
+- **Cleanup** — Cleanup seats ladder outputs (coils) 14 mm from the right rail.
+- **Stability** — Fixed a Qt crash and object-lifetime problems in shared widgets, the splash screen, and background checks.
+- **Overview and references** — The overview and cross-references keep one tag per device and follow reference copies (SEE references).
+- **GC1000 terminals** — GC1000 terminals keep the devices they name.
+- **I/O bus** — I/O bus landings stay on the device they name.
+- **Notes check** — The notes check uses the note's real size.
+- **Off-page links** — Off-page arrows pair correctly and keep their devices.
+
 ## 0.5.12 — 2026-10-21
 
 - **Undo** — The toolbar Undo button and Ctrl+Z now work after dragging parts.
