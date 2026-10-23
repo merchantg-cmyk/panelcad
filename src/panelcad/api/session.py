@@ -5277,22 +5277,45 @@ class Session:
         pdf: bool = True,
         paper: str = "mixed",
         sections: list[str] | None = None,
+        sheet_ids: list[str] | None = None,
     ) -> Path:
         from panelcad.io.exchange import export_package
 
-        return export_package(self, dest, pdf=pdf, paper=paper, sections=sections)
+        return export_package(
+            self, dest, pdf=pdf, paper=paper, sections=sections, sheet_ids=sheet_ids
+        )
+
+    def export_package_report(
+        self,
+        dest: Path | str,
+        *,
+        pdf: bool = True,
+        paper: str = "mixed",
+        sections: list[str] | None = None,
+        sheet_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Like export_package, but returns the folder, print result and warnings."""
+
+        from panelcad.io.exchange import export_package_report
+
+        return export_package_report(
+            self, dest, pdf=pdf, paper=paper, sections=sections, sheet_ids=sheet_ids
+        )
 
     def plan_print_package(
         self,
         *,
         sections: str | list[str] | None = None,
         paper: str = "mixed",
+        sheet_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         """Page list for the one-click print package (no file written)."""
 
         from panelcad.render.print_package import plan_print_package
 
-        return plan_print_package(self, sections=sections, paper=paper).as_dict()
+        return plan_print_package(
+            self, sections=sections, paper=paper, sheet_ids=sheet_ids
+        ).as_dict()
 
     @_traced_path("print_package")
     def print_package(
@@ -5301,6 +5324,7 @@ class Session:
         *,
         sections: str | list[str] | None = None,
         paper: str = "mixed",
+        sheet_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         """One PDF: cover, index, revisions, drawings, and paginated reports."""
 
@@ -5315,7 +5339,9 @@ class Session:
         _ensure_qt_app()
         dest = Path(path)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        return write_print_package(self, dest, sections=sections, paper=paper)
+        return write_print_package(
+            self, dest, sections=sections, paper=paper, sheet_ids=sheet_ids
+        )
 
     def import_print(
         self,

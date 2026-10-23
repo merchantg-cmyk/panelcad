@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
+import os
 import shutil
+import tempfile
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -144,6 +147,20 @@ def sniff(path: Path) -> str:
     raise ValueError(f"cannot detect format of {path.name}")
 
 
+# Package section -> data files it owns. Project/sheet YAML, library files and
+# troubleshoot.json always ship: they are what makes the folder re-importable.
+_SECTION_FILES: dict[str, tuple[str, ...]] = {
+    "bom": ("bom.csv", "bom_grouped.csv"),
+    "wires": ("wires.csv", "panel_wires.csv"),
+    "from_to": ("wires.csv", "panel_wires.csv"),
+    "xref": ("cross_reference.csv",),
+    "terminals": ("terminals.csv",),
+    "checks": ("checks.csv", "audit.csv"),
+    "plc_io": ("io.csv",),
+    "interconnect": ("cables.csv", "cable_pull.csv", "cable_terminations.csv"),
+}
+
+
 def export_package(
     session: Any,
     dest: Path | str,
@@ -151,8 +168,46 @@ def export_package(
     pdf: bool = True,
     paper: str = "mixed",
     sections: list[str] | None = None,
+    sheet_ids: list[str] | None = None,
 ) -> Path:
+    """Write the package folder and return it. See export_package_report."""
+
+    return export_package_report(
+        session, dest, pdf=pdf, paper=paper, sections=sections, sheet_ids=sheet_ids
+    )["path"]
+
+
+def export_package_report(
+    session: Any,
+    dest: Path | str,
+    *,
+    pdf: bool = True,
+    paper: str = "mixed",
+    sections: list[str] | None = None,
+    sheet_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Write the package folder.
+
+    ``sections=None`` writes every data file (the historical behaviour). A list
+    limits the report CSVs and SVG/DXF drawings to those sections, and the same
+    list drives print.pdf. ``sheet_ids`` limits the drawings. A print failure is
+    never hidden: it lands in ``warnings`` (and manifest.json) and no
+    substitute PDF is written.
+    """
+
+    import logging
+
     from panelcad.core.troubleshoot import write_troubleshoot
+    from panelcad.render.print_package import normalize_sections, normalize_sheet_ids
+
+    log = logging.getLogger("panelcad.export_package")
+    enabled = set(normalize_sections(sections)) if sections is not None else None
+    chosen = normalize_sheet_ids(session.project, sheet_ids)
+
+    def want(name: str) -> bool:
+        if enabled is None:
+            return True
+        return any(name in files for key, files in _SECTION_FILES.items() if key in enabled)
 
     root = Path(dest)
     if root.suffix:
@@ -160,61 +215,244 @@ def export_package(
     if root.exists() and root.is_file():
         raise ValueError(f"{root} exists and is a file")
     root.mkdir(parents=True, exist_ok=True)
+    written: list[str] = []
+
+    def wrote(*rels: str) -> None:
+        written.extend(rels)
+
     save_project(session.project, root / PROJECT_YAML, backup=False)
     (root / PROJECT_JSON).write_text(
         json.dumps(session.project.model_dump(mode="json", by_alias=True), indent=2),
         encoding="utf-8",
     )
     _write_yaml(root / "title_block.yaml", session.project.title_block.model_dump(mode="json"))
+    wrote(PROJECT_YAML, PROJECT_JSON, "title_block.yaml")
     from panelcad.io.bom import with_needs_info_section
 
-    write_bom_csv(
-        root / "bom.csv",
-        with_needs_info_section(instance_rows(session.project, session.catalog), session.project, session.catalog),
-    )
-    write_bom_csv(
-        root / "bom_grouped.csv",
-        with_needs_info_section(
-            grouped_rows(session.project, session.catalog), session.project, session.catalog
-        ),
-    )
-    write_csv(root / "wires.csv", wire_rows(session.project))
-    write_csv(root / "cross_reference.csv", session.cross_reference_rows())
-    write_csv(root / "terminals.csv", session.terminal_strip_rows())
-    write_csv(root / "audit.csv", session.audit_schematic_panel())
-    write_csv(root / "checks.csv", session.design_checks(include_suppressed=True))
-    write_csv(root / "io.csv", session.io_rows())
+    if want("bom.csv"):
+        write_bom_csv(
+            root / "bom.csv",
+            with_needs_info_section(
+                instance_rows(session.project, session.catalog), session.project, session.catalog
+            ),
+        )
+        write_bom_csv(
+            root / "bom_grouped.csv",
+            with_needs_info_section(
+                grouped_rows(session.project, session.catalog), session.project, session.catalog
+            ),
+        )
+        wrote("bom.csv", "bom_grouped.csv")
+    if want("wires.csv"):
+        write_csv(root / "wires.csv", wire_rows(session.project))
+        wrote("wires.csv")
+    if want("cross_reference.csv"):
+        write_csv(root / "cross_reference.csv", session.cross_reference_rows())
+        wrote("cross_reference.csv")
+    if want("terminals.csv"):
+        write_csv(root / "terminals.csv", session.terminal_strip_rows())
+        wrote("terminals.csv")
+    if want("audit.csv"):
+        write_csv(root / "audit.csv", session.audit_schematic_panel())
+        write_csv(root / "checks.csv", session.design_checks(include_suppressed=True))
+        wrote("audit.csv", "checks.csv")
+    if want("io.csv"):
+        write_csv(root / "io.csv", session.io_rows())
+        wrote("io.csv")
     write_troubleshoot(session.project, session.catalog, root / "troubleshoot.json")
-    write_csv(root / "cables.csv", session.cable_rows())
-    write_csv(root / "cable_pull.csv", pull_rows(session.project))
-    write_csv(root / "cable_terminations.csv", termination_rows(session.project))
-    write_csv(root / "panel_wires.csv", session.panel_wire_annotations())
+    wrote("troubleshoot.json")
+    if want("cables.csv"):
+        write_csv(root / "cables.csv", session.cable_rows())
+        write_csv(root / "cable_pull.csv", pull_rows(session.project))
+        write_csv(root / "cable_terminations.csv", termination_rows(session.project))
+        wrote("cables.csv", "cable_pull.csv", "cable_terminations.csv")
+    if want("panel_wires.csv"):
+        write_csv(root / "panel_wires.csv", session.panel_wire_annotations())
+        wrote("panel_wires.csv")
     sheets_dir = root / "sheets"
+    draw = enabled is None or "drawings" in enabled
+    keep = None if chosen is None else set(chosen)
+    # Re-exporting into the same folder must not leave files from an earlier,
+    # wider selection behind (they would also be listed in manifest.json).
+    # Only files an earlier export itself wrote (its manifest's ``written``
+    # list, content unchanged since) are pruned, and only plain files directly
+    # inside root, root/svg or root/dxf.
+    stale = _previous_package_files(root)
+    if enabled is not None:
+        for owned in {name for files in _SECTION_FILES.values() for name in files}:
+            if not want(owned):
+                _unlink_package_file(root, owned, stale)
+    for sheet in session.project.sheets:
+        if not (draw and (keep is None or sheet.id in keep)):
+            _unlink_package_file(root, f"svg/{sheet.id}.svg", stale)
+            _unlink_package_file(root, f"dxf/{sheet.id}.dxf", stale)
+    if not pdf:
+        _unlink_package_file(root, "print.pdf", stale)
     for sheet in session.project.sheets:
         _write_yaml(sheets_dir / f"{sheet.id}.yaml", sheet.model_dump(mode="json", by_alias=True))
-        session.export_svg(root / "svg" / f"{sheet.id}.svg", sheet_id=sheet.id)
-        session.export_dxf(root / "dxf" / f"{sheet.id}.dxf", sheet_id=sheet.id)
+        wrote(f"sheets/{sheet.id}.yaml")
+        if draw and (keep is None or sheet.id in keep):
+            session.export_svg(root / "svg" / f"{sheet.id}.svg", sheet_id=sheet.id)
+            session.export_dxf(root / "dxf" / f"{sheet.id}.dxf", sheet_id=sheet.id)
+            wrote(f"svg/{sheet.id}.svg", f"dxf/{sheet.id}.dxf")
     for lib, payload in used_library_files(session).items():
         _write_yaml(root / "library" / f"{lib}.yaml", payload)
-    pdf_path = root / "print.pdf"
+        wrote(f"library/{lib}.yaml")
+    warnings: list[str] = []
+    print_result: dict[str, Any] | None = None
+    pdf_path: Path | None = root / "print.pdf"
     if pdf:
+        # Build into a temp file beside print.pdf and swap it in atomically, so
+        # a failed build never damages an existing print.pdf.
+        fd, tmp_name = tempfile.mkstemp(prefix=".print-", suffix=".tmp.pdf", dir=root)
+        os.close(fd)
+        tmp_pdf = Path(tmp_name)
         try:
-            session.print_package(pdf_path, paper=paper, sections=sections)
-        except Exception:
+            print_result = session.print_package(
+                tmp_pdf, paper=paper, sections=sections, sheet_ids=chosen
+            )
+            if not tmp_pdf.is_file() or tmp_pdf.stat().st_size == 0:
+                raise RuntimeError("the PDF builder produced no file")
+            os.replace(tmp_pdf, pdf_path)
+            if isinstance(print_result, dict) and "path" in print_result:
+                print_result["path"] = str(pdf_path)
+            wrote("print.pdf")
+        except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+            message = f"print.pdf was not written: {exc}"
+            log.warning("export package %s: %s", root, message)
+            warnings.append(message)
+            # A print.pdf an earlier export wrote (unchanged since) is stale now;
+            # anything else, e.g. a hand-placed print.pdf, is left alone.
+            _unlink_package_file(root, "print.pdf", stale)
+            pdf_path = None
+        finally:
             try:
-                session.export_pdf(pdf_path)
-            except Exception:
-                pdf_path = None  # still a valid package without PDF
+                tmp_pdf.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as exc:  # pragma: no cover - reported only
+                log.warning("export package %s: could not remove %s: %s", root, tmp_pdf.name, exc)
+    else:
+        pdf_path = None
+    log.info(
+        "export package %s: requested sections=%s sheets=%s pages=%s",
+        root,
+        "all" if sections is None else list(sections),
+        "all" if chosen is None else chosen,
+        print_result["pages"] if print_result else "no pdf",
+    )
     files = sorted(str(p.relative_to(root)).replace("\\", "/") for p in root.rglob("*") if p.is_file())
-    manifest = {
+    manifest: dict[str, Any] = {
         "format": "panelcad-package",
         "version": "0.1",
         "name": session.project.name,
         "sheets": [s.id for s in session.project.sheets],
         "files": files,
+        "written": sorted(set(written)),
+        "written_sha256": {rel: _sha256(root / rel) for rel in sorted(set(written)) if (root / rel).is_file()},
     }
+    if sections is not None:
+        manifest["sections"] = sorted(enabled or [])
+    if chosen is not None:
+        manifest["drawing_sheets"] = chosen
+    if warnings:
+        manifest["warnings"] = warnings
     (root / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    return root
+    return {
+        "path": root,
+        "pdf": pdf_path,
+        "print": print_result,
+        "warnings": warnings,
+        "sections": None if enabled is None else [k for k in print_sections_order() if k in enabled],
+        "sheet_ids": chosen,
+    }
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _previous_package_files(root: Path) -> dict[str, str]:
+    """Files an earlier export of ``root`` itself wrote, with their sha256.
+
+    Only the manifest's ``written`` list counts (never ``files``, which lists
+    everything in the folder). A manifest without ``written`` (older PanelCAD)
+    or without a hash for a file yields nothing for it, so it is never pruned.
+    """
+
+    try:
+        data = json.loads((root / MANIFEST_NAME).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict) or data.get("format") != "panelcad-package":
+        return {}
+    written = data.get("written")
+    hashes = data.get("written_sha256")
+    if not isinstance(written, list) or not isinstance(hashes, dict):
+        return {}
+    return {
+        f: hashes[f]
+        for f in written
+        if isinstance(f, str) and isinstance(hashes.get(f), str)
+    }
+
+
+def _unlink_package_file(root: Path, rel: str, listed: dict[str, str]) -> None:
+    """Delete root/rel only if an earlier export wrote it (its manifest's
+    ``written`` list), its content is unchanged since (sha256), and it is a plain
+    file directly in root, root/svg or root/dxf (no '..', separators or links)."""
+
+    if rel not in listed:
+        return
+    parts = rel.split("/")
+    if len(parts) == 2:
+        folder, name = parts
+        if folder not in ("svg", "dxf"):
+            return
+    elif len(parts) == 1:
+        folder, name = "", parts[0]
+    else:
+        return
+    if not name or name in (".", "..") or "\\" in name or name.startswith("."):
+        return
+    if name.lower() in {PROJECT_YAML.lower(), PROJECT_JSON.lower(), MANIFEST_NAME.lower(),
+                        "troubleshoot.json", "title_block.yaml"}:
+        return
+    parent = root / folder if folder else root
+    if parent.is_symlink() or not parent.is_dir():
+        return
+    target = parent / name
+    if target.is_symlink() or not target.is_file():
+        return
+    try:
+        real_root = root.resolve()
+        real_parent = parent.resolve()
+        if target.resolve().parent != real_parent or not (
+            real_parent == real_root or real_parent.parent == real_root
+        ):
+            return
+        if _sha256(target) != listed[rel]:
+            return  # replaced or edited since PanelCAD wrote it
+    except OSError:
+        return
+    try:
+        target.unlink()
+    except OSError as exc:  # e.g. open in a PDF viewer on Windows
+        import logging
+
+        logging.getLogger("panelcad.export_package").warning(
+            "export package %s: %s skipped: file in use (%s)", root, rel, exc
+        )
+
+
+def print_sections_order() -> tuple[str, ...]:
+    from panelcad.render.print_package import SECTIONS
+
+    return SECTIONS
 
 
 def import_library(session: Any, path: Path | str) -> list[str]:

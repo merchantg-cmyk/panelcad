@@ -349,8 +349,10 @@ def package_cmd(
     s = Session.open(project)
     parts = [part.strip() for part in (sections or "").split(",") if part.strip()] or None
     if out is not None:
-        dest = s.export_package(out, pdf=True, paper=paper, sections=parts)
-        typer.echo(f"package {dest}")
+        report = s.export_package_report(out, pdf=True, paper=paper, sections=parts)
+        typer.echo(f"package {report['path']}")
+        for warning in report["warnings"]:
+            typer.echo(f"WARNING: {warning}", err=True)
     dest_pdf = pdf
     if dest_pdf is None and out is None:
         dest_pdf = Path(f"{project.stem}_package.pdf")

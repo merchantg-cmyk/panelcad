@@ -3240,30 +3240,58 @@ class MainWindow(QMainWindow):
             n = len(self.session.project.sheets)
             self._status(f"exported {path} — {n} page print set")
 
+    def _package_dialog(self, *, folder: bool, suggested: str):
+        from panelcad.core.panels import package_sheet_order
+        from panelcad.gui import package_dialog as pkg
+
+        key = pkg.selection_key(self.session)
+        sheets = [
+            (sheet.id, sheet.title or sheet.id) for sheet in package_sheet_order(self.session.project)
+        ]
+        dialog = pkg.PrintPackageDialog(
+            self,
+            suggested=suggested,
+            sheets=sheets,
+            initial=pkg.load_selection(key),
+            folder=folder,
+        )
+        if dialog.exec() != dialog.DialogCode.Accepted:
+            return None
+        opts = dialog.values()
+        pkg.save_selection(key, opts)
+        return opts
+
     def print_package(self) -> None:
         self.canvas.sync_positions()
-        from panelcad.gui.package_dialog import PrintPackageDialog
+        from panelcad.gui.package_dialog import describe_result
 
         suggested = "print_package.pdf"
         if self.session.path is not None:
             suggested = str(self.session.path.with_name(f"{self.session.path.stem}_package.pdf"))
-        dialog = PrintPackageDialog(self, suggested=suggested)
-        if dialog.exec() != dialog.DialogCode.Accepted:
+        opts = self._package_dialog(folder=False, suggested=suggested)
+        if opts is None:
             return
-        opts = dialog.values()
         path = str(opts["path"])
+        requested = list(opts["sections"])  # type: ignore[arg-type]
         try:
             result = self.session.print_package(
                 path,
                 paper=str(opts["paper"]),
-                sections=list(opts["sections"]),  # type: ignore[arg-type]
+                sections=requested,
+                sheet_ids=opts.get("sheet_ids"),  # type: ignore[arg-type]
             )
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(self, "Print package failed", str(exc))
             return
         self.canvas.refresh_frame()
         self.canvas.fit_page()
-        self._status(f"print package {result['path']} — {result['pages']} pages")
+        self._status(
+            f"print package {result['path']} — {result['pages']} pages "
+            f"({', '.join(result.get('sections') or [])})"
+        )
+        QMessageBox.information(
+            self, "Print package written", f"{result['path']}\n\n{describe_result(result, requested)}"
+        )
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
@@ -3636,15 +3664,38 @@ class MainWindow(QMainWindow):
 
     def export_package(self) -> None:
         self.canvas.sync_positions()
-        dest = QFileDialog.getExistingDirectory(self, "Export package folder")
-        if not dest:
+        from panelcad.gui.package_dialog import describe_result
+
+        suggested = "package"
+        if self.session.path is not None:
+            suggested = str(self.session.path.with_name(f"{self.session.path.stem}_package"))
+        opts = self._package_dialog(folder=True, suggested=suggested)
+        if opts is None:
             return
+        requested = list(opts["sections"])  # type: ignore[arg-type]
         try:
-            path = self.session.export_package(dest)
+            report = self.session.export_package_report(
+                str(opts["path"]),
+                pdf=True,
+                paper=str(opts["paper"]),
+                sections=requested,
+                sheet_ids=opts.get("sheet_ids"),  # type: ignore[arg-type]
+            )
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(self, "Export failed", str(exc))
             return
+        path = report["path"]
+        if report["warnings"]:
+            self._status(f"exported package {path} — WARNING: no print.pdf")
+            QMessageBox.warning(
+                self,
+                "Package exported without print.pdf",
+                f"{path}\n\n" + "\n".join(report["warnings"]),
+            )
+            return
+        summary = describe_result(report["print"], requested) if report["print"] else ""
         self._status(f"exported package {path}")
+        QMessageBox.information(self, "Package exported", f"{path}\n\n{summary}".strip())
 
     def _on_action_hover(self, action) -> None:
         topic = str(action.property("guidance_help") or "")

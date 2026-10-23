@@ -613,6 +613,7 @@ def plan_print_package(
     *,
     sections: str | Sequence[str] | None = None,
     paper: str = "mixed",
+    sheet_ids: Sequence[str] | None = None,
 ) -> PackagePlan:
     """Deterministic page list. Same project + options → same order and count.
 
@@ -624,7 +625,23 @@ def plan_print_package(
     from panelcad.core.zones import use_sheet_order
 
     with use_sheet_order(package_sheet_order(session.project)):
-        return _plan_print_package(session, sections=sections, paper=paper)
+        return _plan_print_package(session, sections=sections, paper=paper, sheet_ids=sheet_ids)
+
+
+def normalize_sheet_ids(project: Project, sheet_ids: Sequence[str] | None) -> list[str] | None:
+    """``None`` keeps every sheet. Otherwise only known ids, in project order.
+
+    Unknown ids raise so a stale selection can never silently print nothing.
+    """
+
+    if sheet_ids is None:
+        return None
+    known = [sheet.id for sheet in project.sheets]
+    wanted = {str(item).strip() for item in sheet_ids if str(item).strip()}
+    unknown = sorted(wanted - set(known))
+    if unknown:
+        raise ValueError(f"unknown sheet id(s) for print package: {', '.join(unknown)}")
+    return [sid for sid in known if sid in wanted]
 
 
 def _plan_print_package(
@@ -632,6 +649,7 @@ def _plan_print_package(
     *,
     sections: str | Sequence[str] | None = None,
     paper: str = "mixed",
+    sheet_ids: Sequence[str] | None = None,
 ) -> PackagePlan:
     paper = normalize_paper(paper)
     enabled = normalize_sections(sections)
@@ -642,7 +660,14 @@ def _plan_print_package(
     rev_s = (rev.rev if rev else "") or ""
     report_w, report_h = report_page_size(paper)
     all_sheets = package_sheet_order(project)
-    drawn_sheets = all_sheets if "drawings" in enabled else []
+    chosen = normalize_sheet_ids(project, sheet_ids)
+    if "drawings" not in enabled:
+        drawn_sheets = []
+    elif chosen is None:
+        drawn_sheets = all_sheets
+    else:
+        keep = set(chosen)
+        drawn_sheets = [sheet for sheet in all_sheets if sheet.id in keep]
     drawing_count = len(drawn_sheets)
 
     cover_pages: list[PackagePage] = []
@@ -948,6 +973,7 @@ def write_print_package(
     *,
     sections: str | Sequence[str] | None = None,
     paper: str = "mixed",
+    sheet_ids: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """Write a vector PDF with bookmarks and index links. Returns a result dict.
 
@@ -959,7 +985,17 @@ def write_print_package(
     from panelcad.core.zones import use_sheet_order
 
     with use_sheet_order(package_sheet_order(session.project)):
-        return _write_print_package(session, path, sections=sections, paper=paper)
+        return _write_print_package(
+            session, path, sections=sections, paper=paper, sheet_ids=sheet_ids
+        )
+
+
+def _requested_list(sections: str | Sequence[str] | None) -> list[str] | None:
+    if sections is None:
+        return None
+    if isinstance(sections, str):
+        return [part.strip() for part in sections.split(",") if part.strip()]
+    return [str(part) for part in sections]
 
 
 def _write_print_package(
@@ -968,12 +1004,21 @@ def _write_print_package(
     *,
     sections: str | Sequence[str] | None = None,
     paper: str = "mixed",
+    sheet_ids: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     from PySide6.QtGui import QPainter, QPdfWriter
 
     from panelcad.render.pdf_outline import apply_outlines_and_links
 
-    plan = plan_print_package(session, sections=sections, paper=paper)
+    plan = plan_print_package(session, sections=sections, paper=paper, sheet_ids=sheet_ids)
+    requested = _requested_list(sections)
+    log.info(
+        "print package: requested sections=%s resolved=%s sheets=%s pages=%d",
+        "default" if requested is None else requested,
+        plan.sections,
+        "all" if sheet_ids is None else list(sheet_ids),
+        len(plan.pages),
+    )
     if not plan.pages:
         raise ValueError("print package has no pages (enable at least one section)")
 
@@ -1002,6 +1047,8 @@ def _write_print_package(
     result = plan.as_dict()
     result["path"] = str(dest)
     result["outlines"] = outlined
+    result["requested_sections"] = requested
+    result["sheet_ids"] = None if sheet_ids is None else [s["id"] for s in result["sheets"]]
     from panelcad.reconstruct.placeholder import project_has_needs_info
 
     result["not_for_build"] = project_has_needs_info(session.project) or _import_not_for_build(
