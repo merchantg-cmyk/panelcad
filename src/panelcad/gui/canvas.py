@@ -993,6 +993,17 @@ class ComponentItem(QGraphicsItem):
 
             for prim in jumper_primitives(self.device, comp):
                 _paint_primitive(painter, prim)
+            if comp is not None:
+                # Same leads the print draws: a wire never ends beside an inset body.
+                from panelcad.core.pin_ink import pin_lead
+
+                for pin in self.device.pins:
+                    if pin.id in (self._hidden_pins or ()):
+                        continue
+                    end = pin_lead(self.device, comp, pin)
+                    if end is not None:
+                        px, py = comp.pin_xy(pin)
+                        _paint_primitive(painter, Primitive(type="line", x=float(px), y=float(py), x2=end[0], y2=end[1]))
             painter.restore()
         painter.setPen(QPen(_qc("ink"), 0.35))
         painter.setBrush(Qt.BrushStyle.NoBrush)

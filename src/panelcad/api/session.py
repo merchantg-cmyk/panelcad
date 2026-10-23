@@ -4456,8 +4456,12 @@ class Session:
             "feeder": feeder_for_project(self.project, self.catalog),
         }
 
-    def design_checks(self, *, include_suppressed: bool = False) -> list[dict[str, str]]:
-        """Live design findings. Same engine as validate, audit, CLI, and the agent."""
+    def design_checks(self, *, include_suppressed: bool = False, label_cover: bool = False) -> list[dict[str, str]]:
+        """Live design findings. Same engine as validate, audit, CLI, and the agent.
+
+        *label_cover* places labels on undrawn sheets for the covered-label
+        check (seconds on a large project); off, only drawn sheets are read.
+        """
 
         from panelcad.core.checks import run_checks
 
@@ -4469,6 +4473,7 @@ class Session:
                 include_suppressed=include_suppressed,
                 parts=self.parts,
                 project_path=self.path,
+                label_cover=label_cover,
             )
         ]
 

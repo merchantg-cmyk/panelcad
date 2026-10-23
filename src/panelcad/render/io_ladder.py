@@ -229,6 +229,17 @@ def draw_io_sheet(
             cid, pid = parse_pin_ref(end) if "." in end else ("", "")
             if cid in wired:
                 wired[cid].add(pid)
+    # Same collision pass the schematic sheets get. Without it a stacked field
+    # device's tag sat on the symbol above it and wire marks sat on bodies.
+    resolved = None
+    if project is not None:
+        from panelcad.render.label_avoid import resolve_labels
+
+        try:
+            resolved = resolve_labels(project, catalog, sheet, ladder=False, captions=False)
+        except (KeyError, ValueError, IndexError):
+            resolved = None
+    tag_at = resolved.tags if resolved is not None else {}
     for c in modules:
         device = catalog.get(c.library_id)
         ins, outs, _p = io_channels(device)
@@ -237,7 +248,7 @@ def draw_io_sheet(
     for c in others:
         device = catalog.get(c.library_id)
         # Wire already carries the PLC tag. Drawing it again on the coil stacks onto the next rung.
-        draw_device(painter, device, c, coil_style=coil_style, captions=False)
+        draw_device(painter, device, c, coil_style=coil_style, captions=False, tag_at=tag_at.get(c.id))
         callout = str(c.properties.get("callout") or "")
         if project is not None and "offpage" in (c.library_id or ""):
             from panelcad.core.xref import offpage_callout
@@ -264,7 +275,7 @@ def draw_io_sheet(
         routes = route_sheet_wires(sheet, catalog, project=project)
     except (KeyError, ValueError):
         routes = {}
-    marks = place_wire_marks(sheet, catalog, routes, ladder=False)
+    marks = dict(resolved.marks) if resolved is not None else place_wire_marks(sheet, catalog, routes, ladder=False)
     specs = bundle_spec_plan(sheet, routes, ladder=False)
     for wire in sheet.wires:
         pts = routes.get(wire.id) or []

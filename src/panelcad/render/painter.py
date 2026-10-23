@@ -66,12 +66,22 @@ class Painter(ABC):
 
 
 def draw_primitive(
-    painter: Painter, prim: Primitive, ox: float, oy: float, rotation: int = 0, scale: float = 1.0
+    painter: Painter,
+    prim: Primitive,
+    ox: float,
+    oy: float,
+    rotation: int = 0,
+    scale: float = 1.0,
+    mirror: bool = False,
 ) -> None:
     s = scale if scale > 0 else 1.0
 
+    # Same order as pin_world: scale, rotate, then mirror about the origin. A
+    # mirrored symbol drawn unmirrored put its pins on the far side of the body.
     def xf(x: float, y: float) -> tuple[float, float]:
         rx, ry = rotate_point(x * s, y * s, rotation)
+        if mirror:
+            rx = -rx
         return (ox + rx, oy + ry)
 
     if prim.type == "rect":
@@ -101,7 +111,11 @@ def draw_primitive(
         # rotate_point 90° is clockwise on the page, which subtracts from this angle.
         delta = {0: 0.0, 90: -90.0, 180: 180.0, 270: 90.0}.get(int(rotation) % 360, 0.0)
         painter.set_fill(None)
-        painter.arc(c[0], c[1], prim.r * s, prim.start + delta, prim.sweep)
+        start, sweep = prim.start + delta, prim.sweep
+        if mirror:
+            # x -> -x reflects an angle a to 180 - a and reverses the sweep.
+            start, sweep = 180.0 - start, -sweep
+        painter.arc(c[0], c[1], prim.r * s, start, sweep)
     elif prim.type == "polyline":
         painter.polyline([xf(x, y) for x, y in prim.points])
     elif prim.type == "text":
@@ -457,7 +471,8 @@ def draw_device(
         for prim in device.primitives:
             if not isinstance(prim, Primitive):
                 prim = Primitive.model_validate(prim)
-            draw_primitive(painter, prim, component.x, component.y, component.rotation, scale=s)
+            draw_primitive(painter, prim, component.x, component.y, component.rotation, scale=s, mirror=bool(component.mirror))
+        _draw_pin_leads(painter, device, component, s)
     elif draw_control_coil(painter, device, component, coil_style):
         from panelcad.core.pins import extra_captions
 
@@ -491,11 +506,12 @@ def draw_device(
                 continue
             if lamp and component.rotation and prim.type == "text" and str(prim.text).strip() == "H":
                 continue
-            draw_primitive(painter, prim, component.x, component.y, component.rotation, scale=s)
+            draw_primitive(painter, prim, component.x, component.y, component.rotation, scale=s, mirror=bool(component.mirror))
         from panelcad.core.transformer_jumpers import jumper_primitives
 
         for prim in jumper_primitives(device, component):
-            draw_primitive(painter, prim, component.x, component.y, component.rotation, scale=s)
+            draw_primitive(painter, prim, component.x, component.y, component.rotation, scale=s, mirror=bool(component.mirror))
+        _draw_pin_leads(painter, device, component, s, hidden=hidden)
         _draw_rating_lines(painter, device, component, s)
     from panelcad.core.block import has_tag_attribute
     from panelcad.core.ink import device_ref_layout
@@ -518,7 +534,9 @@ def draw_device(
     elif has_tag_attribute(device):
         _draw_block_attributes(painter, device, component, s)
     elif component.rotation:
-        layout = device_ref_layout(device, component, ref_align=ref_align)
+        # The collision pass seats rotated symbols too. Ignoring its seat drew
+        # an off-page tag straight across its own wire.
+        layout = tag_at if tag_at is not None else device_ref_layout(device, component, ref_align=ref_align)
         if layout is not None:
             rx, ry, align, size = layout
             painter.text(rx, ry, shown, size, align=align)
@@ -556,6 +574,31 @@ def draw_device(
         component, device.schematic_height, s, device.schematic_width
     ):
         painter.text(cx, cy, line, 2.2, align="start")
+
+
+def _draw_pin_leads(
+    painter: Painter, device: Device, component: Component, s: float, hidden: set[str] | None = None
+) -> None:
+    """Join each pin to its symbol body when the library leaves a gap.
+
+    Wires end on the pin point. A symbol whose body is inset from the frame,
+    with the pin on the frame and no lead, left every wire stopping short of
+    the drawn device.
+    """
+
+    from panelcad.core.pin_ink import pin_lead
+
+    mirror = bool(component.mirror)
+    for pin in device.pins:
+        if hidden and pin.id in hidden:
+            continue
+        end = pin_lead(device, component, pin)
+        if end is None:
+            continue
+        px, py = component.pin_xy(pin)
+        lead = Primitive(type="line", x=float(px), y=float(py), x2=end[0], y2=end[1])
+        painter.set_stroke("#111111", 0.35)
+        draw_primitive(painter, lead, component.x, component.y, component.rotation, scale=s, mirror=mirror)
 
 
 def _draw_block_attributes(painter: Painter, device: Device, component: Component, scale: float) -> None:

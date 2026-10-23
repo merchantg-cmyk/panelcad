@@ -140,6 +140,8 @@ CHECK_IDS: tuple[str, ...] = (
     "nameplate_flc_approximate",
     "nameplate_unconfirmed",
     "page_over_dense",
+    "wire_end_off_pin",
+    "label_covered_by_wire",
 )
 
 _AMP_RE = re.compile(r"([0-9]+(?:[.][0-9]+)?)\s*A\b", re.I)
@@ -390,8 +392,14 @@ def run_checks(
     include_suppressed: bool = False,
     parts: Any = None,
     project_path: Any = None,
+    label_cover: bool = False,
 ) -> list[Finding]:
-    """Every live check. Structural findings first, then shop design checks."""
+    """Every live check. Structural findings first, then shop design checks.
+
+    *label_cover* runs the label placer for sheets not yet drawn. Off, the
+    covered-label check reads only sheets whose labels are already placed, so
+    a quick check on a large project stays quick.
+    """
 
     findings = list(structural_findings(project, catalog))
     findings.extend(_duplicate_device_tags(project, catalog))
@@ -428,6 +436,8 @@ def run_checks(
     findings.extend(_print_import_findings(project))
     findings.extend(_power_column_overflow(project))
     findings.extend(_page_density(project, catalog))
+    findings.extend(_wire_end_off_pin(project, catalog))
+    findings.extend(_label_covered(project, catalog, compute=label_cover))
     from panelcad.core.transformer_jumpers import jumper_findings
 
     findings.extend(jumper_findings(project, catalog))
@@ -444,6 +454,124 @@ def run_checks(
             continue
         out.append(item)
     out.sort(key=_finding_rank)
+    return out
+
+
+# A wire end further than this (mm, on the sheet) from any symbol ink is
+# drawn off the device.
+OFF_PIN_TOL = 0.75
+
+
+def _drawn_from_primitives(device: Device, comp: Component) -> bool:
+    """True for symbols the generic painter draws from library primitives."""
+
+    from panelcad.render.painter import is_control_coil
+
+    props = comp.properties or {}
+    if props.get("ladder_card") or props.get("ladder_coil"):
+        return False
+    cat = (device.category or "").lower()
+    if cat.startswith("connection.notes") or not device.primitives:
+        return False
+    if is_control_coil(device, comp.library_id):
+        return False
+    try:
+        from panelcad.render.io_ladder import is_io_module
+
+        if is_io_module(device):
+            return False
+    except Exception:  # noqa: BLE001 - an odd device is not this check's problem
+        return False
+    return True
+
+
+def _wire_end_off_pin(project: Project, catalog: Catalog) -> list[Finding]:
+    """A wire whose end lands in white space beside the symbol it names."""
+
+    from panelcad.core.pin_ink import pin_gap
+    from panelcad.render.sheet import parse_pin_ref
+
+    out: list[Finding] = []
+    for sheet in project.sheets:
+        if sheet.kind not in ("schematic", "io"):
+            continue
+        for wire in sheet.wires:
+            for end in (wire.frm, wire.to):
+                if "." not in str(end):
+                    continue
+                try:
+                    cid, pid = parse_pin_ref(end)
+                    comp = sheet.component(cid)
+                except (KeyError, ValueError):
+                    continue
+                device = _device(catalog, comp)
+                if device is None or not _drawn_from_primitives(device, comp):
+                    continue
+                pin = next((p for p in device.pins if p.id == pid), None)
+                if pin is None:
+                    continue
+                gap = pin_gap(device, comp, pin) * comp.visual_scale()
+                if gap <= OFF_PIN_TOL:
+                    continue
+                x, y = _end_xy(sheet, catalog, end) or (None, None)
+                out.append(
+                    Finding(
+                        "wire_end_off_pin",
+                        "warning",
+                        f"{sheet.id}:{wire.id} ends {gap:.1f} mm off the {comp.id} symbol at pin {pid}. "
+                        f"Library {comp.library_id} has no graphics at that pin; move the pin onto the body "
+                        "or add a lead to the symbol.",
+                        sheet=sheet.id,
+                        ref=wire.id,
+                        target=str(end),
+                        x=x,
+                        y=y,
+                        extra={"library_id": comp.library_id},
+                    )
+                )
+    return out
+
+
+def _label_covered(project: Project, catalog: Catalog, *, compute: bool = True) -> list[Finding]:
+    """Tags and wire numbers still crossed by a wire or another symbol after placement."""
+
+    from panelcad.core.layout import is_generated_io_sheet, is_io_sheet
+    from panelcad.render.label_avoid import covered_labels
+
+    from panelcad.core.ladder import sheet_drawing_style
+
+    out: list[Finding] = []
+    for sheet_no, sheet in enumerate(project.sheets, start=1):
+        if sheet.kind not in ("schematic", "io"):
+            continue
+        # Same choice draw_sheet_body makes, so the seats checked are the seats drawn.
+        style = sheet_drawing_style(sheet, project)
+        generated = is_generated_io_sheet(sheet)
+        hand_io = is_io_sheet(sheet) and not generated
+        ladder = (style == "ladder" and (sheet.kind == "schematic" or generated)) or (
+            style == "iec" and sheet.kind == "schematic"
+        )
+        try:
+            items = covered_labels(
+                project, catalog, sheet, ladder=ladder, sheet_no=sheet_no, captions=not hand_io, peek=not compute
+            )
+        except (KeyError, ValueError, IndexError):
+            continue
+        for item in items or ():
+            what = "tag" if item.kind == "tag" else "wire number"
+            out.append(
+                Finding(
+                    "label_covered_by_wire",
+                    "warning",
+                    f"{sheet.id}: {what} '{item.text.splitlines()[0]}' is covered by {', '.join(item.by[:3])}. "
+                    "No clear seat was found; move the device or open a gap.",
+                    sheet=sheet.id,
+                    ref=item.owner,
+                    target=item.kind,
+                    x=item.x,
+                    y=item.y,
+                )
+            )
     return out
 
 

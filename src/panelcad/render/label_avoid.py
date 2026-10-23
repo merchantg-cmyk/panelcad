@@ -176,12 +176,25 @@ def resolve_labels(
     *,
     ladder: bool = False,
     sheet_no: int = 1,
+    captions: bool = True,
+    peek: bool = False,
 ) -> ResolvedLabels:
-    """Tag, wire-number, and cross-reference seats after the collision pass."""
+    """Tag, wire-number, and cross-reference seats after the collision pass.
+
+    *peek* returns the stored result or None, never running the placers.
+
+    *captions* False is the hand-drawn I/O page, which draws the tag alone.
+    Reserving room for captions it never draws left no seat for the tag.
+    """
 
     global _COMPUTES
     cache = _CACHE.get()
     key = drawing_key(project, catalog, sheet, ladder=ladder, sheet_no=sheet_no)
+    if not captions:
+        key = (*key, "no-captions")
+    if peek:
+        hit = cache.get(key) if cache is not None else None
+        return hit if hit is not None else _STORED.get(key)
     if cache is not None and key in cache:
         return cache[key]
     stored = _STORED.get(key)
@@ -204,7 +217,7 @@ def resolve_labels(
         xrefs = list(xref_mod.place_xref_labels(project, catalog, sheet, ladder=ladder))
     except (KeyError, ValueError, IndexError):
         xrefs = []
-    _avoid(sheet, catalog, project, tags, marks, xrefs, routes, ladder=ladder, sheet_no=sheet_no)
+    _avoid(sheet, catalog, project, tags, marks, xrefs, routes, ladder=ladder, sheet_no=sheet_no, captions=captions)
     resolved = ResolvedLabels(tags=tags, marks=marks, xrefs=xrefs, routes=routes)
     _STORED[key] = resolved
     if cache is not None:
@@ -229,13 +242,24 @@ def _avoid(
     *,
     ladder: bool,
     sheet_no: int,
+    captions: bool = True,
 ) -> None:
     from panelcad.render.sheet_labels import _line_number_boxes
 
     specs = bundle_spec_plan(sheet, routes, ladder=ladder)
     named_bodies = sheet_symbol_bodies(sheet, catalog)
+    # Off-page arrows and junction nodes are not "bodies" for routing, but
+    # their ink still covers text. A wire number keeps the right to sit on the
+    # link its own wire ends on.
+    links = _link_bodies(sheet, catalog)
+    # I/O cards are solid bodies: text may not touch the card border.
+    cards = [(f"card:{cid}", box) for cid, box in _hand_io_cards(sheet, catalog).items()]
+    named_bodies = [*named_bodies, *cards, *links]
     bodies = [box for _name, box in named_bodies]
-    body_of = {name.split(":", 1)[1]: box for name, box in named_bodies if name.startswith("body:")}
+    body_of = {name.split(":", 1)[1]: box for name, box in named_bodies}
+    # A wire number may overlap the frame of the device its wire lands on, not
+    # the arrow of an off-page link: that arrow is drawn right through it.
+    end_body_of = {name.split(":", 1)[1]: box for name, box in named_bodies if name.startswith("body:")}
     wx, wy, ww, wh = working_rect(sheet)
     bounds = (wx, wy, wx + ww, wy + wh)
     tx, ty, tw, th = title_block_rect(sheet)
@@ -249,7 +273,7 @@ def _avoid(
         x, y, align, size = layout
         box = text_box(x, y, cid, size, align)
         boxes = [box] if box is not None else []
-        comp = _comp(sheet, cid)
+        comp = _comp(sheet, cid) if captions else None
         if comp is None:
             return boxes
         for cx, cy, calign, csize, line in caption_layouts(comp, layout):
@@ -273,14 +297,31 @@ def _avoid(
     # Long bus lanes are not tag obstacles unless they are named here. A tag
     # parked above a breaker then sits on the phase lanes.
     conductors = _long_conductor_boxes(routes)
+    # Every drawn conductor is an obstacle for text. Only long horizontal buses
+    # were before, so a tag or wire number could sit on a lead or a riser.
+    # Pin leads are ink the painter adds at the pin. Text may not sit on any
+    # of them, the lead of its own wire included: the lead runs at right
+    # angles into the body, through a number seated beside the pin.
+    lead_routes = _lead_routes(sheet, catalog)
+    wire_boxes = _wire_boxes({**routes, **lead_routes})
+    all_wires = [box for boxes in wire_boxes.values() for box in boxes]
+    # What makes a label move: a conductor or link arrow drawn through its
+    # text. Air under WIRE_CLEAR is only a preference while searching, so a
+    # label that already reads cleanly stays where it was drawn.
+    crossing = _wire_boxes({**routes, **lead_routes}, clear=-TOUCH_DEPTH)
+    link_names = {name for name, _box in links}
+    plain_bodies = [box for name, box in named_bodies if name not in link_names]
+    link_ink = [_shrink(box, 1.0 + TOUCH_DEPTH) for _name, box in links]
     for _ in range(6):
         changed = False
         for cid, layout in list(tags.items()):
             own = tag_boxes(cid, layout)
             blocked_by = _others(
-                own, bodies, fixed, _all_tags(tags, tag_boxes, skip=cid), _all_marks(marks, mark_boxes), xref_boxes()
+                own, plain_bodies, fixed, _all_tags(tags, tag_boxes, skip=cid), _all_marks(marks, mark_boxes), xref_boxes()
             )
             blocked_by.extend(conductors)
+            blocked_by.extend(box for boxes in crossing.values() for box in boxes)
+            blocked_by.extend(link_ink)
             if not own or not _hits(own, blocked_by):
                 continue
             found = _search_tag(
@@ -297,6 +338,10 @@ def _avoid(
                 bounds,
                 conductors,
                 body_of.get(cid),
+                captions=captions,
+                wires=all_wires,
+                rivals=[box for name, box in named_bodies if name.split(":", 1)[1] != cid],
+                ink=[*(box for boxes in crossing.values() for box in boxes), *link_ink],
             )
             if found is not None and found != layout:
                 tags[cid] = found
@@ -324,13 +369,19 @@ def _avoid(
             if not own:
                 continue
             others = _others(own, bodies, fixed, _all_tags(tags, tag_boxes), _all_marks(marks, mark_boxes, skip=wid), xref_boxes())
-            ignore = _end_bodies(by_id.get(wid), body_of)
-            hits_except_ends = _hits(own, _without(others, ignore))
+            mine = {wid}
+            others.extend(box for other, boxes in wire_boxes.items() if other not in mine for box in boxes)
+            ignore = _end_bodies(by_id.get(wid), end_body_of)
+            trigger = _others(
+                own, plain_bodies, fixed, _all_tags(tags, tag_boxes), _all_marks(marks, mark_boxes, skip=wid), xref_boxes()
+            )
+            trigger.extend(box for other, boxes in crossing.items() if other not in mine for box in boxes)
+            trigger.extend(link_ink)
             # A number may graze its own terminals. Sitting on the symbol body
             # is still a collision. Keep the body as an obstacle on every pass
             # so a mark that just left the outline does not snap back onto it.
             on_end_body = _overlap_area(own[0], ignore) > 0.2
-            if not far and not hits_except_ends and not on_end_body:
+            if not far and not _hits(own, _without(trigger, ignore)) and not on_end_body:
                 continue
             stub = False
             if pts:
@@ -358,6 +409,107 @@ def _avoid(
                 changed = True
         if not changed:
             break
+
+
+# Clear air between text and a conductor it does not belong to (mm).
+WIRE_CLEAR = 0.4
+
+
+def _lead_routes(sheet: Sheet, catalog: Catalog) -> dict[str, list[Point]]:
+    """Pin leads as two-point routes keyed "lead:<comp>.<pin>"."""
+
+    from panelcad.core.pin_ink import lead_segments
+
+    out: dict[str, list[Point]] = {}
+    cards = _hand_io_cards(sheet, catalog)
+    for comp in sheet.components:
+        device = catalog.devices.get(comp.library_id)
+        if device is None or not device.primitives or comp.id in cards:
+            continue
+        try:
+            segs = lead_segments(device, comp)
+        except (KeyError, ValueError):
+            continue
+        for pid, (x1, y1, x2, y2) in segs:
+            out[f"lead:{comp.id}.{pid}"] = [Point(x=x1, y=y1), Point(x=x2, y=y2)]
+    return out
+
+
+# How far ink must reach into a text box before it counts as drawn through it.
+TOUCH_DEPTH = 0.15
+
+
+def _shrink(box, by: float):
+    return (box[0] + by, box[1] + by, box[2] - by, box[3] - by)
+
+
+def _wire_boxes(
+    routes: dict[str, list[Point]], clear: float | None = None
+) -> dict[str, list[tuple[float, float, float, float]]]:
+    """One box per route segment, shrunk so _hits' 1 mm pad leaves WIRE_CLEAR.
+
+    A conductor is a hairline. The full text pad around it pushed labels a
+    millimetre further off every lead than they need to be.
+    """
+
+    shrink = 1.0 - (WIRE_CLEAR if clear is None else clear)
+    out: dict[str, list[tuple[float, float, float, float]]] = {}
+    for wid, pts in routes.items():
+        boxes = []
+        for a, b in zip(pts, pts[1:]):
+            if hypot(b.x - a.x, b.y - a.y) < 0.05:
+                continue
+            boxes.append(
+                (
+                    min(a.x, b.x) + shrink,
+                    min(a.y, b.y) + shrink,
+                    max(a.x, b.x) - shrink,
+                    max(a.y, b.y) - shrink,
+                )
+            )
+        out[wid] = boxes
+    return out
+
+
+def _hand_io_cards(sheet: Sheet, catalog: Catalog) -> dict[str, tuple[float, float, float, float]]:
+    """Drawn extent of each I/O card on a hand-drawn I/O page.
+
+    draw_io_sheet paints the module as a card wider than its library symbol,
+    with the pins on the card edge. The symbol box missed the strip between,
+    so wire numbers were seated across the card border.
+    """
+
+    from panelcad.core.layout import is_generated_io_sheet, is_io_sheet
+
+    if not is_io_sheet(sheet) or is_generated_io_sheet(sheet):
+        return {}
+    from panelcad.render.io_ladder import io_card_size, is_io_module
+
+    out = {}
+    for comp in sheet.components:
+        device = catalog.devices.get(comp.library_id)
+        if device is None or not is_io_module(device):
+            continue
+        w, h = io_card_size(device, comp)
+        out[comp.id] = (comp.x, comp.y, comp.x + w, comp.y + h)
+    return out
+
+
+def _link_bodies(sheet: Sheet, catalog: Catalog) -> list[tuple[str, tuple[float, float, float, float]]]:
+    from panelcad.render.sheet_labels import symbol_body_box
+
+    out = []
+    for comp in sheet.components:
+        device = catalog.devices.get(comp.library_id)
+        if device is None:
+            continue
+        cat = (device.category or "").lower()
+        if not cat.startswith("connection.") or "terminal" in cat or cat.startswith("connection.notes"):
+            continue
+        if not device.primitives:
+            continue
+        out.append((f"link:{comp.id}", symbol_body_box(comp, device)))
+    return out
 
 
 def _long_conductor_boxes(routes: dict[str, list[Point]]) -> list[tuple[float, float, float, float]]:
@@ -396,9 +548,15 @@ def _search_tag(
     bounds,
     conductors=None,
     owner_body=None,
+    *,
+    captions: bool = True,
+    wires=None,
+    rivals=None,
+    ink=None,
 ):
     x, y, align, size = layout
     comp = _comp(sheet, cid)
+    caption_comp = comp if captions else None
 
     def boxes_at(px, py, palign):
         trial = (px, py, palign, size)
@@ -406,8 +564,8 @@ def _search_tag(
         box = text_box(px, py, cid, size, palign)
         if box is not None:
             own.append(box)
-        if comp is not None:
-            for cx, cy, calign, csize, line in caption_layouts(comp, trial):
+        if caption_comp is not None:
+            for cx, cy, calign, csize, line in caption_layouts(caption_comp, trial):
                 cbox = text_box(cx, cy, line, csize, calign)
                 if cbox is not None:
                     own.append(cbox)
@@ -415,6 +573,7 @@ def _search_tag(
 
     others = _others([], bodies, fixed, _all_tags(tags, tag_boxes, skip=cid), _all_marks(marks, mark_boxes), xref_boxes())
     others.extend(conductors or [])
+    others.extend(wires or [])
     # The phase lanes run in the band above a feeder column, which is also
     # where the tag wants to sit. Only then try a seat beside the symbol.
     # Doing this for every blocked tag pulled F1 off the overload.
@@ -435,12 +594,101 @@ def _search_tag(
             for box in bodies
             if tuple(box) != tuple(owner_body) and _rects_touch(owner_body, box)
         }
+    if ink is not None:
+        # The seat the plain search has always picked stands when no wire or
+        # link arrow is drawn through it. Only a crossed seat is searched again
+        # with the wires as obstacles, so clean drawings keep their layout.
+        plain = [box for box in others if box not in (wires or [])] if wires else others
+        first = _search_point(
+            x, y, align, boxes_at, plain, bounds, prefer_up=True, owner_body=owner_body, covered_neighbors=covered
+        )
+        if first is not None and not _hits(boxes_at(*first), ink):
+            return (first[0], first[1], first[2], size)
+    if owner_body is not None:
+        seat = _beside_body(boxes_at, owner_body, size, others, bounds, rivals or [], covered)
+        if seat is not None:
+            return (seat[0], seat[1], seat[2], size)
     found = _search_point(
-        x, y, align, boxes_at, others, bounds, prefer_up=True, owner_body=owner_body, covered_neighbors=covered
+        x,
+        y,
+        align,
+        boxes_at,
+        others,
+        bounds,
+        prefer_up=True,
+        owner_body=owner_body,
+        covered_neighbors=covered,
+        rivals=rivals,
     )
+    if found is None and (wires or rivals):
+        # Nothing clears every conductor and reads as this symbol's tag. Take
+        # the seat the plain search finds rather than leave the tag where it
+        # was blocked; the covered-label check reports what is still crossed.
+        plain = [box for box in others if box not in (wires or [])] if wires else others
+        found = _search_point(
+            x, y, align, boxes_at, plain, bounds, prefer_up=True, owner_body=owner_body, covered_neighbors=covered
+        )
     if found is None:
         return None
     return (found[0], found[1], found[2], size)
+
+
+# A tag further than this from its own symbol no longer reads as its tag.
+TAG_REACH = 6.0
+
+
+def _box_gap(a, b) -> float:
+    dx = max(0.0, max(a[0], b[0]) - min(a[2], b[2]))
+    dy = max(0.0, max(a[1], b[1]) - min(a[3], b[3]))
+    return hypot(dx, dy)
+
+
+def _reads_as_own(box, owner_body, rivals) -> bool:
+    """True when the tag is near its symbol and no other symbol is nearer."""
+
+    own = _box_gap(box, owner_body)
+    if own > TAG_REACH:
+        return False
+    return all(_box_gap(box, other) > own + 0.2 for other in rivals)
+
+
+def _beside_body(boxes_at, body, size, others, bounds, rivals, covered=None):
+    """Seats hugging the owner's body, nearest corners first.
+
+    The generic ring search starts from the default seat. When the default
+    sits between two stacked symbols every ring step lands nearer the
+    neighbour, or far down the sheet, and the tag ends up beside the wrong
+    device.
+    """
+
+    from panelcad.core.ink import TEXT_ASCENT, TEXT_DESCENT
+
+    gap = 1.4
+    up = size * TEXT_ASCENT
+    down = size * TEXT_DESCENT
+    x1, y1, x2, y2 = body
+    seats = (
+        (x1, y1 - gap - down, "start"),
+        (x2 + gap, y1 + up, "start"),
+        (x1 - gap, y1 + up, "end"),
+        (x2 + gap, y2 - down, "start"),
+        (x1 - gap, y2 - down, "end"),
+        ((x1 + x2) / 2.0, y2 + gap + up, "middle"),
+        (x1, y2 + gap + up, "start"),
+    )
+    blocking = others
+    if covered:
+        blocking = [box for box in others if tuple(box) not in covered]
+    for sx, sy, align in seats:
+        boxes = boxes_at(sx, sy, align)
+        if not boxes or any(not _inside(box, bounds) for box in boxes):
+            continue
+        if _hits(boxes, blocking):
+            continue
+        if not _reads_as_own(boxes[0], body, rivals):
+            continue
+        return (sx, sy, align)
+    return None
 
 
 def _search_on_wire(
@@ -496,7 +744,11 @@ def _search_on_wire(
                 best_clear = (sx, sy, align)
                 best_rank = rank
             continue
-        area = _overlap_area(box, obstacles)
+        # Crossing a conductor counts like a square millimetre of body. The
+        # shrunk wire boxes have no area of their own.
+        area = _overlap_area(box, obstacles) + sum(
+            1.0 for other in obstacles if (other[0] > other[2] or other[1] > other[3]) and _hits([box], [other])
+        )
         if area < best_area - 0.01 or (abs(area - best_area) <= 0.01 and rank < best_overlap_rank):
             best_overlap = (sx, sy, align)
             best_area = area
@@ -618,6 +870,7 @@ def _search_point(
     prefer_up: bool = False,
     owner_body=None,
     covered_neighbors: set[tuple[float, float, float, float]] | None = None,
+    rivals=None,
 ):
     best = None
     best_rank = 10**9
@@ -641,6 +894,8 @@ def _search_point(
             if not boxes or any(not _inside(box, bounds) for box in boxes):
                 continue
             if owner_body is not None and _faces_away(boxes[0], x, owner_body):
+                continue
+            if owner_body is not None and rivals is not None and not _reads_as_own(boxes[0], owner_body, rivals):
                 continue
             # A symbol drawn on top of its neighbor (a lamp on a button) makes
             # the neighbor's box cover the lamp's own tag corner. That neighbor
@@ -768,3 +1023,102 @@ def _comp(sheet: Sheet, cid: str):
         return sheet.component(cid)
     except KeyError:
         return None
+
+
+@dataclass(frozen=True)
+class CoveredLabel:
+    kind: str  # "tag" or "mark"
+    owner: str  # component id or wire id
+    text: str
+    x: float
+    y: float
+    by: tuple[str, ...]
+
+
+def _segment_crosses_box(a: Point, b: Point, box, inset: float = 0.15) -> bool:
+    x1, y1, x2, y2 = box[0] + inset, box[1] + inset, box[2] - inset, box[3] - inset
+    if x1 >= x2 or y1 >= y2:
+        return False
+    # Routes are orthogonal. A diagonal is checked by its bounding box, which
+    # can only over-report.
+    return not (max(a.x, b.x) < x1 or min(a.x, b.x) > x2 or max(a.y, b.y) < y1 or min(a.y, b.y) > y2)
+
+
+def covered_labels(
+    project: Project,
+    catalog: Catalog,
+    sheet: Sheet,
+    *,
+    ladder: bool = False,
+    sheet_no: int = 1,
+    captions: bool = True,
+    peek: bool = False,
+) -> list[CoveredLabel] | None:
+    """Tags and wire numbers that a foreign conductor or symbol body still covers.
+
+    The collision pass moves what it can. What is left here had no clear seat
+    and is a drawing problem for a person to fix (move a device, open a gap).
+    """
+
+    resolved = resolve_labels(project, catalog, sheet, ladder=ladder, sheet_no=sheet_no, captions=captions, peek=peek)
+    if resolved is None:
+        return None
+    named = [*sheet_symbol_bodies(sheet, catalog), *_link_bodies(sheet, catalog)]
+    body_of = {name.split(":", 1)[1]: box for name, box in named}
+    by_id = {wire.id: wire for wire in sheet.wires}
+    specs = bundle_spec_plan(sheet, resolved.routes, ladder=ladder)
+    out: list[CoveredLabel] = []
+
+    leads = _lead_routes(sheet, catalog)
+
+    def crossers(box, *, skip_wire: str = "", skip_bodies: tuple = ()) -> list[str]:
+        hits: list[str] = []
+        for wid, pts in {**resolved.routes, **leads}.items():
+            if wid == skip_wire:
+                continue
+            if any(_segment_crosses_box(a, b, box) for a, b in zip(pts, pts[1:])):
+                hits.append(f"wire {wid}")
+        for cid, body in body_of.items():
+            if cid in skip_bodies:
+                continue
+            if boxes_overlap(
+                (box[0] + 0.15, box[1] + 0.15, box[2] - 0.15, box[3] - 0.15), body
+            ) and not _contains(body, box):
+                hits.append(f"symbol {cid}")
+        return hits
+
+    for cid, (x, y, align, size) in resolved.tags.items():
+        box = text_box(x, y, cid, size, align)
+        if box is None:
+            continue
+        hits = crossers(box, skip_bodies=(cid,))
+        if hits:
+            out.append(CoveredLabel("tag", cid, cid, x, y, tuple(hits)))
+    for wid, (x, y, align) in resolved.marks.items():
+        wire = by_id.get(wid)
+        if wire is None:
+            continue
+        text = wire.drawn_mark(ladder=ladder)
+        if not text:
+            continue
+        box = mark_box(x, y, text, align=align, spec=specs.get(wid, ""))
+        ends = []
+        from panelcad.render.sheet import parse_pin_ref
+
+        for end in (wire.frm, wire.to):
+            try:
+                ref = parse_pin_ref(end)[0]
+            except ValueError:
+                continue
+            if ref in body_of and not any(name == f"link:{ref}" for name, _box in named):
+                ends.append(ref)
+        hits = crossers(box, skip_wire=wid, skip_bodies=tuple(ends))
+        if hits:
+            out.append(CoveredLabel("mark", wid, text, x, y, tuple(hits)))
+    return out
+
+
+def _contains(outer, inner) -> bool:
+    """Text wholly inside a body is the body's own legend, not covered by it."""
+
+    return outer[0] <= inner[0] and outer[1] <= inner[1] and outer[2] >= inner[2] and outer[3] >= inner[3]
