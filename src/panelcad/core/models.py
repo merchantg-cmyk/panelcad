@@ -5,11 +5,23 @@ from __future__ import annotations
 import math
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel as PydanticBaseModel
+from pydantic import ConfigDict, Field, field_validator
 
 from panelcad.core.geometry import Page, Point
 from panelcad.core.revisions import RevisionControl
 from panelcad.version import FORMAT_VERSION
+
+
+class BaseModel(PydanticBaseModel):
+    """Project-document model. The core schema is built on first use.
+
+    Importing the document used to generate every schema up front, inside the
+    same step that loaded Pydantic plugins. Callers that only need a name or a
+    helper do not pay for that.
+    """
+
+    model_config = ConfigDict(defer_build=True)
 
 SheetKind = Literal["schematic", "panel_layout", "door_layout", "terminal", "network", "io"]
 PortKind = Literal["ethernet", "serial", "usb", "can", "fieldbus", "other"]

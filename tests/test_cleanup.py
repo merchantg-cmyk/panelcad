@@ -7,6 +7,8 @@ def test_rung_rank_fuse_before_stop():
     assert _rung_rank("nema.protection.fuse_10a") < _rung_rank("nema.operators.pb_nc")
     assert _rung_rank("iec.protection.fuse_10a") < _rung_rank("iec.operators.pb_nc")
     assert _rung_rank("nema.terminals.pe") > _rung_rank("nema.protection.overload")
+    assert _rung_rank("nema.contactors.aux_no") < _rung_rank("nema.operators.pilot_light")
+    assert _rung_rank("nema.contactors.aux_no") < _rung_rank("nema.contactors.coil")
 
 
 def test_cleanup_scales_piled_io_field_devices():
@@ -308,6 +310,11 @@ def test_ladder_outputs_hug_return_rail():
     assert pb.x < mid < coil.x
     assert aux.x < mid < lamp.x
     assert abs(coil.x - lamp.x) < 8
+    from panelcad.core.sheet_quality import sheet_quality
+
+    q = sheet_quality(s.sheet(), s.catalog, s.project)
+    assert q["overlaps"] == 0
+    assert q["through"] == 0
 
 
 def test_ladder_lamp_is_not_in_series_with_the_coil():

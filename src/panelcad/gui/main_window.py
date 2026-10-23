@@ -682,10 +682,13 @@ class MainWindow(QMainWindow):
         self._startup_update_waits = 0
         self._startup_updates_ran = False
         QTimer.singleShot(400, self, self._startup_updates)
+        # One stylesheet after the docks exist. A sheet applied earlier, or
+        # skipped on the next window, leaves saveState/restoreState with two
+        # bottom tab bars. reapply does not subscribe the theme hooks twice.
         from panelcad.gui.theme import install
         from panelcad.theme import subscribe
 
-        install()
+        install(reapply=True)
         subscribe(self.refresh_theme)
         self._sync_theme_checks()
         self._refresh_status_widgets()

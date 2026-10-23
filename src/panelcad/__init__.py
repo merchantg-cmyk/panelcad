@@ -6,6 +6,14 @@ before the parts library and the drawing window are imported.
 
 from __future__ import annotations
 
+import os
+
+# The first Pydantic model walks every installed distribution's entry points
+# and imports the logfire plugin registered there. That walk also opens the
+# pytest entry points. PanelCAD does not use the plugin. A caller who set
+# PYDANTIC_DISABLE_PLUGINS already keeps their own list.
+os.environ.setdefault("PYDANTIC_DISABLE_PLUGINS", "__all__")
+
 from panelcad.version import __version__
 
 __all__ = ["Session", "__version__", "create_project", "open_project"]

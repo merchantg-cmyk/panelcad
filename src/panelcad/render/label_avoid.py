@@ -325,9 +325,34 @@ def _avoid(
                 continue
             others = _others(own, bodies, fixed, _all_tags(tags, tag_boxes), _all_marks(marks, mark_boxes, skip=wid), xref_boxes())
             ignore = _end_bodies(by_id.get(wid), body_of)
-            if not far and not _hits(own, _without(others, ignore)):
+            hits_except_ends = _hits(own, _without(others, ignore))
+            # A number may graze its own terminals. Sitting on the symbol body
+            # is still a collision. Keep the body as an obstacle on every pass
+            # so a mark that just left the outline does not snap back onto it.
+            on_end_body = _overlap_area(own[0], ignore) > 0.2
+            if not far and not hits_except_ends and not on_end_body:
                 continue
-            found = _search_on_wire(wid, at, pts, by_id, specs, ladder, others, bounds, ignore)
+            stub = False
+            if pts:
+                span_x = max(p.x for p in pts) - min(p.x for p in pts)
+                span_y = max(p.y for p in pts) - min(p.y for p in pts)
+                stub = span_x < 8.0 and span_y < 8.0
+            # Far column seats are only for millimetre-scale jumpers. A long
+            # rung that grazes a body stays within ON_WIRE of the conductor.
+            beside = stub and (on_end_body or far)
+            found = _search_on_wire(
+                wid,
+                at,
+                pts,
+                by_id,
+                specs,
+                ladder,
+                others,
+                bounds,
+                [],
+                route_limit=42.0 if beside else ON_WIRE,
+                beside_stub=beside,
+            )
             if found is not None and found != at:
                 marks[wid] = found
                 changed = True
@@ -418,7 +443,19 @@ def _search_tag(
     return (found[0], found[1], found[2], size)
 
 
-def _search_on_wire(wid, at, pts, by_id, specs, ladder, others, bounds, ignore=None):
+def _search_on_wire(
+    wid,
+    at,
+    pts,
+    by_id,
+    specs,
+    ladder,
+    others,
+    bounds,
+    ignore=None,
+    route_limit: float = ON_WIRE,
+    beside_stub: bool = False,
+):
     """A seat on this wire. A blocked seat still beats a number left off the run."""
 
     wire = by_id.get(wid)
@@ -429,14 +466,28 @@ def _search_on_wire(wid, at, pts, by_id, specs, ladder, others, bounds, ignore=N
         return None
     spec = specs.get(wid, "")
     obstacles = _without(others, ignore or [])
-    seats = _seats(pts) or _short_seats(pts)
+    seats = list(_seats(pts) or _short_seats(pts))
+    seats.append((at[0], at[1], at[2]))
+    if beside_stub:
+        # A 1 mm stub between two fat symbols has no on-wire seat that
+        # clears the bodies. Park the number beside the column.
+        seats.extend(_body_clear_seats(pts))
     best_clear = None
     best_rank = 10**9
     best_overlap = None
     best_area = 10**9
     best_overlap_rank = 10**9
     for sx, sy, align in seats:
-        if not anchor_on_route(sx, sy, pts):
+        on_route = (
+            _clamped_route_distance(sx, sy, pts) <= route_limit
+            if beside_stub
+            else anchor_on_route(sx, sy, pts, limit=route_limit)
+        )
+        # Keep a millimetre-scale jumper's current seat even when it sits
+        # beside the bodies. A long rung's current seat still has to lie
+        # on the conductor; otherwise a far mark stays parked off the wire.
+        is_current = beside_stub and abs(sx - at[0]) < 0.05 and abs(sy - at[1]) < 0.05
+        if not is_current and not on_route:
             continue
         box = mark_box(sx, sy, text, align=align, spec=spec)
         rank = abs(sx - at[0]) + abs(sy - at[1]) + (0.0 if _inside(box, bounds) else 30.0)
@@ -503,9 +554,45 @@ def _short_seats(pts: list[Point]) -> list[tuple[float, float, str]]:
     best = max(zip(pts, pts[1:]), key=lambda pair: hypot(pair[1].x - pair[0].x, pair[1].y - pair[0].y))
     a, b = best
     mx, my = (a.x + b.x) * 0.5, (a.y + b.y) * 0.5
-    if abs(a.x - b.x) <= abs(a.y - b.y):
-        return [(mx - 3.2, my, "end"), (mx + 2.6, my, "start"), (mx, my, "middle")]
-    return [(mx, my - 3.2, "middle"), (mx, my + 2.6, "start"), (mx, my, "middle")]
+    return _offset_seats(mx, my, abs(a.x - b.x) <= abs(a.y - b.y))
+
+
+def _body_clear_seats(pts: list[Point]) -> list[tuple[float, float, str]]:
+    """Seats far enough beside a fat symbol that a stub's number can leave the body."""
+
+    if len(pts) < 2:
+        return []
+    span_x = max(p.x for p in pts) - min(p.x for p in pts)
+    span_y = max(p.y for p in pts) - min(p.y for p in pts)
+    vertical = span_y >= span_x
+    # A millimetre-scale jumper between stacked devices may jog either way.
+    # Offer both axes so L2 at the column centre can leave a 40 mm breaker.
+    stub = span_x < 8.0 and span_y < 8.0
+    anchors = [((a.x + b.x) * 0.5, (a.y + b.y) * 0.5) for a, b in zip(pts, pts[1:])]
+    anchors.append((sum(p.x for p in pts) / len(pts), sum(p.y for p in pts) / len(pts)))
+    seats: list[tuple[float, float, str]] = []
+    for ax, ay in anchors:
+        for d in (8.0, 12.0, 16.0, 22.0, 28.0, 34.0, 40.0):
+            if vertical or stub:
+                seats.append((ax - d, ay, "end"))
+                seats.append((ax + d, ay, "start"))
+            if (not vertical) or stub:
+                seats.append((ax, ay - d, "middle"))
+                seats.append((ax, ay + d, "start"))
+    return seats
+
+
+def _offset_seats(mx: float, my: float, vertical: bool) -> list[tuple[float, float, str]]:
+    seats: list[tuple[float, float, str]] = []
+    for d in (3.2, 5.5, 7.5, 9.5, 11.4):
+        if vertical:
+            seats.append((mx - d, my, "end"))
+            seats.append((mx + d * 0.85, my, "start"))
+        else:
+            seats.append((mx, my - d, "middle"))
+            seats.append((mx, my + d * 0.85, "start"))
+    seats.append((mx, my, "middle"))
+    return seats
 
 
 def _rects_touch(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> bool:
@@ -583,14 +670,7 @@ def _seats(pts: list[Point]) -> list[tuple[float, float, str]]:
         for t in (0.5, 0.35, 0.65, 0.25, 0.75):
             mx = a.x + (b.x - a.x) * t
             my = a.y + (b.y - a.y) * t
-            if vertical:
-                seats.append((mx - 4.0, my, "end"))
-                seats.append((mx + 3.2, my, "start"))
-                seats.append((mx - 7.0, my, "end"))
-            else:
-                seats.append((mx, my - 3.4, "middle"))
-                seats.append((mx, my + 3.2, "start"))
-                seats.append((mx, my - 6.0, "middle"))
+            seats.extend(_offset_seats(mx, my, vertical))
     return seats
 
 
@@ -598,6 +678,25 @@ def _route_distance(x: float, y: float, pts: list[Point]) -> float:
     best = 10**9
     for a, b in zip(pts, pts[1:]):
         best = min(best, _segment_distance(x, y, a.x, a.y, b.x, b.y))
+    return best
+
+
+def _clamped_route_distance(x: float, y: float, pts: list[Point]) -> float:
+    """Distance to the nearest point of the polyline, including the ends.
+
+    A 1 mm stub between two symbols has almost no interior, so a number
+    parked beside it must still count as on that wire.
+    """
+
+    best = 10**9
+    for a, b in zip(pts, pts[1:]):
+        dx, dy = b.x - a.x, b.y - a.y
+        length2 = dx * dx + dy * dy
+        if length2 <= 1e-6:
+            best = min(best, hypot(x - a.x, y - a.y))
+            continue
+        t = max(0.0, min(1.0, ((x - a.x) * dx + (y - a.y) * dy) / length2))
+        best = min(best, hypot(x - (a.x + t * dx), y - (a.y + t * dy)))
     return best
 
 

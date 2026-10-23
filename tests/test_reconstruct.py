@@ -464,14 +464,12 @@ def test_identify_sends_photo_kind_and_ignores_prints(tmp_path: Path):
 
 
 def test_print_import_pipeline_reused_for_secondary_scan(tmp_path: Path, monkeypatch):
-    import sys
-    from types import ModuleType
+    import panelcad.importer.pipeline as pipeline_mod
 
+    _app()
     scan = tmp_path / "old-ladder.png"
     write_drawing_scan(scan)
     called: dict[str, str] = {}
-
-    pipeline = ModuleType("panelcad.importer.pipeline")
 
     def extract_print(path):
         called["path"] = str(path)
@@ -483,17 +481,66 @@ def test_print_import_pipeline_reused_for_secondary_scan(tmp_path: Path, monkeyp
             "wires": [{"number": "201"}],
         }
 
-    pipeline.extract_print = extract_print
-    importer = ModuleType("panelcad.importer")
-    importer.pipeline = pipeline
-    monkeypatch.setitem(sys.modules, "panelcad.importer", importer)
-    monkeypatch.setitem(sys.modules, "panelcad.importer.pipeline", pipeline)
+    monkeypatch.setattr(pipeline_mod, "extract_print", extract_print)
 
     index = load_print_index(scan)
     assert called["path"] == str(scan)
     assert index["extracted"] is True
     assert index["extractor"] == "importer.pipeline"
     assert index["tags"][0]["catalog"] == "MC-12b"
+
+
+def test_extract_print_reads_vector_pdf_tags(tmp_path: Path):
+    """Reconstruct's secondary-print path calls importer.pipeline.extract_print."""
+
+    import pymupdf
+
+    from panelcad.importer.pipeline import extract_print
+
+    pt = 25.4 / 72.0
+    path = tmp_path / "nema-ladder.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page(width=420 / pt, height=297 / pt)
+
+    def mm(x, y):
+        return pymupdf.Point(x / pt, y / pt)
+
+    page.draw_line(mm(40, 30), mm(40, 180), color=(0, 0, 0), width=1.2)
+    page.draw_line(mm(220, 30), mm(220, 180), color=(0, 0, 0), width=1.2)
+    page.draw_line(mm(40, 55), mm(220, 55), color=(0, 0, 0), width=0.8)
+    page.draw_circle(mm(88, 55), 8 / pt, color=(0, 0, 0), width=0.8)
+    page.insert_text(mm(80, 40), "PB1", fontsize=9, color=(0, 0, 0))
+    page.insert_text(mm(50, 51), "101", fontsize=9, color=(0, 0, 0))
+    page.insert_text(mm(40, 250), "DWG NO: N-TEST-1", fontsize=8, color=(0, 0, 0))
+    doc.save(path)
+    doc.close()
+
+    payload = extract_print(path)
+    assert payload["extractor"] == "importer.pipeline"
+    tags = {str(row.get("tag") or "") for row in payload.get("tags") or []}
+    assert "PB1" in tags
+    assert payload["extracted"] is True
+
+    index = load_print_index(path)
+    assert index["extracted"] is True
+    assert any(str(row.get("tag") or "") == "PB1" for row in index.get("tags") or [])
+
+
+def test_extract_print_png_does_not_raise_without_tesseract(tmp_path: Path):
+    from PIL import Image
+
+    from panelcad.importer.pipeline import extract_print
+
+    scan = tmp_path / "blank-scan.png"
+    Image.new("RGB", (640, 480), (255, 255, 255)).save(scan)
+    payload = extract_print(scan)
+    assert payload["kind"] == "scan"
+    assert "tags" in payload
+    assert payload["extractor"] == "importer.pipeline"
+
+    index = load_print_index(scan)
+    assert index["kind"] == "scan"
+    assert isinstance(index.get("tags"), list)
 
 
 def test_unreadable_glare_does_not_invent_parts(tmp_path: Path):

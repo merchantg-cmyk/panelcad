@@ -77,6 +77,10 @@ class _GuiThreadGcPause:
 
 class _CheckWorker(QThread):
     finished_rows = Signal(list)
+    # A snapshot the checks cannot read (for example a value the model
+    # rejects) must not raise inside QThread.run: the runner would stay busy
+    # and live checks would stop for the rest of the session.
+    check_failed = Signal(str)
 
     def __init__(
         self,
@@ -96,8 +100,16 @@ class _CheckWorker(QThread):
     def run(self) -> None:
         from panelcad.core.checks import run_checks
 
+        try:
+            rows = self._rows(run_checks)
+        except Exception as exc:  # noqa: BLE001 - reported to the runner instead
+            self.check_failed.emit(f"{type(exc).__name__}: {exc}")
+            return
+        self.finished_rows.emit(rows)
+
+    def _rows(self, run_checks) -> list:
         project = Project.model_validate(self._payload)
-        rows = [
+        return [
             item.to_row()
             for item in run_checks(
                 project,
@@ -107,7 +119,6 @@ class _CheckWorker(QThread):
                 project_path=self._project_path,
             )
         ]
-        self.finished_rows.emit(rows)
 
 
 class LiveCheckRunner(QObject):
@@ -188,6 +199,17 @@ class LiveCheckRunner(QObject):
                 self._again = False
                 self.schedule()
 
+        def _failed(_message: str) -> None:
+            # Keep the rows already shown; the next edit schedules a fresh run.
+            if gen != self._generation:
+                return
+            self._busy = False
+            if self._worker is worker:
+                self._worker = None
+            if self._again:
+                self._again = False
+                self.schedule()
+
         def _thread_ended() -> None:
             pause.release()
             if self._gc_pause is pause:
@@ -195,6 +217,7 @@ class LiveCheckRunner(QObject):
             worker.deleteLater()
 
         worker.finished_rows.connect(_done)
+        worker.check_failed.connect(_failed)
         worker.finished.connect(_thread_ended)
         pause.acquire()
         worker.start()

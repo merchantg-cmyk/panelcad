@@ -18,6 +18,10 @@ import yaml
 from panelcad.reconstruct.models import ObservedItem, PrintMismatch, Reconstruction, item_is_layout_ready
 
 PRINT_INDEX_KIND = "print_index"
+# Same raster types the print importer already ingests. A PNG scan used to
+# stop here, before any page was read, and the attach note claimed the
+# pipeline was still missing.
+_PIPELINE_EXTS = {".pdf", ".dxf", ".svg", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
 
 
 def classify_print_path(path: Path) -> str:
@@ -49,7 +53,9 @@ def load_print_index(path: Path | str) -> dict[str, Any]:
         return _from_index_yaml(src)
     imported = _from_importer(src)
     if imported is not None:
-        imported["extracted"] = True
+        # A raster page can come back with an explicit False when OCR did not
+        # run. Forcing True made that look like a successful read.
+        imported["extracted"] = bool(imported.get("extracted", True))
         imported["extractor"] = imported.get("extractor") or "importer"
         return imported
     return {
@@ -221,11 +227,36 @@ def _from_importer(path: Path) -> dict[str, Any] | None:
             payload = extract_print(path)
         except Exception:  # noqa: BLE001
             payload = None
-        if isinstance(payload, dict) and (payload.get("tags") or payload.get("wires") or payload.get("devices")):
+        if isinstance(payload, dict):
+            # extract_print already ingested the file. Reading it a second
+            # time doubles the cost of a raster page and cannot find more.
             payload.setdefault("extractor", "importer.pipeline")
-            payload.setdefault("extracted", True)
+            if payload.get("tags") or payload.get("wires") or payload.get("devices"):
+                payload.setdefault("extracted", True)
+                return payload
+            if payload.get("note") in {"file not found", "unsupported print type"}:
+                return None
+            payload["extracted"] = False
             return payload
     return _index_with_pipeline(path)
+
+
+def _wire_endpoint(wire: dict[str, Any], side: str) -> str:
+    """``TAG.PIN`` when the importer split the tag and the pin.
+
+    Facts use ``from_tag`` / ``from_pin``. Copying only the tag drops the
+    connection, so a recovered wire number cannot be checked against the
+    drawing.
+    """
+
+    direct = str(wire.get(side) or "").strip()
+    if "." in direct:
+        return direct
+    tag = str(wire.get(f"{side}_tag") or direct or "").strip()
+    pin = str(wire.get(f"{side}_pin") or "").strip()
+    if tag and pin:
+        return f"{tag}.{pin}"
+    return tag
 
 
 def _index_with_pipeline(path: Path) -> dict[str, Any] | None:
@@ -233,7 +264,7 @@ def _index_with_pipeline(path: Path) -> dict[str, Any] | None:
 
     import tempfile
 
-    if path.suffix.lower() not in {".pdf", ".dxf"}:
+    if path.suffix.lower() not in _PIPELINE_EXTS:
         return None
     try:
         from panelcad.importer.ingest import ingest_paths
@@ -248,8 +279,11 @@ def _index_with_pipeline(path: Path) -> dict[str, Any] | None:
             catalog = default_catalog()
             tags: list[dict[str, Any]] = []
             wires: list[dict[str, Any]] = []
+            ocr_skipped = False
             for page in pages or []:
                 facts = _page_facts(page, workspace, catalog)
+                if facts.get("ocr_skipped"):
+                    ocr_skipped = True
                 for device in facts.get("devices") or []:
                     if not isinstance(device, dict):
                         continue
@@ -273,13 +307,26 @@ def _index_with_pipeline(path: Path) -> dict[str, Any] | None:
                     wires.append(
                         {
                             "number": number,
-                            "from": wire.get("from") or wire.get("from_tag") or "",
-                            "to": wire.get("to") or wire.get("to_tag") or "",
+                            "from": _wire_endpoint(wire, "from"),
+                            "to": _wire_endpoint(wire, "to"),
                         }
                     )
     except Exception:  # noqa: BLE001
         return None
     if not tags and not wires:
+        if ocr_skipped:
+            return {
+                "kind": classify_print_path(path),
+                "path": str(path),
+                "extracted": False,
+                "extractor": "importer.pipeline",
+                "tags": [],
+                "wires": [],
+                "note": (
+                    "OCR was skipped because Tesseract is not available. "
+                    "No tags or wire numbers were read."
+                ),
+            }
         return None
     return {
         "kind": classify_print_path(path),

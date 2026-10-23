@@ -2112,6 +2112,147 @@ def _tile_read_body(
     }
 
 
+def extract_print(path: Path | str, *, catalog: Any = None) -> dict[str, Any]:
+    """Tags and wires from a print. No vision account and no GUI.
+
+    Vector PDF, DXF, and SVG use embedded text and strokes. Raster pages use
+    the pixel reader; missing Tesseract skips OCR instead of failing, so a
+    reconstruct attach still returns a payload.
+    """
+
+    import tempfile
+
+    from panelcad.importer.ingest import PRINT_EXTS, ingest_paths
+    from panelcad.library.catalog import default_catalog
+
+    src = Path(path)
+    kind = "other"
+    suffix = src.suffix.lower()
+    if suffix == ".pdf":
+        kind = "pdf"
+    elif suffix in RASTER_EXTS:
+        kind = "scan"
+    elif suffix in {".dxf", ".svg"}:
+        kind = "other"
+    empty = {
+        "kind": kind,
+        "path": str(src),
+        "extracted": False,
+        "extractor": "importer.pipeline",
+        "tags": [],
+        "wires": [],
+        "devices": [],
+    }
+    if not src.is_file():
+        empty["note"] = "file not found"
+        return empty
+    if suffix not in PRINT_EXTS:
+        empty["note"] = "unsupported print type"
+        return empty
+    cat = catalog if catalog is not None else default_catalog()
+    tags: list[dict[str, Any]] = []
+    wires: list[dict[str, Any]] = []
+    devices: list[dict[str, Any]] = []
+    ocr_skipped = False
+    try:
+        with tempfile.TemporaryDirectory(prefix="panelcad-print-") as tmp:
+            workspace = Workspace(Path(tmp))
+            pages = ingest_paths([src], workspace)
+            for page in pages or []:
+                if not isinstance(page, dict):
+                    continue
+                facts = _facts_from_ingested_page(page, workspace, cat)
+                if facts.get("ocr_skipped"):
+                    ocr_skipped = True
+                sheet_id = str(page.get("id") or "")
+                for device in facts.get("devices") or []:
+                    if not isinstance(device, dict):
+                        continue
+                    tag = str(device.get("tag") or "").strip()
+                    if not tag or device.get("unreadable"):
+                        continue
+                    row = {
+                        "tag": tag,
+                        "library_id": device.get("library_id") or "",
+                        "catalog": device.get("catalog") or "",
+                        "sheet": sheet_id,
+                        "kind": device.get("kind") or device.get("symbol") or "",
+                    }
+                    tags.append(row)
+                    devices.append(row)
+                for wire in facts.get("wires") or []:
+                    if not isinstance(wire, dict):
+                        continue
+                    number = str(wire.get("number") or "").strip()
+                    frm = _wire_end(wire, "from")
+                    to = _wire_end(wire, "to")
+                    if not number and not frm and not to:
+                        continue
+                    wires.append(
+                        {
+                            "number": number,
+                            "from": frm,
+                            "to": to,
+                            "sheet": sheet_id,
+                        }
+                    )
+    except Exception as exc:  # noqa: BLE001 — reconstruct still gets a payload
+        empty["note"] = f"{type(exc).__name__}: {exc}"
+        return empty
+    extracted = bool(tags or wires)
+    return {
+        "kind": kind,
+        "path": str(src),
+        "extracted": extracted,
+        "extractor": "importer.pipeline",
+        "tags": tags,
+        "wires": wires,
+        "devices": devices,
+        "note": ""
+        if extracted
+        else (
+            "OCR was skipped because Tesseract is not available. No tags or wire numbers were read."
+            if ocr_skipped
+            else "no tags or wires read"
+        ),
+    }
+
+
+def _wire_end(wire: dict[str, Any], side: str) -> str:
+    """``TAG.PIN`` when facts split the tag and the pin, else the tag."""
+
+    direct = str(wire.get(side) or "").strip()
+    if "." in direct:
+        return direct
+    tag = str(wire.get(f"{side}_tag") or direct or "").strip()
+    pin = str(wire.get(f"{side}_pin") or "").strip()
+    return f"{tag}.{pin}" if tag and pin else tag
+
+
+def _facts_from_ingested_page(page: dict[str, Any], workspace: Workspace, catalog: Any) -> dict[str, Any]:
+    """Vector words/strokes, or a raster page with OCR optional."""
+
+    page_id = str(page.get("id") or "")
+    tokens = workspace.read_json("pages", page_id, "words.json", default=[]) or []
+    strokes = workspace.read_json("pages", page_id, "strokes.json", default=[]) or []
+    width = float(page.get("width_mm") or 0)
+    height = float(page.get("height_mm") or 0)
+    if tokens and width > 0 and height > 0:
+        from panelcad.importer.vectors import read_drawing
+
+        return read_drawing(list(tokens), list(strokes or []), width, height, catalog)
+    image_path = str(page.get("image") or "")
+    if image_path and Path(image_path).is_file() and width > 0 and height > 0:
+        try:
+            from panelcad.importer.raster import read_pixels
+
+            with Image.open(image_path) as image:
+                return read_pixels(image, width, height, catalog, allow_missing_ocr=True)
+        except Exception:  # noqa: BLE001
+            return {}
+    return {}
+
+
 def _fallback_slice(pixel: dict[str, Any], tile: dict[str, Any], reason: str) -> dict[str, Any]:
     piece = slice_facts(pixel, tile)
     out: dict[str, Any] = {}

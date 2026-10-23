@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 Rotation = Literal[0, 90, 180, 270]
 Side = Literal["left", "right", "top", "bottom"]
@@ -19,6 +19,10 @@ PAGE_SIZES_MM = {
 
 
 class Point(BaseModel):
+    # Schema is built on first use. Importing geometry used to build it, and
+    # that build is what walked Pydantic's plugin entry points.
+    model_config = ConfigDict(defer_build=True)
+
     x: float
     y: float
 
@@ -27,6 +31,8 @@ class Point(BaseModel):
 
 
 class Page(BaseModel):
+    model_config = ConfigDict(defer_build=True)
+
     size: str = "A3"
     orientation: Literal["landscape", "portrait"] = "landscape"
     width_mm: float | None = None

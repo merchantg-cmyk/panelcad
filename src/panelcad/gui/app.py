@@ -37,14 +37,12 @@ def launch_gui(project: Path | str | None = None):
         from panelcad.api.session import Session
         from panelcad.diag.crash import mark_clean_exit
         from panelcad.diag.runtime import install_process_diagnostics
-        from panelcad.gui.theme import install
-
         unclean = install_process_diagnostics(gui=True)
         app = ensure_application()
         icon = application_icon()
         if not icon.isNull():
             app.setWindowIcon(icon)
-        install(app)
+        # The window applies the stylesheet once, after its docks exist.
         splash_message("Opening project...")
         open_error = None
         session = None

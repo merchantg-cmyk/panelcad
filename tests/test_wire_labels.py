@@ -120,6 +120,22 @@ def test_two_point_vertical_uses_midpoint_not_endpoint():
     assert align in {"start", "end"}
 
 
+def test_star_delta_power_numbers_clear_symbol_bodies():
+    """L1/T1 on a star-delta power column must not sit on the breaker or motor."""
+
+    from panelcad.render.sheet_labels import colliding_sheet_labels
+
+    s = Session.create("Star-delta labels")
+    s.insert_circuit(kind="star_delta", control="local", hp=25, voltage=480)
+    hits = []
+    for sheet in s.project.sheets:
+        if sheet.kind in {"panel_layout", "door_layout", "terminal"}:
+            continue
+        hits.extend(colliding_sheet_labels(s.project, s.catalog, sheet))
+    body_hits = [row for row in hits if "wire:" in row and "body:" in row]
+    assert not body_hits, body_hits
+
+
 def test_power_tags_clear_wire_labels_by_one_text_height():
     """K1 must not share the L1/L2/L3 row, and 104 must not sit on M1."""
 

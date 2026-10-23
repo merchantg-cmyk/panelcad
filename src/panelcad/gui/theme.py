@@ -482,13 +482,36 @@ def apply_stylesheet(app: QApplication | None = None) -> None:
         apply_titlebar(widget)
 
 
-def install(app: QApplication | None = None) -> None:
-    """Fusion, font, palette, stylesheet, dialog clamp, and OS scheme changes. Idempotent."""
+def _hooks_are_on(target: QApplication) -> bool:
+    if _hooks is None:
+        return False
+    try:
+        return _hooks.parent() is target
+    except RuntimeError:
+        return False
+
+
+def install(app: QApplication | None = None, *, reapply: bool = False) -> None:
+    """Fusion, font, palette, stylesheet, dialog clamp, and OS scheme changes.
+
+    A second call on the same application does nothing unless ``reapply`` is
+    set. ``MainWindow`` reapplies once after its docks exist: applying the
+    sheet before those docks, or skipping it on a later window, leaves
+    ``restoreState`` with two bottom tab bars. ``setStyleSheet`` still runs
+    at most once per window. Theme changes go through ``apply_stylesheet``.
+    """
 
     global _installed, _hooks, _fusion_applied
     target = app or QApplication.instance()
     if target is None:
         return
+    if _installed and _hooks_are_on(target) and not reapply:
+        return
+    if _installed and not _hooks_are_on(target):
+        # The previous QApplication is gone. Install on this one once.
+        _installed = False
+        _fusion_applied = False
+        _hooks = None
     # setStyleSheet wraps the style and clears objectName. Calling setStyle
     # again sends StyleChange through every main window that is still alive.
     if not _fusion_applied:
@@ -499,7 +522,7 @@ def install(app: QApplication | None = None) -> None:
         _fusion_applied = True
     target.setFont(ui_font())
     apply_stylesheet(target)
-    if _installed:
+    if _installed and _hooks_are_on(target):
         return
     subscribe(_on_settings_changed)
     _hooks = _ThemeHooks(target)

@@ -59,6 +59,56 @@ def test_cleanup_never_worsens(name):
     _no_worse(name, after, again)
 
 
+def test_vfd_ladder_cleanup_does_not_run_wires_through_symbols():
+    """A VFD power column has no ladder rungs, so Cleanup used to skip the guard."""
+
+    s = Session.create("vfd-ladder")
+    s.set_title_block(standard="NEMA/ANSI", drawing_style="ladder")
+    s.insert_circuit(kind="vfd", drive="generic_1k5", hp=2, voltage=480, control="local")
+    before = _totals(s)
+    assert before["through"] == 0
+    s.cleanup()
+    after = _totals(s)
+    _no_worse("vfd-ladder", before, after)
+    assert after["through"] == 0
+
+
+def test_cleanup_does_not_rearrange_a_clean_page():
+    """A page that is already readable stays as built. Full Cleanup on a tie
+    used to reshuffle it and park rating text on the next motor.
+    """
+
+    s = _built(CASES["dol"])
+    sheet = next((sh for sh in s.project.sheets if sh.id == "motor-control"), None)
+    if sheet is None:
+        sheet = next(sh for sh in s.project.sheets if sh.kind == "schematic")
+    before = sheet_quality(sheet, s.catalog, s.project)
+    if any(before[key] for key in PRIMARY):
+        pytest.skip("builder left overlaps on this page")
+    placed = {c.id: (round(c.x, 3), round(c.y, 3)) for c in sheet.components}
+    s.cleanup()
+    sheet = s.sheet(sheet.id)
+    after = sheet_quality(sheet, s.catalog, s.project)
+    assert after == before
+    assert {c.id: (round(c.x, 3), round(c.y, 3)) for c in sheet.components} == placed
+
+
+def test_cleanup_does_not_worsen_io_pages():
+    """I/O pages are unmeasured, so Cleanup used to skip the guard and
+    drive extra wires through symbols.
+    """
+
+    s = Session.create("io-quality")
+    s.insert_circuit(kind="plc_motor", hp=5, voltage=480, control="local")
+    pages = [sh for sh in s.project.sheets if sh.kind == "io"]
+    if not pages:
+        pytest.skip("builder left no I/O page")
+    before = {sh.id: sheet_quality(sh, s.catalog, s.project) for sh in pages}
+    s.cleanup()
+    for sid, prev in before.items():
+        _no_worse("io", prev, sheet_quality(s.sheet(sid), s.catalog, s.project))
+
+
 def test_rejected_tidy_keeps_the_rungs():
     s = _built(CASES["reversing"])
     sheet = next(sh for sh in s.project.sheets if sh.id == "motor-control")

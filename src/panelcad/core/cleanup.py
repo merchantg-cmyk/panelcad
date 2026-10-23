@@ -290,6 +290,8 @@ def _longest_path(adj: dict[str, set[str]]) -> list[str]:
 
 
 def _rung_rank(library_id: str) -> int:
+    from panelcad.core.ladder import is_aux_library, is_lamp_library
+
     lib = library_id.lower()
     if "fuse" in lib or "breaker" in lib or "disconnect" in lib:
         return 0
@@ -297,6 +299,12 @@ def _rung_rank(library_id: str) -> int:
         return 1
     if "pb_no" in lib or "selector" in lib or "limit" in lib:
         return 2
+    # Aux sits on the hot side of a lamp rung. Matching "contactor" first
+    # ranked it with the coil, so rail-attach wired L1 onto the lamp.
+    if is_aux_library(library_id):
+        return 3
+    if is_lamp_library(library_id):
+        return 6
     if "ol_contact" in lib or "overload" in lib:
         return 7
     if "terminals.pe" in lib or lib.endswith(".pe") or ".pe_" in lib:
@@ -840,7 +848,6 @@ def seat_outputs_at_rail(session: Session, sheet: Sheet, *, gap: float = OUTPUT_
 
     from panelcad.core.ladder import rail_xs
     from panelcad.core.power_layout import _body
-    from panelcad.core.sheet_quality import sheet_quality
     from panelcad.render.wiring import clear_route_cache
 
     catalog = session.catalog
@@ -867,7 +874,7 @@ def seat_outputs_at_rail(session: Session, sheet: Sheet, *, gap: float = OUTPUT_
         if not inside_gap and any(nx < comp.x - 0.01 for nx, comp in zip(new_x, run)):
             continue  # only pull back an output that crowds the rail
         if quality is None:
-            quality = sheet_quality(sheet, catalog, session.project)
+            quality = _quality(session, sheet)
         saved = [(comp, comp.x) for comp in run]
         points = [(wire, list(wire.points)) for wire in sheet.wires]
         for comp, nx in zip(run, new_x):
@@ -875,7 +882,7 @@ def seat_outputs_at_rail(session: Session, sheet: Sheet, *, gap: float = OUTPUT_
         for wire in sheet.wires:
             wire.points = []
         clear_route_cache()
-        after = sheet_quality(sheet, catalog, session.project)
+        after = _quality(session, sheet)
         if _seat_ok(after, quality):
             quality = after
             moved += len(run)
@@ -1341,7 +1348,6 @@ def nudge_overlaps(session: Session, sheet: Sheet, *, gap: float = 2.0) -> int:
     does not move.
     """
 
-    from panelcad.core.sheet_quality import sheet_quality
     from panelcad.render.titleblock import working_rect
 
     catalog = session.catalog
@@ -1370,7 +1376,7 @@ def nudge_overlaps(session: Session, sheet: Sheet, *, gap: float = 2.0) -> int:
         area = lambda r: (r[2] - r[0]) * (r[3] - r[1])
         (still, rs), (mover, rm) = sorted(pair, key=lambda item: (area(item[1]), item[0].id), reverse=True)
         here = (mover.x, mover.y)
-        base = sheet_quality(sheet, catalog, session.project)
+        base = _quality(session, sheet)
         best = None
         for dx, dy in (
             (0.0, rs[3] - rm[1] + gap),
@@ -1384,7 +1390,7 @@ def nudge_overlaps(session: Session, sheet: Sheet, *, gap: float = 2.0) -> int:
             if any(_overlap(box, r, pad=-0.5) for cid, (_c, r) in boxes.items() if cid != mover.id):
                 continue
             mover.x, mover.y = here[0] + dx, here[1] + dy
-            q = sheet_quality(sheet, catalog, session.project)
+            q = _quality(session, sheet)
             mover.x, mover.y = here
             if q["overlaps"] < base["overlaps"] and (best is None or _rank(q) < best[0]):
                 best = (_rank(q), dx, dy)
@@ -1394,10 +1400,100 @@ def nudge_overlaps(session: Session, sheet: Sheet, *, gap: float = 2.0) -> int:
     return moved
 
 
+def _outside_count(sheet: Sheet, catalog: Catalog) -> int:
+    """Symbols whose body sits past the working rectangle."""
+
+    from panelcad.render.titleblock import working_rect
+
+    wx, wy, ww, wh = working_rect(sheet)
+    n = 0
+    for comp in sheet.components:
+        try:
+            box = _aabb(sheet, catalog, comp)
+        except KeyError:
+            continue
+        if box[0] < wx - 0.6 or box[1] < wy - 0.6 or box[2] > wx + ww + 0.6 or box[3] > wy + wh + 0.6:
+            n += 1
+    return n
+
+
+def _unseated_count(session: Session, sheet: Sheet) -> int:
+    """Rung outputs whose body still sits left of the return-rail gap."""
+
+    if not _seats_outputs(session, sheet):
+        return 0
+    from panelcad.core.ladder import rail_xs
+    from panelcad.core.power_layout import _body
+
+    _left, right = rail_xs(sheet)
+    target = right - OUTPUT_RAIL_GAP
+    n = 0
+    catalog = session.catalog
+    for run in _output_runs(session, sheet):
+        try:
+            box = _body(run[-1], catalog.get(run[-1].library_id))
+        except (KeyError, AttributeError):
+            continue
+        if box[2] < target - 0.5:
+            n += 1
+    return n
+
+
+def _quality(session: Session, sheet: Sheet) -> dict[str, int]:
+    from panelcad.core.sheet_quality import sheet_quality
+
+    q = dict(sheet_quality(sheet, session.catalog, session.project))
+    q["outside"] = _outside_count(sheet, session.catalog)
+    q["unseated"] = _unseated_count(session, sheet)
+    return q
+
+
 def _rank(q: dict[str, int]) -> tuple[int, ...]:
     from panelcad.core.sheet_quality import PRIMARY
 
-    return tuple(q[key] for key in PRIMARY) + (q["bends"],)
+    return tuple(q[key] for key in PRIMARY) + (
+        int(q.get("outside") or 0),
+        int(q.get("unseated") or 0),
+        q["bends"],
+    )
+
+
+def _idle_cleanup(sheet_id: str) -> dict[str, Any]:
+    return {"sheet": sheet_id, "scaled": 0, "aligned": 0, "unstacked": 0, "clamped": 0, "spaced": 0}
+
+
+def _cleanup_unless_worse(session: Session, sheet: Sheet) -> dict[str, Any]:
+    """First-time arrange (power stack, I/O) still must not add overlaps or throughs.
+
+    A VFD / vertical power column has no ladder rungs, so the guarded path
+    used to skip it. layout_power_sheet then drove motor leads through the
+    drive body. Keep the arrange only when overlaps and wires-through-symbols
+    do not rise, and do not add elbows on a page that was already clear.
+    """
+
+    from panelcad.core.spacing import page_fullness
+
+    idle = _idle_cleanup(sheet.id)
+    saved = session.project.model_copy(deep=True)
+    before = _quality(session, sheet)
+    result = cleanup_sheet(session, sheet)
+    after = _quality(session, session.sheet(sheet.id))
+    worse = after["overlaps"] > before["overlaps"] or after["through"] > before["through"]
+    # A first-time power arrange may still move a PRIMARY-clean stack that sits
+    # past the rails. Only roll back when overlaps or wires-through-symbols rose.
+    if worse:
+        _restore_project(session, saved)
+        return {
+            **idle,
+            "before": before,
+            "after": before,
+            "kept": False,
+            "method": "as_built",
+            "density": page_fullness(session.sheet(sheet.id), session.catalog),
+        }
+    out = {**idle, **result, "before": before, "after": after, "kept": True, "method": result.get("method") or "cleanup"}
+    out.setdefault("density", page_fullness(session.sheet(sheet.id), session.catalog))
+    return out
 
 
 def _guarded_cleanup(session: Session, sheet_id: str) -> dict[str, Any]:
@@ -1405,26 +1501,36 @@ def _guarded_cleanup(session: Session, sheet_id: str) -> dict[str, Any]:
 
     Tidies are tried from the drawing as built: the full Cleanup, and gap
     openers that only move whole rows down or a rung's right-hand part
-    right, and a nudge that moves one clashing symbol clear. The best one
-    that passes sheet_quality.no_worse wins (the full Cleanup on a tie):
-    overlaps and wires through symbols never rise, and crossings rise by at
-    most CROSSING_ALLOWANCE only to clear an overlap. When none passes, the
-    page stays as built.
+    right, and a nudge that moves one clashing symbol clear. The as-built
+    page is the baseline: a tidy has to beat its sheet_quality rank
+    (overlaps, wires through symbols, crossings, then bends). Overlaps and
+    wires through symbols never rise, and crossings rise by at most
+    CROSSING_ALLOWANCE only to clear an overlap. When none beats as-built,
+    the page stays as built.
 
-    A rough placement with no built rungs is not guarded: there Cleanup is
-    what draws the ladder, as before.
+    A rough placement with no built rungs still runs Cleanup, then the same
+    overlaps/through rule rejects an arrange that made the ink worse.
     """
 
-    from panelcad.core.sheet_quality import no_worse, sheet_quality
+    from panelcad.core.sheet_quality import no_worse
     from panelcad.core.spacing import page_fullness
 
     sheet = session.sheet(sheet_id)
-    if not _measured(sheet) or not _keeps_rungs(session, sheet):
+    if not _measured(sheet):
+        if sheet.kind == "io":
+            return _cleanup_unless_worse(session, sheet)
         return cleanup_sheet(session, sheet)
-    before = sheet_quality(sheet, session.catalog, session.project)
-    idle = {"sheet": sheet_id, "scaled": 0, "aligned": 0, "unstacked": 0, "clamped": 0, "spaced": 0}
+    if not _keeps_rungs(session, sheet):
+        return _cleanup_unless_worse(session, sheet)
+    before = _quality(session, sheet)
+    idle = _idle_cleanup(sheet_id)
     saved = session.project.model_copy(deep=True)
-    best: tuple[tuple[int, ...], Any, dict[str, Any], dict[str, int]] | None = None
+    best: tuple[tuple[int, ...], Any, dict[str, Any], dict[str, int]] = (
+        _rank(before),
+        saved.model_copy(deep=True),
+        {**idle, "method": "as_built"},
+        before,
+    )
     overflow: dict[str, Any] | None = None
     for name in ("cleanup", "rung_gaps", "column_gaps", "both_gaps", "nudge"):
         _restore_project(session, saved.model_copy(deep=True))
@@ -1448,12 +1554,10 @@ def _guarded_cleanup(session: Session, sheet_id: str) -> dict[str, Any]:
             # A page this tidy cannot read (a symbol with no pins, a rung the
             # reflow does not recognise) just loses that candidate.
             continue
-        after = sheet_quality(session.sheet(sheet_id), session.catalog, session.project)
+        after = _quality(session, session.sheet(sheet_id))
         seated = int(result.get("seated") or 0)
         relaxed = {**before, "bends": before["bends"] + OUTPUT_SEAT_BENDS * seated}
-        if (no_worse(after, before) or (seated and no_worse(after, relaxed))) and (
-            best is None or _rank(after) < best[0]
-        ):
+        if (no_worse(after, before) or (seated and no_worse(after, relaxed))) and _rank(after) < best[0]:
             best = (_rank(after), session.project.model_copy(deep=True), {**result, "method": name}, after)
     def _keep_overflow_note() -> None:
         # Cleanup records branches that do not fit the power columns. That
@@ -1470,29 +1574,30 @@ def _guarded_cleanup(session: Session, sheet_id: str) -> dict[str, Any]:
         else:
             session.project.properties.pop("power_column_overflow", None)
 
-    if best is None:
-        # Every tidy made the page harder to read. Seating the outputs alone
-        # is still offered: it is guarded rung by rung against the page as built.
+    if best[2].get("method") == "as_built":
+        # Every tidy made the page harder to read, or none beat as-built.
+        # Seating the outputs alone is still offered: it is guarded rung by
+        # rung against the page as built, and must still beat that rank.
         _restore_project(session, saved.model_copy(deep=True))
         page = session.sheet(sheet_id)
         seated = seat_outputs_at_rail(session, page) if _seats_outputs(session, page) else 0
         if seated:
-            # Each rung was already checked against the page as built.
-            after = sheet_quality(page, session.catalog, session.project)
-            result = {**idle, "seated": seated, "method": "seat_outputs"}
-            best = (_rank(after), session.project.model_copy(deep=True), result, after)
-    if best is not None:
-        _restore_project(session, best[1])
-        _keep_overflow_note()
-        result = best[2]
-        result.update({"before": before, "after": best[3], "kept": True})
-        result.setdefault("density", page_fullness(session.sheet(sheet_id), session.catalog))
-        return result
-    # Every tidy made this page harder to read. The drawing as built wins.
-    _restore_project(session, saved)
+            after = _quality(session, page)
+            relaxed = {**before, "bends": before["bends"] + OUTPUT_SEAT_BENDS * seated}
+            if (no_worse(after, before) or no_worse(after, relaxed)) and _rank(after) < best[0]:
+                best = (
+                    _rank(after),
+                    session.project.model_copy(deep=True),
+                    {**idle, "seated": seated, "method": "seat_outputs"},
+                    after,
+                )
+    _restore_project(session, best[1])
     _keep_overflow_note()
-    return {**idle, "before": before, "after": before, "kept": False,
-            "density": page_fullness(session.sheet(sheet_id), session.catalog)}
+    result = best[2]
+    kept = result.get("method") != "as_built"
+    result.update({"before": before, "after": best[3], "kept": kept})
+    result.setdefault("density", page_fullness(session.sheet(sheet_id), session.catalog))
+    return result
 
 
 def cleanup_project(session: Session, sheet_id: str | None = None) -> dict[str, Any]:
