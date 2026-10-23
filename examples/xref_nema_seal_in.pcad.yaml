@@ -6,7 +6,7 @@ title_block:
   company: ECS Shop
   address: ''
   logo: ''
-  customer: Example Customer
+  customer: Ada
   location: MCC demo
   drawing_number: E-XREF
   drawn_by: PanelCAD
@@ -36,42 +36,42 @@ sheets:
   components:
   - id: PB1
     library_id: nema.operators.pb_nc
-    x: 46.0
+    x: 37.0
     y: 19.700000000000003
     rotation: 0
     mirror: false
     properties: {}
   - id: PB2
     library_id: nema.operators.pb_no
-    x: 88.0
+    x: 141.66666666666666
     y: 19.700000000000003
     rotation: 0
     mirror: false
     properties: {}
   - id: M1
     library_id: nema.contactors.coil
-    x: 210.0
+    x: 309.0
     y: 29.700000000000003
     rotation: 0
     mirror: false
     properties: {}
   - id: OL1
     library_id: nema.protection.ol_contact
-    x: 255.0
+    x: 355.0
     y: 27.700000000000003
     rotation: 0
     mirror: false
     properties: {}
   - id: M1-13
     library_id: nema.contactors.aux_no
-    x: 88.0
+    x: 141.66666666666666
     y: 59.099999999999994
     rotation: 0
     mirror: false
     properties: {}
   - id: CR1
     library_id: nema.contactors.coil
-    x: 210.0
+    x: 355.0
     y: 80.5
     rotation: 0
     mirror: false
@@ -177,15 +177,15 @@ sheets:
       link: control:CR1-13.4|aux:OP2.A
   - id: CR1-21
     library_id: nema.contactors.aux_nc
-    x: 110.0
-    y: 33.7
+    x: 37.0
+    y: 75.0
     rotation: 0
     mirror: false
     properties: {}
   - id: PL1
     library_id: nema.operators.pilot_light
-    x: 200.0
-    y: 31.700000000000003
+    x: 359.0
+    y: 73.0
     rotation: 0
     mirror: false
     properties: {}

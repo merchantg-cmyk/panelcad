@@ -30,35 +30,35 @@ sheets:
   components:
   - id: S1
     library_id: iec.operators.pb_no
-    x: 69.0
+    x: 37.0
     y: 19.700000000000003
     rotation: 0
     mirror: false
     properties: {}
   - id: K1
     library_id: iec.contactors.coil
-    x: 210.0
+    x: 355.0
     y: 29.700000000000003
     rotation: 0
     mirror: false
     properties: {}
   - id: K1-14
     library_id: iec.contactors.aux_no
-    x: 69.0
+    x: 37.0
     y: 59.099999999999994
     rotation: 0
     mirror: false
     properties: {}
   - id: K1-21
     library_id: iec.contactors.aux_nc
-    x: 69.0
+    x: 37.0
     y: 84.5
     rotation: 0
     mirror: false
     properties: {}
   - id: H1
     library_id: iec.operators.pilot_light
-    x: 210.0
+    x: 359.0
     y: 82.5
     rotation: 0
     mirror: false
@@ -117,15 +117,15 @@ sheets:
   components:
   - id: K1-43
     library_id: iec.contactors.aux_no
-    x: 69.0
-    y: 33.7
+    x: 37.0
+    y: 75.0
     rotation: 0
     mirror: false
     properties: {}
   - id: H2
     library_id: iec.operators.pilot_light
-    x: 200.0
-    y: 31.700000000000003
+    x: 359.0
+    y: 73.0
     rotation: 0
     mirror: false
     properties: {}

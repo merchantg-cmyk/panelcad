@@ -1848,7 +1848,8 @@ class Session:
         dest_id = str(to_sheet or "").strip()
         if dest_id and dest_id != src.id:
             return self.wire_offpage(
-                frm, to, net=net, from_sheet=src.id, to_sheet=dest_id, label=label, make_room=make_room
+                frm, to, net=net, from_sheet=src.id, to_sheet=dest_id, label=label, make_room=make_room,
+                number=number,
             )
         self._assert_pin(src, frm)
         self._assert_pin(src, to)
@@ -1876,7 +1877,11 @@ class Session:
                 raise ValueError(mix)
         self._wire_seq += 1
         wid = wire_id or f"w{self._wire_seq}"
-        while any(w.id == wid for w in src.wires):
+        # Wire ids are unique across the project, not just this sheet: a
+        # reopened project restarts the counter, and the same id on two sheets
+        # breaks lookups, undo and cross-references.
+        taken = {w.id for sh in self.project.sheets for w in sh.wires}
+        while wid in taken:
             self._wire_seq += 1
             wid = f"w{self._wire_seq}"
         cap = (label or net or "").strip()
@@ -1921,8 +1926,12 @@ class Session:
         src_rung_y: float | None = None,
         dst_rung_y: float | None = None,
         make_room: bool = False,
+        number: str | None = None,
     ) -> dict[str, Any]:
         """Wire a pin on this page to a pin on another page via matching TO / FROM arrows.
+
+        ``number`` is the wire number of the conductor. Both halves (source pin
+        to TO arrow, FROM arrow to target pin) carry it, locked.
 
         Devices already drawn stay where they are: each arrow takes the nearest
         clear slot on its rail. ``make_room`` is for builders laying out their
@@ -2038,8 +2047,8 @@ class Session:
                 properties=dst_props,
                 make_room=make_room,
             )
-        w1 = self.wire(frm, f"{op_src_id}.A", net=cap, sheet_id=src.id, label=cap)
-        w2 = self.wire(f"{op_dst_id}.A", to, net=cap, sheet_id=dest.id, label=cap)
+        w1 = self.wire(frm, f"{op_src_id}.A", net=cap, sheet_id=src.id, label=cap, number=number)
+        w2 = self.wire(f"{op_dst_id}.A", to, net=cap, sheet_id=dest.id, label=cap, number=number)
         return {
             "from": frm,
             "to": to,

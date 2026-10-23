@@ -585,6 +585,28 @@ def _path_reaches_rail(sheet: Sheet, path: list[str], rail: str, hot: str, ret: 
     return False
 
 
+def _fed_offpage(sheet: Sheet, start: str) -> bool:
+    """True when the hot end of a rung (*start*) is fed by an off-page connector.
+
+    Only the rung's start counts. An arrow tapped off the middle or the load
+    end of a rung carries that rung onward to another sheet; the rung itself
+    still needs its hot rail wire.
+    """
+
+    pages = {c.id for c in sheet.components if is_offpage(c.library_id)}
+    if start in pages:
+        return True
+    for wire in sheet.wires:
+        try:
+            a, _ = parse_pin_ref(wire.frm)
+            b, _ = parse_pin_ref(wire.to)
+        except ValueError:
+            continue
+        if (a == start and b in pages) or (b == start and a in pages):
+            return True
+    return False
+
+
 def _attach_path_to_rails(session: "Session", sheet: Sheet, hot: str, ret: str, path: list[str]) -> int:
     if len(path) < 2:
         return 0
@@ -599,6 +621,8 @@ def _attach_path_to_rails(session: "Session", sheet: Sheet, hot: str, ret: str, 
         start, end = end, start
     elif _on_rail(start, ret) and not _on_rail(end, ret):
         start, end = end, start
+    elif _on_rail(end, ret) and not _on_rail(start, ret):
+        pass
     elif not _on_rail(start, hot) and not _on_rail(end, hot):
         if _rung_rank(sheet.component(start).library_id) > _rung_rank(sheet.component(end).library_id):
             start, end = end, start
@@ -616,7 +640,10 @@ def _attach_path_to_rails(session: "Session", sheet: Sheet, hot: str, ret: str, 
 
     # A device whose other side already reaches a rail through this path does
     # not get a second rail wire. That second wire is what shorted the coil.
-    if not _path_reaches_rail(sheet, path, hot, hot, ret):
+    # A rung continued from another sheet is fed through its off-page
+    # connector. A hot rail wire here would tie that number to L1 and relabel
+    # every L1 wire in the project.
+    if not _path_reaches_rail(sheet, path, hot, hot, ret) and not _fed_offpage(sheet, start):
         session.wire(hot, _left_pin(start), net=hot, sheet_id=sheet.id)
         n += 1
     if not _path_reaches_rail(sheet, path, ret, hot, ret):

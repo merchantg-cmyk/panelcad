@@ -686,6 +686,14 @@ def _straight_routes(
         manual = False
         if wire.points and len(pts) >= 2 and _orthogonal(pts):
             manual = True
+        if (
+            is_io_sheet(sheet)
+            and not is_generated_io_sheet(sheet)
+            and not manual
+            and foreign
+            and _io_route_clashes(pts, foreign)
+        ):
+            pts = _io_shift_mid(pts, foreign)
         if not skip_pull and prior and not manual and needs_separation(pts, foreign):
             pulled = pull_path(pts, prior, walls, keys=prior_keys, own=key)
             # Moving off a shared lane through a symbol is worse than the share.
@@ -719,6 +727,67 @@ def _straight_routes(
         prior.append(pts)
         prior_keys.append(key)
     return out
+
+
+def _touches_foreign(points: list[Point], others: list[list[Point]]) -> bool:
+    """True when a corner or end of one route sits on another route.
+
+    The junction painter puts a dot there, so two unrelated numbers would read
+    as tied together.
+    """
+
+    from panelcad.render.junctions import _point_on
+
+    for path in others:
+        for a, b in ((points, path), (path, points)):
+            for pt in a:
+                for p1, p2 in zip(b, b[1:]):
+                    if _point_on(pt.x, pt.y, p1.x, p1.y, p2.x, p2.y):
+                        return True
+    return False
+
+
+def _io_route_clashes(points: list[Point], others: list[list[Point]]) -> bool:
+    return needs_separation(points, others) or _touches_foreign(points, others)
+
+
+def _io_shift_mid(points: list[Point], others: list[list[Point]]) -> list[Point]:
+    """Move the middle jog of a packed I/O route off other numbers' runs.
+
+    ``manhattan_route`` puts every jog at the midpoint between the two stubs,
+    so neighbouring channels with staggered pins share one vertical (or
+    horizontal) and get junction dots where they meet. Step the jog sideways a
+    lane at a time, inside the gap between the stubs, until it is clear. The
+    ends and stubs stay on their pins. No clear slot keeps the route as it was.
+    """
+
+    if len(points) != 6:
+        return points
+    a, sa, m1, m2, eb, b = points
+    vertical = abs(m1.x - m2.x) <= 0.01 and abs(sa.y - m1.y) <= 0.01
+    horizontal = abs(m1.y - m2.y) <= 0.01 and abs(sa.x - m1.x) <= 0.01
+    if not (vertical or horizontal):
+        return points
+    lo, hi = (min(sa.x, eb.x), max(sa.x, eb.x)) if vertical else (min(sa.y, eb.y), max(sa.y, eb.y))
+    mid = m1.x if vertical else m1.y
+    step = 2.0 * LANE_GAP
+    k = 1
+    while True:
+        moved = False
+        for sign in (1.0, -1.0):
+            c = mid + sign * k * step
+            if not (lo + LANE_GAP <= c <= hi - LANE_GAP):
+                continue
+            moved = True
+            if vertical:
+                cand = [a, sa, Point(x=c, y=sa.y), Point(x=c, y=eb.y), eb, b]
+            else:
+                cand = [a, sa, Point(x=sa.x, y=c), Point(x=eb.x, y=c), eb, b]
+            if not _io_route_clashes(cand, others):
+                return cand
+        if not moved:
+            return points
+        k += 1
 
 
 def _cuts_symbol(points: list[Point], walls: list[Rect]) -> bool:

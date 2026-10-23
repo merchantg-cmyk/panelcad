@@ -355,7 +355,7 @@ OP_HELP: dict[str, dict[str, str]] = {
     "set_properties": "Args: ref, properties{}, sheet?",
     "wire": "Args: from, to, net?, sheet?, to_sheet?, number?. number locks that wire number, the same as Set wire number. to_sheet = other page, places TO/FROM arrows.",
     "pair_offpage": "Add the FROM arrow (wired to the target pin) that each hand-placed TO arrow is missing. Args: sheet?, ref?. Devices do not move.",
-    "wire_offpage": "Off-page wire between two sheets. Args: from, to, to_sheet, from_sheet? or sheet?, net?, label?. Places matching TO and FROM arrows.",
+    "wire_offpage": "Off-page wire between two sheets. Args: from, to, to_sheet, from_sheet? or sheet?, net?, label?, number?. Places matching TO and FROM arrows.",
     "delete_component": "Args: ref, sheet?",
     "duplicate_component": "Copy a device offset 10 mm. Args: ref, sheet?",
     "rotate_component": "Rotate 90° clockwise (or degrees=). Args: ref, degrees?=90, sheet?",
@@ -1653,6 +1653,7 @@ class Agent:
             from_sheet=msg.get("from_sheet") or msg.get("sheet"),
             to_sheet=str(to_sheet),
             label=msg.get("label"),
+            number=msg.get("number"),
         )
 
     def op_wire(self, msg: dict[str, Any]) -> dict[str, Any]:
