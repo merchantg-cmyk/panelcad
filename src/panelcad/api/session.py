@@ -4000,12 +4000,29 @@ class Session:
             keep_numbers=keep_numbers,
         )
 
+    def _convert_guarded(self, op: str, summary: str, fn: Callable[[], Any]) -> Any:
+        """Run a conversion step; when the final From-To check blocks, put the
+        pre-conversion project back as its own undo step, then re-raise."""
+
+        from panelcad.convert.from_to_check import ConnectionLost
+
+        try:
+            return self._undoable(op, summary, fn)
+        except ConnectionLost as err:
+            if err.source_project is not None and not self._history_lock:
+                from panelcad.convert.engine import _install
+                from panelcad.core.models import Project
+
+                source = Project.model_validate(err.source_project)
+                self._undoable(op, "roll back blocked conversion", lambda: _install(self, source))
+            raise
+
     def convert_standard_next(self, workspace: Path | str | None = None) -> dict[str, Any]:
         """Convert the next unfinished chunk. One undo. Does not overwrite the source file."""
 
         from panelcad.convert.engine import next_chunk
 
-        return self._undoable("convert_standard", "convert next chunk", lambda: next_chunk(self, workspace))
+        return self._convert_guarded("convert_standard", "convert next chunk", lambda: next_chunk(self, workspace))
 
     def convert_standard_apply(
         self,
@@ -4016,7 +4033,7 @@ class Session:
 
         from panelcad.convert.engine import apply_conversion
 
-        return self._undoable(
+        return self._convert_guarded(
             "convert_standard",
             "apply drawing-standard conversion",
             lambda: apply_conversion(self, workspace, out=out),
@@ -4034,7 +4051,7 @@ class Session:
 
         from panelcad.convert.engine import convert_standard
 
-        return self._undoable(
+        return self._convert_guarded(
             "convert_standard",
             f"convert drawing standard to {target}",
             lambda: convert_standard(
@@ -4060,7 +4077,7 @@ class Session:
     def convert_standard_rerun(self, chunk_id: str, workspace: Path | str | None = None) -> dict[str, Any]:
         from panelcad.convert.engine import rerun_chunk
 
-        return self._undoable(
+        return self._convert_guarded(
             "convert_standard",
             f"re-run {chunk_id}",
             lambda: rerun_chunk(self, chunk_id, workspace),
@@ -4069,7 +4086,7 @@ class Session:
     def convert_standard_revert(self, chunk_id: str, workspace: Path | str | None = None) -> dict[str, Any]:
         from panelcad.convert.engine import revert_chunk
 
-        return self._undoable(
+        return self._convert_guarded(
             "convert_standard",
             f"revert {chunk_id}",
             lambda: revert_chunk(self, chunk_id, workspace),

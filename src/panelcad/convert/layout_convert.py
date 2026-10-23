@@ -279,10 +279,122 @@ def rungs_for(session: Any, sheet: Any, parts: list[_Part]) -> tuple[list[dict[s
         rungs.append(auto)
         return rungs, "_rungs", extra
 
+    plain_coil = _one(parts, "coil")
+    if plain_coil is not None:
+        # A plain coil rung (DOL and hand-drawn starters). The contact order is
+        # read from the wires, so the relayout keeps the netlist it was given.
+        seal = _one(parts, "seal")
+        contacts = wired_chain(sheet, parts, plain_coil, "A1", skip=seal)
+        rung: dict[str, Any] = {"contacts": contacts, "output": plain_coil, "out_net": "RUN"}
+        if seal is not None:
+            under = _parallel_to(sheet, seal, contacts)
+            if under is not None:
+                rung["seal"] = seal
+                rung["seal_under"] = under
+        return [rung], "_rungs", extra
+
     chain = _keep([estop, stop, start, _one(parts, "selector")])
     if chain:
         return [{"contacts": chain, "output": None}], "_rungs", extra
     return [], "_rungs", extra
+
+
+def _split_end(end: str) -> tuple[str, str]:
+    text = str(end or "")
+    if "." not in text:
+        return text, ""
+    ref, pin = text.rsplit(".", 1)
+    return ref, pin
+
+
+def _pin_graph(sheet: Any) -> dict[tuple[str, str], set[tuple[str, str]]]:
+    graph: dict[tuple[str, str], set[tuple[str, str]]] = {}
+    for wire in sheet.wires:
+        a = _split_end(wire.frm)
+        b = _split_end(wire.to)
+        if not a[1] or not b[1]:
+            continue
+        graph.setdefault(a, set()).add(b)
+        graph.setdefault(b, set()).add(a)
+    # Pins on one net are joined through each other (a seal-in shares both nets).
+    changed = True
+    while changed:
+        changed = False
+        for node, near in list(graph.items()):
+            grown = set(near)
+            for other in near:
+                grown |= graph.get(other, set())
+            grown.discard(node)
+            if grown != near:
+                graph[node] = grown
+                changed = True
+    return graph
+
+
+def wired_chain(
+    sheet: Any, parts: list[_Part], output: _Part, output_pin: str, *, skip: _Part | None = None
+) -> list[_Part]:
+    """Series contacts feeding ``output``, hot side first, walked along the drawn wires."""
+
+    refs = {part.ref: part for part in parts}
+    graph = _pin_graph(sheet)
+    pins_of: dict[str, set[str]] = {}
+    for ref, pin in graph:
+        pins_of.setdefault(ref, set()).add(pin)
+    seen = {output.ref}
+    if skip is not None:
+        seen.add(skip.ref)
+    chain: list[_Part] = []
+    cur = (output.ref, output_pin)
+    while True:
+        nxt = sorted(
+            node for node in graph.get(cur, set()) if node[0] in refs and node[0] not in seen
+        )
+        if len(nxt) != 1:
+            break
+        ref, pin = nxt[0]
+        chain.insert(0, refs[ref])
+        seen.add(ref)
+        others = pins_of.get(ref, set()) - {pin}
+        if len(others) != 1:
+            break
+        cur = (ref, next(iter(others)))
+    return chain
+
+
+def _parallel_to(sheet: Any, seal: _Part, contacts: list[_Part]) -> _Part | None:
+    graph = _pin_graph(sheet)
+    seal_nets = [
+        {node[0] for node in near} for (ref, _pin), near in graph.items() if ref == seal.ref
+    ]
+    for part in contacts:
+        if len(seal_nets) >= 2 and all(part.ref in net for net in seal_nets):
+            return part
+    return None
+
+
+def unplaced_wired(sheet: Any, parts: list[_Part], rungs: list[dict[str, Any]]) -> list[str]:
+    """Role parts that share a wire with the rungs but are not in any rung."""
+
+    used: set[str] = set()
+    for rung in rungs:
+        for part in rung.get("contacts") or []:
+            used.add(part.ref)
+        for key in ("output", "seal", "seal_under", "tap", "join"):
+            part = rung.get(key)
+            if part is not None:
+                used.add(part.ref)
+    if not used:
+        return []
+    graph = _pin_graph(sheet)
+    left: list[str] = []
+    for part in parts:
+        if part.ref in used:
+            continue
+        near = {node[0] for (ref, _pin), nodes in graph.items() if ref == part.ref for node in nodes}
+        if near & used:
+            left.append(part.ref)
+    return left
 
 
 def parts_on_sheet(session: Any, sheet: Any) -> list[_Part]:
@@ -864,6 +976,9 @@ def relayout_sheet(session: Any, sheet_id: str, target: str) -> dict[str, str]:
     sheet.rail_return = record["to_ret"]
     rungs, key, extra = rungs_for(session, sheet, parts)
     extra[key] = rungs
+    left = unplaced_wired(sheet, parts, rungs)
+    if left:
+        record["unplaced"] = left
     if not parts:
         clear_route_cache()
         return record

@@ -265,8 +265,19 @@ def revert_chunk(session: Any, chunk_id: str, workspace: str | Path | None = Non
     for dep in _dependents(ws, chunk):
         if dep["status"] in {"done", "accepted"}:
             dep["status"] = "pending"
+    before = json.loads(json.dumps(ws))
     chunk["status"] = "reverted"
     _rebuild(session, ws)
+    if not any(item.get("status") == "pending" for item in ws["chunks"]):
+        # A revert that leaves nothing pending is checked before anything is
+        # written or removed. A block refuses this revert only: the workspace
+        # stays as it was and the caller's undo step puts the drawing back.
+        from panelcad.convert.from_to_check import RevertRefused
+
+        report = connection_report(session, ws)
+        if not report["ok"]:
+            _save(before)
+            raise RevertRefused(report, chunk_id=str(chunk_id))
     _stamp_working(session, ws)
     _save(ws)
     _write_out(session, ws)
@@ -429,6 +440,14 @@ def _apply_layout(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> No
     block["rails"] = rails
     chunk["rail"] = record
     issues = sheet_flags(session, sheet_id)
+    for ref in record.get("unplaced") or []:
+        issues.append(
+            {
+                "flag": "unplaced",
+                "detail": f"{ref} is wired into a rung but was not placed on the ladder. Check it before accepting.",
+                "ref": ref,
+            }
+        )
     chunk["issues"] = issues
     chunk["suggestion"] = suggest_cleanup(issues)
 
@@ -1139,6 +1158,7 @@ def _public(ws: dict[str, Any]) -> dict[str, Any]:
         "pending": pending,
         "done": not pending,
         "chunks": [_chunk_public(chunk) for chunk in ws["chunks"]],
+        "connection_check": ws.get("connection_check") or {},
     }
 
 
@@ -1213,10 +1233,107 @@ def _save(ws: dict[str, Any]) -> None:
     dest.write_text(json.dumps(ws, indent=2), encoding="utf-8")
 
 
+def connection_report(session: Any, ws: dict[str, Any]) -> dict[str, Any]:
+    """From-To nets before and after, mapped back through the conversion maps."""
+
+    from panelcad.convert.from_to_check import check_connections
+
+    public = _public(ws)
+    before = Project.model_validate(ws["source_project"])
+    return check_connections(
+        before,
+        session.project,
+        session.catalog,
+        tag_map=public["tag_map"],
+        pin_rewrites=public["pin_rewrites"],
+        rail_map=public["rail_map"],
+    )
+
+
 def _write_out(session: Any, ws: dict[str, Any]) -> None:
+    from panelcad.convert.from_to_check import ConnectionLost
+
+    report = connection_report(session, ws)
+    # Mid-way through a stepped conversion the sheets are half renamed (one
+    # sheet's rails converted, the next not yet), so the nets cannot match.
+    # Record the check, but only block once every chunk has run. Nothing is
+    # saved until then, and a copy from an earlier run is removed, so a
+    # half-converted or unchecked copy never sits at the save-as path.
+    partial = any(chunk.get("status") == "pending" for chunk in ws["chunks"])
+    report["partial"] = partial
+    ws["connection_check"] = report
+    if partial or not report["ok"]:
+        _drop_written(session, ws)
+        _save(ws)
+        if partial:
+            return
+        raise ConnectionLost(report, source_project=ws["source_project"])
+    _save(ws)
     raw = ws.get("out_path") or ""
     if not raw:
         return
     dest = Path(raw)
     _refuse_source(ws.get("source_path"), dest)
+    dropped = str(ws.get("out_dropped") or "")
+    if dropped and dest.exists() and _same_path(dropped, dest):
+        # We removed our own copy here and cleared the session's disk stamp.
+        # Something new now sits at that path, so it is not ours to replace.
+        raise FileExistsError(
+            f"{dest} was created after the earlier converted copy was removed; "
+            "it was not overwritten. Move it or choose a different save-as path."
+        )
     session.save(dest)
+    ws.pop("out_dropped", None)
+    ws["out_written"] = {"path": str(dest), "sha256": _file_hash(dest)}
+    _save(ws)
+
+
+def _same_path(a: Path | str, b: Path | str) -> bool:
+    try:
+        return Path(a).resolve() == Path(b).resolve()
+    except OSError:
+        return str(a) == str(b)
+
+
+def _file_hash(path: Path) -> str:
+    import hashlib
+
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
+def _drop_written(session: Any, ws: dict[str, Any]) -> None:
+    """Remove the save-as copy this workspace wrote, only if it is unchanged since.
+
+    Saving the copy made it the session's file, so its on-disk stamp is
+    cleared too; otherwise the next save to the same path is refused as
+    "changed on disk".
+    """
+
+    info = ws.pop("out_written", None) or {}
+    raw = str(info.get("path") or "")
+    digest = str(info.get("sha256") or "")
+    if not raw or not digest:
+        return
+    path = Path(raw)
+    source = ws.get("source_path")
+    try:
+        if source and path.resolve() == Path(source).resolve():
+            return
+    except OSError:
+        return
+    if path.is_file() and _file_hash(path) == digest:
+        try:
+            path.unlink()
+        except OSError:
+            return
+        stamped = getattr(session, "_stamped_path", None)
+        try:
+            same = stamped is not None and Path(stamped).resolve() == path.resolve()
+        except OSError:
+            same = False
+        ws["out_dropped"] = str(path)
+        if same:
+            session._disk_stamp = ""
