@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Any, Iterable, Literal
 from urllib.parse import urlparse
 
-import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from panelcad.library import yaml_load as _lib_yaml
 from panelcad.library.paths import builtin_library_dir, parts_overlay_dirs
 
 Verified = Literal["full", "partial"]
@@ -534,7 +534,7 @@ class PartsCatalog:
             self.load_file(path)
 
     def load_file(self, path: Path) -> None:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        data = _lib_yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         if not isinstance(data, dict):
             raise ValueError(f"{path}: manufacturer part file must be a mapping")
         if data.get("vendor_articles"):
@@ -558,7 +558,7 @@ class PartsCatalog:
 
         text = path.read_text(encoding="utf-8")
         sources = _article_sources(text)
-        data = yaml.safe_load(text) or {}
+        data = _lib_yaml.safe_load(text) or {}
         articles = data.get("vendor_articles") or {}
         if not isinstance(articles, dict):
             return

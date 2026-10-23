@@ -12,9 +12,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from panelcad.core.models import Device, Project, Sheet
+from panelcad.library import yaml_load as _lib_yaml
 from panelcad.library.catalog import normalize_standard
 from panelcad.library.paths import builtin_library_dir, library_search_paths, user_library_dir
 
@@ -70,7 +69,7 @@ def _as_prefix_map(raw: Any) -> dict[str, str]:
 
 
 def _read_prefix_file(path: Path) -> dict[str, dict[str, str]]:
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    data = _lib_yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict):
         return {}
     block = data.get("standards")

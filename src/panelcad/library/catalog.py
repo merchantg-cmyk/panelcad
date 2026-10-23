@@ -8,6 +8,7 @@ import yaml
 from panelcad.core.block import parse_attributes
 from panelcad.core.models import Device, PinDef
 from panelcad.core.primitives import Primitive, expand_draw_item, land_leads_on_circle
+from panelcad.library import yaml_load as _lib_yaml
 from panelcad.library.panel import resolve_panel
 from panelcad.library.paths import library_search_paths
 from panelcad.library.ports import parse_port
@@ -40,7 +41,7 @@ class Catalog:
         finalize_io_modules(self)
 
     def load_file(self, path: Path) -> None:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        data = _lib_yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         from panelcad.core.refs import is_prefix_library_file
 
         if is_prefix_library_file(data):
@@ -109,7 +110,7 @@ class Catalog:
         dest.parent.mkdir(parents=True, exist_ok=True)
         lib_name = device.library_id.split(".", 1)[0] if "." in device.library_id else "local"
         if dest.is_file():
-            data = yaml.safe_load(dest.read_text(encoding="utf-8")) or {}
+            data = _lib_yaml.safe_load(dest.read_text(encoding="utf-8")) or {}
             lib_name = str(data.get("library") or lib_name)
             devices_raw = list(data.get("devices") or [])
         else:

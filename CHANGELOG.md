@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.5.15 — 2026-10-23
+
+- **Faster startup** — The AI libraries load only when they are used, and the parts library uses a faster YAML reader.
+- **Off-page wires** — Off-page wires keep the wire number you give them and never reuse wire ids.
+- **I/O wiring** — Auto-routed I/O wires no longer share runs or leave false junction dots.
+- **Cleanup** — Cleanup no longer turns rung wire labels into L1.
+- **Examples** — The example files are saved with coils near the right rail.
+
 ## 0.5.14 — 2026-10-23
 
 - **Memory** — Windows are freed when they close, so long sessions no longer build up closed windows.

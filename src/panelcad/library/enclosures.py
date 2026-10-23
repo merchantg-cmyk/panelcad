@@ -7,8 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import yaml
-
+from panelcad.library import yaml_load as _lib_yaml
 from panelcad.library.paths import builtin_library_dir, repo_root, user_library_dir
 
 INCH_MM = 25.4
@@ -203,7 +202,7 @@ def _row_from_raw(raw: dict[str, Any]) -> StandardEnclosure:
 
 
 def load_enclosure_file(path: Path, library: EnclosureLibrary) -> None:
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    data = _lib_yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict):
         return
     defaults = data.get("defaults") or {}
