@@ -120,7 +120,7 @@ def test_control_transformer_is_coil_arcs_with_h_and_x_terminals():
         assert pins["H1"].y == pytest.approx(12.0)
         assert pins["H2"].y == pytest.approx(28.0)
         assert pins["X1"].y == pytest.approx(12.0)
-        assert pins["X2"].y == pytest.approx(28.0)
+        assert pins["X2"].y == pytest.approx(50.0 if library_id.startswith("nema.") else 28.0)
         arcs = _arcs(device)
         assert len(arcs) >= 9, library_id
         assert not any(prim.type == "circle" for prim in device.primitives)
@@ -241,3 +241,55 @@ def test_side_approach_lands_straight_on_even_motor_terminals():
         landings.append(pts[-1].x)
     gaps = [b - a for a, b in zip(landings, landings[1:])]
     assert gaps == pytest.approx([10.0, 10.0], abs=0.05)
+
+
+def test_nema_breakers_use_pure_arc_poles_and_contactors_use_circle_coil():
+    catalog = default_catalog()
+    for lib_id, poles in (
+        ("nema.breakers.mcb_1p_16a", 1),
+        ("nema.breakers.mcb_3p_32a", 3),
+        ("nema.breakers.mccb_3p_100a", 3),
+    ):
+        dev = catalog.get(lib_id)
+        arcs = _arcs(dev)
+        circles = [prim for prim in dev.primitives if prim.type == "circle"]
+        lines = [prim for prim in dev.primitives if prim.type == "line"]
+        assert len(arcs) == poles, lib_id
+        assert len(circles) == poles * 2, lib_id
+        assert all(abs(line.x - line.x2) <= 0.05 for line in lines), (lib_id, lines)
+
+    for lib_id in ("nema.contactors.ac3_9a", "nema.contactors.ac3_32a"):
+        dev = catalog.get(lib_id)
+        rects = [prim for prim in dev.primitives if prim.type == "rect"]
+        circles = [prim for prim in dev.primitives if prim.type == "circle"]
+        assert len(rects) == 1, lib_id
+        assert len(circles) == 1, lib_id
+
+    ol = catalog.get("nema.protection.overload")
+    rects = [prim for prim in ol.primitives if prim.type == "rect"]
+    assert len(rects) == 1
+    box_right = rects[0].x + rects[0].w
+    for prim in ol.primitives:
+        if prim.type == "line":
+            assert max(prim.x, prim.x2) <= box_right + 0.05
+    for pin_id in ("95", "96"):
+        pin = next(pin for pin in ol.pins if pin.id == pin_id)
+        assert pin.x == pytest.approx(box_right)
+
+
+def test_single_pole_nema_controls_do_not_receive_three_phase_supply_stubs():
+    from panelcad.core.phase_color import pin_phase_map
+    from panelcad.render.phase_ink import line_side_runs
+    from panelcad.render.svg import sheet_to_svg
+
+    session = Session.create("NEMA controls")
+    session.place("nema.operators.pb_no", ref="PB1", x=25, y=40, snap=False)
+    session.place("nema.operators.pb_nc", ref="PB2", x=75, y=40, snap=False)
+    session.place("nema.operators.estop", ref="ESTOP1", x=125, y=40, snap=False)
+    session.place("nema.protection.fuse_10a", ref="FU1", x=175, y=40, snap=False)
+    assert pin_phase_map(session.sheet(), session.catalog) == {}
+    runs = line_side_runs(session.project, session.sheet(), session.catalog)
+    assert runs == []
+    svg = sheet_to_svg(session.sheet(), session.catalog, project=session.project)
+    assert 'width="100%"' not in svg
+    assert 'fill="#f7f4ea"' in svg

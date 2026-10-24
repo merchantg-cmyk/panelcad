@@ -137,6 +137,6 @@ def sheet_to_svg(
         f'<?xml version="1.0" encoding="UTF-8"?>\n'
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}mm" height="{height}mm" '
         f'viewBox="0 0 {width} {height}">\n'
-        f'<rect width="100%" height="100%" fill="#f7f4ea"/>\n'
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f7f4ea"/>\n'
         f"{body}\n</svg>\n"
     )

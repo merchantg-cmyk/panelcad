@@ -209,8 +209,13 @@ def feature_iec_to_nema_convert(app, win) -> None:
         QTest.qWait(100)
 
         header = dlg.findChild(QLabel, "convert-review-header")
-        check("review header shown", header is not None and header.isVisible() and "NEMA/ANSI" in header.text(),
+        check("review header shown with decisions count",
+              header is not None and header.isVisible() and "NEMA/ANSI" in header.text() and "decisions:" in header.text(),
               header.text() if header is not None else "missing")
+        tags_lbl = dlg.findChild(QLabel, "chunk-summary:tags")
+        check("chunk summary shows reasons",
+              tags_lbl is not None and "reasons:" in tags_lbl.text(),
+              tags_lbl.text() if tags_lbl is not None else "missing")
         shot(dlg, "convert-dialog-review")
 
         # Click Before thumbnail on main sheet to verify CompareDialog

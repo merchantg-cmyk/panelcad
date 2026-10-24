@@ -14,13 +14,15 @@ devices:
         - { id: "3", x: 0, y: 24, side: left }
         - { id: "4", x: 24, y: 24, side: right }
       draw:
-        - circle: [12, 7, 5.5]
-        - line: [12, 12.5, 12, 20]
-        - line: [0, 24, 7, 24]
-        - line: [17, 24, 24, 24]
-        - line: [7, 21, 7, 27]
-        - line: [17, 21, 17, 27]
-        - line: [7, 24, 14, 18]
+        - line: [8, 9.5, 16, 9.5]
+        - line: [8, 9.5, 8, 12]
+        - line: [16, 9.5, 16, 12]
+        - line: [12, 9.5, 12, 19.5]
+        - line: [5.5, 19.5, 18.5, 19.5]
+        - line: [0, 24, 6.8, 24]
+        - line: [17.2, 24, 24, 24]
+        - circle: [8, 24, 1.2]
+        - circle: [16, 24, 1.2]
     panel: { w: 22, h: 22, d: 50, din: false, in_panel: true, mount: door, dims: generic }
     props: { contact: "NO", mounting: 22mm }
 
@@ -36,13 +38,15 @@ devices:
         - { id: "1", x: 0, y: 24, side: left }
         - { id: "2", x: 24, y: 24, side: right }
       draw:
-        - circle: [12, 7, 5.5]
-        - line: [12, 12.5, 12, 20]
-        - line: [0, 24, 7, 24]
-        - line: [17, 24, 24, 24]
-        - line: [7, 21, 7, 27]
-        - line: [17, 21, 17, 27]
-        - line: [7, 24, 17, 21]
+        - line: [8, 9.5, 16, 9.5]
+        - line: [8, 9.5, 8, 12]
+        - line: [16, 9.5, 16, 12]
+        - line: [12, 9.5, 12, 25.4]
+        - line: [5.5, 25.4, 18.5, 25.4]
+        - line: [0, 24, 6.8, 24]
+        - line: [17.2, 24, 24, 24]
+        - circle: [8, 24, 1.2]
+        - circle: [16, 24, 1.2]
     panel: { w: 22, h: 22, d: 50, din: false, in_panel: true, mount: door, dims: generic }
     props: { contact: NC, mounting: 22mm }
 
@@ -58,14 +62,14 @@ devices:
         - { id: "1", x: 0, y: 26, side: left }
         - { id: "2", x: 28, y: 26, side: right }
       draw:
-        - circle: [14, 8, 6]
-        - circle: [14, 8, 3]
-        - line: [14, 14, 14, 22]
-        - line: [0, 26, 8, 26]
-        - line: [20, 26, 28, 26]
-        - line: [8, 23, 8, 29]
-        - line: [20, 23, 20, 29]
-        - line: [8, 26, 20, 23]
+        - arc: [14, 12.5, 6, 0, 180]
+        - line: [8, 12.5, 20, 12.5]
+        - line: [14, 12.5, 14, 27.4]
+        - line: [6.5, 27.4, 21.5, 27.4]
+        - line: [0, 26, 7.8, 26]
+        - line: [20.2, 26, 28, 26]
+        - circle: [9, 26, 1.2]
+        - circle: [19, 26, 1.2]
     panel: { w: 40, h: 40, d: 60, din: false, in_panel: true, mount: door, dims: generic }
     props: { contact: NC, color: red, mounting: 22mm }
 
@@ -83,19 +87,19 @@ devices:
         - { id: "21", x: 0, y: 38, side: left }
         - { id: "22", x: 28, y: 38, side: right }
       draw:
-        - circle: [14, 8, 6]
-        - circle: [14, 8, 3]
-        - line: [14, 14, 14, 22]
-        - line: [0, 26, 8, 26]
-        - line: [20, 26, 28, 26]
-        - line: [8, 23, 8, 29]
-        - line: [20, 23, 20, 29]
-        - line: [8, 26, 20, 23]
-        - line: [0, 38, 8, 38]
-        - line: [20, 38, 28, 38]
-        - line: [8, 35, 8, 41]
-        - line: [20, 35, 20, 41]
-        - line: [8, 38, 20, 35]
+        - arc: [14, 12.5, 6, 0, 180]
+        - line: [8, 12.5, 20, 12.5]
+        - line: [14, 12.5, 14, 39.4]
+        - line: [6.5, 27.4, 21.5, 27.4]
+        - line: [0, 26, 7.8, 26]
+        - line: [20.2, 26, 28, 26]
+        - circle: [9, 26, 1.2]
+        - circle: [19, 26, 1.2]
+        - line: [6.5, 39.4, 21.5, 39.4]
+        - line: [0, 38, 7.8, 38]
+        - line: [20.2, 38, 28, 38]
+        - circle: [9, 38, 1.2]
+        - circle: [19, 38, 1.2]
     panel: { w: 40, h: 40, d: 60, din: false, in_panel: true, mount: door, dims: generic }
     props: { contact: 2NC, color: red, mounting: 22mm, twist_release: true }
 
@@ -155,14 +159,14 @@ devices:
         - { id: "3", x: 0, y: 24, side: left }
         - { id: "4", x: 24, y: 24, side: right }
       draw:
-        - circle: [12, 8, 6]
-        - line: [12, 8, 16.4, 4.2]
-        - line: [12, 14, 12, 20]
-        - line: [0, 24, 7, 24]
-        - line: [17, 24, 24, 24]
-        - line: [7, 21, 7, 27]
-        - line: [17, 21, 17, 27]
-        - line: [7, 24, 14, 18]
+        - circle: [12, 8, 5]
+        - line: [12, 8, 15.8, 4.5]
+        - line: [12, 13, 12, 19.5]
+        - line: [5.5, 19.5, 18.5, 19.5]
+        - line: [0, 24, 6.8, 24]
+        - line: [17.2, 24, 24, 24]
+        - circle: [8, 24, 1.2]
+        - circle: [16, 24, 1.2]
     panel: { w: 22, h: 22, d: 50, din: false, in_panel: true, mount: door, dims: generic }
     props: { contact: "NO", positions: 2, maintained: true, mounting: 22mm }
 
@@ -238,11 +242,10 @@ devices:
         - { id: "3", x: 0, y: 10, side: left }
         - { id: "4", x: 28, y: 10, side: right }
       draw:
-        - line: [0, 10, 8, 10]
-        - line: [20, 10, 28, 10]
-        - line: [8, 7, 8, 13]
-        - line: [20, 7, 20, 13]
-        - line: [8, 10, 16, 4]
+        - line: [0, 10, 11, 10]
+        - line: [17, 10, 28, 10]
+        - line: [11, 4.5, 11, 15.5]
+        - line: [17, 4.5, 17, 15.5]
     panel: { w: 9, h: 45, d: 70, din: true }
     props: { contact: "NO" }
 
@@ -258,11 +261,11 @@ devices:
         - { id: "1", x: 0, y: 10, side: left }
         - { id: "2", x: 28, y: 10, side: right }
       draw:
-        - line: [0, 10, 8, 10]
-        - line: [20, 10, 28, 10]
-        - line: [8, 7, 8, 13]
-        - line: [20, 7, 20, 13]
-        - line: [8, 10, 20, 7]
+        - line: [0, 10, 11, 10]
+        - line: [17, 10, 28, 10]
+        - line: [11, 4.5, 11, 15.5]
+        - line: [17, 4.5, 17, 15.5]
+        - line: [8.5, 15, 19.5, 5]
     panel: { w: 9, h: 45, d: 70, din: true }
     props: { contact: NC }
 
@@ -439,10 +442,11 @@ devices:
         - { id: "1", x: 0, y: 7, side: left, electrical: power }
         - { id: "2", x: 28, y: 7, side: right, electrical: power }
       draw:
-        - line: [0, 7, 6, 7]
+        - line: [0, 7, 10, 7]
         - rect: [6, 2, 16, 10]
-        - line: [22, 7, 28, 7]
-        - text: [14, 9, "FU", 2.0]
+        - arc: [12, 7, 2.0, 180, -180]
+        - arc: [16, 7, 2.0, 180, 180]
+        - line: [18, 7, 28, 7]
     panel: { w: 18, h: 80, d: 60, din: true }
     props: { In: 10A }
 
@@ -462,15 +466,21 @@ devices:
         - { id: "4", x: 18, y: 50, side: bottom, electrical: power }
         - { id: "6", x: 28, y: 50, side: bottom, electrical: power }
       draw:
-        - line: [8, 0, 8, 12]
+        - line: [8, 0, 8, 16]
         - rect: [4, 12, 8, 16]
-        - line: [8, 28, 8, 50]
-        - line: [18, 0, 18, 12]
+        - arc: [8, 18, 2.0, 90, -180]
+        - arc: [8, 22, 2.0, 90, 180]
+        - line: [8, 24, 8, 50]
+        - line: [18, 0, 18, 16]
         - rect: [14, 12, 8, 16]
-        - line: [18, 28, 18, 50]
-        - line: [28, 0, 28, 12]
+        - arc: [18, 18, 2.0, 90, -180]
+        - arc: [18, 22, 2.0, 90, 180]
+        - line: [18, 24, 18, 50]
+        - line: [28, 0, 28, 16]
         - rect: [24, 12, 8, 16]
-        - line: [28, 28, 28, 50]
+        - arc: [28, 18, 2.0, 90, -180]
+        - arc: [28, 22, 2.0, 90, 180]
+        - line: [28, 24, 28, 50]
     panel: { w: 0, h: 0, d: 0, din: true, in_panel: true, mount: din_rail, dims: generic }
     props: { poles: 3 }
 
@@ -489,32 +499,28 @@ devices:
         - { id: "2", x: 8, y: 50, side: bottom, electrical: power }
         - { id: "4", x: 18, y: 50, side: bottom, electrical: power }
         - { id: "6", x: 28, y: 50, side: bottom, electrical: power }
-        - { id: "95", x: 36, y: 22, side: right, electrical: output }
-        - { id: "96", x: 36, y: 34, side: right, electrical: output }
+        - { id: "95", x: 34, y: 22, side: right, electrical: output }
+        - { id: "96", x: 34, y: 34, side: right, electrical: output }
       draw:
-        - rect: [2, 8, 28, 34]
+        - rect: [2, 8, 32, 34]
         - line: [8, 0, 8, 14]
         - line: [18, 0, 18, 14]
         - line: [28, 0, 28, 14]
-        - arc: [8, 15.5, 1.5, 90, -180]
-        - arc: [8, 18.5, 1.5, 90, 180]
-        - arc: [8, 21.5, 1.5, 90, -180]
-        - arc: [8, 24.5, 1.5, 90, 180]
-        - arc: [18, 15.5, 1.5, 90, -180]
-        - arc: [18, 18.5, 1.5, 90, 180]
-        - arc: [18, 21.5, 1.5, 90, -180]
-        - arc: [18, 24.5, 1.5, 90, 180]
-        - arc: [28, 15.5, 1.5, 90, -180]
-        - arc: [28, 18.5, 1.5, 90, 180]
-        - arc: [28, 21.5, 1.5, 90, -180]
-        - arc: [28, 24.5, 1.5, 90, 180]
-        - line: [8, 26, 8, 50]
-        - line: [18, 26, 18, 50]
-        - line: [28, 26, 28, 50]
-        - line: [36, 22, 32, 22]
-        - line: [32, 22, 35, 32]
-        - line: [32, 34, 36, 34]
-        - line: [32, 32, 32, 36]
+        - arc: [8, 16, 2, 90, -180]
+        - arc: [8, 20, 2, 90, 180]
+        - arc: [8, 24, 2, 90, -180]
+        - arc: [8, 28, 2, 90, 180]
+        - arc: [18, 16, 2, 90, -180]
+        - arc: [18, 20, 2, 90, 180]
+        - arc: [18, 24, 2, 90, -180]
+        - arc: [18, 28, 2, 90, 180]
+        - arc: [28, 16, 2, 90, -180]
+        - arc: [28, 20, 2, 90, 180]
+        - arc: [28, 24, 2, 90, -180]
+        - arc: [28, 28, 2, 90, 180]
+        - line: [8, 30, 8, 50]
+        - line: [18, 30, 18, 50]
+        - line: [28, 30, 28, 50]
     panel: { w: 45, h: 70, d: 80, din: true }
     props: { class: 10 }
 
@@ -530,14 +536,14 @@ devices:
         - { id: "95", x: 0, y: 16, side: left, electrical: output }
         - { id: "96", x: 28, y: 16, side: right, electrical: output }
       draw:
-        - arc: [11, 7, 1.5, 180, -180]
-        - arc: [14, 7, 1.5, 180, 180]
-        - arc: [17, 7, 1.5, 180, -180]
-        - line: [0, 16, 8, 16]
-        - line: [20, 16, 28, 16]
-        - line: [8, 13, 8, 19]
-        - line: [20, 13, 20, 19]
-        - line: [8, 16, 20, 13]
+        - arc: [11, 6, 1.5, 180, -180]
+        - arc: [14, 6, 1.5, 180, 180]
+        - arc: [17, 6, 1.5, 180, -180]
+        - line: [0, 16, 11, 16]
+        - line: [17, 16, 28, 16]
+        - line: [11, 11, 11, 21]
+        - line: [17, 11, 17, 21]
+        - line: [8.5, 20.5, 19.5, 11.5]
     panel: { w: 45, h: 70, d: 80, din: true }
     props: { contact: NC }
 
@@ -557,20 +563,17 @@ devices:
         - { id: T2, x: 18, y: 50, side: bottom, electrical: power }
         - { id: T3, x: 28, y: 50, side: bottom, electrical: power }
       draw:
-        - rect: [4, 8, 28, 34]
+        - rect: [2, 8, 32, 34]
         - line: [8, 0, 8, 16]
         - line: [18, 0, 18, 16]
         - line: [28, 0, 28, 16]
-        - line: [5, 16, 11, 16]
-        - line: [15, 16, 21, 16]
-        - line: [25, 16, 31, 16]
-        - line: [8, 16, 12, 26]
-        - line: [18, 16, 22, 26]
-        - line: [28, 16, 31, 26]
-        - line: [8, 28, 8, 50]
-        - line: [18, 28, 18, 50]
-        - line: [28, 28, 28, 50]
-        - line: [12, 26, 31, 26]
+        - line: [12, 16, 8, 26]
+        - line: [22, 16, 18, 26]
+        - line: [32, 16, 28, 26]
+        - line: [8, 26, 8, 50]
+        - line: [18, 26, 18, 50]
+        - line: [28, 26, 28, 50]
+        - line: [10, 21, 30, 21]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
     props: { poles: 3, location: field }
 
@@ -607,15 +610,15 @@ devices:
         - { id: "3", x: 0, y: 28, side: left }
         - { id: "4", x: 24, y: 28, side: right }
       draw:
-        - circle: [12, 8, 6]
-        - line: [8, 4, 16, 12]
-        - line: [16, 4, 8, 12]
-        - line: [12, 14, 12, 24]
-        - line: [0, 28, 7, 28]
-        - line: [17, 28, 24, 28]
-        - line: [7, 25, 7, 31]
-        - line: [17, 25, 17, 31]
-        - line: [7, 28, 14, 22]
+        - circle: [12, 8, 5]
+        - line: [8.5, 4.5, 15.5, 11.5]
+        - line: [15.5, 4.5, 8.5, 11.5]
+        - line: [12, 13, 12, 23.5]
+        - line: [5.5, 23.5, 18.5, 23.5]
+        - line: [0, 28, 6.8, 28]
+        - line: [17.2, 28, 24, 28]
+        - circle: [8, 28, 1.2]
+        - circle: [16, 28, 1.2]
     panel: { w: 22, h: 22, d: 50, din: false, in_panel: true, mount: door, dims: generic }
     props: { contact: "NO", lamp: true, mounting: 22mm }
 
@@ -656,10 +659,11 @@ devices:
         - { id: "2", x: 10, y: 50, side: bottom, electrical: power }
       draw:
         - rect: [3, 6, 14, 38]
-        - line: [10, 0, 10, 14]
-        - line: [6, 14, 14, 14]
-        - line: [10, 14, 14, 22]
-        - line: [10, 24, 10, 50]
+        - line: [10, 0, 10, 15.2]
+        - circle: [10, 16.0, 0.8]
+        - arc: [10, 20.0, 3.2, 90, -180]
+        - circle: [10, 24.0, 0.8]
+        - line: [10, 24.8, 10, 50]
         - text: [14, 36, "CB", 2.2]
     panel: { w: 18, h: 80, d: 70, din: true }
     props: { poles: 1, In: 16A, Un: 120V }
@@ -681,19 +685,21 @@ devices:
         - { id: "6", x: 28, y: 55, side: bottom, electrical: power }
       draw:
         - rect: [2, 8, 32, 40]
-        - line: [8, 0, 8, 16]
-        - line: [18, 0, 18, 16]
-        - line: [28, 0, 28, 16]
-        - line: [5, 16, 11, 16]
-        - line: [15, 16, 21, 16]
-        - line: [25, 16, 31, 16]
-        - line: [8, 16, 12, 24]
-        - line: [18, 16, 22, 24]
-        - line: [28, 16, 32, 24]
-        - line: [8, 26, 8, 55]
-        - line: [18, 26, 18, 55]
-        - line: [28, 26, 28, 55]
-        - line: [12, 24, 32, 24]
+        - line: [8, 0, 8, 15.4]
+        - line: [18, 0, 18, 15.4]
+        - line: [28, 0, 28, 15.4]
+        - circle: [8, 16.2, 0.8]
+        - circle: [18, 16.2, 0.8]
+        - circle: [28, 16.2, 0.8]
+        - arc: [8, 21.0, 4.0, 90, -180]
+        - arc: [18, 21.0, 4.0, 90, -180]
+        - arc: [28, 21.0, 4.0, 90, -180]
+        - circle: [8, 25.8, 0.8]
+        - circle: [18, 25.8, 0.8]
+        - circle: [28, 25.8, 0.8]
+        - line: [8, 26.6, 8, 55]
+        - line: [18, 26.6, 18, 55]
+        - line: [28, 26.6, 28, 55]
         - text: [13, 42, "CB", 2.4]
     panel: { w: 54, h: 80, d: 70, din: true }
     props: { poles: 3, In: 32A, Un: 480V }
@@ -715,19 +721,21 @@ devices:
         - { id: "6", x: 33, y: 60, side: bottom, electrical: power }
       draw:
         - rect: [2, 8, 38, 46]
-        - line: [9, 0, 9, 18]
-        - line: [21, 0, 21, 18]
-        - line: [33, 0, 33, 18]
-        - line: [6, 18, 12, 18]
-        - line: [18, 18, 24, 18]
-        - line: [30, 18, 36, 18]
-        - line: [9, 18, 13, 26]
-        - line: [21, 18, 25, 26]
-        - line: [33, 18, 37, 26]
-        - line: [9, 28, 9, 60]
-        - line: [21, 28, 21, 60]
-        - line: [33, 28, 33, 60]
-        - line: [13, 26, 37, 26]
+        - line: [9, 0, 9, 17.4]
+        - line: [21, 0, 21, 17.4]
+        - line: [33, 0, 33, 17.4]
+        - circle: [9, 18.2, 0.8]
+        - circle: [21, 18.2, 0.8]
+        - circle: [33, 18.2, 0.8]
+        - arc: [9, 23.0, 4.0, 90, -180]
+        - arc: [21, 23.0, 4.0, 90, -180]
+        - arc: [33, 23.0, 4.0, 90, -180]
+        - circle: [9, 27.8, 0.8]
+        - circle: [21, 27.8, 0.8]
+        - circle: [33, 27.8, 0.8]
+        - line: [9, 28.6, 9, 60]
+        - line: [21, 28.6, 21, 60]
+        - line: [33, 28.6, 33, 60]
         - text: [15, 46, "CB", 2.4]
     panel: { w: 105, h: 130, d: 86, din: true }
     props: { poles: 3, In: 100A, Un: 480V }
@@ -750,17 +758,17 @@ devices:
         - { id: "95", x: 36, y: 22, side: right, electrical: output }
         - { id: "96", x: 36, y: 34, side: right, electrical: output }
       draw:
-        - rect: [2, 8, 32, 46]
+        - rect: [3, 8, 29, 46]
         - line: [8, 0, 8, 16]
         - line: [18, 0, 18, 16]
         - line: [28, 0, 28, 16]
         - line: [5, 16, 11, 16]
         - line: [15, 16, 21, 16]
-        - line: [25, 16, 31, 16]
+        - line: [25, 16, 30, 16]
         - line: [8, 16, 12, 24]
         - line: [18, 16, 22, 24]
-        - line: [28, 16, 32, 24]
-        - line: [12, 24, 32, 24]
+        - line: [28, 16, 30, 24]
+        - line: [12, 24, 30, 24]
         - arc: [8, 30, 2, 90, -180]
         - arc: [8, 34, 2, 90, 180]
         - arc: [8, 38, 2, 90, -180]
@@ -776,10 +784,13 @@ devices:
         - line: [8, 44, 8, 62]
         - line: [18, 44, 18, 62]
         - line: [28, 44, 28, 62]
-        - line: [36, 22, 32, 22]
-        - line: [32, 22, 35, 33]
-        - line: [32, 34, 36, 34]
-        - line: [32, 32, 32, 36]
+        - line: [34.2, 22, 36, 22]
+        - line: [34.2, 22, 34.2, 26]
+        - line: [32.8, 26, 35.6, 26]
+        - line: [32.8, 30, 35.6, 30]
+        - line: [32.8, 31.2, 35.6, 24.8]
+        - line: [34.2, 30, 34.2, 34]
+        - line: [34.2, 34, 36, 34]
         - text: [12, 12, "MCP", 2.2]
     panel: { w: 45, h: 90, d: 80, din: true }
     props: { poles: 3, range: "", In: "" }
@@ -802,25 +813,25 @@ devices:
         - { id: A1, x: 0, y: 28, side: left, electrical: input }
         - { id: A2, x: 0, y: 42, side: left, electrical: input }
       draw:
-        - rect: [4, 8, 32, 54]
-        - line: [10, 0, 10, 16]
-        - line: [20, 0, 20, 16]
-        - line: [30, 0, 30, 16]
-        - line: [7, 16, 13, 16]
-        - line: [17, 16, 23, 16]
-        - line: [27, 16, 33, 16]
-        - line: [10, 16, 14, 22]
-        - line: [20, 16, 24, 22]
-        - line: [30, 16, 33, 22]
-        - line: [10, 26, 10, 70]
-        - line: [20, 26, 20, 70]
-        - line: [30, 26, 30, 70]
-        - line: [14, 22, 33, 22]
-        - rect: [5, 31, 4.2, 10]
-        - line: [0, 28, 5, 28]
-        - line: [5, 28, 5, 41]
-        - line: [0, 42, 5, 42]
-        - text: [26, 40, "M", 2.8]
+        - rect: [2, 8, 34, 54]
+        - line: [10, 0, 10, 18]
+        - line: [20, 0, 20, 18]
+        - line: [30, 0, 30, 18]
+        - line: [6.8, 18, 13.2, 18]
+        - line: [16.8, 18, 23.2, 18]
+        - line: [26.8, 18, 33.2, 18]
+        - line: [6.8, 23, 13.2, 23]
+        - line: [16.8, 23, 23.2, 23]
+        - line: [26.8, 23, 33.2, 23]
+        - line: [10, 23, 10, 70]
+        - line: [20, 23, 20, 70]
+        - line: [30, 23, 30, 70]
+        - circle: [6.5, 35, 2.5]
+        - line: [0, 28, 6.5, 28]
+        - line: [6.5, 28, 6.5, 32.5]
+        - line: [6.5, 37.5, 6.5, 42]
+        - line: [0, 42, 6.5, 42]
+        - text: [26, 40, "M", 3.0]
     panel: { w: 45, h: 58, d: 57, din: true }
     props: { poles: 3, Ie: 9A, coil: 120VAC }
 
@@ -842,25 +853,25 @@ devices:
         - { id: A1, x: 0, y: 30, side: left, electrical: input }
         - { id: A2, x: 0, y: 44, side: left, electrical: input }
       draw:
-        - rect: [4, 8, 36, 58]
-        - line: [11, 0, 11, 16]
-        - line: [22, 0, 22, 16]
-        - line: [33, 0, 33, 16]
-        - line: [8, 16, 14, 16]
-        - line: [19, 16, 25, 16]
-        - line: [30, 16, 36, 16]
-        - line: [11, 16, 15, 22]
-        - line: [22, 16, 26, 22]
-        - line: [33, 16, 37, 22]
-        - line: [11, 26, 11, 74]
-        - line: [22, 26, 22, 74]
-        - line: [33, 26, 33, 74]
-        - line: [15, 22, 37, 22]
-        - rect: [5.5, 33, 4.6, 10]
-        - line: [0, 30, 5.5, 30]
-        - line: [5.5, 30, 5.5, 43]
-        - line: [0, 44, 5.5, 44]
-        - text: [28, 42, "M", 2.8]
+        - rect: [2, 8, 38, 58]
+        - line: [11, 0, 11, 18]
+        - line: [22, 0, 22, 18]
+        - line: [33, 0, 33, 18]
+        - line: [7.8, 18, 14.2, 18]
+        - line: [18.8, 18, 25.2, 18]
+        - line: [29.8, 18, 36.2, 18]
+        - line: [7.8, 23, 14.2, 23]
+        - line: [18.8, 23, 25.2, 23]
+        - line: [29.8, 23, 36.2, 23]
+        - line: [11, 23, 11, 74]
+        - line: [22, 23, 22, 74]
+        - line: [33, 23, 33, 74]
+        - circle: [6.5, 37, 2.5]
+        - line: [0, 30, 6.5, 30]
+        - line: [6.5, 30, 6.5, 34.5]
+        - line: [6.5, 39.5, 6.5, 44]
+        - line: [0, 44, 6.5, 44]
+        - text: [28, 42, "M", 3.0]
     panel: { w: 45, h: 85, d: 90, din: true }
     props: { poles: 3, Ie: 32A, coil: 120VAC }
 
@@ -1440,12 +1451,12 @@ devices:
         - { id: "3", x: 0, y: 10, side: left }
         - { id: "4", x: 28, y: 10, side: right }
       draw:
-        - line: [0, 10, 8, 10]
-        - line: [20, 10, 28, 10]
-        - line: [8, 7, 8, 13]
-        - line: [20, 7, 20, 13]
-        - line: [8, 10, 16, 4]
-        - line: [18, 2, 22, 6]
+        - line: [0, 10, 11, 10]
+        - line: [17, 10, 28, 10]
+        - line: [11, 4.5, 11, 15.5]
+        - line: [17, 4.5, 17, 15.5]
+        - line: [14, 5.5, 14, 1.5]
+        - polyline: [[12.3, 3.5], [14, 1.5], [15.7, 3.5]]
         - text: [14, 17, "NOTC", 1.8]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
     props: { contact: NOTC, timing: on-delay }
@@ -1462,12 +1473,13 @@ devices:
         - { id: "1", x: 0, y: 10, side: left }
         - { id: "2", x: 28, y: 10, side: right }
       draw:
-        - line: [0, 10, 8, 10]
-        - line: [20, 10, 28, 10]
-        - line: [8, 7, 8, 13]
-        - line: [20, 7, 20, 13]
-        - line: [8, 10, 20, 7]
-        - line: [18, 2, 22, 6]
+        - line: [0, 10, 11, 10]
+        - line: [17, 10, 28, 10]
+        - line: [11, 4.5, 11, 15.5]
+        - line: [17, 4.5, 17, 15.5]
+        - line: [8.5, 15, 19.5, 5]
+        - line: [14, 5.5, 14, 1.5]
+        - polyline: [[12.3, 3.5], [14, 1.5], [15.7, 3.5]]
         - text: [14, 17, "NCTO", 1.8]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
     props: { contact: NCTO, timing: on-delay }
@@ -1484,12 +1496,12 @@ devices:
         - { id: "3", x: 0, y: 10, side: left }
         - { id: "4", x: 28, y: 10, side: right }
       draw:
-        - line: [0, 10, 8, 10]
-        - line: [20, 10, 28, 10]
-        - line: [8, 7, 8, 13]
-        - line: [20, 7, 20, 13]
-        - line: [8, 10, 16, 4]
-        - line: [6, 2, 10, 6]
+        - line: [0, 10, 11, 10]
+        - line: [17, 10, 28, 10]
+        - line: [11, 4.5, 11, 15.5]
+        - line: [17, 4.5, 17, 15.5]
+        - line: [14, 1.5, 14, 5.5]
+        - polyline: [[12.3, 3.5], [14, 5.5], [15.7, 3.5]]
         - text: [14, 17, "NOTO", 1.8]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
     props: { contact: NOTO, timing: off-delay }
@@ -1506,12 +1518,13 @@ devices:
         - { id: "1", x: 0, y: 10, side: left }
         - { id: "2", x: 28, y: 10, side: right }
       draw:
-        - line: [0, 10, 8, 10]
-        - line: [20, 10, 28, 10]
-        - line: [8, 7, 8, 13]
-        - line: [20, 7, 20, 13]
-        - line: [8, 10, 20, 7]
-        - line: [6, 2, 10, 6]
+        - line: [0, 10, 11, 10]
+        - line: [17, 10, 28, 10]
+        - line: [11, 4.5, 11, 15.5]
+        - line: [17, 4.5, 17, 15.5]
+        - line: [8.5, 15, 19.5, 5]
+        - line: [14, 1.5, 14, 5.5]
+        - polyline: [[12.3, 3.5], [14, 5.5], [15.7, 3.5]]
         - text: [14, 17, "NCTC", 1.8]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
     props: { contact: NCTC, timing: off-delay }
@@ -1584,10 +1597,11 @@ devices:
         - { id: "1", x: 0, y: 7, side: left, electrical: power }
         - { id: "2", x: 28, y: 7, side: right, electrical: power }
       draw:
-        - line: [0, 7, 6, 7]
+        - line: [0, 7, 10, 7]
         - rect: [6, 2, 16, 10]
-        - line: [22, 7, 28, 7]
-        - text: [14, 9, "FU", 2.2]
+        - arc: [12, 7, 2.0, 180, -180]
+        - arc: [16, 7, 2.0, 180, 180]
+        - line: [18, 7, 28, 7]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
     props: { location: panel }
 

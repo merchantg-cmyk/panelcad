@@ -475,6 +475,9 @@ def _trace_phase_maps(sheet: Sheet, catalog: Catalog) -> tuple[dict[str, str], d
         device = devices.get(comp.id)
         if device is None:
             continue
+        pin_ids = {pin.id for pin in device.pins}
+        if not ({"1", "3", "5"} <= pin_ids or {"L1", "L2", "L3"} <= pin_ids):
+            continue
         for pin in device.pins:
             phase = _SEED.get(pin.id)
             if phase is None:

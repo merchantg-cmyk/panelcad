@@ -18,6 +18,19 @@ from pathlib import Path
 from typing import Any
 
 from panelcad.convert.flags import sheet_flags, suggest_cleanup
+from panelcad.convert.plan import (
+    ALL_REASON_CODES,
+    DECISION_REASON_CODES,
+    SHEET_FLAG_REASON_CODES,
+    ConversionChunk,
+    ConversionDecision,
+    ConversionPlan,
+    decisions_for_layout_chunk,
+    decisions_for_symbols_chunk,
+    decisions_for_tags_chunk,
+    decisions_from_issues,
+    sync_project_conversion_decisions,
+)
 from panelcad.convert.layout_convert import (
     apply_sheet_rails,
     consolidate_control_sheets,
@@ -361,7 +374,15 @@ def accept_chunk(session: Any, chunk_id: str, workspace: str | Path | None = Non
     if chunk["status"] not in {"done", "accepted"}:
         raise ValueError(f"chunk {chunk_id} is not ready to accept")
     chunk["status"] = "accepted"
+    sync_project_conversion_decisions(session.project, ws)
+    _stamp_working(session, ws)
     _save(ws)
+    if ws.get("out_written") and ws.get("out_path"):
+        dest = Path(ws["out_path"])
+        if dest.is_file():
+            session.save(dest)
+            ws["out_written"] = {"path": str(dest), "sha256": _file_hash(dest)}
+            _save(ws)
     return _public(ws)
 
 
@@ -386,6 +407,7 @@ def revert_chunk(session: Any, chunk_id: str, workspace: str | Path | None = Non
         if not report["ok"]:
             _save(before)
             raise RevertRefused(report, chunk_id=str(chunk_id))
+    sync_project_conversion_decisions(session.project, ws)
     _stamp_working(session, ws)
     _save(ws)
     _write_out(session, ws)
@@ -447,6 +469,7 @@ def _execute(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> None:
     else:
         raise ValueError(f"unknown chunk kind '{kind}'")
     _refresh_xref(session)
+    sync_project_conversion_decisions(session.project, ws)
 
 
 def _apply_tags(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> None:
@@ -490,6 +513,7 @@ def _apply_tags(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> None
     ]
     chunk["issues"] = issues
     chunk["suggestion"] = suggest_cleanup(issues)
+    chunk["decisions"] = [d.to_dict() for d in decisions_for_tags_chunk(session, ws, chunk)]
 
 
 def _apply_symbols(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> None:
@@ -518,6 +542,7 @@ def _apply_symbols(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> N
     chunk["issues"] = issues
     chunk["pin_rewrites"] = rewrites
     chunk["suggestion"] = suggest_cleanup(issues)
+    chunk["decisions"] = [d.to_dict() for d in decisions_for_symbols_chunk(session, ws, chunk)]
 
 
 
@@ -1086,6 +1111,7 @@ def _apply_layout(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> No
                 else:
                     c_item["issues"] = []
                     c_item["suggestion"] = suggest_cleanup([])
+                c_item["decisions"] = [d.to_dict() for d in decisions_for_layout_chunk(session, ws, c_item)]
             return
 
     issues = sheet_flags(session, sheet_id)
@@ -1099,6 +1125,7 @@ def _apply_layout(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> No
         )
     chunk["issues"] = issues
     chunk["suggestion"] = suggest_cleanup(issues)
+    chunk["decisions"] = [d.to_dict() for d in decisions_for_layout_chunk(session, ws, chunk)]
 
 
 def _swap_one(
@@ -1829,6 +1856,7 @@ def _install(session: Any, project: Project) -> None:
 
 
 def _stamp_working(session: Any, ws: dict[str, Any]) -> None:
+    sync_project_conversion_decisions(session.project, ws)
     ws["working_project"] = session.project.model_dump(mode="json")
 
 
@@ -1855,6 +1883,17 @@ def _public(ws: dict[str, Any]) -> dict[str, Any]:
             if issue.get("flag") in {"unmapped_symbol", "unmapped_pin"}:
                 unmapped.append(dict(issue))
     pending = [chunk["id"] for chunk in ws["chunks"] if chunk["status"] == "pending"]
+    chunk_rows = [_chunk_public(chunk) for chunk in ws["chunks"]]
+    all_decisions: list[dict[str, Any]] = []
+    reason_codes: list[str] = []
+    for c_row in chunk_rows:
+        if c_row["status"] not in {"done", "accepted"}:
+            continue
+        for dec in c_row.get("decisions") or []:
+            all_decisions.append(dec)
+            rc = str(dec.get("reason_code") or "")
+            if rc and rc not in reason_codes:
+                reason_codes.append(rc)
     return {
         "workspace": ws["path"],
         "out_path": ws.get("out_path") or "",
@@ -1871,21 +1910,16 @@ def _public(ws: dict[str, Any]) -> dict[str, Any]:
         "unmapped": unmapped,
         "pending": pending,
         "done": not pending,
-        "chunks": [_chunk_public(chunk) for chunk in ws["chunks"]],
+        "chunks": chunk_rows,
+        "decisions": all_decisions,
+        "reason_codes": reason_codes,
         "connection_check": ws.get("connection_check") or {},
     }
 
 
 def _chunk_public(chunk: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "id": chunk["id"],
-        "kind": chunk["kind"],
-        "sheet": chunk.get("sheet") or "",
-        "status": chunk["status"],
-        "issues": list(chunk.get("issues") or []),
-        "suggestion": chunk.get("suggestion") or "",
-        "tag_bumps": list(chunk.get("tag_bumps") or []),
-    }
+    c_obj = ConversionChunk.from_dict(chunk)
+    return c_obj.to_dict()
 
 
 def _default_out(source: Path | None, target: str, name: str) -> Path:

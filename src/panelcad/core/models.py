@@ -618,6 +618,14 @@ class Project(BaseModel):
             return []
         return value
 
+    @property
+    def metadata(self) -> dict[str, Any]:
+        return self.properties
+
+    @metadata.setter
+    def metadata(self, value: dict[str, Any]) -> None:
+        self.properties = dict(value or {})
+
     def sheet(self, sheet_id: str) -> Sheet:
         for s in self.sheets:
             if s.id == sheet_id:

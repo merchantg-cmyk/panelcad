@@ -145,3 +145,46 @@ def test_motor_lines_that_are_not_plain_leads_are_left_alone():
     assert [(p.x, p.y, p.x2, p.y2) for p in out if p.type == "line"] == [
         (p.x, p.y, p.x2, p.y2) for p in prims if p.type == "line"
     ]
+
+
+def test_enclosure_box_interior_clearance():
+    """All internal heater, contact, and breaker primitives inside a power device
+    enclosure box must maintain at least 2.0 mm clearance from the left and right
+    box borders so no heater wave or contact bar ever touches or protrudes through
+    its enclosure box."""
+    session = Session.create("clearance")
+    checked = (
+        "nema.protection.overload",
+        "iec.protection.overload_9a",
+        "nema.breakers.mcb_1p_16a",
+        "nema.breakers.mcb_3p_32a",
+        "nema.breakers.mccb_3p_100a",
+        "nema.breakers.mpcb_3p",
+        "nema.contactors.ac3_9a",
+        "nema.contactors.ac3_32a",
+        "nema.protection.disconnect_3p",
+    )
+    for lib_id in checked:
+        dev = session.catalog.get(lib_id)
+        rects = [p for p in dev.primitives if p.type == "rect"]
+        assert rects, f"{lib_id} has no enclosure rect"
+        outer = max(rects, key=lambda r: r.w * r.h)
+        bx1, by1, bx2, by2 = outer.x, outer.y, outer.x + outer.w, outer.y + outer.h
+        for p in dev.primitives:
+            if p is outer or p.type == "text":
+                continue
+            if p.type == "arc":
+                ax1, ax2 = p.x - p.r, p.x + p.r
+                ay1, ay2 = p.y - p.r, p.y + p.r
+                assert ax1 - bx1 >= 2.0 - 1e-6, f"{lib_id} arc at x={p.x}, r={p.r} too close to left box wall x={bx1}"
+                assert bx2 - ax2 >= 2.0 - 1e-6, f"{lib_id} arc at x={p.x}, r={p.r} too close to right box wall x={bx2}"
+                assert ay1 - by1 >= 2.0 - 1e-6, f"{lib_id} arc at y={p.y}, r={p.r} too close to top box wall y={by1}"
+                assert by2 - ay2 >= 2.0 - 1e-6, f"{lib_id} arc at y={p.y}, r={p.r} too close to bottom box wall y={by2}"
+            elif p.type == "line":
+                lx1, lx2 = min(p.x, p.x2), max(p.x, p.x2)
+                ly1, ly2 = min(p.y, p.y2), max(p.y, p.y2)
+                # Skip lead lines that cross the box border to reach external pins, or auxiliary contacts outside the box
+                if ly1 < by1 or ly2 > by2 or lx1 < bx1 or lx2 > bx2:
+                    continue
+                assert lx1 - bx1 >= 2.0 - 1e-6, f"{lib_id} internal line ({p.x},{p.y})->({p.x2},{p.y2}) too close to left wall x={bx1}"
+                assert bx2 - lx2 >= 2.0 - 1e-6, f"{lib_id} internal line ({p.x},{p.y})->({p.x2},{p.y2}) too close to right wall x={bx2}"

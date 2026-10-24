@@ -333,8 +333,9 @@ class ConvertDialog(QDialog):
                 widget.hide()
                 widget.setParent(None)
                 widget.deleteLater()
+        decisions = list(result.get("decisions") or [])
         header = QLabel(
-            f"Target {result.get('target')}    pending {len(result.get('pending') or [])}"
+            f"Target {result.get('target')}    pending {len(result.get('pending') or [])}    decisions: {len(decisions)}"
         )
         header.setObjectName("convert-review-header")
         self.review_layout.addWidget(header)
@@ -348,9 +349,22 @@ class ConvertDialog(QDialog):
         frame.setObjectName(f"chunk:{chunk['id']}")
         layout = QVBoxLayout(frame)
         flags = ", ".join(issue.get("flag", "") for issue in (chunk.get("issues") or [])) or "none"
-        layout.addWidget(
-            QLabel(f"{chunk['id']}    {chunk['status']}    flags: {flags}")
+        reasons = ", ".join(str(r) for r in (chunk.get("reason_codes") or [])) or flags
+        summary_lbl = QLabel(
+            f"{chunk['id']}    {chunk['status']}    flags: {flags}    reasons: {reasons}"
         )
+        summary_lbl.setObjectName(f"chunk-summary:{chunk['id']}")
+        layout.addWidget(summary_lbl)
+        chunk_decs = list(chunk.get("decisions") or [])
+        if chunk_decs:
+            dec_lines = [
+                f"• [{d.get('reason_code') or d.get('flag')}] {d.get('message') or d.get('detail')}"
+                for d in chunk_decs
+            ]
+            dec_lbl = QLabel("\n".join(dec_lines))
+            dec_lbl.setObjectName(f"chunk-decisions:{chunk['id']}")
+            dec_lbl.setWordWrap(True)
+            layout.addWidget(dec_lbl)
         sheet_id = str(chunk.get("sheet") or "")
         if sheet_id:
             pics = QHBoxLayout()

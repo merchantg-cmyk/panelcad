@@ -10,6 +10,14 @@ from panelcad.convert.engine import (
     rerun_chunk,
     revert_chunk,
 )
+from panelcad.convert.plan import (
+    ALL_REASON_CODES,
+    DECISION_REASON_CODES,
+    SHEET_FLAG_REASON_CODES,
+    ConversionChunk,
+    ConversionDecision,
+    ConversionPlan,
+)
 from panelcad.convert.table import (
     convert_terminal_tag,
     format_wire_number,
@@ -19,6 +27,12 @@ from panelcad.convert.table import (
 )
 
 __all__ = [
+    "ALL_REASON_CODES",
+    "ConversionChunk",
+    "ConversionDecision",
+    "ConversionPlan",
+    "DECISION_REASON_CODES",
+    "SHEET_FLAG_REASON_CODES",
     "accept_chunk",
     "apply_conversion",
     "conversion_plan",

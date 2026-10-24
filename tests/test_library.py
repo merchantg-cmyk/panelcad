@@ -294,7 +294,7 @@ def _blades(device, y: float):
 
 
 def test_no_nc_contacts_are_not_through_wires():
-    """NO is an open blade; NC is a closed blade onto the right tick — not a bus through the pins."""
+    """Contacts and pushbuttons never draw a continuous through-conductor from pin to pin."""
 
     cat = default_catalog()
     no_ids = (
@@ -317,6 +317,16 @@ def test_no_nc_contacts_are_not_through_wires():
         "nema.protection.ol_contact",
         "nema.operators.estop",
     )
+    nema_bridge_ids = {
+        "nema.operators.pb_no",
+        "nema.operators.pb_nc",
+        "nema.operators.estop",
+    }
+    nema_parallel_bar_ids = {
+        "nema.contactors.aux_no",
+        "nema.contactors.aux_nc",
+        "nema.protection.ol_contact",
+    }
     for library_id in no_ids + nc_ids:
         device = cat.get(library_id)
         rows = _pin_rows(device)
@@ -325,13 +335,43 @@ def test_no_nc_contacts_are_not_through_wires():
             if len(pins) < 2:
                 continue
             assert not _through_conductor(device, y), library_id
-            blades = _blades(device, y)
-            assert blades, library_id
-            reach = max(max(b.x, b.x2) for b in blades)
-            if library_id in no_ids:
-                assert reach <= device.schematic_width - 7, library_id
+            if library_id in nema_bridge_ids:
+                bridges = [
+                    p
+                    for p in device.primitives
+                    if p.type == "line"
+                    and p.y == p.y2
+                    and p.y != y
+                    and abs(p.y - y) <= 6.0
+                    and abs(p.x2 - p.x) >= 12.0
+                ]
+                assert bridges, f"{library_id} missing NEMA horizontal contact bridge bar"
+                if library_id in no_ids:
+                    assert bridges[0].y < y - 3.0, f"{library_id} NO bridge should sit above contacts"
+                else:
+                    assert bridges[0].y > y + 0.5, f"{library_id} NC bridge should sit across contacts"
+            elif library_id in nema_parallel_bar_ids:
+                bars = [
+                    p
+                    for p in device.primitives
+                    if p.type == "line" and p.x == p.x2 and abs(p.y2 - p.y) >= 9.0
+                ]
+                assert len(bars) >= 2, f"{library_id} missing NEMA parallel contact bars"
+                if library_id in nc_ids:
+                    slashes = [
+                        p
+                        for p in device.primitives
+                        if p.type == "line" and p.x != p.x2 and p.y != p.y2
+                    ]
+                    assert slashes, f"{library_id} missing diagonal NC slash across parallel bars"
             else:
-                assert reach >= device.schematic_width - 10, library_id
+                blades = _blades(device, y)
+                assert blades, library_id
+                reach = max(max(b.x, b.x2) for b in blades)
+                if library_id in no_ids:
+                    assert reach <= device.schematic_width - 7, library_id
+                else:
+                    assert reach >= device.schematic_width - 10, library_id
 
 
 def test_operator_sits_above_the_contact_pins():
@@ -340,15 +380,34 @@ def test_operator_sits_above_the_contact_pins():
         "iec.operators.pb_no",
         "iec.operators.pb_nc",
         "iec.operators.estop",
-        "nema.operators.pb_no",
-        "nema.operators.pb_nc",
-        "nema.operators.estop",
     ):
         device = cat.get(library_id)
         pin_y = min(p.y for p in device.pins)
         hats = [p.y for p in device.primitives if p.type == "circle"]
         assert hats, library_id
         assert max(hats) < pin_y - 6, library_id
+    for library_id in (
+        "nema.operators.pb_no",
+        "nema.operators.pb_nc",
+        "nema.operators.estop",
+    ):
+        device = cat.get(library_id)
+        pin_y = min(p.y for p in device.pins)
+        contact_dots = [
+            p for p in device.primitives if p.type == "circle" and abs(p.y - pin_y) < 1e-6
+        ]
+        assert len(contact_dots) == 2, f"{library_id} should have two stationary contact circles"
+        stems = [
+            p
+            for p in device.primitives
+            if p.type == "line"
+            and p.x == p.x2 == device.schematic_width / 2
+            and min(p.y, p.y2) < pin_y - 10
+        ]
+        assert stems, f"{library_id} plunger stem does not rise above contact pins"
+    estop = cat.get("nema.operators.estop")
+    domes = [p for p in estop.primitives if p.type == "arc" and abs(p.sweep) == 180]
+    assert domes, "nema.operators.estop should have a mushroom head dome arc"
 
 
 def _pole_short(device) -> bool:
@@ -534,3 +593,99 @@ def test_rung_fuses_are_inline_left_right():
     assert values == sorted(values)
     assert any(d.library_id.startswith("iec.") for d in hits)
     assert any(d.library_id.startswith("nema.") for d in hits)
+
+
+def test_nema_ics_pushbuttons_contactors_and_overloads():
+    cat = default_catalog()
+
+    # 1. NEMA Pushbuttons & E-Stop: stationary contact circles + horizontal bridge + vertical stem
+    for lib_id, is_nc, has_dome in [
+        ("nema.operators.pb_no", False, False),
+        ("nema.operators.pb_nc", True, False),
+        ("nema.operators.estop", True, True),
+        ("nema.operators.estop_2nc", True, True),
+    ]:
+        dev = cat.get(lib_id)
+        pin_y = dev.pins[0].y
+        circles = [
+            p for p in dev.primitives if p.type == "circle" and abs(p.y - pin_y) <= 0.1
+        ]
+        assert len(circles) == 2, f"{lib_id} must have two stationary contact circles at y={pin_y}"
+        bridges = [
+            p
+            for p in dev.primitives
+            if p.type == "line"
+            and p.y == p.y2
+            and p.y != pin_y
+            and abs(p.y - pin_y) <= 6.0
+            and abs(p.x2 - p.x) >= 12.0
+        ]
+        assert bridges, f"{lib_id} must have a horizontal NEMA bridge bar"
+        if is_nc:
+            assert bridges[0].y > pin_y, f"{lib_id} NC bridge bar should rest across underside of contacts"
+        else:
+            assert bridges[0].y < pin_y, f"{lib_id} NO bridge bar should float above contacts"
+        if has_dome:
+            domes = [p for p in dev.primitives if p.type == "arc" and abs(p.sweep) == 180]
+            assert domes, f"{lib_id} must have a mushroom head dome arc"
+
+    # 2. NEMA Contactors (3-pole power): parallel horizontal contact bars on each pole, no diagonal switch blades
+    for lib_id in ("nema.contactors.ac3_9a", "nema.contactors.ac3_32a"):
+        dev = cat.get(lib_id)
+        horiz_pole_bars = [
+            p
+            for p in dev.primitives
+            if p.type == "line" and p.y == p.y2 and p.y in (18, 23) and abs(p.x2 - p.x) >= 6.0
+        ]
+        assert len(horiz_pole_bars) == 6, f"{lib_id} must have 3 pairs of NEMA parallel contact bars"
+
+    # 3. NEMA Overload Relay & OL Contact: thermal heater arcs + NEMA NC parallel-bar contact
+    ol = cat.get("nema.protection.overload")
+    heater_arcs = [p for p in ol.primitives if p.type == "arc" and p.r >= 2.0]
+    assert len(heater_arcs) == 12, "nema.protection.overload must have 4 bold thermal wave arcs per pole (12 total)"
+
+    ol_ct = cat.get("nema.protection.ol_contact")
+    ol_ct_arcs = [p for p in ol_ct.primitives if p.type == "arc"]
+    ol_ct_bars = [
+        p
+        for p in ol_ct.primitives
+        if p.type == "line" and p.x == p.x2 and abs(p.y2 - p.y) >= 8.0
+    ]
+    assert len(ol_ct_arcs) >= 3, "nema.protection.ol_contact must have thermal heater crest arcs"
+    assert len(ol_ct_bars) == 2, "nema.protection.ol_contact must have NEMA parallel contact bars"
+
+    # 4. IEEE Std 315 Clause 9.4.1 / NEMA ICS 19 Circuit Breakers: curved breaker arc on each pole
+    for lib_id, expected_poles in (
+        ("nema.breakers.mcb_1p_16a", 1),
+        ("nema.breakers.mcb_3p_32a", 3),
+        ("nema.breakers.mccb_3p_100a", 3),
+    ):
+        dev = cat.get(lib_id)
+        cb_arcs = [p for p in dev.primitives if p.type == "arc" and p.r >= 2.5 and abs(p.sweep) == 180]
+        assert len(cb_arcs) == expected_poles, f"{lib_id} must have {expected_poles} IEEE 315 curved breaker arcs"
+
+    # 5. IEEE Std 315 Clause 4.16 / NEMA ICS 19 Timed Contacts: parallel bars + timing direction arrowhead
+    for lib_id, arrow_up in (
+        ("nema.timers.contact_notc", True),
+        ("nema.timers.contact_ncto", True),
+        ("nema.timers.contact_noto", False),
+        ("nema.timers.contact_nctc", False),
+    ):
+        dev = cat.get(lib_id)
+        polylines = [p for p in dev.primitives if p.type == "polyline" and len(p.points) == 3]
+        assert len(polylines) == 1, f"{lib_id} must have an IEEE 315 timing direction arrowhead"
+        pts = polylines[0].points
+        if arrow_up:
+            assert pts[1][1] < pts[0][1], f"{lib_id} on-delay arrow must point upward (TDC/TDO)"
+        else:
+            assert pts[1][1] > pts[0][1], f"{lib_id} off-delay arrow must point downward (TDO/TDC)"
+
+    # 6. IEEE Std 315 Clause 9.1.1 / NEMA ICS 19 Fuses: S-curve fuse link inside fuse body
+    for lib_id, expected_arcs in (
+        ("nema.protection.fuse_10a", 2),
+        ("nema.protection.fuse", 2),
+        ("nema.protection.fuse_3p", 6),
+    ):
+        dev = cat.get(lib_id)
+        fuse_arcs = [p for p in dev.primitives if p.type == "arc" and abs(p.sweep) == 180]
+        assert len(fuse_arcs) == expected_arcs, f"{lib_id} must have {expected_arcs} IEEE 315 S-curve fuse link arcs"

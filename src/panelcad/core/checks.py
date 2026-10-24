@@ -142,6 +142,8 @@ CHECK_IDS: tuple[str, ...] = (
     "page_over_dense",
     "wire_end_off_pin",
     "label_covered_by_wire",
+    "convert.needs_review",
+    "convert.sheet_flag",
 )
 
 _AMP_RE = re.compile(r"([0-9]+(?:[.][0-9]+)?)\s*A\b", re.I)
@@ -184,6 +186,22 @@ class Finding:
     y: float | None = None
     suppressed: bool = False
     extra: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def code(self) -> str:
+        return self.check
+
+    @property
+    def sheet_id(self) -> str:
+        return self.sheet
+
+    @property
+    def component_id(self) -> str:
+        return self.ref
+
+    @property
+    def reason_code(self) -> str:
+        return self.extra.get("reason_code", self.target)
 
     def key(self) -> str:
         return f"{self.check}:{self.sheet}:{self.ref}:{self.target}"
@@ -441,6 +459,7 @@ def run_checks(
     from panelcad.core.transformer_jumpers import jumper_findings
 
     findings.extend(jumper_findings(project, catalog))
+    findings.extend(_conversion_decision_findings(project, catalog))
     hidden = set(suppressed_ids(project))
     out: list[Finding] = []
     seen: set[str] = set()
@@ -2418,3 +2437,75 @@ def _cable_shield_findings(project: Project) -> list[Finding]:
                 )
             )
     return findings
+
+
+def _conversion_decision_findings(project: Project, catalog: Catalog) -> list[Finding]:
+    """Surface unresolved conversion decisions and sheet flags in the Problems panel."""
+
+    from panelcad.convert.plan import SHEET_FLAG_REASON_CODES, ConversionDecision
+
+    raw = project.properties.get("last_conversion_decisions")
+    if not isinstance(raw, list) or not raw:
+        return []
+    findings: list[Finding] = []
+    for item in raw:
+        if not isinstance(item, (dict, ConversionDecision)):
+            continue
+        dec = ConversionDecision.from_dict(item)
+        if not dec.needs_review:
+            continue
+        check_id = (
+            "convert.sheet_flag"
+            if dec.reason_code in SHEET_FLAG_REASON_CODES
+            else "convert.needs_review"
+        )
+        sh_id = str(dec.sheet_id or "")
+        comp_id = str(dec.component_id or "")
+        x: float | None = None
+        y: float | None = None
+        if sh_id and comp_id:
+            try:
+                comp = project.sheet(sh_id).component(comp_id)
+                x, y = float(comp.x), float(comp.y)
+            except Exception:  # noqa: BLE001
+                pass
+        msg = dec.message or f"Conversion decision '{dec.reason_code}' requires review."
+        sev: Severity = "warning" if dec.severity not in ("error", "warning", "info") else dec.severity  # type: ignore[assignment]
+        findings.append(
+            Finding(
+                check=check_id,
+                severity=sev,
+                message=msg,
+                sheet=sh_id,
+                ref=comp_id or sh_id,
+                target=dec.reason_code,
+                x=x,
+                y=y,
+                extra={
+                    "reason_code": dec.reason_code,
+                    "chunk_id": dec.chunk_id,
+                },
+            )
+        )
+    return findings
+
+
+def check_project(
+    project: Project,
+    catalog: Catalog | None = None,
+    *,
+    include_suppressed: bool = False,
+    label_cover: bool = True,
+) -> list[Finding]:
+    """Run ``run_checks`` on ``project`` with the default catalog when none is passed."""
+
+    if catalog is None:
+        from panelcad.library.catalog import default_catalog
+
+        catalog = default_catalog()
+    return run_checks(
+        project,
+        catalog,
+        include_suppressed=include_suppressed,
+        label_cover=label_cover,
+    )

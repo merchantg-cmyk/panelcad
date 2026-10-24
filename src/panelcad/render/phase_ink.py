@@ -45,6 +45,9 @@ def line_side_runs(project: Project, sheet: Sheet, catalog: Catalog) -> list[Sup
             device = catalog.get(comp.library_id)
         except KeyError:
             continue
+        pin_ids = {pin.id for pin in device.pins}
+        if not ({"1", "3", "5"} <= pin_ids or {"L1", "L2", "L3"} <= pin_ids):
+            continue
         for pin in device.pins:
             phase = _SEED.get(pin.id)
             if phase is None:
@@ -198,6 +201,16 @@ def _graphic_points(prim: object) -> list[tuple[float, float]]:
             float(getattr(prim, "start", 0.0)),
             float(getattr(prim, "sweep", 0.0)),
         )
+    if kind == "circle" and float(getattr(prim, "r", 99.0)) <= 1.5:
+        from panelcad.core.primitives import arc_polyline
+
+        return arc_polyline(
+            float(prim.x),
+            float(prim.y),
+            float(prim.r),
+            90.0,
+            360.0,
+        )
     return []
 
 
@@ -215,11 +228,20 @@ def _touches_pin(points: list[tuple[float, float]], pins: list[PinDef]) -> bool:
     return False
 
 
+def _anchor_points(pts: list[tuple[float, float]]) -> tuple[tuple[float, float], ...]:
+    if len(pts) < 2:
+        return tuple(pts)
+    if len(pts) == 2:
+        mid = ((pts[0][0] + pts[1][0]) * 0.5, (pts[0][1] + pts[1][1]) * 0.5)
+        return (pts[0], pts[1], mid)
+    return (pts[0], pts[-1], pts[len(pts) // 2])
+
+
 def _graphics_touch(a: list[tuple[float, float]], b: list[tuple[float, float]]) -> bool:
     if len(a) < 2 or len(b) < 2:
         return False
-    for left in (a[0], a[-1]):
-        for right in (b[0], b[-1]):
+    for left in _anchor_points(a):
+        for right in _anchor_points(b):
             if _near(left, right, 0.75):
                 return True
     return False
