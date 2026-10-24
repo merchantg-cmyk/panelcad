@@ -196,7 +196,7 @@ def test_conversion_docs_and_public_exports():
     )
     from panelcad.convert.standard_map import ENTRIES
 
-    assert panelcad.__version__ == "0.5.15"
+    assert panelcad.__version__ == "0.5.16"
     assert verify_converted_from_to is check_connections
     assert consolidate_multipage_iec is consolidate_control_sheets
 
