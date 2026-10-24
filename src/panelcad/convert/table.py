@@ -527,3 +527,5 @@ def convert_contact_number(
             return str(row["pins_nema_to_iec"][clean])
         return str(row["iec_contact_no"])
     return clean
+
+ROLE_PREFIX_TABLE = ROLE_TAG_TABLE

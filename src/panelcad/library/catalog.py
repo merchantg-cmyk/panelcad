@@ -22,6 +22,13 @@ class Catalog:
         self.ref_prefix_maps: dict[str, dict[str, str]] = {}
         self.io_modules: dict[str, Any] = {}
 
+    @classmethod
+    def load_builtin(cls, project_dir: Path | None = None) -> "Catalog":
+        return default_catalog(project_dir)
+
+    def __contains__(self, library_id: object) -> bool:
+        return str(library_id) in self.devices
+
     def load_defaults(self, project_dir: Path | None = None) -> None:
         from panelcad.core.refs import load_ref_prefix_maps
 
@@ -375,3 +382,5 @@ def default_catalog(project_dir: Path | None = None) -> Catalog:
     cat = Catalog()
     cat.load_defaults(project_dir)
     return cat
+
+Library = Catalog

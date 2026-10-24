@@ -187,7 +187,7 @@ def feature_iec_to_nema_convert(app, win) -> None:
     import yaml
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QDialog, QFrame, QLabel, QPushButton
+    from PySide6.QtWidgets import QComboBox, QDialog, QFrame, QLabel, QPushButton
 
     out_yaml = SCRATCH / "work" / "xref_iec_mirror-nema.pcad.yaml"
     state: dict = {}
@@ -196,6 +196,10 @@ def feature_iec_to_nema_convert(app, win) -> None:
         check("dialog is ConvertDialog", type(dlg).__name__ == "ConvertDialog", dlg.windowTitle())
         check("NEMA/ANSI radio is selected", dlg.nema.isChecked(), f"nema={dlg.nema.isChecked()} iec={dlg.iec.isChecked()}")
         check("Whole project radio is selected", dlg.whole.isChecked(), f"whole={dlg.whole.isChecked()}")
+        mode_combo = dlg.findChild(QComboBox, "convert-mode-combo")
+        check("ConvertDialog has convert-mode-combo selector",
+              mode_combo is not None and mode_combo.count() >= 2 and mode_combo.currentData() == "rules_only",
+              f"count={mode_combo.count() if mode_combo is not None else 0} current={mode_combo.currentData() if mode_combo is not None else None}")
         dlg.path.selectAll()
         QTest.keyClicks(dlg.path, str(out_yaml))
         check("Save as path typed", dlg.path.text() == str(out_yaml), dlg.path.text())

@@ -472,6 +472,9 @@ ROLE_TAG_TABLE: list[dict[str, Any]] = [
         "categories": ("timing.timer", "timing.contact"),
         "role_tokens": (
             "timer",
+            "timer_relay",
+            "tr",
+            "tdr",
             "on_delay",
             "off_delay",
             "timer_coil",
@@ -490,7 +493,7 @@ ROLE_TAG_TABLE: list[dict[str, Any]] = [
         "nema_prefix": "CB",
         "nema_aliases": ("CB",),
         "categories": ("protection.breaker",),
-        "role_tokens": ("breaker", "mcb", "mccb"),
+        "role_tokens": ("breaker", "circuit_breaker", "cb", "mcb", "mccb"),
         "library_tokens": ("breakers.mcb", "breakers.mccb"),
     },
     {
@@ -500,7 +503,7 @@ ROLE_TAG_TABLE: list[dict[str, Any]] = [
         "nema_prefix": "MCP",
         "nema_aliases": ("MCP", "CB"),
         "categories": ("protection.mpcb",),
-        "role_tokens": ("mpcb",),
+        "role_tokens": ("mpcb", "motor_circuit_protector", "mcp"),
         "library_tokens": ("breakers.mpcb",),
     },
     {
@@ -510,7 +513,7 @@ ROLE_TAG_TABLE: list[dict[str, Any]] = [
         "nema_prefix": "DISC",
         "nema_aliases": ("DISC", "DS"),
         "categories": ("protection.disconnect",),
-        "role_tokens": ("disconnect", "disc", "ds", "isolator"),
+        "role_tokens": ("disconnect", "disconnect_switch", "switch_disconnector", "disc", "ds", "isolator"),
         "library_tokens": ("protection.disconnect",),
     },
     {
@@ -530,7 +533,7 @@ ROLE_TAG_TABLE: list[dict[str, Any]] = [
         "nema_prefix": "OL",
         "nema_aliases": ("OL",),
         "categories": ("protection.overload",),
-        "role_tokens": ("overload", "ol", "ol_contact"),
+        "role_tokens": ("overload", "overload_relay", "thermal_overload", "ol", "ol_contact"),
         "library_tokens": ("protection.overload", "protection.ol_contact"),
     },
     {
@@ -550,7 +553,7 @@ ROLE_TAG_TABLE: list[dict[str, Any]] = [
         "nema_prefix": "SEL",
         "nema_aliases": ("SEL", "SS"),
         "categories": ("operator.selector",),
-        "role_tokens": ("selector", "sel", "hoa", "hand_off_auto", "fwd_rev"),
+        "role_tokens": ("selector", "selector_switch", "sel", "hoa", "hand_off_auto", "fwd_rev"),
         "library_tokens": ("operators.selector_",),
     },
     {
@@ -1102,3 +1105,5 @@ CONTACT_PIN_MAP_TABLE: list[dict[str, Any]] = [
         "pins_iec_to_nema": {"97": "97", "98": "98"},
     },
 ]
+
+ROLE_PREFIX_TABLE = ROLE_TAG_TABLE

@@ -17,6 +17,17 @@ import re
 from pathlib import Path
 from typing import Any
 
+from panelcad.convert.ai_assist import (
+    DEFAULT_CONFIDENCE_THRESHOLD,
+    ConversionAIBackend,
+    NoOpAIBackend,
+    RecordedJSONBackend,
+    rank_layout_candidates,
+    resolve_ai_backend,
+    resolve_ambiguous_role,
+    reword_sheet_notes,
+    suggest_symbol_counterpart,
+)
 from panelcad.convert.flags import sheet_flags, suggest_cleanup
 from panelcad.convert.plan import (
     ALL_REASON_CODES,
@@ -25,6 +36,7 @@ from panelcad.convert.plan import (
     ConversionChunk,
     ConversionDecision,
     ConversionPlan,
+    _is_ambiguous_symbol,
     decisions_for_layout_chunk,
     decisions_for_symbols_chunk,
     decisions_for_tags_chunk,
@@ -100,6 +112,69 @@ _KIND_RANK = {
 }
 
 
+_WS_AI_BACKENDS: dict[str, Any] = {}
+
+
+def _normalize_mode(
+    mode: str = "rules_only",
+    *,
+    ai_assist: bool = False,
+    ai_backend: Any = None,
+) -> str:
+    raw = str(mode or "").strip().lower().replace("-", "_")
+    if isinstance(ai_backend, NoOpAIBackend) and not ai_assist and raw in {"", "rules_only", "standard", "none"}:
+        return "rules_only"
+    if ai_assist or ai_backend is not None or raw in {"ai_assisted", "ai", "assisted", "ai_assist"}:
+        return "ai_assisted"
+    return "rules_only"
+
+
+def _is_ai_enabled(ws: dict[str, Any]) -> bool:
+    return bool(ws.get("ai_assist")) or str(ws.get("mode") or "rules_only") == "ai_assisted"
+
+
+def _serialize_ai_backend(backend: Any) -> dict[str, Any] | None:
+    if isinstance(backend, RecordedJSONBackend):
+        return {
+            "kind": "recorded_json",
+            "model": backend.model,
+            "use_heuristics": backend.use_heuristics,
+            "recordings": backend.recordings,
+        }
+    return None
+
+
+def _resolve_ws_ai_backend(
+    session: Any,
+    ws: dict[str, Any],
+    explicit_backend: Any = None,
+) -> ConversionAIBackend:
+    if not _is_ai_enabled(ws) and explicit_backend is None:
+        return NoOpAIBackend()
+    ws_key = str(ws.get("path") or "")
+    candidate = explicit_backend
+    if candidate is None and ws_key and ws_key in _WS_AI_BACKENDS:
+        candidate = _WS_AI_BACKENDS[ws_key]
+    if candidate is None:
+        candidate = getattr(session, "_convert_ai_backend", None)
+    if candidate is None and isinstance(ws.get("ai_backend_config"), dict):
+        cfg = ws["ai_backend_config"]
+        if cfg.get("kind") == "recorded_json":
+            candidate = RecordedJSONBackend(
+                cfg.get("recordings") or {},
+                model=str(cfg.get("model") or "recorded-json/v1"),
+                use_heuristics=bool(cfg.get("use_heuristics", True)),
+            )
+    backend = resolve_ai_backend(
+        candidate,
+        mode=str(ws.get("mode") or "ai_assisted"),
+        ai_assist=True,
+    )
+    if ws_key:
+        _WS_AI_BACKENDS[ws_key] = backend
+    return backend
+
+
 def conversion_plan(
     session: Any,
     target: str,
@@ -109,6 +184,10 @@ def conversion_plan(
     workspace: str | Path | None = None,
     resume: str | Path | None = None,
     keep_numbers: bool = False,
+    mode: str = "rules_only",
+    ai_assist: bool = False,
+    ai_backend: Any = None,
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
 ) -> dict[str, Any]:
     """Build the sheet list, tag map, and chunks. Does not change the drawing.
 
@@ -118,6 +197,10 @@ def conversion_plan(
     if resume:
         ws = _load(resume)
         session._convert_workspace = Path(ws["path"])
+        if ai_backend is not None:
+            _WS_AI_BACKENDS[str(ws["path"])] = resolve_ai_backend(
+                ai_backend, mode="ai_assisted", ai_assist=True
+            )
         return _public(ws)
     std = target_standard(target)
     orig_project: Project = session.project
@@ -135,6 +218,10 @@ def conversion_plan(
             workspace=workspace,
             keep_numbers=keep_numbers,
             unconsolidate_on_start=unconsolidate_on_start,
+            mode=mode,
+            ai_assist=ai_assist,
+            ai_backend=ai_backend,
+            confidence_threshold=confidence_threshold,
         )
     finally:
         if unconsolidate_on_start:
@@ -212,6 +299,10 @@ def _build_conversion_plan(
     workspace: str | Path | None = None,
     keep_numbers: bool = False,
     unconsolidate_on_start: bool = False,
+    mode: str = "rules_only",
+    ai_assist: bool = False,
+    ai_backend: Any = None,
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
 ) -> dict[str, Any]:
     project: Project = session.project
     if sheets is None:
@@ -234,19 +325,42 @@ def _build_conversion_plan(
     dest = Path(out) if out else _default_out(getattr(session, "path", None), std, project.name)
     _refuse_source(getattr(session, "path", None), dest)
     ws_path = Path(workspace) if workspace else _workspace_for(dest)
-    tag_map, bumps = _plan_tags(session, std, sheet_ids, keep_numbers=keep_numbers)
-    chunks: list[dict[str, Any]] = [
-        {
-            "id": "tags",
-            "kind": "tags",
-            "sheet": "",
-            "status": "pending",
-            "tag_map": tag_map,
-            "tag_bumps": bumps,
-            "issues": [],
-            "suggestion": "",
-        }
-    ]
+    eff_mode = _normalize_mode(
+        mode,
+        ai_assist=ai_assist,
+        ai_backend=ai_backend if ai_backend is not None else getattr(session, "_convert_ai_backend", None),
+    )
+    active_backend: ConversionAIBackend | None = None
+    if eff_mode == "ai_assisted":
+        active_backend = resolve_ai_backend(
+            ai_backend if ai_backend is not None else getattr(session, "_convert_ai_backend", None),
+            mode=eff_mode,
+            ai_assist=True,
+        )
+        _WS_AI_BACKENDS[str(ws_path)] = active_backend
+    planned_ai_decisions: list[dict[str, Any]] = []
+    tag_map, bumps = _plan_tags(
+        session,
+        std,
+        sheet_ids,
+        keep_numbers=keep_numbers,
+        ai_backend=active_backend,
+        confidence_threshold=confidence_threshold,
+        ai_decisions_out=planned_ai_decisions,
+    )
+    tags_chunk: dict[str, Any] = {
+        "id": "tags",
+        "kind": "tags",
+        "sheet": "",
+        "status": "pending",
+        "tag_map": tag_map,
+        "tag_bumps": bumps,
+        "issues": [],
+        "suggestion": "",
+    }
+    if planned_ai_decisions:
+        tags_chunk["planned_ai_decisions"] = planned_ai_decisions
+    chunks: list[dict[str, Any]] = [tags_chunk]
     for sid in sheet_ids:
         sheet = project.sheet(sid)
         members = [comp.id for comp in sheet.components]
@@ -275,7 +389,7 @@ def _build_conversion_plan(
                     "rail": {},
                 }
             )
-    ws = {
+    ws: dict[str, Any] = {
         "version": 1,
         "path": str(ws_path),
         "source_path": str(session.path) if getattr(session, "path", None) else "",
@@ -291,15 +405,35 @@ def _build_conversion_plan(
         "unconsolidate_on_start": bool(unconsolidate_on_start),
         "unmapped_preview": _preview_unmapped(session, sheet_ids, std),
     }
+    if eff_mode == "ai_assisted":
+        ws["mode"] = "ai_assisted"
+        ws["ai_assist"] = True
+        ws["confidence_threshold"] = float(confidence_threshold)
+        serialized_backend = _serialize_ai_backend(active_backend)
+        if serialized_backend is not None:
+            ws["ai_backend_config"] = serialized_backend
     _save(ws)
     session._convert_workspace = ws_path
     return _public(ws)
 
 
-def next_chunk(session: Any, workspace: str | Path | None = None) -> dict[str, Any]:
+def next_chunk(
+    session: Any,
+    workspace: str | Path | None = None,
+    *,
+    ai_backend: Any = None,
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+) -> dict[str, Any]:
     """Convert the next pending chunk and save the workspace."""
 
     ws = _load(_ws_path(session, workspace))
+    if ai_backend is not None:
+        ws["mode"] = "ai_assisted"
+        ws["ai_assist"] = True
+        ws["confidence_threshold"] = float(confidence_threshold)
+        _WS_AI_BACKENDS[str(ws["path"])] = resolve_ai_backend(
+            ai_backend, mode="ai_assisted", ai_assist=True
+        )
     _resume_working(session, ws)
     chunk = next((item for item in ws["chunks"] if item["status"] == "pending"), None)
     if chunk is None:
@@ -324,10 +458,19 @@ def apply_conversion(
     workspace: str | Path | None = None,
     *,
     out: str | Path | None = None,
+    ai_backend: Any = None,
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
 ) -> dict[str, Any]:
     """Run every pending chunk. Writes the save-as project when finished."""
 
     ws = _load(_ws_path(session, workspace))
+    if ai_backend is not None:
+        ws["mode"] = "ai_assisted"
+        ws["ai_assist"] = True
+        ws["confidence_threshold"] = float(confidence_threshold)
+        _WS_AI_BACKENDS[str(ws["path"])] = resolve_ai_backend(
+            ai_backend, mode="ai_assisted", ai_assist=True
+        )
     if out:
         dest = Path(out)
         _refuse_source(ws.get("source_path") or getattr(session, "path", None), dest)
@@ -354,6 +497,10 @@ def convert_standard(
     out: str | Path | None = None,
     workspace: str | Path | None = None,
     keep_numbers: bool = False,
+    mode: str = "rules_only",
+    ai_assist: bool = False,
+    ai_backend: Any = None,
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
 ) -> dict[str, Any]:
     """Plan and apply in one call."""
 
@@ -364,8 +511,148 @@ def convert_standard(
         out=out,
         workspace=workspace,
         keep_numbers=keep_numbers,
+        mode=mode,
+        ai_assist=ai_assist,
+        ai_backend=ai_backend,
+        confidence_threshold=confidence_threshold,
     )
-    return apply_conversion(session, planned["workspace"], out=planned["out_path"])
+    return apply_conversion(
+        session,
+        planned["workspace"],
+        out=planned["out_path"],
+        ai_backend=ai_backend,
+    )
+
+
+def start_conversion(
+    session: Any,
+    target: str = "NEMA/ANSI",
+    *,
+    sheets: list[str] | None = None,
+    out: str | Path | None = None,
+    workspace: str | Path | None = None,
+    keep_numbers: bool = False,
+    mode: str = "rules_only",
+    ai_assist: bool = False,
+    ai_backend: Any = None,
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+    plan_only: bool = False,
+) -> dict[str, Any]:
+    """Start an IEC <-> NEMA conversion (either plan-only or full apply)."""
+
+    if plan_only:
+        return conversion_plan(
+            session,
+            target,
+            sheets=sheets,
+            out=out,
+            workspace=workspace,
+            keep_numbers=keep_numbers,
+            mode=mode,
+            ai_assist=ai_assist,
+            ai_backend=ai_backend,
+            confidence_threshold=confidence_threshold,
+        )
+    return convert_standard(
+        session,
+        target,
+        sheets=sheets,
+        out=out,
+        workspace=workspace,
+        keep_numbers=keep_numbers,
+        mode=mode,
+        ai_assist=ai_assist,
+        ai_backend=ai_backend,
+        confidence_threshold=confidence_threshold,
+    )
+
+
+class ConversionEngine:
+    """Stateful helper wrapping chunked IEC <-> NEMA conversion with optional AI advisor."""
+
+    def __init__(
+        self,
+        session: Any = None,
+        target: str = "NEMA/ANSI",
+        *,
+        mode: str = "rules_only",
+        ai_assist: bool = False,
+        ai_backend: Any = None,
+        confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+    ) -> None:
+        self.session = session
+        self.target = target
+        self.mode = _normalize_mode(mode, ai_assist=ai_assist, ai_backend=ai_backend)
+        self.ai_assist = self.mode == "ai_assisted"
+        self.ai_backend = ai_backend
+        self.confidence_threshold = float(confidence_threshold)
+
+    def plan(
+        self,
+        target: str | None = None,
+        *,
+        sheets: list[str] | None = None,
+        out: str | Path | None = None,
+        workspace: str | Path | None = None,
+        resume: str | Path | None = None,
+        keep_numbers: bool = False,
+    ) -> dict[str, Any]:
+        return conversion_plan(
+            self.session,
+            target or self.target,
+            sheets=sheets,
+            out=out,
+            workspace=workspace,
+            resume=resume,
+            keep_numbers=keep_numbers,
+            mode=self.mode,
+            ai_assist=self.ai_assist,
+            ai_backend=self.ai_backend,
+            confidence_threshold=self.confidence_threshold,
+        )
+
+    def convert(
+        self,
+        target: str | None = None,
+        *,
+        sheets: list[str] | None = None,
+        out: str | Path | None = None,
+        workspace: str | Path | None = None,
+        keep_numbers: bool = False,
+    ) -> dict[str, Any]:
+        return convert_standard(
+            self.session,
+            target or self.target,
+            sheets=sheets,
+            out=out,
+            workspace=workspace,
+            keep_numbers=keep_numbers,
+            mode=self.mode,
+            ai_assist=self.ai_assist,
+            ai_backend=self.ai_backend,
+            confidence_threshold=self.confidence_threshold,
+        )
+
+    run = convert
+    start_conversion = convert
+
+    def next_chunk(self, workspace: str | Path | None = None) -> dict[str, Any]:
+        return next_chunk(self.session, workspace)
+
+    def apply(self, workspace: str | Path | None = None, *, out: str | Path | None = None) -> dict[str, Any]:
+        return apply_conversion(self.session, workspace, out=out, ai_backend=self.ai_backend)
+
+    def accept(self, chunk_id: str, workspace: str | Path | None = None) -> dict[str, Any]:
+        return accept_chunk(self.session, chunk_id, workspace)
+
+    def revert(self, chunk_id: str, workspace: str | Path | None = None) -> dict[str, Any]:
+        return revert_chunk(self.session, chunk_id, workspace)
+
+    def rerun(self, chunk_id: str, workspace: str | Path | None = None) -> dict[str, Any]:
+        return rerun_chunk(self.session, chunk_id, workspace)
+
+    def review(self, workspace: str | Path | None = None) -> dict[str, Any]:
+        return review(self.session, workspace)
 
 
 def accept_chunk(session: Any, chunk_id: str, workspace: str | Path | None = None) -> dict[str, Any]:
@@ -511,6 +798,21 @@ def _apply_tags(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> None
         }
         for row in (chunk.get("tag_bumps") or [])
     ]
+    if _is_ai_enabled(ws):
+        ai_backend = _resolve_ws_ai_backend(session, ws)
+        threshold = float(ws.get("confidence_threshold", DEFAULT_CONFIDENCE_THRESHOLD) or DEFAULT_CONFIDENCE_THRESHOLD)
+        ai_decs = list(chunk.get("planned_ai_decisions") or [])
+        note_decs = reword_sheet_notes(
+            session.project,
+            ws["target"],
+            backend=ai_backend,
+            confidence_threshold=threshold,
+            apply=True,
+            chunk="tags",
+            sheets=ws.get("sheets"),
+        )
+        ai_decs.extend(d.to_dict() for d in note_decs)
+        chunk["ai_decisions"] = ai_decs
     chunk["issues"] = issues
     chunk["suggestion"] = suggest_cleanup(issues)
     chunk["decisions"] = [d.to_dict() for d in decisions_for_tags_chunk(session, ws, chunk)]
@@ -523,13 +825,15 @@ def _apply_symbols(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> N
     wanted = {tag_map.get(ref, ref) for ref in (chunk.get("members") or [])}
     issues: list[dict[str, Any]] = []
     rewrites: list[dict[str, str]] = []
+    if _is_ai_enabled(ws):
+        chunk["ai_decisions"] = []
     for page in session.project.sheets:
         if page.id != sheet.id and page.kind not in _LAYOUT_KINDS:
             continue
         for comp in list(page.components):
             if comp.id not in wanted:
                 continue
-            _swap_one(session, comp, page, ws["target"], issues, rewrites)
+            _swap_one(session, comp, page, ws["target"], issues, rewrites, ws=ws, chunk=chunk)
     _assign_iec_family_contact_slots(session.project, ws["target"], wanted)
     _apply_ladder_only_rails(session, ws, chunk, sheet)
     _rebuild_power_routes(session, sheet)
@@ -1123,6 +1427,35 @@ def _apply_layout(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> No
                 "ref": ref,
             }
         )
+    if _is_ai_enabled(ws):
+        ai_backend = _resolve_ws_ai_backend(session, ws)
+        threshold = float(ws.get("confidence_threshold", DEFAULT_CONFIDENCE_THRESHOLD) or DEFAULT_CONFIDENCE_THRESHOLD)
+        custom_cands = list((ws.get("layout_candidates") or {}).get(sheet_id) or [])
+        cands = custom_cands or [
+            {
+                "id": "ladder_standard",
+                "description": f"Standard {ws['target']} ladder layout on {sheet_id}",
+                "flags": list(issues),
+                "rungs": len(getattr(session.sheet(sheet_id), "components", []) or []),
+            },
+            {
+                "id": "ladder_compact",
+                "description": f"Compact {ws['target']} ladder layout on {sheet_id}",
+                "flags": list(issues),
+                "rungs": len(getattr(session.sheet(sheet_id), "components", []) or []),
+            },
+        ]
+        lres = rank_layout_candidates(
+            cands,
+            sheet_id=sheet_id,
+            target=ws["target"],
+            chunk=str(chunk.get("id") or f"{sheet_id}:layout"),
+            session=session,
+            backend=ai_backend,
+            confidence_threshold=threshold,
+        )
+        chunk["selected_layout_candidate"] = lres.selected_id
+        chunk["ai_decisions"] = [lres.decision.to_dict()]
     chunk["issues"] = issues
     chunk["suggestion"] = suggest_cleanup(issues)
     chunk["decisions"] = [d.to_dict() for d in decisions_for_layout_chunk(session, ws, chunk)]
@@ -1135,14 +1468,42 @@ def _swap_one(
     target: str,
     issues: list[dict[str, Any]],
     rewrites: list[dict[str, str]],
+    *,
+    ws: dict[str, Any] | None = None,
+    chunk: dict[str, Any] | None = None,
 ) -> None:
     low_lib = str(comp.library_id or "").lower()
     if "offpage" in low_lib or "junction" in low_lib or "connection.node" in low_lib:
         return
     new_lib = counterpart(comp.library_id, target)
+    ai_mapping: dict[str, str] | None = None
     if new_lib is None:
-        issues.append(_unmapped_issue(session, comp, sheet.id))
-        return
+        if ws is not None and chunk is not None and _is_ai_enabled(ws) and sheet.id == str(chunk.get("sheet") or ""):
+            ai_backend = _resolve_ws_ai_backend(session, ws)
+            threshold = float(ws.get("confidence_threshold", DEFAULT_CONFIDENCE_THRESHOLD) or DEFAULT_CONFIDENCE_THRESHOLD)
+            wired = _wired_pins(session.project, comp.id, sheet.id)
+            sugg = suggest_symbol_counterpart(
+                comp,
+                target,
+                wired_pins=wired,
+                catalog=session.catalog,
+                sheet=sheet,
+                sheet_id=sheet.id,
+                chunk=str(chunk.get("id") or f"{sheet.id}:symbols"),
+                backend=ai_backend,
+                confidence_threshold=threshold,
+            )
+            if sugg.decision is not None:
+                chunk.setdefault("ai_decisions", []).append(sugg.decision.to_dict())
+            if sugg.accepted and sugg.suggested_library_id:
+                new_lib = sugg.suggested_library_id
+                ai_mapping = dict(sugg.pin_map)
+            else:
+                issues.append(_unmapped_issue(session, comp, sheet.id))
+                return
+        else:
+            issues.append(_unmapped_issue(session, comp, sheet.id))
+            return
     if new_lib == comp.library_id:
         return
     try:
@@ -1150,7 +1511,7 @@ def _swap_one(
     except KeyError:
         issues.append(_unmapped_issue(session, comp, sheet.id, missing=new_lib))
         return
-    mapping = pin_map(comp.library_id, target)
+    mapping = ai_mapping if ai_mapping is not None else pin_map(comp.library_id, target)
     target_pins = {pin.id for pin in device.pins}
     wired = _wired_pins(session.project, comp.id, sheet.id)
     blocked = []
@@ -1406,12 +1767,46 @@ def _wired_pins(project: Project, ref: str, sheet_id: str | None = None) -> set[
     return pins
 
 
+def _is_ambiguous_family_for_ai(
+    session: Any,
+    fam: dict[str, Any],
+    ai_backend: ConversionAIBackend | None,
+) -> bool:
+    if ai_backend is None or not ai_backend.available():
+        return False
+    leader = min(fam["members"].values(), key=_rank)
+    comp_id = str(leader.get("id") or "")
+    base = str(fam.get("base") or "")
+    lib_id = str(leader.get("library_id") or "")
+    low_lib = lib_id.lower()
+    if "offpage" in low_lib or "junction" in low_lib or "connection.node" in low_lib:
+        return False
+    role = str(leader.get("role") or "").strip()
+    parsed = parse_device_tag(comp_id)
+    prefix = parsed[0].upper() if parsed else ""
+    if isinstance(ai_backend, RecordedJSONBackend):
+        role_bucket = ai_backend.recordings.get("resolve_role") or {}
+        if comp_id in role_bucket or base in role_bucket or f"-{comp_id}" in role_bucket or "*" in role_bucket:
+            return True
+    if not role and (
+        (prefix in {"K", "Q", "S", "F", "B", "CR", "M", "CB", "DISC", "FU", "OL", "PB"} and _is_ambiguous_symbol(session, lib_id))
+        or "generic" in low_lib
+        or "custom" in low_lib
+        or "unknown" in low_lib
+    ):
+        return True
+    return False
+
+
 def _plan_tags(
     session: Any,
     target: str,
     sheet_ids: list[str],
     *,
     keep_numbers: bool = False,
+    ai_backend: ConversionAIBackend | None = None,
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+    ai_decisions_out: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, str], list[dict[str, str]]]:
     project: Project = session.project
     selected = set(sheet_ids)
@@ -1472,6 +1867,25 @@ def _plan_tags(
                 taken.add(new_id)
             continue
         prefix = _target_prefix(session, project, fam, target)
+        if ai_backend is not None and not _is_terminal_family(fam, prefix) and _is_ambiguous_family_for_ai(session, fam, ai_backend):
+            leader = min(fam["members"].values(), key=_rank)
+            leader_sheet = project.sheet(leader["sheet"])
+            comp_obj = next((c for c in leader_sheet.components if c.id == leader["id"]), None)
+            if comp_obj is not None:
+                res = resolve_ambiguous_role(
+                    comp_obj,
+                    target,
+                    backend=ai_backend,
+                    project=project,
+                    sheet=leader_sheet,
+                    confidence_threshold=confidence_threshold,
+                    fallback_prefix=prefix,
+                    chunk="tags",
+                )
+                fam["_ai_role_res"] = res
+                if res.accepted and res.prefix:
+                    prefix = res.prefix
+                    fam["ai_role"] = res.role
         fam["prefix"] = prefix
         if _is_terminal_family(fam, prefix):
             for member in members:
@@ -1482,6 +1896,19 @@ def _plan_tags(
             pending.append(fam)
     if pending:
         _assign_sequential(pending, taken, mapping, bumps)
+    if ai_decisions_out is not None:
+        for fam in in_scope:
+            res = fam.get("_ai_role_res")
+            if res is None or res.decision is None:
+                continue
+            leader = min(fam["members"].values(), key=_rank)
+            orig_id = str(leader["id"])
+            final_id = mapping.get(orig_id, orig_id)
+            res.decision.component_id = final_id
+            res.decision.before["id"] = orig_id
+            res.decision.after["id"] = final_id
+            res.decision.after["prefix"] = str(fam.get("prefix") or "")
+            ai_decisions_out.append(res.decision.to_dict())
     changed = {old: new for old, new in mapping.items() if old != new}
     return changed, bumps
 

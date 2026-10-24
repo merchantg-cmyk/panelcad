@@ -19,6 +19,8 @@ DECISION_REASON_CODES: frozenset[str] = frozenset(
         "coil_without_contacts",
         "contact_without_coil",
         "multipage_consolidation",
+        "note_reworded",
+        "layout_candidate",
     }
 )
 
@@ -47,6 +49,23 @@ class ConversionDecision:
     message: str = ""
     chunk_id: str = ""
     severity: str = "warning"
+    model: str = ""
+    confidence: float | None = None
+    proposal: dict[str, Any] = field(default_factory=dict)
+    reason: str = ""
+    chunk: str = ""
+    kind: str = ""
+    note: str = ""
+
+    def __post_init__(self) -> None:
+        if self.note and not self.message:
+            self.message = self.note
+        elif self.message and not self.note:
+            self.note = self.message
+        if self.chunk and not self.chunk_id:
+            self.chunk_id = self.chunk
+        elif self.chunk_id and not self.chunk:
+            self.chunk = self.chunk_id
 
     @property
     def flag(self) -> str:
@@ -64,8 +83,24 @@ class ConversionDecision:
     def sheet(self) -> str:
         return self.sheet_id or ""
 
+    @property
+    def accepted(self) -> bool:
+        if isinstance(self.proposal, dict) and "accepted" in self.proposal:
+            return bool(self.proposal["accepted"])
+        return not self.needs_review
+
+    @property
+    def original(self) -> Any:
+        if "original" in self.before:
+            return self.before["original"]
+        if "text" in self.before:
+            return self.before["text"]
+        if "original" in self.proposal:
+            return self.proposal["original"]
+        return self.before
+
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "reason_code": str(self.reason_code),
             "component_id": self.component_id,
             "sheet_id": self.sheet_id,
@@ -80,6 +115,15 @@ class ConversionDecision:
             "ref": str(self.component_id or ""),
             "sheet": str(self.sheet_id or ""),
         }
+        if self.model:
+            out["model"] = str(self.model)
+        if self.confidence is not None:
+            out["confidence"] = float(self.confidence)
+        if self.proposal:
+            out["proposal"] = dict(self.proposal)
+        if self.reason:
+            out["reason"] = str(self.reason)
+        return out
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | "ConversionDecision") -> "ConversionDecision":
@@ -92,7 +136,14 @@ class ConversionDecision:
         sh_id = data.get("sheet_id")
         if sh_id is None and data.get("sheet"):
             sh_id = str(data["sheet"])
-        msg = str(data.get("message") or data.get("detail") or "")
+        msg = str(data.get("message") or data.get("detail") or data.get("note") or "")
+        raw_conf = data.get("confidence")
+        conf_val: float | None = None
+        if raw_conf is not None:
+            try:
+                conf_val = float(raw_conf)
+            except (TypeError, ValueError):
+                conf_val = None
         return cls(
             reason_code=reason,
             component_id=str(comp_id) if comp_id else None,
@@ -101,8 +152,12 @@ class ConversionDecision:
             after=dict(data.get("after") or {}),
             needs_review=bool(data.get("needs_review", True)),
             message=msg,
-            chunk_id=str(data.get("chunk_id") or ""),
+            chunk_id=str(data.get("chunk_id") or data.get("chunk") or ""),
             severity=str(data.get("severity") or "warning"),
+            model=str(data.get("model") or ""),
+            confidence=conf_val,
+            proposal=dict(data.get("proposal") or {}),
+            reason=str(data.get("reason") or ""),
         )
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -224,6 +279,8 @@ class ConversionPlan:
     chunks: list[ConversionChunk] = field(default_factory=list)
     decisions: list[ConversionDecision] = field(default_factory=list)
     connection_check: dict[str, Any] = field(default_factory=dict)
+    mode: str = "rules_only"
+    confidence_threshold: float = 0.80
 
     def needs_review_decisions(self) -> list[ConversionDecision]:
         accepted_chunks = {c.id for c in self.chunks if c.status == "accepted"}
@@ -252,7 +309,7 @@ class ConversionPlan:
             d.to_dict() if isinstance(d, ConversionDecision) else ConversionDecision.from_dict(d).to_dict()
             for d in self.decisions
         ]
-        return {
+        out: dict[str, Any] = {
             "workspace": self.workspace,
             "out_path": self.out_path,
             "target": self.target,
@@ -273,6 +330,10 @@ class ConversionPlan:
             "reason_codes": self.reason_codes,
             "connection_check": dict(self.connection_check),
         }
+        if self.mode and self.mode != "rules_only":
+            out["mode"] = self.mode
+            out["confidence_threshold"] = float(self.confidence_threshold)
+        return out
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | "ConversionPlan") -> "ConversionPlan":
@@ -303,6 +364,8 @@ class ConversionPlan:
             chunks=chunks,
             decisions=decisions,
             connection_check=dict(data.get("connection_check") or {}),
+            mode=str(data.get("mode") or "rules_only"),
+            confidence_threshold=float(data.get("confidence_threshold", 0.80) or 0.80),
         )
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -346,6 +409,8 @@ def decisions_from_issues(
         after = dict(issue.get("after") or {})
         if issue.get("library_id") and "library_id" not in before:
             before["library_id"] = str(issue["library_id"])
+        raw_conf = issue.get("confidence")
+        conf_val = float(raw_conf) if raw_conf is not None else None
         out.append(
             ConversionDecision(
                 reason_code=code,
@@ -357,6 +422,10 @@ def decisions_from_issues(
                 message=msg,
                 chunk_id=chunk_id or str(issue.get("chunk_id") or ""),
                 severity=str(issue.get("severity") or "warning"),
+                model=str(issue.get("model") or ""),
+                confidence=conf_val,
+                proposal=dict(issue.get("proposal") or {}),
+                reason=str(issue.get("reason") or ""),
             )
         )
     return out
@@ -378,6 +447,21 @@ def decisions_for_tags_chunk(
     src_data = ws.get("source_project")
     src_proj = Project.model_validate(src_data) if isinstance(src_data, dict) else session.project
     selected = set(ws.get("sheets") or [s.id for s in src_proj.sheets])
+
+    # Include any AI-assisted tag/note decisions already attached to the chunk
+    ai_handled_components: set[str] = set()
+    for raw_ai_dec in chunk.get("ai_decisions") or []:
+        dec_obj = ConversionDecision.from_dict(raw_ai_dec)
+        if not dec_obj.chunk_id:
+            dec_obj.chunk_id = chunk_id
+        decisions.append(dec_obj)
+        if dec_obj.reason_code == "ambiguous_role":
+            orig_id = str(dec_obj.before.get("id") or dec_obj.component_id or "")
+            if orig_id:
+                p_orig = parse_device_tag(orig_id)
+                ai_handled_components.add(f"{p_orig[0]}{p_orig[1]}" if p_orig else orig_id)
+            if dec_obj.component_id:
+                ai_handled_components.add(dec_obj.component_id)
 
     # 1. Tag collisions from tag_bumps
     for row in chunk.get("tag_bumps") or []:
@@ -401,7 +485,7 @@ def decisions_for_tags_chunk(
         )
 
     # 2. Ambiguous role & multifunction block detection across source components
-    seen_families: set[str] = set()
+    seen_families: set[str] = set(ai_handled_components)
     for sheet in src_proj.sheets:
         if sheet.id not in selected:
             continue
@@ -431,7 +515,7 @@ def decisions_for_tags_chunk(
                     )
                 )
 
-            if base in seen_families:
+            if base in seen_families or comp.id in seen_families or new_id in seen_families:
                 continue
             if prefix in _AMBIGUOUS_IEC_PREFIXES and not role and _is_ambiguous_symbol(session, lib_id):
                 seen_families.add(base)
@@ -468,7 +552,7 @@ def decisions_for_tags_chunk(
                     )
                 )
 
-    return decisions
+    return _dedupe_decisions(decisions)
 
 
 def decisions_for_symbols_chunk(
@@ -480,17 +564,32 @@ def decisions_for_symbols_chunk(
 
     chunk_id = str(chunk.get("id") or "")
     sheet_id = str(chunk.get("sheet") or "")
-    decisions = decisions_from_issues(
+    decisions: list[ConversionDecision] = []
+    for raw_ai_dec in chunk.get("ai_decisions") or []:
+        dec_obj = ConversionDecision.from_dict(raw_ai_dec)
+        if not dec_obj.chunk_id:
+            dec_obj.chunk_id = chunk_id
+        decisions.append(dec_obj)
+
+    ai_unmapped_Ids = {
+        str(d.component_id or "")
+        for d in decisions
+        if d.reason_code == "unmapped_symbol" and d.component_id
+    }
+    for dec in decisions_from_issues(
         list(chunk.get("issues") or []),
         sheet_id=sheet_id or None,
         chunk_id=chunk_id,
-    )
+    ):
+        if dec.reason_code == "unmapped_symbol" and (dec.component_id or "") in ai_unmapped_Ids:
+            continue
+        decisions.append(dec)
 
     # Check for orphan coils or contacts on this sheet
     try:
         sheet = session.sheet(sheet_id)
     except Exception:  # noqa: BLE001
-        return decisions
+        return _dedupe_decisions(decisions)
 
     coil_bases, contact_bases, power_bases = _collect_project_coil_and_contact_bases(session.project)
     for comp in sheet.components:
@@ -558,10 +657,19 @@ def decisions_for_layout_chunk(
 
     chunk_id = str(chunk.get("id") or "")
     sheet_id = str(chunk.get("sheet") or "")
-    decisions = decisions_from_issues(
-        list(chunk.get("issues") or []),
-        sheet_id=sheet_id or None,
-        chunk_id=chunk_id,
+    decisions: list[ConversionDecision] = []
+    for raw_ai_dec in chunk.get("ai_decisions") or []:
+        dec_obj = ConversionDecision.from_dict(raw_ai_dec)
+        if not dec_obj.chunk_id:
+            dec_obj.chunk_id = chunk_id
+        decisions.append(dec_obj)
+
+    decisions.extend(
+        decisions_from_issues(
+            list(chunk.get("issues") or []),
+            sheet_id=sheet_id or None,
+            chunk_id=chunk_id,
+        )
     )
 
     rail_rec = chunk.get("rail") or {}
@@ -609,7 +717,7 @@ def decisions_for_layout_chunk(
 
 
 def sync_project_conversion_decisions(project: Project, ws: dict[str, Any]) -> list[dict[str, Any]]:
-    """Persist unresolved ``needs_review`` conversion decisions onto the project metadata."""
+    """Persist unresolved ``needs_review`` (and unaccepted AI-assisted) conversion decisions onto the project metadata."""
 
     unresolved: list[dict[str, Any]] = []
     all_decisions: list[dict[str, Any]] = []
@@ -633,7 +741,7 @@ def sync_project_conversion_decisions(project: Project, ws: dict[str, Any]) -> l
                 dec.chunk_id = chunk_id
             row = dec.to_dict()
             all_decisions.append(row)
-            if status != "accepted" and dec.needs_review:
+            if status != "accepted" and (dec.needs_review or bool(dec.model)):
                 unresolved.append(row)
 
     ws["decisions"] = all_decisions

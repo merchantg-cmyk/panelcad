@@ -3985,6 +3985,10 @@ class Session:
         workspace: Path | str | None = None,
         resume: Path | str | None = None,
         keep_numbers: bool = False,
+        mode: str = "rules_only",
+        ai_assist: bool = False,
+        ai_backend: Any = None,
+        confidence_threshold: float = 0.80,
     ) -> dict[str, Any]:
         """Plan an IEC <-> NEMA conversion. Writes a workspace JSON and does not edit the drawing."""
 
@@ -3998,6 +4002,10 @@ class Session:
             workspace=workspace,
             resume=resume,
             keep_numbers=keep_numbers,
+            mode=mode,
+            ai_assist=ai_assist,
+            ai_backend=ai_backend,
+            confidence_threshold=confidence_threshold,
         )
 
     def _convert_guarded(self, op: str, summary: str, fn: Callable[[], Any]) -> Any:
@@ -4017,17 +4025,33 @@ class Session:
                 self._undoable(op, "roll back blocked conversion", lambda: _install(self, source))
             raise
 
-    def convert_standard_next(self, workspace: Path | str | None = None) -> dict[str, Any]:
+    def convert_standard_next(
+        self,
+        workspace: Path | str | None = None,
+        ai_backend: Any = None,
+        confidence_threshold: float = 0.80,
+    ) -> dict[str, Any]:
         """Convert the next unfinished chunk. One undo. Does not overwrite the source file."""
 
         from panelcad.convert.engine import next_chunk
 
-        return self._convert_guarded("convert_standard", "convert next chunk", lambda: next_chunk(self, workspace))
+        return self._convert_guarded(
+            "convert_standard",
+            "convert next chunk",
+            lambda: next_chunk(
+                self,
+                workspace,
+                ai_backend=ai_backend,
+                confidence_threshold=confidence_threshold,
+            ),
+        )
 
     def convert_standard_apply(
         self,
         workspace: Path | str | None = None,
         out: Path | str | None = None,
+        ai_backend: Any = None,
+        confidence_threshold: float = 0.80,
     ) -> dict[str, Any]:
         """Finish every pending chunk and save-as. One undo."""
 
@@ -4036,7 +4060,13 @@ class Session:
         return self._convert_guarded(
             "convert_standard",
             "apply drawing-standard conversion",
-            lambda: apply_conversion(self, workspace, out=out),
+            lambda: apply_conversion(
+                self,
+                workspace,
+                out=out,
+                ai_backend=ai_backend,
+                confidence_threshold=confidence_threshold,
+            ),
         )
 
     def convert_standard(
@@ -4046,6 +4076,10 @@ class Session:
         out: Path | str | None = None,
         workspace: Path | str | None = None,
         keep_numbers: bool = False,
+        mode: str = "rules_only",
+        ai_assist: bool = False,
+        ai_backend: Any = None,
+        confidence_threshold: float = 0.80,
     ) -> dict[str, Any]:
         """Convert the project or selected sheets. One undo. Save-as; the source file stays put."""
 
@@ -4061,6 +4095,10 @@ class Session:
                 out=out,
                 workspace=workspace,
                 keep_numbers=keep_numbers,
+                mode=mode,
+                ai_assist=ai_assist,
+                ai_backend=ai_backend,
+                confidence_threshold=confidence_threshold,
             ),
         )
 

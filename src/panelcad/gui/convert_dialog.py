@@ -10,6 +10,7 @@ from PySide6.QtGui import QColor, QImage, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
+    QComboBox,
     QDialog,
     QFileDialog,
     QFrame,
@@ -211,6 +212,14 @@ class ConvertDialog(QDialog):
             "Leave each device's number as it is. "
             "Unchecked, each letter family is numbered 1, 2, 3 in sheet order."
         )
+        self.mode_combo = QComboBox()
+        self.mode_combo.setObjectName("convert-mode-combo")
+        self.mode_combo.addItem("Standard (rules only)", "rules_only")
+        self.mode_combo.addItem("AI-assisted", "ai_assisted")
+        self.mode_combo.setToolTip(
+            "Standard uses deterministic rules only. "
+            "AI-assisted adds validated advisory suggestions for ambiguous roles, unmapped symbols, notes, and layout."
+        )
 
         self.sheets = QListWidget()
         active = session.active_sheet_id
@@ -245,6 +254,8 @@ class ConvertDialog(QDialog):
         row.addStretch(1)
         form.addLayout(row)
         form.addWidget(self.keep_numbers)
+        form.addWidget(QLabel("Conversion type"))
+        form.addWidget(self.mode_combo)
         form.addWidget(self.sheets)
         form.addWidget(QLabel("Save as"))
         row = QHBoxLayout()
@@ -309,6 +320,9 @@ class ConvertDialog(QDialog):
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Convert drawing standard", str(exc))
 
+    def conversion_mode(self) -> str:
+        return str(self.mode_combo.currentData() or "rules_only")
+
     def perform(self) -> dict:
         """Run the conversion and fill the review. Tests call this without exec."""
 
@@ -317,6 +331,7 @@ class ConvertDialog(QDialog):
             sheets=self.chosen_sheets(),
             out=self.path.text().strip() or None,
             keep_numbers=self.keep_numbers.isChecked(),
+            mode=self.conversion_mode(),
         )
         self.show_review(result)
         return result
