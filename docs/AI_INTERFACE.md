@@ -135,6 +135,8 @@ panelcad electrical xref job.pcad.yaml --wire 102
 | quote_build / quote_set_rates / quote_import_prices / quote_export | view/edit | Quote from the drawing. Prices only from an imported CSV/XLSX, a library `unit_cost`, or `manual` on `quote_set_rates`. Nothing is downloaded or sent. `quote_export` writes xlsx, pdf, csv, or json and is **blocked (`NOT FOR BUILD`)** while any layout occupant is still generic. `view=customer` omits cost, markup, vendor, and shop rate in every format. Result includes `incomplete` and `unpriced`. Labor placeholders are labelled example defaults only while they are still the shipped numbers. |
 | phase_colors / set_phase_colors | view/edit | 3-phase power colors. Black/red/blue (208/240 V) and brown/orange/yellow (480 V) are a US shop convention. The 480 V palette is chosen when `system_voltage` (or the drawing) is at or above `nema_high_voltage` (default 300). Brown, black, and grey are a permitted IEC default, not a required L1/L2/L3 order. `nema_low`, `nema_high`, and `iec` are `L1,L2,L3`. `neutral` is the NEMA white/grey. `iec_neutral` is blue (default light blue #5eb0e8). IEC 60445 §6.2.2 is unverified from an official source. Ground is green (IEC green/yellow). A blue IEC line color warns when the drawing has a neutral. Control wiring is unchanged. Omit `system_voltage` or pass `auto` to follow the drawing. |
 | retag | edit | `mode=duplicates` (default), `family`, or `standard`. `standard` (or `apply_prefixes=true`) remaps tags to the project's drawing-standard prefixes. A contact keeps its coil's tag. |
+| convert_standard / convert_standard_plan / convert_standard_next / convert_standard_apply | edit | Convert a project or selected sheets between IEC and NEMA. Save-as; never overwrites the source file. One undo. Guarded by `verify_converted_from_to` (`check_connections`, `from-to-check/1`), which raises `ConnectionLost` and rolls back if any From-To net is lost, added, or merged. JSONL args: `to=iec\|nema`, `sheets?`, `out?`, `workspace?`, `keep_numbers?=false`, `resume?` (`convert_standard_plan`). Python `Session.convert_standard` / `Session.convert_standard_plan` additionally accept `wire_mode='line_ref'\|'keep'`, `mode='rules_only'\|'ai_assisted'`, `ai_assist=False`, `ai_backend=None`, and `confidence_threshold=0.80`. CLI: `panelcad convert <project> --to nema --out <path> [--sheets s1,s2] [--keep-numbers] [--resume ws.json]`. |
+| convert_standard_review / convert_standard_accept / convert_standard_rerun / convert_standard_revert | view/edit | Inspect or manage conversion chunks (`chunk` / `chunk_id`, `workspace?`), flags, tag maps, and per-item `ConversionDecision` rows (`DECISION_REASON_CODES`). `convert_standard_revert` refuses with `RevertRefused` if reverting a chunk would break From-To wiring. Session also provides `resolve_conversion_decision(decision, action='accept'\|'change'\|'keep_original', chosen_option=...)`, `import_iec_print_to_from_to(...)`, and `import_and_convert_standard(...)`. |
 | cross_reference / export_cross_reference / set_cross_reference | view/edit | Derived coil/contact/device report (sheet, line, zone). `write?=false` persist `properties.xref`. `nc_mark?=underline\|bar\|parentheses`. CSV lists each coil and its contacts. Opening a file never writes refs. |
 | circuit_for / checkpoints / upstream / downstream / plc_point / likely_causes | view | Read-only troubleshooting. Same payload from Session, JSONL, `panelcad electrical troubleshoot`, and the drawing agent. `circuit_for` `ref` is the control and power path. `checkpoints` `ref` + `symptom` (`motor_wont_start`, `motor_trips`, `wont_stop`, `no_control_power`, `plc_input_not_seen`, `plc_output_on_load_off`, `vfd_faulted`) returns ordered checks, each `LIVE` or `DE-ENERGIZED`, and opens with lockout and NFPA 70E text. Expected voltage comes only from a net name, a rail name, or a supply output on that net; otherwise the check is `needs-info`. `upstream` and `downstream` take `endpoint` as `ref.pin`. `plc_point` takes `address` (address, point label, or tag on the drawing). `likely_causes` takes `ref`, `symptom`, and optional `readings` (`ok` / `wrong` / `skipped`); the first wrong reading narrows the fault. Answers cite only wire numbers and terminals on the drawing. Nothing in the payload tells the reader to jumper, bypass, force, defeat, or override a safety device, overload, or PLC point. `export_troubleshoot` `path` writes the open `troubleshoot.json` document (`docs/TROUBLESHOOT.md`). `append_troubleshoot_log` appends readings to `<stem>.troubleshoot-log.json` next to the saved project and does not write the project file. Unknown devices, symptoms, and PLC points are a query error (exit 1 on the CLI, no crash record). |
 | device_index / lookup_zone / trace_wire | view | Floor-troubleshooting index. `device_index` `ref?` lists every element of a device (page, zone, element type, terminals, wire numbers). Exact tag match (M1 does not return M10). A lamp tag returns the lamp, not an off-page whose dest starts with that tag. `lookup_zone` `zone` (`5-A2`, `A2`, `/1.3`, `105`, `sheet:A2`) plus optional `sheet` returns what sits there. Bad or off-grid zones raise the same sentence on Session, JSONL, CLI (exit 1), and the drawing tool — not a crash record. `trace_wire` `number` follows a conductor across sheets (from/to, pages, pin zones); empty is `wire number is required`, unknown numbers error the same way. Same payload from Session, `panelcad electrical xref --device/--zone/--wire`, and JSONL. The print package includes a Device Index appendix when the project has families. |
@@ -360,6 +362,90 @@ s.export_json("job.json")
 ```
 
 Agent: `print_package`, `export_package`, `import_any`, `export_json`, `import_library`, `import_sheet`, `import_wires`, `wire_list`, `export_wire_markers`, `set_net_wire_spec`. The Pydantic drawing agent also has `print_package` (`path`, `paper`, `sections`), `wire_list` (always the from-to report; `path`, `sort`), and `export_wire_markers` (`path`, `target`, `style`, `sort`).
+
+## IEC-to-NEMA conversion
+
+Convert IEC 60617 projects (or imported IEC PDFs and scans) to NEMA ICS 19 / ANSI Y32.2 / IEEE 315 drawings without losing a single electrical connection.
+
+### 1. Wire-by-wire From-To gate and wire/terminal mapping
+
+Every conversion and chunk revert runs `verify_converted_from_to` (`check_connections` in `panelcad.convert.from_to_check`, scorer `from-to-check/1`). The checker extracts the full From-To netlist before and after conversion, maps converted endpoints back through the device tag map, contact pin rewrites, and rail renames (`L+`/`M` ↔ `24V`/`0V`, `L1`/`N` ↔ `L1`/`L2`), and verifies that every net matches end for end.
+
+- If any connection is lost, added, or merged, `ConnectionLost` aborts the save and rolls the session back to the pre-conversion project.
+- If reverting a single chunk would break a net, `RevertRefused` blocks the revert and leaves the conversion intact.
+- Wire numbering (`wire_mode` / `format_wire_number`): `line_ref` renumbers control conductors by NEMA sheet and rung line (`101`, `102`, …) while preserving supply rails (`L1`, `L2`, `24V`, `0V`, `PE`/`GND`) and locked wires (`locked_wire_preserved`); `keep` preserves existing wire numbers.
+- Terminal mapping (`convert_terminal_tag`): IEC terminal designations such as `-X1:3` or `X1:3` map to NEMA `TB1-3` (and reverse on NEMA-to-IEC).
+- `build_from_to_diff_rows` produces side-by-side per-wire diff rows (`MATCH`, `RENAMED`, `LOCKED`, `MISMATCH`) for the GUI and audit reports.
+
+### 2. Symbol pairs and NEMA ICS 19 / ANSI Y32.2 / IEEE 315 graphics
+
+`panelcad.convert.standard_map` (`ENTRIES`, re-exported by `panelcad.convert.table`) pairs `iec.<id>` and `nema.<id>` library parts across all standard control-panel families:
+
+- **Operators, sensors, and pilot devices:** `operators.pb_no`, `operators.pb_nc`, `operators.pb_illum`, `operators.estop`, `operators.estop_2nc`, `operators.selector_no`, `operators.selector_3pos`, `operators.limit_no`, `operators.limit_nc`, `operators.pressure_no`, `operators.pressure_nc`, `operators.float_no`, `operators.float_nc`, `operators.flow_no`, `operators.flow_nc`, `operators.foot_no`, `operators.foot_nc`, `operators.level_no`, `operators.level_nc`, `operators.temp_no`, `operators.temperature_no`, `operators.temperature_nc`, `operators.prox_no`, `sensors.prox_24v`, `operators.pilot_light`, `operators.stack_light`, `operators.horn`.
+- **Coils, contacts, relays, and timers:** `contactors.coil`, `contactors.aux_no`, `contactors.aux_nc`, `contactors.3p`, `contactors.ac3_9a`, `contactors.ac3_32a`, `relays.cr`, `relays.alternating`, `relays.safety_2ch`, `relays.safety_24vdc`, `timers.on_delay`, `timers.off_delay`, `timers.contact_notc`, `timers.contact_ncto`, `timers.contact_noto`, `timers.contact_nctc`.
+- **Protection, power distribution, drives, motors, loads, PLC I/O, and terminals:** `protection.fuse`, `protection.fuse_10a`, `breakers.mcb_1p_16a`, `breakers.mcb_3p_32a`, `breakers.mccb_3p_100a`, `breakers.mpcb_3p`, `protection.overload`, `protection.overload_9a` (`iec.protection.overload_9a` ↔ `nema.protection.overload`), `protection.ol_contact`, `power.disconnect_3p`, `protection.disconnect_3p`, `power.transformer_1ph`, `power.control_transformer`, `power.psu_24v_5a`, `power.receptacle`, `drives.vfd_1k5`, `drives.softstarter`, `motors.3ph`, `loads.motor_1ph`, `loads.motor_3ph_6lead`, `loads.fan_24v`, `plc.compact_16dio`, `plc.analog_1ai_1ao`, `terminals.feed_through`, `terminals.x_2p5`, `terminals.pe` (`iec.terminals.pe_4` ↔ `nema.terminals.pe`).
+
+NEMA schematic symbols maintain at least `1.5 mm` clearance inside their bounding box so adjacent ladder items never clip, and single-pole control fuses and breakers (`protection.fuse`, `protection.fuse_10a`, `breakers.mcb_1p_16a`) stay on the control wire color instead of 3-phase power colors.
+
+### 3. Role-based tags, pin numbering, cross-references, and power sheets
+
+- **Role-based tag renaming (`ROLE_PREFIX_TABLE` / `ROLE_TAG_TABLE`, `rename_tag_by_role`):** Ambiguous IEC prefixes map by circuit role: `S` (`S`/`SP`/`ST`/`SL`/`SQ`/`SB`) → `PB`/`SEL`/`ES`/`LS`/`PRS`/`FS`/`TSW`/`PXS`/`SSW`; `K` (`K`/`KM`/`KA`/`KT`/`KS`) → `M`/`CR`/`TR`/`SR`; `Q` (`Q`/`QF`/`QS`/`QM`) → `CB`/`DISC`/`MCP`; `F` (`F`/`FU`/`FR`) → `FU`/`OL`; `T` → `T` (alias `XFMR`); `G` → `PS`; `U` → `VFD`/`SS` (alias `DRV`); `H` (`H`/`HL`/`HA`) → `PL`/`HN` (alias `LT`); `A` → `PLC`; `X` (`X`/`PE`) → `TB`/`GND` (alias `X`). Contacts and overload elements inherit their parent coil or starter tag (`K1` starter + contacts → `M1`). Pass `keep_numbers=True` (`--keep-numbers`) to keep source tag suffixes (`-S4` → `PB4`) instead of sequential numbering per prefix (`PB1`, `PB2`).
+- **Contact pin numbering:** IEC NO contacts `13/14` map to NEMA `3/4`; IEC NC contacts `11/12` and `21/22` map to `1/2`; overload contacts `95/96` and `97/98` map to NEMA OL pins.
+- **Rung cross-references:** Converted NEMA ladder sheets assign rung line numbers (`101`, `102`, …) and populate coil contact cross-reference tables (`NO` and underlined `NC` line numbers).
+- **3-phase power sheets (`is_power_sheet`):** Sheets carrying 3-phase power feeders (`L1`/`L2`/`L3` to `DISC`/`CB`/`FU`/`M`/`OL`/`VFD`/`U1`/`V1`/`W1`) keep their vertical feeder geometry during conversion and never undergo horizontal control-ladder relayout or right-rail collisions.
+- **Title-block and wire overlap guards:** Ladder relayout enforces margins above the title block (`y < 245 mm`) and routes parallel branches without wire-through-body or label overlaps.
+
+### 4. Multi-page IEC circuit consolidation
+
+`consolidate_multipage_iec` (`consolidate_control_sheets` in `panelcad.convert.layout_convert`) traces off-page connectors (`iec.connection.offpage` / `offpage_from`) across multi-sheet IEC control drawings, merges connected control rungs onto horizontal NEMA ladder sheets (up to 6 rungs per sheet before spilling to a continuation sheet), replaces resolved off-page stubs with direct conductors, and removes emptied secondary control sheets.
+
+### 5. Per-item `ConversionDecision` audit records and Problems integration
+
+`panelcad.convert.plan` records a structured `ConversionDecision` (`reason_code`, `component_id`, `sheet_id`, `before`, `after`, `needs_review`, `message`, `chunk_id`, `severity`, `model`, `confidence`, `proposal`; serialized with compatibility aliases `original`, `accepted`, `action`, `flag`, `detail`, `ref`, `sheet`) whenever a mapping is ambiguous, low-confidence, or AI-suggested.
+
+- **Reason codes (`DECISION_REASON_CODES`):** `ambiguous_role`, `coil_without_contacts`, `contact_without_coil`, `imported_low_confidence`, `layout_candidate`, `multifunction_block`, `multipage_consolidation`, `note_reworded`, `off_grid_relayout`, `tag_collision`, `unmapped_pin`, `unmapped_symbol`.
+- **Sheet layout flags (`SHEET_FLAG_REASON_CODES`):** `component_overlap`, `rail_collision`, `title_block_overlap`, `wire_overlap`.
+- **Problems dock:** Unresolved decisions (`needs_review=True`) appear in `design_checks` and the GUI Problems dock under `"Conversion: needs review"` until resolved via `Session.resolve_conversion_decision(decision, action="accept" | "change" | "keep_original", chosen_option=...)` or `CompareDialog`.
+
+### 6. Pluggable AI advisor (`panelcad.convert.ai_assist`)
+
+Pass `mode="ai_assisted"` (or `ai_assist=True` on `Session.convert_standard` / `Session.convert_standard_plan`) to enable the optional advisor (`ConversionAIBackend`, `ConfiguredConversionAIBackend`, `RecordedJSONBackend`, `FakeConversionAIBackend`, `NoOpAIBackend`):
+
+- `resolve_ambiguous_role`: classifies ambiguous IEC tags (`K`, `S`, `Q`, `F`, `H`, `U`) from schematic context when deterministic clues are tied, falling back to `manual_review_required` below `confidence_threshold` (`0.80`).
+- `suggest_symbol_counterpart`: proposes a target symbol for unmapped parts, validated against the loaded symbol catalog so unknown library IDs are rejected.
+- `reword_note_text` / `reword_sheet_notes` and `revert_reworded_notes`: rewrites IEC terminology in sheet notes to NEMA wording while storing `original_text` on the note and recording a `note_reworded` decision for one-click revert.
+- `rank_layout_candidates`: ranks candidate ladder layouts after filtering out any candidate that trips `HARD_LAYOUT_FLAGS` (`component_overlap`, `layout_overflow`, `rail_collision`, `title_block_overlap`, `wire_overlap`).
+
+### 7. 3-stage IEC PDF and scan import-to-NEMA pipeline (`panelcad.convert.import_convert`)
+
+Import an IEC PDF or raster scan and convert it to NEMA in three stages using `pypdf` and `panelcad.importer.vision` (no external OCR packages required):
+
+1. **Stage 1 — Extract (`import_iec_print_to_from_to` / `Session.import_iec_print_to_from_to`):** Reads embedded PDF text/vectors (`pypdf`) and vision detections (`panelcad.importer.vision`), normalizes IEC tags (`clean_iec_tag`, `split_endpoint_token`), and produces an `ImportedIECPrintDraft` (`source_path`, `title`, `standard`, `sheets`, `devices`, `from_to_rows` serialized as `from_to`, `notes`, `decisions`, `confidence_threshold`, `needs_review_count`, plus helper methods `unresolved_rows()` and `unresolved_devices()`).
+2. **Stage 2 — Review and correct (`apply_from_to_corrections`):** Applies user or agent edits (`edits`, `add_rows`, `delete_rows`, `confirm_rows`, `device_edits`) to resolve low-confidence endpoints before layout synthesis.
+3. **Stage 3 — Build and convert (`convert_imported_iec_print` / `Session.import_and_convert_standard`):** Synthesizes the IEC project (`build_iec_project_from_imported_from_to`), runs `convert_standard(..., target="NEMA")`, and verifies the result against the corrected From-To table with `verify_converted_from_to`.
+
+### 8. GUI `ConvertDialog` and `CompareDialog`
+
+- **`ConvertDialog` (`Tools → Convert drawing standard…`):** Select target standard (`NEMA/ANSI` or `IEC`), scope (`Whole project` or `Selected sheets`), conversion mode (`convert-mode-combo`: `"Standard (rules only)"` / `rules_only` or `"AI-assisted"` / `ai_assisted`), tag numbering (`convert-tag-mode-combo`: `"Sequential"` / `sequential` or `"Keep numbers"` / `keep_numbers`, synced with checkbox `"Keep existing numbers"` / `keep-existing-numbers`), wire numbering (`convert-wire-mode-combo`: `"NEMA line-reference"` / `line_ref` or `"Keep existing wire numbers"` / `keep`), or click `"Import IEC PDF / scan..."` (`convert-import-scan-btn`) to populate `convert-import-from-to-table` for the 3-stage import-and-convert flow.
+- **`CompareDialog` (`convert-compare`):** Displays the conversion summary bar (`compare-summary-bar`: converted sheets, mapped tags, wire net match percentage, needs-review count, and mode), `"Highlight changed items"` checkbox (`compare-highlight-toggle`), `"Apply Decisions"` (`compare-apply-decisions-btn`) and `"Accept & Save"` (`compare-accept-save-btn`) buttons, and three `compare-tabs` tabs: `"Sheet Compare"` (`compare-sheet-tab`), `"From-To Diff"` (`compare-from-to-tab` / `compare-from-to-table`), and `"Decisions Review"` (`compare-decisions-tab` / `compare-decisions-table`) with `"Accept"`, `"Change"`, and `"Keep original"` actions.
+
+### 9. 18-print IEC conversion scorecard (`panelcad.convert.scorecard`)
+
+`panelcad.convert.scorecard` benchmarks conversion quality across an 18-print synthetic and public IEC corpus (`CORPUS_IDS`: `dol_starter`, `reversing_starter`, `star_delta_starter`, `two_speed_dahlander`, `vfd_drive_cell`, `soft_starter_bypass`, `plc_digital_io`, `plc_analog_loop`, `safety_relay_dual_channel`, `control_transformer_dist`, `multi_page_conveyor_3p`, `multi_page_pump_duplex`, `multi_page_hvac_ahu`, `siemens_style_numbering`, `schneider_style_numbering`, `eplan_potential_chains`, `ambiguous_roles_sheet`, `imported_scan_fixture`):
+
+```python
+from panelcad.convert.scorecard import (
+    build_iec_conversion_corpus,
+    compare_scorecard_modes,
+    run_conversion_scorecard,
+    verify_golden_nema_from_to_csvs,
+)
+
+corpus = build_iec_conversion_corpus()
+report = run_conversion_scorecard(corpus, mode="rules_only")
+comparison = compare_scorecard_modes(corpus)
+golden_ok = verify_golden_nema_from_to_csvs("tests/golden/wire_list")
+```
 
 ## Bug reports
 

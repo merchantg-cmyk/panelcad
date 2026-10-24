@@ -1,7 +1,8 @@
 # IEC-to-NEMA conversion with the From-To check
 
 ## Sub-features
-- Tools → "Convert drawing standard..." opens `ConvertDialog`. It has IEC/NEMA radios, Whole project or Selected sheets, and `keep-existing-numbers`.
+- Tools → "Convert drawing standard..." opens `ConvertDialog`. It has IEC/NEMA/ANSI radios, Whole project or Selected sheets, `convert-mode-combo` (`"Standard (rules only)"` / `"AI-assisted"`), `convert-tag-mode-combo` (`"Sequential"` / `"Keep numbers"`, synced with `"Keep existing numbers"` `keep-existing-numbers`), `convert-wire-mode-combo` (`"NEMA line-reference"` / `"Keep existing wire numbers"`), and `"Import IEC PDF / scan..."` (`convert-import-scan-btn`).
+- `CompareDialog` (`convert-compare`) provides `compare-summary-bar`, `"Highlight changed items"` (`compare-highlight-toggle`), and `compare-tabs` (`"Sheet Compare"`, `"From-To Diff"` with `compare-from-to-table`, and `"Decisions Review"` with `compare-decisions-table`).
 - A chunked review (`convert-review`) with per-chunk `accept:<id>`, `rerun:<id>` and `revert:<id>`, and a before/after `convert-compare` dialog.
 - Multi-page IEC control sheet consolidation (`convert/layout_convert.py`): when converting Whole project from IEC (`drawing_style: iec`) to NEMA/ANSI (`drawing_style: ladder`), control sheets linked by `power.offpage` arrows are consolidated onto as few NEMA ladder sheets as fit above the title block (`<= 6` rungs per sheet), resolving off-page arrows into direct horizontal rungs and cross-sheet coil/contact references (`NO L...` / `NC L...`).
 - The From-To check (`convert/from_to_check.py`, scorer `from-to-check/1`). The save happens only after every chunk is done and the check passes. A blocked single-chunk revert raises `RevertRefused` and keeps the conversion. A final-step block rolls back to the original project.

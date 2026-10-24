@@ -184,3 +184,65 @@ def test_golden_nema_from_to_csvs_match():
 
     results = verify_golden_nema_from_to_csvs(GOLDEN_DIR)
     assert results == {"dol": True, "reversing": True, "plc": True}
+def test_conversion_docs_and_public_exports():
+    import panelcad
+    from panelcad.convert import (
+        DECISION_REASON_CODES,
+        ROLE_PREFIX_TABLE,
+        check_connections,
+        consolidate_control_sheets,
+        consolidate_multipage_iec,
+        verify_converted_from_to,
+    )
+    from panelcad.convert.standard_map import ENTRIES
+
+    assert panelcad.__version__ == "0.5.15"
+    assert verify_converted_from_to is check_connections
+    assert consolidate_multipage_iec is consolidate_control_sheets
+
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    ai_doc = (ROOT / "docs/AI_INTERFACE.md").read_text(encoding="utf-8")
+
+    for expected in (
+        "verify_converted_from_to",
+        "from-to-check/1",
+        "ROLE_PREFIX_TABLE",
+        "consolidate_multipage_iec",
+        "ConversionDecision",
+        "DECISION_REASON_CODES",
+        "panelcad.convert.ai_assist",
+        "panelcad.convert.import_convert",
+        "ConvertDialog",
+        "CompareDialog",
+        "panelcad.convert.scorecard",
+        "tests/golden/wire_list",
+    ):
+        assert expected in changelog, f"Missing {expected} in CHANGELOG.md"
+        assert expected in ai_doc, f"Missing {expected} in docs/AI_INTERFACE.md"
+
+    assert "IEC-to-NEMA conversion" in readme
+    for code in DECISION_REASON_CODES:
+        assert code in ai_doc
+    for cid in CORPUS_IDS:
+        assert cid in changelog, f"Missing corpus id {cid} in CHANGELOG.md"
+        assert cid in ai_doc, f"Missing corpus id {cid} in docs/AI_INTERFACE.md"
+    for entry in ENTRIES:
+        assert entry["id"] in ai_doc, f"Missing symbol entry id {entry['id']} in docs/AI_INTERFACE.md"
+    for label in (
+        "Standard (rules only)",
+        "AI-assisted",
+        "Sequential",
+        "Keep numbers",
+        "Keep existing numbers",
+        "NEMA line-reference",
+        "Keep existing wire numbers",
+        "Sheet Compare",
+        "From-To Diff",
+        "Decisions Review",
+    ):
+        assert label in changelog
+        assert label in ai_doc
+    iec_prefixes = {row["iec_prefix"] for row in ROLE_PREFIX_TABLE}
+    for prefix in ("S", "K", "Q", "F", "H", "X", "T", "U"):
+        assert prefix in iec_prefixes

@@ -331,3 +331,6 @@ def build_from_to_diff_rows(
                     "status": "MISMATCH",
                 })
     return rows
+
+
+verify_converted_from_to = check_connections

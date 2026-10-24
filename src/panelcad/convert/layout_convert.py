@@ -1979,3 +1979,6 @@ def consolidate_control_sheets(session: Any, ctrl_sids: list[str]) -> dict[str, 
 
 def sheet_is_target(project: Any, sheet: Any, target: str) -> bool:
     return sheet_drawing_standard(project, sheet) == target_standard(target)
+
+
+consolidate_multipage_iec = consolidate_control_sheets

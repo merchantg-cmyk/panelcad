@@ -48,7 +48,19 @@ from panelcad.convert.import_convert import (
     import_iec_print_to_from_to,
     split_endpoint_token,
 )
-from panelcad.convert.from_to_check import build_from_to_diff_rows
+from panelcad.convert.from_to_check import (
+    SCORER_VERSION as FROM_TO_SCORER_VERSION,
+    ConnectionLost,
+    RevertRefused,
+    build_from_to_diff_rows,
+    check_connections,
+    verify_converted_from_to,
+)
+from panelcad.convert.layout_convert import (
+    consolidate_control_sheets,
+    consolidate_multipage_iec,
+    is_power_sheet,
+)
 from panelcad.convert.plan import (
     ALL_REASON_CODES,
     DECISION_REASON_CODES,
@@ -141,7 +153,15 @@ __all__ = [
     "clean_iec_tag",
     "convert_imported_iec_print",
     "import_iec_print_to_from_to",
+    "ConnectionLost",
+    "FROM_TO_SCORER_VERSION",
+    "RevertRefused",
     "build_from_to_diff_rows",
+    "check_connections",
+    "consolidate_control_sheets",
+    "consolidate_multipage_iec",
+    "is_power_sheet",
+    "verify_converted_from_to",
     "decision_original_value",
     "decision_proposal_value",
     "resolve_conversion_decision",
