@@ -24,7 +24,15 @@ from panelcad.convert.layout_convert import (
     rail_kind,
     relayout_sheet,
 )
-from panelcad.convert.table import counterpart, extra_pins, pin_map, target_standard
+from panelcad.convert.table import (
+    convert_terminal_suffix,
+    counterpart,
+    extra_pins,
+    parse_device_tag,
+    pin_map,
+    role_prefix_for,
+    target_standard,
+)
 from panelcad.core.models import Project
 from panelcad.core.refs import resolve_ref_prefix, sheet_drawing_standard
 
@@ -739,12 +747,11 @@ def _plan_tags(
     families: dict[str, dict[str, Any]] = {}
     for sheet in project.sheets:
         for comp in sheet.components:
-            match = _BASE.match(comp.id)
-            if not match:
+            parsed = parse_device_tag(comp.id)
+            if parsed is None:
                 continue
-            base = f"{match.group(1)}{match.group(2)}"
-            suffix = match.group(3)
-            number = int(match.group(2))
+            letters, number, suffix = parsed
+            base = f"{letters}{number}"
             fam = families.setdefault(base, {"base": base, "number": number, "members": {}})
             place = (_place_rank(sheet.kind), sheet_pos[sheet.id], float(comp.x), float(comp.y))
             row = {
@@ -786,14 +793,17 @@ def _plan_tags(
     pending: list[dict[str, Any]] = []
     for fam in in_scope:
         members = list(fam["members"].values())
-        if fam["base"] in inverse and _inverse_fits(fam, inverse, taken):
+        if (fam["base"] in inverse or all(m["id"] in inverse for m in members)) and _inverse_fits(fam, inverse, taken):
             for member in members:
-                new_id = inverse.get(member["id"], inverse[fam["base"]] + member["suffix"])
+                new_id = inverse[member["id"]] if member["id"] in inverse else inverse[fam["base"]] + member["suffix"]
                 mapping[member["id"]] = new_id
                 taken.add(new_id)
             continue
         prefix = _target_prefix(session, project, fam, target)
         fam["prefix"] = prefix
+        if _is_terminal_family(fam, prefix):
+            for member in members:
+                member["suffix"] = convert_terminal_suffix(member["suffix"], target)
         if keep_numbers:
             _assign_kept_number(fam, prefix, taken, mapping, bumps)
         else:
@@ -817,17 +827,34 @@ def _family_place(fam: dict[str, Any]) -> tuple:
     return min(places)
 
 
+def _is_terminal_family(fam: dict[str, Any], prefix: str) -> bool:
+    if prefix.upper() in {"TB", "X", "XT"}:
+        return True
+    for member in fam["members"].values():
+        lib_id = str(member.get("library_id") or "").lower()
+        role = str(member.get("role") or "").lower()
+        if "terminal" in lib_id or role in {"terminal", "tb", "terminal_block", "terminal_strip"}:
+            return True
+    return False
+
+
 def _target_prefix(session: Any, project: Project, fam: dict[str, Any], target: str) -> str:
     """Letter of the symbol we are switching to.
 
     A NEMA device's own ref_prefix is CB/M/ES. resolve_ref_prefix only consults
     ref_prefixes.yaml for NEMA/ANSI, so looking up the source device at IEC
     leaves the tag unchanged. IEC 81346-2 letters are the counterpart's
-    library ref_prefix.
+    library ref_prefix. When a component carries an explicit ``role`` (or is an
+    unmapped tag with a known role/prefix), ``role_prefix_for`` disambiguates
+    shared IEC prefixes (``-K`` contactor vs relay vs timer, ``-Q`` breaker vs
+    disconnect vs contactor, ``-F`` fuse vs overload, ``-S`` operator roles).
     """
 
     leader = min(fam["members"].values(), key=_rank)
     lib_id = str(leader["library_id"] or "")
+    role = str(leader.get("role") or "")
+    parsed = parse_device_tag(leader["id"])
+    src_prefix = parsed[0] if parsed else ""
     mapped = counterpart(lib_id, target)
     if mapped:
         lib_id = mapped
@@ -835,14 +862,35 @@ def _target_prefix(session: Any, project: Project, fam: dict[str, Any], target: 
         device = session.catalog.get(lib_id) if lib_id else None
     except KeyError:
         device = None
+    overrides = getattr(project, "ref_prefixes", None)
+    if device is not None and overrides:
+        cat = str(getattr(device, "category", "") or "").strip()
+        if cat and cat in overrides:
+            return resolve_ref_prefix(
+                device,
+                standard=target,
+                maps=getattr(session.catalog, "ref_prefix_maps", None),
+                overrides=overrides,
+            )
+    if role:
+        by_role = role_prefix_for(target, role=role, source_prefix=src_prefix)
+        if by_role:
+            return by_role
     if device is None:
-        match = _BASE.match(leader["id"])
-        return match.group(1) if match else "A"
+        by_fallback = role_prefix_for(
+            target,
+            role=role,
+            library_id=lib_id,
+            source_prefix=src_prefix,
+        )
+        if by_fallback:
+            return by_fallback
+        return src_prefix or "A"
     return resolve_ref_prefix(
         device,
         standard=target,
         maps=getattr(session.catalog, "ref_prefix_maps", None),
-        overrides=getattr(project, "ref_prefixes", None),
+        overrides=overrides,
     )
 
 
@@ -935,10 +983,15 @@ def _inverse_map(project: Project, target: str) -> dict[str, str]:
 
 
 def _inverse_fits(fam: dict[str, Any], inverse: dict[str, str], taken: set[str]) -> bool:
-    new_base = inverse[fam["base"]]
+    new_base = inverse.get(fam["base"])
     seen: set[str] = set()
     for member in fam["members"].values():
-        new_id = inverse.get(member["id"], new_base + member["suffix"])
+        if member["id"] in inverse:
+            new_id = inverse[member["id"]]
+        elif new_base is not None:
+            new_id = new_base + member["suffix"]
+        else:
+            return False
         if new_id in taken or new_id in seen:
             return False
         seen.add(new_id)
@@ -1029,7 +1082,7 @@ def _rewrite_texts(project: Project, mapping: dict[str, str], rails: set[str] | 
     if not keys:
         return
     # A dot keeps the pin: ``M1.U1`` must not become ``M1.VFD1`` when device U1 is renamed.
-    pattern = re.compile("|".join(rf"(?<![A-Za-z0-9.]){re.escape(old)}(?![A-Za-z0-9])" for old in keys))
+    pattern = re.compile("|".join(rf"(?<![A-Za-z0-9.:-]){re.escape(old)}(?![A-Za-z0-9])" for old in keys))
 
     def _sub(text: str) -> str:
         return pattern.sub(lambda match: mapping[match.group(0)], text)

@@ -107,3 +107,144 @@ devices:
         - line: [22, 28, 22, 32]
     panel: { w: 22.5, h: 80, d: 70, din: true }
     props: { function: on-delay, coil: 24VDC }
+
+  # Schematic symbols only. No millimetres: a catalog part supplies the size.
+  - id: timers.off_delay
+    name: Off-delay timer
+    category: timing.timer
+    ref_prefix: KT
+    tags: [timer, off-delay]
+    schematic:
+      width: 36
+      height: 40
+      pins:
+        - { id: A1, x: 0, y: 20, side: left, electrical: input }
+        - { id: A2, x: 36, y: 20, side: right, electrical: input }
+      draw:
+        - rect: [6, 6, 24, 28]
+        - circle: [18, 20, 5]
+        - text: [18, 21.6, "KT", 2.2]
+        - text: [25, 32, "TOF", 2]
+        - line: [0, 20, 13, 20]
+        - line: [23, 20, 36, 20]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { function: off-delay }
+
+  - id: timers.contact_notc
+    name: Timer contact NOTC
+    category: timing.contact
+    ref_prefix: KT
+    tags: [timer, contact, notc, "no"]
+    schematic:
+      width: 28
+      height: 18
+      pins:
+        - { id: "15", x: 0, y: 10, side: left }
+        - { id: "18", x: 28, y: 10, side: right }
+      draw:
+        - line: [0, 10, 8, 10]
+        - line: [20, 10, 28, 10]
+        - line: [8, 10, 18, 4]
+        - line: [14, 2, 18, 6]
+        - text: [14, 17, "TON", 1.8]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NOTC, timing: on-delay }
+
+  - id: timers.contact_ncto
+    name: Timer contact NCTO
+    category: timing.contact
+    ref_prefix: KT
+    tags: [timer, contact, ncto, nc]
+    schematic:
+      width: 28
+      height: 18
+      pins:
+        - { id: "15", x: 0, y: 10, side: left }
+        - { id: "16", x: 28, y: 10, side: right }
+      draw:
+        - line: [0, 10, 8, 10]
+        - line: [18, 7, 18, 10]
+        - line: [18, 10, 28, 10]
+        - line: [8, 10, 19, 7]
+        - line: [14, 2, 18, 6]
+        - text: [14, 17, "TON", 1.8]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NCTO, timing: on-delay }
+
+  - id: timers.contact_noto
+    name: Timer contact NOTO
+    category: timing.contact
+    ref_prefix: KT
+    tags: [timer, contact, noto, "no"]
+    schematic:
+      width: 28
+      height: 18
+      pins:
+        - { id: "15", x: 0, y: 10, side: left }
+        - { id: "18", x: 28, y: 10, side: right }
+      draw:
+        - line: [0, 10, 8, 10]
+        - line: [20, 10, 28, 10]
+        - line: [8, 10, 18, 4]
+        - line: [10, 2, 14, 6]
+        - text: [14, 17, "TOF", 1.8]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NOTO, timing: off-delay }
+
+  - id: timers.contact_nctc
+    name: Timer contact NCTC
+    category: timing.contact
+    ref_prefix: KT
+    tags: [timer, contact, nctc, nc]
+    schematic:
+      width: 28
+      height: 18
+      pins:
+        - { id: "15", x: 0, y: 10, side: left }
+        - { id: "16", x: 28, y: 10, side: right }
+      draw:
+        - line: [0, 10, 8, 10]
+        - line: [18, 7, 18, 10]
+        - line: [18, 10, 28, 10]
+        - line: [8, 10, 19, 7]
+        - line: [10, 2, 14, 6]
+        - text: [14, 17, "TOF", 1.8]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NCTC, timing: off-delay }
+
+  - id: relays.alternating
+    name: Alternating relay
+    category: switching.alternating
+    ref_prefix: KA
+    tags: [alternating, relay]
+    schematic:
+      width: 36
+      height: 32
+      pins:
+        - { id: A1, x: 0, y: 16, side: left, electrical: input }
+        - { id: A2, x: 36, y: 16, side: right, electrical: input }
+      draw:
+        - rect: [8, 6, 20, 20]
+        - text: [18, 18, "KA", 3]
+        - line: [0, 16, 8, 16]
+        - line: [28, 16, 36, 16]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { type: alternating }
+
+  - id: relays.cr
+    name: Control relay
+    category: switching.relay
+    ref_prefix: KA
+    tags: [relay, coil]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: A1, x: 0, y: 14, side: left, electrical: input }
+        - { id: A2, x: 28, y: 14, side: right, electrical: input }
+      draw:
+        - rect: [6, 8, 16, 12]
+        - line: [0, 14, 6, 14]
+        - line: [22, 14, 28, 14]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { type: relay }

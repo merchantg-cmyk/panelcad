@@ -2,7 +2,7 @@
 """Drive the real PanelCAD GUI through menus and dialog widgets.
 
 Usage (from launch.sh, which sets the isolated env):  drive.py <feature>
-Features implemented: print-package.  Writes screenshots, outputs and
+Features implemented: print-package, iec-to-nema-convert.  Writes screenshots, outputs and
 result.json to $EVIDENCE.  Exit 0 = every assertion passed.
 
 Rules: reach features through QMenuBar actions by visible text and through
@@ -182,7 +182,118 @@ def feature_print_package(app, win) -> None:
     check("PDF outline drawings == kept sheets", drawings == ["Power", "Control"], str(drawings))
     check("dropped sheet absent from PDF outline", "Enclosure" not in drawings, str(outline))
 
-FEATURES = {"print-package": ("sample_catalog.pcad.yaml", feature_print_package)}
+
+def feature_iec_to_nema_convert(app, win) -> None:
+    import yaml
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QDialog, QFrame, QLabel, QPushButton
+
+    out_yaml = SCRATCH / "work" / "xref_iec_mirror-nema.pcad.yaml"
+    state: dict = {}
+
+    def convert_dialog(dlg):
+        check("dialog is ConvertDialog", type(dlg).__name__ == "ConvertDialog", dlg.windowTitle())
+        check("NEMA/ANSI radio is selected", dlg.nema.isChecked(), f"nema={dlg.nema.isChecked()} iec={dlg.iec.isChecked()}")
+        check("Whole project radio is selected", dlg.whole.isChecked(), f"whole={dlg.whole.isChecked()}")
+        dlg.path.selectAll()
+        QTest.keyClicks(dlg.path, str(out_yaml))
+        check("Save as path typed", dlg.path.text() == str(out_yaml), dlg.path.text())
+        shot(dlg, "convert-dialog-before")
+
+        buttons = {b.text(): b for b in dlg.findChildren(QPushButton)}
+        convert_btn = buttons.get("Convert")
+        check("Convert button found", convert_btn is not None, str(sorted(buttons)))
+        QTest.mouseClick(convert_btn, Qt.MouseButton.LeftButton)
+        app.processEvents()
+        QTest.qWait(100)
+
+        header = dlg.findChild(QLabel, "convert-review-header")
+        check("review header shown", header is not None and header.isVisible() and "NEMA/ANSI" in header.text(),
+              header.text() if header is not None else "missing")
+        shot(dlg, "convert-dialog-review")
+
+        # Click Before thumbnail on main sheet to verify CompareDialog
+        thumb = dlg.findChild(QFrame, "thumb:Before:main")
+        check("Before thumbnail rendered", thumb is not None, "thumb:Before:main")
+        if thumb is not None:
+            QTest.mouseClick(thumb, Qt.MouseButton.LeftButton)
+            app.processEvents()
+            QTest.qWait(80)
+            compare = dlg.findChild(QDialog, "convert-compare")
+            check("CompareDialog opened", compare is not None and compare.isVisible(),
+                  compare.windowTitle() if compare is not None else "none")
+            if compare is not None:
+                shot(compare, "convert-compare-dialog")
+                compare.close()
+                app.processEvents()
+
+        # Click Accept on each chunk button via QTest
+        accept_btns = [b for b in dlg.findChildren(QPushButton) if b.objectName().startswith("accept:")]
+        state["chunk_ids"] = [b.objectName().split(":", 1)[1] for b in accept_btns]
+        check("review chunks present", len(accept_btns) >= 3, str(state["chunk_ids"]))
+        for cid in list(state["chunk_ids"]):
+            btn = dlg.findChild(QPushButton, f"accept:{cid}")
+            if btn is not None:
+                QTest.mouseClick(btn, Qt.MouseButton.LeftButton)
+                app.processEvents()
+        shot(dlg, "convert-dialog-accepted")
+
+        close_btn = next((b for b in dlg.findChildren(QPushButton) if b.text() == "Close"), None)
+        check("Close button found", close_btn is not None, "Close")
+        if close_btn is not None:
+            QTest.mouseClick(close_btn, Qt.MouseButton.LeftButton)
+
+    pump = ModalPump(app, [convert_dialog])
+    shot(win, "main-window-before")
+    act = menu_action(win, "Tools", "Convert drawing standard...")
+    log(f"triggering Tools → {act.text()}")
+    act.trigger()
+    for _ in range(40):
+        app.processEvents()
+        QTest.qWait(50)
+        if len(pump.seen) >= 1:
+            break
+    pump.timer.stop()
+    shot(win, "main-window-after")
+    status = win.statusBar().currentMessage()
+    log(f"status bar: {status}")
+    check("status bar updated", "converted drawing standard" in status, status)
+    check("converted YAML written", out_yaml.is_file() and out_yaml.stat().st_size > 500, str(out_yaml))
+    if not out_yaml.is_file():
+        return
+    shutil.copy2(out_yaml, EVIDENCE / out_yaml.name)
+    data = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+    tb = data.get("title_block") or {}
+    check("title_block standard is NEMA/ANSI", tb.get("standard") == "NEMA/ANSI", str(tb.get("standard")))
+    check("title_block drawing_style is ladder", tb.get("drawing_style") == "ladder", str(tb.get("drawing_style")))
+    sheets = data.get("sheets") or []
+    check("all sheets use ladder style", all((s.get("drawing_style") or tb.get("drawing_style")) == "ladder" for s in sheets),
+          str([s.get("drawing_style") for s in sheets]))
+    comp_ids = {c["id"] for s in sheets for c in (s.get("components") or [])}
+    lib_ids = {c["library_id"] for s in sheets for c in (s.get("components") or [])}
+    check("components converted to NEMA library_ids", all(lid.startswith("nema.") for lid in lib_ids), str(sorted(lib_ids)))
+    check("tags renamed by NEMA roles (PB1, M1, PL1, PL2)", {"PB1", "M1", "PL1", "PL2"} <= comp_ids, str(sorted(comp_ids)))
+
+    ws_files = list((SCRATCH / "work").glob("*.convert.json"))
+    check("conversion workspace written", len(ws_files) == 1, str([p.name for p in ws_files]))
+    if ws_files:
+        shutil.copy2(ws_files[0], EVIDENCE / ws_files[0].name)
+        ws = json.loads(ws_files[0].read_text(encoding="utf-8"))
+        conn = ws.get("connection_check") or {}
+        check("From-To scorer is from-to-check/1 and ok=True",
+              conn.get("scorer") == "from-to-check/1" and conn.get("ok") is True and not conn.get("missing") and not conn.get("extra"),
+              json.dumps(conn))
+        chunks = ws.get("chunks") or []
+        check("all chunks accepted in workspace",
+              bool(chunks) and all(c.get("status") == "accepted" for c in chunks),
+              str([(c.get("id"), c.get("status")) for c in chunks]))
+
+
+FEATURES = {
+    "print-package": ("sample_catalog.pcad.yaml", feature_print_package),
+    "iec-to-nema-convert": ("xref_iec_mirror.pcad.yaml", feature_iec_to_nema_convert),
+}
 
 
 def main() -> int:

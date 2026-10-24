@@ -175,3 +175,26 @@ devices:
       - { id: ETH, kind: ethernet, medium: "10/100", protocol: Ethernet, connector: RJ45, side: right }
     panel: { w: 200, h: 146, d: 34, din: false, in_panel: true, mount: door, dims: generic }
     props: { size: 7in, supply: 24VDC, comms: Ethernet }
+
+  - id: plc.analog_1ai_1ao
+    name: PLC analog 1AI / 1AO
+    category: control.plc
+    ref_prefix: A
+    tags: [plc, analog, io]
+    schematic:
+      width: 50
+      height: 48
+      pins:
+        - { id: Lplus, x: 0, y: 10, side: left, electrical: power }
+        - { id: M, x: 0, y: 18, side: left, electrical: power }
+        - { id: AI0, x: 0, y: 30, side: left, electrical: input }
+        - { id: AO0, x: 50, y: 30, side: right, electrical: output }
+      draw:
+        - rect: [8, 6, 34, 36]
+        - text: [25, 18, "AI/AO", 3]
+        - line: [0, 10, 8, 10]
+        - line: [0, 18, 8, 18]
+        - line: [0, 30, 8, 30]
+        - line: [42, 30, 50, 30]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { AI: 1, AO: 1, supply: 24VDC }

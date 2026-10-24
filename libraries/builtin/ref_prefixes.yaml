@@ -28,7 +28,9 @@ standards:
     switching.softstarter: SS
     timing.timer: TR
     load.motor: MTR
+    load.fan: FAN
     load.solenoid: SOL
+    sensor.proximity: PX
     drive.vfd: VFD
     drive.softstarter: SS
     operator.pushbutton: PB

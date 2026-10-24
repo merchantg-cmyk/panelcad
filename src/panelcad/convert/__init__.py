@@ -10,14 +10,26 @@ from panelcad.convert.engine import (
     rerun_chunk,
     revert_chunk,
 )
+from panelcad.convert.table import (
+    convert_terminal_tag,
+    format_wire_number,
+    rename_tag_by_role,
+    role_entry_for,
+    role_prefix_for,
+)
 
 __all__ = [
     "accept_chunk",
     "apply_conversion",
     "conversion_plan",
     "convert_standard",
+    "convert_terminal_tag",
+    "format_wire_number",
     "next_chunk",
+    "rename_tag_by_role",
     "review",
     "rerun_chunk",
     "revert_chunk",
+    "role_entry_for",
+    "role_prefix_for",
 ]

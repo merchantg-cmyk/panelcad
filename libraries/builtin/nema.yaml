@@ -1571,3 +1571,139 @@ devices:
         - line: [22, 14, 28, 14]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
     props: { type: relay }
+
+  - id: protection.fuse
+    name: Fuse
+    category: protection.fuse
+    ref_prefix: F
+    tags: [fuse]
+    schematic:
+      width: 28
+      height: 14
+      pins:
+        - { id: "1", x: 0, y: 7, side: left, electrical: power }
+        - { id: "2", x: 28, y: 7, side: right, electrical: power }
+      draw:
+        - line: [0, 7, 6, 7]
+        - rect: [6, 2, 16, 10]
+        - line: [22, 7, 28, 7]
+        - text: [14, 9, "FU", 2.2]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { location: panel }
+
+  - id: terminals.x_2p5
+    name: Terminal 2.5 mm²
+    category: connection.terminal
+    ref_prefix: X
+    tags: [terminal]
+    schematic:
+      width: 16
+      height: 24
+      pins:
+        - { id: A, x: 0, y: 12, side: left }
+        - { id: B, x: 16, y: 12, side: right }
+      draw:
+        - rect: [4, 6, 8, 12]
+        - line: [0, 12, 4, 12]
+        - line: [12, 12, 16, 12]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { section: 2.5mm2, Ith: 24A, Un: 800V, jumper_family: generic, pitch_mm: 5.2 }
+
+  - id: loads.fan_24v
+    name: Panel fan 24VDC
+    category: load.fan
+    ref_prefix: FAN
+    tags: [fan, load]
+    schematic:
+      width: 36
+      height: 36
+      pins:
+        - { id: Lplus, x: 0, y: 12, side: left, electrical: power }
+        - { id: M, x: 0, y: 24, side: left, electrical: power }
+      draw:
+        - circle: [22, 18, 12]
+        - line: [14, 18, 30, 18]
+        - line: [22, 10, 22, 26]
+        - line: [0, 12, 10, 12]
+        - line: [0, 24, 10, 24]
+        - text: [22, 34, "FAN", 2.4]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { supply: 24VDC }
+
+  - id: sensors.prox_24v
+    name: Proximity sensor 24VDC
+    category: sensor.proximity
+    ref_prefix: PX
+    tags: [sensor, prox]
+    schematic:
+      width: 32
+      height: 28
+      pins:
+        - { id: Lplus, x: 0, y: 8, side: left, electrical: power }
+        - { id: M, x: 0, y: 18, side: left, electrical: power }
+      draw:
+        - rect: [8, 4, 20, 18]
+        - circle: [18, 13, 4]
+        - line: [0, 8, 8, 8]
+        - line: [0, 18, 8, 18]
+        - text: [18, 26, "PX", 2.4]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { supply: 24VDC }
+
+  - id: power.receptacle
+    name: Duplex receptacle
+    category: power.receptacle
+    ref_prefix: REC
+    tags: [receptacle, outlet, duplex]
+    schematic:
+      width: 28
+      height: 22
+      pins:
+        - { id: H, x: 0, y: 8, side: left, electrical: power }
+        - { id: N, x: 28, y: 8, side: right, electrical: power }
+        - { id: PE, x: 14, y: 22, side: bottom, electrical: power }
+      draw:
+        - rect: [4, 1, 20, 16]
+        - line: [10, 4, 10, 12]
+        - line: [16, 4, 16, 12]
+        - line: [0, 8, 4, 8]
+        - line: [24, 8, 28, 8]
+        - line: [14, 17, 14, 22]
+        - circle: [14, 15, 1.4]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { location: field }
+
+  - id: relays.safety_24vdc
+    name: Safety relay 24VDC (dual-channel)
+    category: switching.safety
+    ref_prefix: SR
+    tags: [safety, relay, estop, 24v]
+    schematic:
+      width: 50
+      height: 60
+      pins:
+        - { id: A1, x: 0, y: 16, side: left, electrical: input }
+        - { id: A2, x: 0, y: 28, side: left, electrical: input }
+        - { id: S11, x: 0, y: 40, side: left, electrical: input }
+        - { id: S12, x: 0, y: 48, side: left, electrical: input }
+        - { id: "13", x: 50, y: 16, side: right, electrical: output }
+        - { id: "14", x: 50, y: 24, side: right, electrical: output }
+        - { id: "23", x: 50, y: 32, side: right, electrical: output }
+        - { id: "24", x: 50, y: 40, side: right, electrical: output }
+      draw:
+        - rect: [8, 8, 34, 46]
+        - circle: [18, 22, 4]
+        - line: [0, 16, 8, 16]
+        - line: [8, 16, 18, 18]
+        - line: [0, 28, 8, 28]
+        - line: [8, 28, 18, 26]
+        - line: [0, 40, 8, 40]
+        - line: [0, 48, 8, 48]
+        - line: [30, 16, 36, 22]
+        - line: [36, 24, 50, 24]
+        - line: [30, 16, 50, 16]
+        - line: [30, 32, 36, 38]
+        - line: [36, 40, 50, 40]
+        - line: [30, 32, 50, 32]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { coil: 24VDC, channels: 2 }

@@ -737,3 +737,21 @@ devices:
         - text: [10, 10, "WD", 2.2]
     panel: { w: 40, h: 60, d: 40, din: false, in_panel: true, mount: panel, dims: generic }
     props: { location: panel }
+
+  - id: terminals.feed_through
+    name: Feed-through terminal
+    category: connection.terminal
+    ref_prefix: XT
+    tags: [terminal, feed-through, feedthrough]
+    schematic:
+      width: 16
+      height: 20
+      pins:
+        - { id: A, x: 0, y: 10, side: left }
+        - { id: B, x: 16, y: 10, side: right }
+      draw:
+        - rect: [3, 4, 10, 12]
+        - line: [0, 10, 3, 10]
+        - line: [13, 10, 16, 10]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { type: feed-through, passthrough: yes }

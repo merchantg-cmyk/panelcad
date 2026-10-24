@@ -250,3 +250,298 @@ devices:
         - line: [20, 12, 24, 12]
     panel: { w: 50, h: 40, d: 50, din: false, in_panel: true, mount: field, dims: generic }
     props: { voltage: 24VDC }
+
+  # Schematic symbols only. No millimetres: a catalog part supplies the size.
+  - id: operators.float_no
+    name: Float switch NO
+    category: operator.float
+    ref_prefix: SL
+    tags: [float, switch, "no"]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "13", x: 0, y: 20, side: left }
+        - { id: "14", x: 28, y: 20, side: right }
+      draw:
+        - circle: [14, 6, 4]
+        - line: [14, 10, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 20, 18, 14]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: "NO", location: field }
+
+  - id: operators.float_nc
+    name: Float switch NC
+    category: operator.float
+    ref_prefix: SL
+    tags: [float, switch, nc]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "11", x: 0, y: 20, side: left }
+        - { id: "12", x: 28, y: 20, side: right }
+      draw:
+        - circle: [14, 6, 4]
+        - line: [14, 10, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [18, 17, 18, 20]
+        - line: [18, 20, 28, 20]
+        - line: [8, 20, 19, 17]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NC, location: field }
+
+  - id: operators.level_no
+    name: Level switch NO
+    category: operator.level
+    ref_prefix: SL
+    tags: [level, switch, "no"]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "13", x: 0, y: 20, side: left }
+        - { id: "14", x: 28, y: 20, side: right }
+      draw:
+        - polyline: [[8, 2], [20, 2], [14, 10]]
+        - line: [14, 10, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 20, 18, 14]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: "NO", location: field }
+
+  - id: operators.level_nc
+    name: Level switch NC
+    category: operator.level
+    ref_prefix: SL
+    tags: [level, switch, nc]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "11", x: 0, y: 20, side: left }
+        - { id: "12", x: 28, y: 20, side: right }
+      draw:
+        - polyline: [[8, 2], [20, 2], [14, 10]]
+        - line: [14, 10, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [18, 17, 18, 20]
+        - line: [18, 20, 28, 20]
+        - line: [8, 20, 19, 17]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NC, location: field }
+
+  - id: operators.pressure_no
+    name: Pressure switch NO
+    category: operator.pressure
+    ref_prefix: SP
+    tags: [pressure, switch, "no"]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "13", x: 0, y: 20, side: left }
+        - { id: "14", x: 28, y: 20, side: right }
+      draw:
+        - circle: [14, 7, 5]
+        - line: [11, 7, 17, 7]
+        - line: [14, 12, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 20, 18, 14]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: "NO", location: field }
+
+  - id: operators.pressure_nc
+    name: Pressure switch NC
+    category: operator.pressure
+    ref_prefix: SP
+    tags: [pressure, switch, nc]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "11", x: 0, y: 20, side: left }
+        - { id: "12", x: 28, y: 20, side: right }
+      draw:
+        - circle: [14, 7, 5]
+        - line: [11, 7, 17, 7]
+        - line: [14, 12, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [18, 17, 18, 20]
+        - line: [18, 20, 28, 20]
+        - line: [8, 20, 19, 17]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NC, location: field }
+
+  - id: operators.temperature_no
+    name: Temperature switch NO
+    category: operator.temperature
+    ref_prefix: ST
+    tags: [temperature, switch, "no"]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "13", x: 0, y: 20, side: left }
+        - { id: "14", x: 28, y: 20, side: right }
+      draw:
+        - line: [10, 2, 18, 2]
+        - line: [14, 2, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 20, 18, 14]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: "NO", location: field }
+
+  - id: operators.temperature_nc
+    name: Temperature switch NC
+    category: operator.temperature
+    ref_prefix: ST
+    tags: [temperature, switch, nc]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "11", x: 0, y: 20, side: left }
+        - { id: "12", x: 28, y: 20, side: right }
+      draw:
+        - line: [10, 2, 18, 2]
+        - line: [14, 2, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [18, 17, 18, 20]
+        - line: [18, 20, 28, 20]
+        - line: [8, 20, 19, 17]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NC, location: field }
+
+  - id: operators.flow_no
+    name: Flow switch NO
+    category: operator.flow
+    ref_prefix: SF
+    tags: [flow, switch, "no"]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "13", x: 0, y: 20, side: left }
+        - { id: "14", x: 28, y: 20, side: right }
+      draw:
+        - polyline: [[8, 4], [14, 8], [8, 12]]
+        - line: [14, 8, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 20, 18, 14]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: "NO", location: field }
+
+  - id: operators.flow_nc
+    name: Flow switch NC
+    category: operator.flow
+    ref_prefix: SF
+    tags: [flow, switch, nc]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "11", x: 0, y: 20, side: left }
+        - { id: "12", x: 28, y: 20, side: right }
+      draw:
+        - polyline: [[8, 4], [14, 8], [8, 12]]
+        - line: [14, 8, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [18, 17, 18, 20]
+        - line: [18, 20, 28, 20]
+        - line: [8, 20, 19, 17]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NC, location: field }
+
+  - id: operators.foot_no
+    name: Foot switch NO
+    category: operator.foot
+    ref_prefix: SF
+    tags: [foot, switch, "no"]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "13", x: 0, y: 20, side: left }
+        - { id: "14", x: 28, y: 20, side: right }
+      draw:
+        - polyline: [[8, 8], [14, 3], [20, 8]]
+        - line: [14, 8, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [20, 20, 28, 20]
+        - line: [8, 20, 18, 14]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: "NO", location: field }
+
+  - id: operators.foot_nc
+    name: Foot switch NC
+    category: operator.foot
+    ref_prefix: SF
+    tags: [foot, switch, nc]
+    schematic:
+      width: 28
+      height: 28
+      pins:
+        - { id: "11", x: 0, y: 20, side: left }
+        - { id: "12", x: 28, y: 20, side: right }
+      draw:
+        - polyline: [[8, 8], [14, 3], [20, 8]]
+        - line: [14, 8, 14, 16]
+        - line: [0, 20, 8, 20]
+        - line: [18, 17, 18, 20]
+        - line: [18, 20, 28, 20]
+        - line: [8, 20, 19, 17]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: NC, location: field }
+
+  - id: operators.horn
+    name: Horn
+    category: operator.horn
+    ref_prefix: HA
+    tags: [horn, buzzer, audible]
+    schematic:
+      width: 28
+      height: 24
+      pins:
+        - { id: X1, x: 0, y: 12, side: left, electrical: input }
+        - { id: X2, x: 28, y: 12, side: right, electrical: input }
+      draw:
+        - polyline: [[6, 6], [14, 6], [20, 2], [20, 22], [14, 18], [6, 18]]
+        - line: [0, 12, 6, 12]
+        - line: [20, 12, 28, 12]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { type: horn }
+
+  - id: operators.estop_2nc
+    name: E-Stop 2NC (2-channel)
+    category: operator.estop
+    ref_prefix: SF
+    tags: [estop, emergency, nc, 2nc]
+    schematic:
+      width: 28
+      height: 46
+      pins:
+        - { id: "11", x: 0, y: 26, side: left }
+        - { id: "12", x: 28, y: 26, side: right }
+        - { id: "21", x: 0, y: 38, side: left }
+        - { id: "22", x: 28, y: 38, side: right }
+      draw:
+        - arc: [14, 10, 7, 0, 180]
+        - line: [7, 10, 21, 10]
+        - line: [14, 10, 14, 34]
+        - line: [0, 26, 8, 26]
+        - line: [18, 23, 18, 26]
+        - line: [18, 26, 28, 26]
+        - line: [8, 26, 19, 23]
+        - line: [0, 38, 8, 38]
+        - line: [18, 35, 18, 38]
+        - line: [18, 38, 28, 38]
+        - line: [8, 38, 19, 35]
+    panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
+    props: { contact: 2NC, head: mushroom, latch: twist-release }

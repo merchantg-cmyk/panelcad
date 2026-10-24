@@ -1468,3 +1468,219 @@ def test_conversion_carries_project_fields_and_switches_phase_colors(tmp_path: P
     assert "standard" in schemas["insert_circuit"]["args"]
     assert "iec_neutral" in schemas["set_phase_colors"]["args"]
     assert "iec_neutral" in listed["result"]["help"]["set_phase_colors"]
+
+
+def test_expanded_symbol_table_covers_timers_operators_fuses_terminals_and_loads(tmp_path: Path):
+    """Patch 2 expands ENTRIES to 62 symbol pairs and converts them cleanly both ways."""
+
+    from panelcad.convert.standard_map import ENTRIES
+    from panelcad.convert.table import counterpart
+
+    assert len(ENTRIES) >= 62
+    catalog = Session.create("map-expanded").catalog
+    new_pairs = [
+        ("nema.protection.fuse", "iec.protection.fuse"),
+        ("nema.terminals.x_2p5", "iec.terminals.x_2p5"),
+        ("nema.terminals.feed_through", "iec.terminals.feed_through"),
+        ("nema.loads.fan_24v", "iec.loads.fan_24v"),
+        ("nema.sensors.prox_24v", "iec.sensors.prox_24v"),
+        ("nema.power.receptacle", "iec.power.receptacle"),
+        ("nema.relays.safety_24vdc", "iec.relays.safety_24vdc"),
+        ("nema.timers.off_delay", "iec.timers.off_delay"),
+        ("nema.timers.contact_notc", "iec.timers.contact_notc"),
+        ("nema.timers.contact_ncto", "iec.timers.contact_ncto"),
+        ("nema.timers.contact_noto", "iec.timers.contact_noto"),
+        ("nema.timers.contact_nctc", "iec.timers.contact_nctc"),
+        ("nema.relays.alternating", "iec.relays.alternating"),
+        ("nema.relays.cr", "iec.relays.cr"),
+        ("nema.operators.float_no", "iec.operators.float_no"),
+        ("nema.operators.float_nc", "iec.operators.float_nc"),
+        ("nema.operators.level_no", "iec.operators.level_no"),
+        ("nema.operators.level_nc", "iec.operators.level_nc"),
+        ("nema.operators.pressure_no", "iec.operators.pressure_no"),
+        ("nema.operators.pressure_nc", "iec.operators.pressure_nc"),
+        ("nema.operators.temperature_no", "iec.operators.temperature_no"),
+        ("nema.operators.temperature_nc", "iec.operators.temperature_nc"),
+        ("nema.operators.flow_no", "iec.operators.flow_no"),
+        ("nema.operators.flow_nc", "iec.operators.flow_nc"),
+        ("nema.operators.foot_no", "iec.operators.foot_no"),
+        ("nema.operators.foot_nc", "iec.operators.foot_nc"),
+        ("nema.operators.horn", "iec.operators.horn"),
+        ("nema.operators.estop_2nc", "iec.operators.estop_2nc"),
+        ("nema.plc.analog_1ai_1ao", "iec.plc.analog_1ai_1ao"),
+    ]
+    for nema_id, iec_id in new_pairs:
+        assert counterpart(iec_id, "nema") == nema_id
+        assert counterpart(nema_id, "iec") == iec_id
+        nema_dev = catalog.get(nema_id)
+        iec_dev = catalog.get(iec_id)
+        assert any(
+            dev.panel.in_panel is False
+            and dev.panel.din_rail is False
+            and dev.panel.mount == "none"
+            and dev.panel.width_mm == 0.0
+            and dev.panel.height_mm == 0.0
+            and dev.panel.depth_mm == 0.0
+            for dev in (nema_dev, iec_dev)
+        )
+
+    # Round-trip a custom sheet containing expanded symbols and wired pins.
+    session = _session("expanded-symbols", "IEC")
+    session.place("iec.protection.fuse", ref="F1", x=30, y=30)
+    session.place("iec.timers.off_delay", ref="KT1", x=60, y=30)
+    session.place("iec.timers.contact_notc", ref="KT1_NO", x=90, y=30)
+    session.place("iec.operators.pressure_no", ref="SP1", x=120, y=30)
+    session.place("iec.operators.horn", ref="HA1", x=150, y=30)
+    session.place("iec.sensors.prox_24v", ref="PX1", x=180, y=30)
+    session.place("iec.loads.fan_24v", ref="FAN1", x=210, y=30)
+    session.place("iec.operators.estop_2nc", ref="SF1", x=240, y=30)
+    session.wire("F1.1", "F1.2", net="L1")
+    session.wire("KT1.A1", "KT1.A2", net="24V")
+    session.wire("KT1_NO.15", "KT1_NO.18", net="T_OUT")
+    session.wire("SP1.13", "SP1.14", net="P_SIG")
+    session.wire("HA1.X1", "HA1.X2", net="H_SIG")
+    session.wire("PX1.Lplus", "PX1.M", net="PX_SIG")
+    session.wire("FAN1.Lplus", "FAN1.M", net="FAN_PWR")
+    session.wire("SF1.11", "SF1.12", net="ES_CH1")
+    session.wire("SF1.21", "SF1.22", net="ES_CH2")
+
+    to_nema = _convert(session, "nema", tmp_path, "expanded-nema")
+    assert to_nema["unmapped"] == []
+    assert to_nema["connection_check"]["ok"] is True
+    assert to_nema["connection_check"]["scorer"] == "from-to-check/1"
+    libs_nema = {comp.id: comp.library_id for comp in session.project.sheets[0].components}
+    assert "nema.protection.fuse" in libs_nema.values()
+    assert "nema.timers.off_delay" in libs_nema.values()
+    assert "nema.timers.contact_notc" in libs_nema.values()
+    assert "nema.operators.pressure_no" in libs_nema.values()
+    assert "nema.operators.horn" in libs_nema.values()
+    assert "nema.sensors.prox_24v" in libs_nema.values()
+    assert "nema.loads.fan_24v" in libs_nema.values()
+    assert "nema.operators.estop_2nc" in libs_nema.values()
+
+    to_iec = _convert(session, "iec", tmp_path, "expanded-iec")
+    assert to_iec["unmapped"] == []
+    assert to_iec["connection_check"]["ok"] is True
+    assert to_iec["connection_check"]["scorer"] == "from-to-check/1"
+
+
+def test_role_tag_table_disambiguates_shared_iec_prefixes(tmp_path: Path):
+    """Patch 2 role table maps -K/-KT/-Q/-F/-S/-P/-H/-T/-M/-X to their NEMA prefixes."""
+
+    from panelcad.convert.standard_map import ROLE_TAG_TABLE
+    from panelcad.convert.table import rename_tag_by_role, role_prefix_for
+
+    assert len(ROLE_TAG_TABLE) >= 18
+    # Direct role table lookups
+    assert role_prefix_for("nema", role="contactor", source_prefix="-K") == "M"
+    assert role_prefix_for("nema", role="relay", source_prefix="-K") == "CR"
+    assert role_prefix_for("nema", role="timer", source_prefix="-KT") == "TR"
+    assert role_prefix_for("nema", role="timer", source_prefix="-K") == "TR"
+    assert role_prefix_for("nema", role="breaker", source_prefix="-Q") == "CB"
+    assert role_prefix_for("nema", role="disconnect", source_prefix="-Q") == "DISC"
+    assert role_prefix_for("nema", role="contactor", source_prefix="-Q") == "M"
+    assert role_prefix_for("nema", role="fuse", source_prefix="-F") == "FU"
+    assert role_prefix_for("nema", role="overload", source_prefix="-F") == "OL"
+    assert role_prefix_for("nema", role="pushbutton", source_prefix="-S") == "PB"
+    assert role_prefix_for("nema", role="selector", source_prefix="-S") == "SEL"
+    assert role_prefix_for("nema", role="limit_switch", source_prefix="-S") == "LS"
+    assert role_prefix_for("nema", role="estop", source_prefix="-S") == "ES"
+    assert role_prefix_for("nema", role="pilot_light", source_prefix="-P") == "PL"
+    assert role_prefix_for("nema", role="pilot_light", source_prefix="-H") == "PL"
+    assert role_prefix_for("nema", role="transformer", source_prefix="-T") == "T"
+    assert role_prefix_for("nema", role="motor", source_prefix="-M") == "MTR"
+    assert role_prefix_for("nema", role="terminal", source_prefix="-X") == "TB"
+
+    # Full tag renames with leading '-' or aspect/location prefixes
+    assert rename_tag_by_role("-K1", "nema", role="contactor") == "M1"
+    assert rename_tag_by_role("-K2", "nema", role="relay") == "CR2"
+    assert rename_tag_by_role("-KT3", "nema", role="timer") == "TR3"
+    assert rename_tag_by_role("-Q1", "nema", role="breaker") == "CB1"
+    assert rename_tag_by_role("-Q2", "nema", role="disconnect") == "DISC2"
+    assert rename_tag_by_role("-Q3", "nema", role="contactor") == "M3"
+    assert rename_tag_by_role("-F1", "nema", role="fuse") == "FU1"
+    assert rename_tag_by_role("-F2", "nema", role="overload") == "OL2"
+    assert rename_tag_by_role("-S1", "nema", role="pushbutton") == "PB1"
+    assert rename_tag_by_role("-S2", "nema", role="selector") == "SEL2"
+    assert rename_tag_by_role("-S3", "nema", role="limit_switch") == "LS3"
+    assert rename_tag_by_role("-P1", "nema", role="pilot_light") == "PL1"
+    assert rename_tag_by_role("-H2", "nema", role="pilot_light") == "PL2"
+    assert rename_tag_by_role("-T1", "nema", role="transformer") == "T1"
+    assert rename_tag_by_role("-M1", "nema", role="motor") == "MTR1"
+
+    # Engine conversion with role-disambiguated -K, -Q, and -F tags
+    session = _session("role-tags", "IEC")
+    c_m = session.place("iec.contactors.ac3_32a", ref="-K1", x=30, y=30)
+    c_m.properties["role"] = "contactor"
+    c_cr = session.place("iec.relays.cr", ref="-K2", x=60, y=30)
+    c_cr.properties["role"] = "relay"
+    c_tr = session.place("iec.timers.on_delay", ref="-K3", x=90, y=30)
+    c_tr.properties["role"] = "timer"
+    c_cb = session.place("iec.breakers.mccb_3p_100a", ref="-Q1", x=120, y=30)
+    c_cb.properties["role"] = "breaker"
+    c_ds = session.place("iec.protection.disconnect_3p", ref="-Q2", x=150, y=30)
+    c_ds.properties["role"] = "disconnect"
+    c_fu = session.place("iec.protection.fuse", ref="-F1", x=180, y=30)
+    c_fu.properties["role"] = "fuse"
+    c_ol = session.place("iec.protection.overload_9a", ref="-F2", x=210, y=30)
+    c_ol.properties["role"] = "overload"
+
+    res = _convert(session, "nema", tmp_path, "role-tags-nema", keep_numbers=True)
+    assert res["tag_map"] == {
+        "-K1": "M1",
+        "-K2": "CR2",
+        "-K3": "TR3",
+        "-Q1": "CB1",
+        "-Q2": "DISC2",
+        "-F1": "FU1",
+        "-F2": "OL2",
+    }
+    back = _convert(session, "iec", tmp_path, "role-tags-iec", keep_numbers=True)
+    assert back["connection_check"]["ok"] is True
+    assert {comp.id for comp in session.project.sheets[0].components} == {
+        "-K1",
+        "-K2",
+        "-K3",
+        "-Q1",
+        "-Q2",
+        "-F1",
+        "-F2",
+    }
+
+
+def test_terminal_and_wire_number_format_tables(tmp_path: Path):
+    """Patch 2 terminal table (-X1:3 <-> TB1-3) and wire-number format table."""
+
+    from panelcad.convert.table import convert_terminal_tag, format_wire_number
+
+    assert convert_terminal_tag("-X1:3", "nema") == "TB1-3"
+    assert convert_terminal_tag("X1:3", "nema") == "TB1-3"
+    assert convert_terminal_tag("=A1+P1-X2:14", "nema") == "TB2-14"
+    assert convert_terminal_tag("TB1-3", "iec") == "X1:3"
+    assert convert_terminal_tag("TB2-14", "iec") == "X2:14"
+    assert convert_terminal_tag("M1", "nema") is None
+
+    # Wire-number table: NEMA ladder rung line-ref vs IEC potential/address vs keep=True
+    assert format_wire_number("1.1", "nema") == "101"
+    assert format_wire_number("1.1.2", "nema") == "101A"
+    assert format_wire_number("", "nema", rung=103) == "103"
+    assert format_wire_number("", "nema", rung=103, branch=1) == "103A"
+    assert format_wire_number("L+", "nema") == "24V"
+    assert format_wire_number("M", "nema") == "0V"
+    assert format_wire_number("24V", "iec") == "L+"
+    assert format_wire_number("101", "iec") == "11.1"
+    assert format_wire_number("101A", "iec") == "11.2"
+    assert format_wire_number("1.1.2", "nema", keep=True) == "1.1.2"
+
+    # Full engine conversion of terminal strip pins (-X1:1, -X1:3 -> TB1-1, TB1-3)
+    session = _session("terminals", "IEC")
+    session.place("iec.terminals.x_2p5", ref="-X1:1", x=30, y=30)
+    session.place("iec.terminals.x_2p5", ref="-X1:3", x=30, y=50)
+    session.wire("-X1:1.A", "-X1:3.A", net="W101")
+    to_nema = _convert(session, "nema", tmp_path, "terminals-nema")
+    assert to_nema["tag_map"] == {"-X1:1": "TB1-1", "-X1:3": "TB1-3"}
+    assert to_nema["connection_check"]["ok"] is True
+    assert {comp.id for comp in session.project.sheets[0].components} == {"TB1-1", "TB1-3"}
+    to_iec = _convert(session, "iec", tmp_path, "terminals-iec")
+    assert to_iec["connection_check"]["ok"] is True
+    assert {comp.id for comp in session.project.sheets[0].components} == {"-X1:1", "-X1:3"}
