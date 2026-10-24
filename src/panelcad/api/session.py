@@ -4130,6 +4130,81 @@ class Session:
             lambda: revert_chunk(self, chunk_id, workspace),
         )
 
+    def import_iec_print_to_from_to(
+        self,
+        path_or_paths: Any,
+        *,
+        vision_backend: Any = None,
+        confidence_threshold: float = 0.80,
+        workspace: Path | str | None = None,
+    ) -> Any:
+        """Extract IEC components and a draft From-To wire list from an IEC PDF or scan."""
+
+        from panelcad.convert.import_convert import import_iec_print_to_from_to
+
+        return import_iec_print_to_from_to(
+            path_or_paths,
+            vision_backend=vision_backend,
+            confidence_threshold=confidence_threshold,
+            catalog=self.catalog,
+            workspace=workspace,
+        )
+
+    def import_and_convert_standard(
+        self,
+        source: Any,
+        target: str = "NEMA",
+        *,
+        vision_backend: Any = None,
+        corrections: dict[str, Any] | None = None,
+        edits: list[dict[str, Any]] | None = None,
+        add_rows: list[dict[str, Any]] | None = None,
+        delete_rows: list[str] | None = None,
+        confirm_rows: list[str] | None = None,
+        device_edits: list[dict[str, Any]] | None = None,
+        mode: str = "rules_only",
+        ai_assist: bool = False,
+        ai_backend: Any = None,
+        confidence_threshold: float = 0.80,
+        keep_numbers: bool = False,
+        out: Path | str | None = None,
+        workspace: Path | str | None = None,
+    ) -> Any:
+        """Import an IEC PDF or scan, apply optional From-To corrections, and convert into this Session."""
+
+        from panelcad.convert.engine import _install
+        from panelcad.convert.import_convert import convert_imported_iec_print
+
+        def _run() -> Any:
+            result = convert_imported_iec_print(
+                source,
+                target=target,
+                vision_backend=vision_backend,
+                corrections=corrections,
+                edits=edits,
+                add_rows=add_rows,
+                delete_rows=delete_rows,
+                confirm_rows=confirm_rows,
+                device_edits=device_edits,
+                mode=mode,
+                ai_assist=ai_assist,
+                ai_backend=ai_backend,
+                confidence_threshold=confidence_threshold,
+                keep_numbers=keep_numbers,
+                out=out,
+                workspace=workspace,
+                catalog=self.catalog,
+            )
+            _install(self, result.converted_project)
+            result["session"] = self
+            return result
+
+        return self._undoable(
+            "convert_standard",
+            f"import IEC print and convert to {target}",
+            _run,
+        )
+
     def update_cross_references(self) -> list[dict[str, str]]:
         from panelcad.core.xref import update_cross_references
 

@@ -22,7 +22,10 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QRadioButton,
+    QHeaderView,
     QScrollArea,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -189,6 +192,7 @@ class ConvertDialog(QDialog):
         self._workspace = ""
         self._source: Project | None = None
         self._compare: CompareDialog | None = None
+        self._imported_draft = None
 
         current = sheet_drawing_standard(session.project, session.sheet() if session.project.sheets else None)
         self.iec = QRadioButton("IEC")
@@ -235,6 +239,22 @@ class ConvertDialog(QDialog):
         browse = QPushButton("Browse…")
         browse.clicked.connect(self._browse)
 
+        self.import_scan_btn = QPushButton("Import IEC PDF / scan...")
+        self.import_scan_btn.setObjectName("convert-import-scan-btn")
+        self.import_scan_btn.setToolTip(
+            "Import an IEC PDF or raster scan into a draft From-To wire table for review before converting."
+        )
+        self.import_scan_btn.clicked.connect(self._on_import_scan)
+
+        self.import_from_to_table = QTableWidget(0, 6)
+        self.import_from_to_table.setObjectName("convert-import-from-to-table")
+        self.import_from_to_table.setHorizontalHeaderLabels(
+            ["Wire #", "From Tag", "From Pin", "To Tag", "To Pin", "Confidence"]
+        )
+        self.import_from_to_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.import_from_to_table.setMinimumHeight(140)
+        self.import_from_to_table.hide()
+
         convert = QPushButton("Convert")
         convert.clicked.connect(self._on_convert)
         close = QPushButton("Close")
@@ -256,6 +276,8 @@ class ConvertDialog(QDialog):
         form.addWidget(self.keep_numbers)
         form.addWidget(QLabel("Conversion type"))
         form.addWidget(self.mode_combo)
+        form.addWidget(self.import_scan_btn)
+        form.addWidget(self.import_from_to_table)
         form.addWidget(self.sheets)
         form.addWidget(QLabel("Save as"))
         row = QHBoxLayout()
@@ -323,8 +345,127 @@ class ConvertDialog(QDialog):
     def conversion_mode(self) -> str:
         return str(self.mode_combo.currentData() or "rules_only")
 
+    def _on_import_scan(self) -> None:
+        name, _filter = QFileDialog.getOpenFileName(
+            self,
+            "Import IEC PDF or scan",
+            "",
+            "IEC Prints (*.pdf *.png *.jpg *.jpeg *.json *.yaml *.pcad.yaml)",
+        )
+        if name:
+            try:
+                self.load_imported_print(name)
+            except Exception as exc:  # noqa: BLE001
+                QMessageBox.warning(self, "Import IEC PDF / scan", str(exc))
+
+    def load_imported_print(
+        self,
+        source: object,
+        *,
+        vision_backend: object = None,
+        confidence_threshold: float = 0.80,
+    ) -> object:
+        """Extract a draft From-To list from an IEC PDF/scan and populate the review table."""
+
+        from panelcad.convert.import_convert import import_iec_print_to_from_to
+
+        draft = import_iec_print_to_from_to(
+            source,  # type: ignore[arg-type]
+            vision_backend=vision_backend,
+            confidence_threshold=confidence_threshold,
+            catalog=self.session.catalog,
+        )
+        self._imported_draft = draft
+        self._populate_import_table(draft)
+        return draft
+
+    def _populate_import_table(self, draft: object) -> None:
+        rows = list(getattr(draft, "from_to_rows", []) or [])
+        self.import_from_to_table.setRowCount(len(rows))
+        for r_idx, row in enumerate(rows):
+            vals = [
+                str(row.wire_number or ""),
+                str(row.from_tag or ""),
+                str(row.from_pin or ""),
+                str(row.to_tag or ""),
+                str(row.to_pin or ""),
+                f"{float(row.confidence):.2f}" + (" (review)" if row.needs_review else ""),
+            ]
+            for c_idx, val in enumerate(vals):
+                item = QTableWidgetItem(val)
+                if c_idx == 0:
+                    item.setData(Qt.ItemDataRole.UserRole, str(row.row_id or f"row_{r_idx + 1}"))
+                if c_idx == 5:
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.import_from_to_table.setItem(r_idx, c_idx, item)
+        self.import_from_to_table.setVisible(True)
+
+    def imported_from_to_rows(self) -> list[dict[str, str]]:
+        """Return the current From-To rows from the editable import table."""
+
+        out: list[dict[str, str]] = []
+        for r_idx in range(self.import_from_to_table.rowCount()):
+            w_item = self.import_from_to_table.item(r_idx, 0)
+            ft_item = self.import_from_to_table.item(r_idx, 1)
+            fp_item = self.import_from_to_table.item(r_idx, 2)
+            tt_item = self.import_from_to_table.item(r_idx, 3)
+            tp_item = self.import_from_to_table.item(r_idx, 4)
+            row_id = str(w_item.data(Qt.ItemDataRole.UserRole) or f"row_{r_idx + 1}") if w_item else f"row_{r_idx + 1}"
+            out.append({
+                "row_id": row_id,
+                "wire_number": w_item.text().strip() if w_item else "",
+                "from_tag": ft_item.text().strip() if ft_item else "",
+                "from_pin": fp_item.text().strip() if fp_item else "",
+                "to_tag": tt_item.text().strip() if tt_item else "",
+                "to_pin": tp_item.text().strip() if tp_item else "",
+            })
+        return out
+
+    def apply_table_corrections(self) -> object:
+        """Apply any edits made in ``import_from_to_table`` back onto the imported From-To draft."""
+
+        if self._imported_draft is None:
+            return None
+        from panelcad.convert.import_convert import apply_from_to_corrections
+
+        orig_by_id = {
+            str(r.row_id or f"row_{idx + 1}"): r
+            for idx, r in enumerate(self._imported_draft.from_to_rows)
+        }
+        edits: list[dict[str, str]] = []
+        for row_dict in self.imported_from_to_rows():
+            rid = row_dict["row_id"]
+            orig = orig_by_id.get(rid)
+            if orig is None:
+                continue
+            if (
+                orig.wire_number != row_dict["wire_number"]
+                or orig.from_tag != row_dict["from_tag"].lstrip("-").strip()
+                or orig.from_pin != row_dict["from_pin"]
+                or orig.to_tag != row_dict["to_tag"].lstrip("-").strip()
+                or orig.to_pin != row_dict["to_pin"]
+            ):
+                edits.append(row_dict)
+        if edits:
+            self._imported_draft = apply_from_to_corrections(self._imported_draft, edits=edits)
+            self._populate_import_table(self._imported_draft)
+        return self._imported_draft
+
     def perform(self) -> dict:
         """Run the conversion and fill the review. Tests call this without exec."""
+
+        if self._imported_draft is not None:
+            self.apply_table_corrections()
+            result = self.session.import_and_convert_standard(
+                self._imported_draft,
+                target=self._target(),
+                out=self.path.text().strip() or None,
+                keep_numbers=self.keep_numbers.isChecked(),
+                mode=self.conversion_mode(),
+            )
+            self.show_review(result)
+            self._reload_parent()
+            return result
 
         result = self.session.convert_standard(
             self._target(),

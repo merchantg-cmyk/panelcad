@@ -34,6 +34,20 @@ from panelcad.convert.engine import (
     revert_chunk,
     start_conversion,
 )
+from panelcad.convert.import_convert import (
+    DEFAULT_IMPORT_CONFIDENCE_THRESHOLD,
+    ImportedConversionResult,
+    ImportedDeviceRecord,
+    ImportedFromToRow,
+    ImportedIECPrintDraft,
+    RecordedImportVisionBackend,
+    apply_from_to_corrections,
+    build_iec_project_from_imported_from_to,
+    clean_iec_tag,
+    convert_imported_iec_print,
+    import_iec_print_to_from_to,
+    split_endpoint_token,
+)
 from panelcad.convert.plan import (
     ALL_REASON_CODES,
     DECISION_REASON_CODES,
@@ -91,5 +105,17 @@ __all__ = [
     "role_entry_for",
     "role_prefix_for",
     "start_conversion",
+    "DEFAULT_IMPORT_CONFIDENCE_THRESHOLD",
+    "ImportedConversionResult",
+    "ImportedDeviceRecord",
+    "ImportedFromToRow",
+    "ImportedIECPrintDraft",
+    "RecordedImportVisionBackend",
+    "apply_from_to_corrections",
+    "build_iec_project_from_imported_from_to",
+    "clean_iec_tag",
+    "convert_imported_iec_print",
+    "import_iec_print_to_from_to",
+    "split_endpoint_token",
     "suggest_symbol_counterpart",
 ]

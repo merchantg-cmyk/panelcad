@@ -29,6 +29,18 @@ from panelcad.convert.ai_assist import (
     suggest_symbol_counterpart,
 )
 from panelcad.convert.flags import sheet_flags, suggest_cleanup
+from panelcad.convert.import_convert import (
+    DEFAULT_IMPORT_CONFIDENCE_THRESHOLD,
+    ImportedConversionResult,
+    ImportedDeviceRecord,
+    ImportedFromToRow,
+    ImportedIECPrintDraft,
+    RecordedImportVisionBackend,
+    apply_from_to_corrections,
+    build_iec_project_from_imported_from_to,
+    convert_imported_iec_print,
+    import_iec_print_to_from_to,
+)
 from panelcad.convert.plan import (
     ALL_REASON_CODES,
     DECISION_REASON_CODES,

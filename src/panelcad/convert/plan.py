@@ -21,6 +21,7 @@ DECISION_REASON_CODES: frozenset[str] = frozenset(
         "multipage_consolidation",
         "note_reworded",
         "layout_candidate",
+        "imported_low_confidence",
     }
 )
 
@@ -742,6 +743,33 @@ def sync_project_conversion_decisions(project: Project, ws: dict[str, Any]) -> l
             row = dec.to_dict()
             all_decisions.append(row)
             if status != "accepted" and (dec.needs_review or bool(dec.model)):
+                unresolved.append(row)
+
+    raw_imported = project.properties.get("imported_from_to_decisions") or ws.get("imported_decisions") or []
+    seen_keys = {
+        (
+            str(d.get("reason_code") or ""),
+            str(d.get("component_id") or ""),
+            str(d.get("sheet_id") or ""),
+            str(d.get("message") or ""),
+        )
+        for d in all_decisions
+    }
+    for raw_imp in raw_imported:
+        imp_dec = ConversionDecision.from_dict(raw_imp)
+        if not imp_dec.chunk_id:
+            imp_dec.chunk_id = "import"
+        row = imp_dec.to_dict()
+        key = (
+            str(row.get("reason_code") or ""),
+            str(row.get("component_id") or ""),
+            str(row.get("sheet_id") or ""),
+            str(row.get("message") or ""),
+        )
+        if key not in seen_keys:
+            seen_keys.add(key)
+            all_decisions.append(row)
+            if imp_dec.needs_review or bool(imp_dec.model):
                 unresolved.append(row)
 
     ws["decisions"] = all_decisions

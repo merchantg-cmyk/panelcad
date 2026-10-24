@@ -200,6 +200,10 @@ def feature_iec_to_nema_convert(app, win) -> None:
         check("ConvertDialog has convert-mode-combo selector",
               mode_combo is not None and mode_combo.count() >= 2 and mode_combo.currentData() == "rules_only",
               f"count={mode_combo.count() if mode_combo is not None else 0} current={mode_combo.currentData() if mode_combo is not None else None}")
+        import_btn = dlg.findChild(QPushButton, "convert-import-scan-btn")
+        check("ConvertDialog has convert-import-scan-btn button",
+              import_btn is not None and import_btn.isEnabled() and "Import IEC PDF / scan" in import_btn.text(),
+              import_btn.text() if import_btn is not None else "missing")
         dlg.path.selectAll()
         QTest.keyClicks(dlg.path, str(out_yaml))
         check("Save as path typed", dlg.path.text() == str(out_yaml), dlg.path.text())

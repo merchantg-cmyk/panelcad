@@ -33,6 +33,25 @@ def project_to_pdf(
         writer.setTitle(project.name)
         paint_project_on_device(writer, project, catalog, sheets=sheets, base_dir=base_dir)
         writer = None
+        try:
+            import json as _json
+            from pypdf import PdfReader as _PdfReader, PdfWriter as _PdfWriter
+
+            _reader = _PdfReader(str(tmp))
+            _writer = _PdfWriter()
+            _writer.append(_reader)
+            _proj_copy = project.model_copy(deep=True)
+            if sheets is not None:
+                _proj_copy.sheets = list(sheets)
+            _writer.add_metadata({
+                "/Title": project.name or "PanelCAD Project",
+                "/Producer": "PanelCAD",
+                "/PanelCADProject": _json.dumps(_proj_copy.model_dump(mode="json"), separators=(",", ":")),
+            })
+            with open(tmp, "wb") as _fh:
+                _writer.write(_fh)
+        except Exception:
+            pass
         os.replace(tmp, dest)
     except Exception:
         writer = None
