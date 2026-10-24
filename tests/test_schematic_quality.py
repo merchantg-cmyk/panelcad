@@ -621,8 +621,8 @@ def test_cleanup_reflows_an_overlapping_ladder_inside_the_rails():
 
 def test_conveyor_sheets_do_not_stack_different_wire_numbers():
     candidates = [
-        Path("/workspace/panelcad-testpass/out/A/a1_step7.pcad.yaml"),
-        Path("/home/ubuntu/.cursor/projects/workspace/uploads/a1_step7.pcad_67e7.yaml"),
+        Path("<local-path>"),
+        Path("/home/ubuntu/.cursor/projects<local-path>"),
     ]
     path = next((item for item in candidates if item.is_file()), None)
     if path is None:
