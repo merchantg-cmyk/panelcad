@@ -48,6 +48,7 @@ from panelcad.convert.import_convert import (
     import_iec_print_to_from_to,
     split_endpoint_token,
 )
+from panelcad.convert.from_to_check import build_from_to_diff_rows
 from panelcad.convert.plan import (
     ALL_REASON_CODES,
     DECISION_REASON_CODES,
@@ -55,6 +56,11 @@ from panelcad.convert.plan import (
     ConversionChunk,
     ConversionDecision,
     ConversionPlan,
+    decision_original_value,
+    decision_proposal_value,
+    resolve_conversion_decision,
+    sort_decisions_by_confidence,
+    valid_decision_options,
 )
 from panelcad.convert.table import (
     convert_terminal_tag,
@@ -116,6 +122,12 @@ __all__ = [
     "clean_iec_tag",
     "convert_imported_iec_print",
     "import_iec_print_to_from_to",
+    "build_from_to_diff_rows",
+    "decision_original_value",
+    "decision_proposal_value",
+    "resolve_conversion_decision",
+    "sort_decisions_by_confidence",
     "split_endpoint_token",
     "suggest_symbol_counterpart",
+    "valid_decision_options",
 ]

@@ -204,6 +204,10 @@ def feature_iec_to_nema_convert(app, win) -> None:
         check("ConvertDialog has convert-import-scan-btn button",
               import_btn is not None and import_btn.isEnabled() and "Import IEC PDF / scan" in import_btn.text(),
               import_btn.text() if import_btn is not None else "missing")
+        wire_combo = dlg.findChild(QComboBox, "convert-wire-mode-combo")
+        check("ConvertDialog has convert-wire-mode-combo selector",
+              wire_combo is not None and wire_combo.count() >= 2 and wire_combo.currentData() == "line_ref",
+              f"count={wire_combo.count() if wire_combo is not None else 0} current={wire_combo.currentData() if wire_combo is not None else None}")
         dlg.path.selectAll()
         QTest.keyClicks(dlg.path, str(out_yaml))
         check("Save as path typed", dlg.path.text() == str(out_yaml), dlg.path.text())
@@ -237,6 +241,19 @@ def feature_iec_to_nema_convert(app, win) -> None:
             check("CompareDialog opened", compare is not None and compare.isVisible(),
                   compare.windowTitle() if compare is not None else "none")
             if compare is not None:
+                from PySide6.QtWidgets import QTableWidget
+                summary_bar = compare.findChild(QLabel, "compare-summary-bar")
+                check("CompareDialog has compare-summary-bar with netlist and from-to status",
+                      summary_bar is not None and "netlist: OK" in summary_bar.text() and "from-to: OK" in summary_bar.text(),
+                      summary_bar.text() if summary_bar is not None else "missing")
+                ft_table = compare.findChild(QTableWidget, "compare-from-to-table")
+                check("CompareDialog has compare-from-to-table populated",
+                      ft_table is not None and ft_table.rowCount() > 0,
+                      f"rows={ft_table.rowCount() if ft_table is not None else 0}")
+                dec_table = compare.findChild(QTableWidget, "compare-decisions-table")
+                check("CompareDialog has compare-decisions-table populated",
+                      dec_table is not None and dec_table.rowCount() > 0,
+                      f"rows={dec_table.rowCount() if dec_table is not None else 0}")
                 shot(compare, "convert-compare-dialog")
                 compare.close()
                 app.processEvents()

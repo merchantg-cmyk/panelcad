@@ -2253,6 +2253,7 @@ def convert_imported_iec_print(
     ai_backend: Any = None,
     confidence_threshold: float = DEFAULT_IMPORT_CONFIDENCE_THRESHOLD,
     keep_numbers: bool = False,
+    wire_mode: str = "line_ref",
     session: Any = None,
     catalog: Catalog | None = None,
 ) -> dict[str, Any]:
@@ -2316,6 +2317,7 @@ def convert_imported_iec_print(
             out=out,
             workspace=ws_arg,
             keep_numbers=keep_numbers,
+            wire_mode=wire_mode,
             mode=mode,
             ai_assist=ai_assist,
             ai_backend=ai_backend,

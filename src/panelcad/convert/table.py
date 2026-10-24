@@ -37,7 +37,7 @@ _TAG_SPLIT_RE = re.compile(
 _TERMINAL_RE = re.compile(
     r"^(?:=[A-Za-z0-9_.-]+)?(?:\+[A-Za-z0-9_.-]+)?(-?)([A-Za-z]+)(\d+)([:-])([A-Za-z0-9]+)$"
 )
-_IEC_ADDR_WIRE_RE = re.compile(r"^(?:(\d+)[./:])?(\d+)(?:\.(\d+))?([A-Za-z]?)$")
+_IEC_ADDR_WIRE_RE = re.compile(r"^(?:(\d+)[./:-])?(?:[Ww])?(\d+)(?:\.(\d+))?([A-Za-z]?)$")
 _NEMA_RUNG_WIRE_RE = re.compile(r"^(\d{3,4})([A-Za-z]?)$")
 
 

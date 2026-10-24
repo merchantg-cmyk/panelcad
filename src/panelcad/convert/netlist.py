@@ -53,10 +53,16 @@ def normalize_edges(
         pin_back[(str(row["ref"]), str(row["pin"]))] = str(row["was"])
     rail_back: dict[str, dict[str, str]] = {}
     for sheet_id, pair in rail_map.items():
-        rail_back[str(sheet_id)] = {
+        mapping = {
             str(pair.get("to_hot") or ""): str(pair.get("from_hot") or ""),
             str(pair.get("to_ret") or ""): str(pair.get("from_ret") or ""),
         }
+        wn_map = pair.get("wire_numbers")
+        if isinstance(wn_map, dict):
+            for new_n, old_n in wn_map.items():
+                if new_n and old_n:
+                    mapping[str(new_n)] = str(old_n)
+        rail_back[str(sheet_id)] = mapping
 
     def _token(sheet_id: str, end: str) -> str:
         rails = rail_back.get(sheet_id) or {}

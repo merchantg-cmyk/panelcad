@@ -3985,6 +3985,7 @@ class Session:
         workspace: Path | str | None = None,
         resume: Path | str | None = None,
         keep_numbers: bool = False,
+        wire_mode: str = "line_ref",
         mode: str = "rules_only",
         ai_assist: bool = False,
         ai_backend: Any = None,
@@ -4002,6 +4003,7 @@ class Session:
             workspace=workspace,
             resume=resume,
             keep_numbers=keep_numbers,
+            wire_mode=wire_mode,
             mode=mode,
             ai_assist=ai_assist,
             ai_backend=ai_backend,
@@ -4076,6 +4078,7 @@ class Session:
         out: Path | str | None = None,
         workspace: Path | str | None = None,
         keep_numbers: bool = False,
+        wire_mode: str = "line_ref",
         mode: str = "rules_only",
         ai_assist: bool = False,
         ai_backend: Any = None,
@@ -4095,10 +4098,39 @@ class Session:
                 out=out,
                 workspace=workspace,
                 keep_numbers=keep_numbers,
+                wire_mode=wire_mode,
                 mode=mode,
                 ai_assist=ai_assist,
                 ai_backend=ai_backend,
                 confidence_threshold=confidence_threshold,
+            ),
+        )
+
+    def resolve_conversion_decision(
+        self,
+        decision: Any,
+        resolution: str = "accept",
+        chosen_option: str | None = None,
+        *,
+        workspace: Path | str | dict[str, Any] | None = None,
+        out: Path | str | None = None,
+        target: str | None = None,
+    ) -> dict[str, Any]:
+        """Resolve one conversion decision (Accept, Change, or Keep original) on this session."""
+
+        from panelcad.convert.plan import resolve_conversion_decision
+
+        return self._undoable(
+            "convert_standard",
+            f"resolve conversion decision ({resolution})",
+            lambda: resolve_conversion_decision(
+                self,
+                decision,
+                resolution,
+                chosen_option,
+                workspace=workspace,
+                out=out,
+                target=target,
             ),
         )
 
@@ -4167,6 +4199,7 @@ class Session:
         ai_backend: Any = None,
         confidence_threshold: float = 0.80,
         keep_numbers: bool = False,
+        wire_mode: str = "line_ref",
         out: Path | str | None = None,
         workspace: Path | str | None = None,
     ) -> Any:
@@ -4191,6 +4224,7 @@ class Session:
                 ai_backend=ai_backend,
                 confidence_threshold=confidence_threshold,
                 keep_numbers=keep_numbers,
+                wire_mode=wire_mode,
                 out=out,
                 workspace=workspace,
                 catalog=self.catalog,

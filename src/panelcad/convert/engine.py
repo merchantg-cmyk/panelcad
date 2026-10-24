@@ -41,6 +41,7 @@ from panelcad.convert.import_convert import (
     convert_imported_iec_print,
     import_iec_print_to_from_to,
 )
+from panelcad.convert.from_to_check import build_from_to_diff_rows
 from panelcad.convert.plan import (
     ALL_REASON_CODES,
     DECISION_REASON_CODES,
@@ -49,11 +50,16 @@ from panelcad.convert.plan import (
     ConversionDecision,
     ConversionPlan,
     _is_ambiguous_symbol,
+    decision_original_value,
+    decision_proposal_value,
     decisions_for_layout_chunk,
     decisions_for_symbols_chunk,
     decisions_for_tags_chunk,
     decisions_from_issues,
+    resolve_conversion_decision,
+    sort_decisions_by_confidence,
     sync_project_conversion_decisions,
+    valid_decision_options,
 )
 from panelcad.convert.layout_convert import (
     apply_sheet_rails,
@@ -71,6 +77,7 @@ from panelcad.convert.table import (
     convert_terminal_suffix,
     counterpart,
     extra_pins,
+    format_wire_number,
     parse_device_tag,
     pin_map,
     role_prefix_for,
@@ -141,6 +148,13 @@ def _normalize_mode(
     return "rules_only"
 
 
+def _normalize_wire_mode(wire_mode: str = "line_ref") -> str:
+    raw = str(wire_mode or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if raw in {"keep", "keep_existing", "keep_existing_wire_numbers", "keep_wire_numbers", "preserve"}:
+        return "keep"
+    return "line_ref"
+
+
 def _is_ai_enabled(ws: dict[str, Any]) -> bool:
     return bool(ws.get("ai_assist")) or str(ws.get("mode") or "rules_only") == "ai_assisted"
 
@@ -196,6 +210,7 @@ def conversion_plan(
     workspace: str | Path | None = None,
     resume: str | Path | None = None,
     keep_numbers: bool = False,
+    wire_mode: str = "line_ref",
     mode: str = "rules_only",
     ai_assist: bool = False,
     ai_backend: Any = None,
@@ -229,6 +244,7 @@ def conversion_plan(
             out=out,
             workspace=workspace,
             keep_numbers=keep_numbers,
+            wire_mode=wire_mode,
             unconsolidate_on_start=unconsolidate_on_start,
             mode=mode,
             ai_assist=ai_assist,
@@ -310,6 +326,7 @@ def _build_conversion_plan(
     out: str | Path | None = None,
     workspace: str | Path | None = None,
     keep_numbers: bool = False,
+    wire_mode: str = "line_ref",
     unconsolidate_on_start: bool = False,
     mode: str = "rules_only",
     ai_assist: bool = False,
@@ -411,6 +428,7 @@ def _build_conversion_plan(
         "sheets": sheet_ids,
         "whole_project": whole,
         "keep_numbers": bool(keep_numbers),
+        "wire_mode": _normalize_wire_mode(wire_mode),
         "chunks": chunks,
         "source_project": project.model_dump(mode="json"),
         "working_project": None,
@@ -509,6 +527,7 @@ def convert_standard(
     out: str | Path | None = None,
     workspace: str | Path | None = None,
     keep_numbers: bool = False,
+    wire_mode: str = "line_ref",
     mode: str = "rules_only",
     ai_assist: bool = False,
     ai_backend: Any = None,
@@ -523,6 +542,7 @@ def convert_standard(
         out=out,
         workspace=workspace,
         keep_numbers=keep_numbers,
+        wire_mode=wire_mode,
         mode=mode,
         ai_assist=ai_assist,
         ai_backend=ai_backend,
@@ -544,6 +564,7 @@ def start_conversion(
     out: str | Path | None = None,
     workspace: str | Path | None = None,
     keep_numbers: bool = False,
+    wire_mode: str = "line_ref",
     mode: str = "rules_only",
     ai_assist: bool = False,
     ai_backend: Any = None,
@@ -560,6 +581,7 @@ def start_conversion(
             out=out,
             workspace=workspace,
             keep_numbers=keep_numbers,
+            wire_mode=wire_mode,
             mode=mode,
             ai_assist=ai_assist,
             ai_backend=ai_backend,
@@ -572,6 +594,7 @@ def start_conversion(
         out=out,
         workspace=workspace,
         keep_numbers=keep_numbers,
+        wire_mode=wire_mode,
         mode=mode,
         ai_assist=ai_assist,
         ai_backend=ai_backend,
@@ -587,6 +610,9 @@ class ConversionEngine:
         session: Any = None,
         target: str = "NEMA/ANSI",
         *,
+        out: str | Path | None = None,
+        workspace: str | Path | None = None,
+        wire_mode: str = "line_ref",
         mode: str = "rules_only",
         ai_assist: bool = False,
         ai_backend: Any = None,
@@ -594,6 +620,9 @@ class ConversionEngine:
     ) -> None:
         self.session = session
         self.target = target
+        self.out = out
+        self.workspace = workspace
+        self.wire_mode = _normalize_wire_mode(wire_mode)
         self.mode = _normalize_mode(mode, ai_assist=ai_assist, ai_backend=ai_backend)
         self.ai_assist = self.mode == "ai_assisted"
         self.ai_backend = ai_backend
@@ -608,15 +637,17 @@ class ConversionEngine:
         workspace: str | Path | None = None,
         resume: str | Path | None = None,
         keep_numbers: bool = False,
+        wire_mode: str | None = None,
     ) -> dict[str, Any]:
         return conversion_plan(
             self.session,
             target or self.target,
             sheets=sheets,
-            out=out,
-            workspace=workspace,
+            out=out or self.out,
+            workspace=workspace or self.workspace,
             resume=resume,
             keep_numbers=keep_numbers,
+            wire_mode=wire_mode or self.wire_mode,
             mode=self.mode,
             ai_assist=self.ai_assist,
             ai_backend=self.ai_backend,
@@ -631,18 +662,42 @@ class ConversionEngine:
         out: str | Path | None = None,
         workspace: str | Path | None = None,
         keep_numbers: bool = False,
+        wire_mode: str | None = None,
     ) -> dict[str, Any]:
         return convert_standard(
             self.session,
             target or self.target,
             sheets=sheets,
-            out=out,
-            workspace=workspace,
+            out=out or self.out,
+            workspace=workspace or self.workspace,
             keep_numbers=keep_numbers,
+            wire_mode=wire_mode or self.wire_mode,
             mode=self.mode,
             ai_assist=self.ai_assist,
             ai_backend=self.ai_backend,
             confidence_threshold=self.confidence_threshold,
+        )
+
+    start = convert
+    run = convert
+
+    def resolve_decision(
+        self,
+        decision: Any,
+        resolution: str = "accept",
+        chosen_option: str | None = None,
+        *,
+        workspace: str | Path | dict[str, Any] | None = None,
+        out: str | Path | None = None,
+    ) -> dict[str, Any]:
+        return resolve_conversion_decision(
+            self.session,
+            decision,
+            resolution,
+            chosen_option,
+            workspace=workspace,
+            out=out,
+            target=self.target,
         )
 
     run = convert
@@ -848,6 +903,7 @@ def _apply_symbols(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> N
             _swap_one(session, comp, page, ws["target"], issues, rewrites, ws=ws, chunk=chunk)
     _assign_iec_family_contact_slots(session.project, ws["target"], wanted)
     _apply_ladder_only_rails(session, ws, chunk, sheet)
+    _apply_sheet_wire_numbers_for_chunk(session, ws, chunk, sheet)
     _rebuild_power_routes(session, sheet)
     has_layout = any(
         c.get("kind") == "layout" and c.get("sheet") == sheet.id
@@ -907,6 +963,110 @@ def _apply_ladder_only_rails(session: Any, ws: dict[str, Any], chunk: dict[str, 
         block["rails"] = rails
         chunk["rail"] = record
     _tidy_non_layout_ladder_sheet(session, sheet, std, block)
+
+
+def _convert_sheet_wire_numbers(
+    session: Any,
+    ws: dict[str, Any],
+    sheet: Any,
+    record: dict[str, Any],
+    *,
+    stored_rails: dict[str, Any] | None = None,
+) -> None:
+    """Convert or preserve wire numbers on ``sheet`` according to ``ws['wire_mode']``."""
+
+    w_mode = _normalize_wire_mode(str(ws.get("wire_mode") or "line_ref"))
+    if w_mode == "keep":
+        return
+    if str(getattr(sheet, "kind", "") or "") in _LAYOUT_KINDS:
+        return
+    std = target_standard(ws["target"])
+    if std == "IEC":
+        stored_wn = (stored_rails or {}).get("wire_numbers") if isinstance(stored_rails, dict) else None
+        if isinstance(stored_wn, dict) and stored_wn:
+            rev_wn: dict[str, str] = dict(record.get("wire_numbers") or {})
+            for wire in sheet.wires:
+                if getattr(wire, "number_locked", False):
+                    continue
+                cur = str(wire.number or "").strip()
+                if cur in stored_wn:
+                    orig = str(stored_wn[cur])
+                    wire.number = orig
+                    rev_wn[orig] = cur
+            if rev_wn:
+                record["wire_numbers"] = rev_wn
+        return
+
+    if std == "NEMA/ANSI":
+        sheet_idx = next(
+            (i + 1 for i, s in enumerate(session.project.sheets) if s.id == sheet.id),
+            1,
+        )
+        is_pwr = is_power_sheet(sheet)
+        skip_tokens = {
+            "L1", "L2", "L3", "N", "PE", "GND", "24V", "+24V", "0V",
+            "L+", "M", "X1", "X2", "H1", "H2", "COM", "T1", "T2", "T3", "U1", "V1",
+        }
+        if is_pwr:
+            skip_tokens.add("W1")
+        reverse_wn: dict[str, str] = dict(record.get("wire_numbers") or {})
+        forward_wn: dict[str, str] = {str(old_v): str(new_k) for new_k, old_v in reverse_wn.items()}
+        used_numbers: set[str] = {
+            str(w.number or "").strip()
+            for w in sheet.wires
+            if getattr(w, "number_locked", False) and str(w.number or "").strip()
+        }
+        for wire in sheet.wires:
+            if getattr(wire, "number_locked", False):
+                continue
+            old_num = str(wire.number or "").strip()
+            if not old_num or old_num.upper() in skip_tokens:
+                continue
+            if old_num in forward_wn:
+                wire.number = forward_wn[old_num]
+                continue
+            cand = format_wire_number(old_num, "NEMA/ANSI", sheet=sheet_idx, keep=False)
+            if not cand or cand == old_num:
+                continue
+            if (cand in reverse_wn and reverse_wn[cand] != old_num) or cand in used_numbers:
+                base_digits = "".join(ch for ch in cand if ch.isdigit())
+                base_n = int(base_digits) if base_digits else (sheet_idx * 100 + 1)
+                while str(base_n) in reverse_wn or str(base_n) in used_numbers:
+                    base_n += 1
+                cand = str(base_n)
+            forward_wn[old_num] = cand
+            reverse_wn[cand] = old_num
+            used_numbers.add(cand)
+            wire.number = cand
+        if reverse_wn:
+            record["wire_numbers"] = reverse_wn
+
+
+def _apply_sheet_wire_numbers_for_chunk(
+    session: Any,
+    ws: dict[str, Any],
+    chunk: dict[str, Any],
+    sheet: Any,
+) -> None:
+    if str(getattr(sheet, "kind", "") or "") in _LAYOUT_KINDS:
+        return
+    block = session.project.properties.get("convert_standard")
+    if not isinstance(block, dict):
+        block = {
+            "source": ws["source_standard"],
+            "target": ws["target"],
+            "tag_map": _active_tag_map(ws),
+            "rails": {},
+        }
+        session.project.properties["convert_standard"] = block
+    rails = dict(block.get("rails") or {})
+    prior_rail = dict(rails.get(sheet.id) or {})
+    record = dict(chunk.get("rail") or prior_rail or {})
+    _convert_sheet_wire_numbers(session, ws, sheet, record, stored_rails=prior_rail)
+    if record:
+        rails[sheet.id] = record
+        block["rails"] = rails
+        chunk["rail"] = record
 
 
 def _tidy_power_sheet(session: Any, sheet: Any) -> None:
@@ -1378,7 +1538,24 @@ def _consolidatable_control_sheets(session: Any, ws: dict[str, Any]) -> list[str
 
 def _apply_layout(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> None:
     sheet_id = str(chunk["sheet"])
+    block_before = session.project.properties.get("convert_standard")
+    prior_rail = (
+        dict((block_before.get("rails") or {}).get(sheet_id) or {})
+        if isinstance(block_before, dict)
+        else {}
+    )
     record = relayout_sheet(session, sheet_id, ws["target"])
+    if prior_rail.get("wire_numbers"):
+        merged_wn = dict(prior_rail["wire_numbers"])
+        merged_wn.update(record.get("wire_numbers") or {})
+        record["wire_numbers"] = merged_wn
+    _convert_sheet_wire_numbers(
+        session,
+        ws,
+        session.sheet(sheet_id),
+        record,
+        stored_rails=prior_rail,
+    )
     block = session.project.properties.get("convert_standard")
     if not isinstance(block, dict):
         block = {
@@ -2297,6 +2474,10 @@ def _install(session: Any, project: Project) -> None:
 def _stamp_working(session: Any, ws: dict[str, Any]) -> None:
     sync_project_conversion_decisions(session.project, ws)
     ws["working_project"] = session.project.model_dump(mode="json")
+    try:
+        object.__setattr__(session.project, "_conversion_workspace", ws)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _chunk(ws: dict[str, Any], chunk_id: str) -> dict[str, Any]:
@@ -2309,7 +2490,7 @@ def _chunk(ws: dict[str, Any], chunk_id: str) -> dict[str, Any]:
 def _public(ws: dict[str, Any]) -> dict[str, Any]:
     tag_map: dict[str, str] = {}
     pin_rewrites: list[dict[str, str]] = []
-    rail_map: dict[str, dict[str, str]] = {}
+    rail_map: dict[str, dict[str, Any]] = {}
     unmapped: list[dict[str, Any]] = []
     for chunk in ws["chunks"]:
         if chunk["status"] not in {"done", "accepted"}:
@@ -2317,7 +2498,14 @@ def _public(ws: dict[str, Any]) -> dict[str, Any]:
         tag_map.update({str(k): str(v) for k, v in (chunk.get("tag_map") or {}).items()})
         pin_rewrites.extend(chunk.get("pin_rewrites") or [])
         if chunk.get("rail"):
-            rail_map[str(chunk.get("sheet") or "")] = dict(chunk["rail"])
+            sid_key = str(chunk.get("sheet") or "")
+            prev_rail = dict(rail_map.get(sid_key) or {})
+            prev_wn = dict(prev_rail.get("wire_numbers") or {})
+            prev_rail.update(chunk["rail"])
+            if prev_wn or (chunk["rail"].get("wire_numbers")):
+                prev_wn.update(chunk["rail"].get("wire_numbers") or {})
+                prev_rail["wire_numbers"] = prev_wn
+            rail_map[sid_key] = prev_rail
         for issue in chunk.get("issues") or []:
             if issue.get("flag") in {"unmapped_symbol", "unmapped_pin"}:
                 unmapped.append(dict(issue))
@@ -2341,6 +2529,8 @@ def _public(ws: dict[str, Any]) -> dict[str, Any]:
         "source_path": ws.get("source_path") or "",
         "sheets": list(ws.get("sheets") or []),
         "whole_project": bool(ws.get("whole_project")),
+        "keep_numbers": bool(ws.get("keep_numbers", False)),
+        "wire_mode": _normalize_wire_mode(str(ws.get("wire_mode") or "line_ref")),
         "tag_map": tag_map,
         "planned_tag_map": _planned_tag_map(ws),
         "pin_rewrites": pin_rewrites,
@@ -2353,6 +2543,8 @@ def _public(ws: dict[str, Any]) -> dict[str, Any]:
         "decisions": all_decisions,
         "reason_codes": reason_codes,
         "connection_check": ws.get("connection_check") or {},
+        "from_to_check": ws.get("connection_check") or {},
+        "same_netlist": bool((ws.get("connection_check") or {}).get("ok", True)),
     }
 
 
