@@ -19,12 +19,16 @@ from typing import Any
 
 from panelcad.convert.flags import sheet_flags, suggest_cleanup
 from panelcad.convert.layout_convert import (
+    apply_sheet_rails,
     needs_column_or_ladder,
     parts_on_sheet,
     rail_kind,
     relayout_sheet,
 )
 from panelcad.convert.table import (
+    convert_contact_number,
+    convert_contact_pin_labels,
+    convert_contact_terminals,
     convert_terminal_suffix,
     counterpart,
     extra_pins,
@@ -352,11 +356,26 @@ def _apply_tags(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> None
     _rename_all(session.project, mapping)
     prev = session.project.properties.get("convert_standard")
     prev_rails = dict(prev.get("rails") or {}) if isinstance(prev, dict) else {}
+    prev_positions: dict[str, Any] = {}
+    if isinstance(prev, dict) and isinstance(prev.get("positions"), dict):
+        for sh_id, sh_pos in prev["positions"].items():
+            if not isinstance(sh_pos, dict):
+                continue
+            comp_pos = dict(sh_pos.get("components") or {})
+            remapped_comp_pos = dict(comp_pos)
+            for old_ref, new_ref in mapping.items():
+                if old_ref in comp_pos:
+                    remapped_comp_pos[new_ref] = comp_pos[old_ref]
+            prev_positions[str(sh_id)] = {
+                "components": remapped_comp_pos,
+                "wires": dict(sh_pos.get("wires") or {}),
+            }
     session.project.properties["convert_standard"] = {
         "source": ws["source_standard"],
         "target": ws["target"],
         "tag_map": dict(chunk.get("tag_map") or {}),
         "rails": prev_rails,
+        "positions": prev_positions,
     }
     if ws.get("whole_project"):
         session.project.title_block.standard = ws["target"]
@@ -389,10 +408,370 @@ def _apply_symbols(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> N
             if comp.id not in wanted:
                 continue
             _swap_one(session, comp, page, ws["target"], issues, rewrites)
+    _assign_iec_family_contact_slots(session.project, ws["target"], wanted)
+    _apply_ladder_only_rails(session, ws, chunk, sheet)
     _rebuild_power_routes(session, sheet)
     chunk["issues"] = issues
     chunk["pin_rewrites"] = rewrites
     chunk["suggestion"] = suggest_cleanup(issues)
+
+
+
+
+def _apply_ladder_only_rails(session: Any, ws: dict[str, Any], chunk: dict[str, Any], sheet: Any) -> None:
+    """Convert control rails on a ladder sheet that has no layout chunk (e.g. L+/0V <-> 24V/0V)."""
+
+    has_layout = any(
+        c.get("kind") == "layout" and c.get("sheet") == sheet.id
+        for c in (ws.get("chunks") or [])
+    )
+    if has_layout:
+        return
+    if str(getattr(sheet, "kind", "") or "") in _LAYOUT_KINDS:
+        return
+    _power_tokens = (
+        "motors.",
+        "loads.motor",
+        "breakers.mcb_3p",
+        "breakers.mccb",
+        "contactors.ac3",
+        "contactors.three_pole",
+        "drives.",
+        "starters.",
+    )
+    if any(
+        any(tok in str(getattr(c, "library_id", "") or "") for tok in _power_tokens)
+        for c in sheet.components
+    ):
+        return
+    std = target_standard(ws["target"])
+    tb = getattr(session.project, "title_block", None)
+    tb_hot = str(getattr(tb, "rail_hot", "") or "") if tb is not None else ""
+    tb_ret = str(getattr(tb, "rail_return", "") or "") if tb is not None else ""
+    s_hot = str(sheet.rail_hot or tb_hot)
+    s_ret = str(sheet.rail_return or tb_ret)
+    block = session.project.properties.get("convert_standard")
+    stored = ((block.get("rails") or {}).get(sheet.id) or {}) if isinstance(block, dict) else {}
+    wire_ends = {str(w.frm or "") for w in sheet.wires} | {str(w.to or "") for w in sheet.wires}
+    if not isinstance(block, dict):
+        block = {
+            "source": ws["source_standard"],
+            "target": ws["target"],
+            "tag_map": _active_tag_map(ws),
+            "rails": {},
+        }
+        session.project.properties["convert_standard"] = block
+    is_ladder = str(getattr(sheet, "drawing_style", "") or "") == "ladder"
+    needs_rail = is_ladder and (
+        (std == "NEMA/ANSI" and (s_hot == "L+" or s_ret == "M" or "L+" in wire_ends or "M" in wire_ends))
+        or (std == "IEC" and bool(stored))
+    )
+    if needs_rail:
+        parts = parts_on_sheet(session, sheet)
+        record = apply_sheet_rails(session, sheet.id, std, parts, columns=False)
+        rails = dict(block.get("rails") or {})
+        rails[sheet.id] = record
+        block["rails"] = rails
+        chunk["rail"] = record
+    _tidy_non_layout_ladder_sheet(session, sheet, std, block)
+
+
+def _tidy_non_layout_ladder_sheet(session: Any, sheet: Any, std: str, block: dict[str, Any]) -> None:
+    """De-crowd same-row symbols and clear backtracking waypoints on a non-layout ladder sheet."""
+
+    from panelcad.core.geometry import Point
+    from panelcad.core.ink import schematic_ink_rect
+    from panelcad.render.sheet import pin_side_world, pin_world
+    from panelcad.render.titleblock import title_block_rect, working_rect
+    from panelcad.render.wiring import clear_route_cache
+
+    pos_map = block.setdefault("positions", {})
+    if std == "IEC":
+        saved = pos_map.get(sheet.id)
+        if isinstance(saved, dict):
+            comp_saved = saved.get("components") or {}
+            for comp in sheet.components:
+                row = comp_saved.get(comp.id)
+                if isinstance(row, dict):
+                    comp.x = float(row.get("x", comp.x))
+                    comp.y = float(row.get("y", comp.y))
+                    comp.rotation = int(row.get("rotation", 0))  # type: ignore[assignment]
+                    comp.scale = float(row.get("scale", 1.0))
+            wire_saved = saved.get("wires") or {}
+            for wire in sheet.wires:
+                pts = wire_saved.get(wire.id)
+                if isinstance(pts, list):
+                    wire.points = [Point(x=float(p["x"]), y=float(p["y"])) for p in pts if isinstance(p, dict)]
+            clear_route_cache()
+        return
+
+    if sheet.id not in pos_map:
+        pos_map[sheet.id] = {
+            "components": {
+                comp.id: {
+                    "x": float(comp.x),
+                    "y": float(comp.y),
+                    "rotation": int(comp.rotation or 0),
+                    "scale": float(comp.scale or 1.0),
+                }
+                for comp in sheet.components
+            },
+            "wires": {
+                wire.id: [{"x": float(pt.x), "y": float(pt.y)} for pt in (wire.points or [])]
+                for wire in sheet.wires
+            },
+        }
+
+    wx, wy, ww, _wh = working_rect(sheet)
+    _tx, ty, _tw, _th = title_block_rect(sheet)
+    min_y = None
+    max_y = None
+    for comp in sheet.components:
+        try:
+            dev = session.catalog.get(comp.library_id)
+        except KeyError:
+            continue
+        ink = schematic_ink_rect(dev, comp.x, comp.y, comp.id, component=comp)
+        min_y = ink[1] if min_y is None else min(min_y, ink[1])
+        max_y = ink[3] if max_y is None else max(max_y, ink[3])
+    if min_y is not None and max_y is not None:
+        dy = 0.0
+        if min_y < wy + 0.5:
+            cand = float(int((wy + 1.0 - min_y) + 0.999))
+            if max_y + cand <= ty - 2.0:
+                dy = cand
+        elif max_y > ty - 2.0:
+            cand = -float(int((max_y - (ty - 2.0)) + 0.999))
+            if min_y + cand >= wy + 0.5:
+                dy = cand
+        if dy != 0.0:
+            for comp in sheet.components:
+                comp.y = round(float(comp.y) + dy, 1)
+            for wire in sheet.wires:
+                if wire.points:
+                    wire.points = [Point(x=float(pt.x), y=round(float(pt.y) + dy, 1)) for pt in wire.points]
+
+    max_x = wx + ww - 20.0
+    comps = sorted(sheet.components, key=lambda c: (float(c.x), float(c.y), c.id))
+    for i, a in enumerate(comps):
+        try:
+            a_dev = session.catalog.get(a.library_id)
+            a_w = float(getattr(a_dev, "schematic_width", 0.0) or 24.0)
+        except KeyError:
+            a_w = 24.0
+        for b in comps[i + 1 :]:
+            if abs(float(a.y) - float(b.y)) > 15.0:
+                continue
+            if float(b.x) < float(a.x) + a_w + 10.0:
+                need_x = float(a.x) + a_w + 18.0
+                if need_x <= max_x:
+                    b.x = need_x
+
+    for wire in sheet.wires:
+        if not wire.points:
+            continue
+        frm = str(wire.frm or "")
+        if "." not in frm:
+            continue
+        ref, pid = frm.split(".", 1)
+        try:
+            comp = sheet.component(ref)
+            pin = session.catalog.get(comp.library_id).pin(pid)
+        except (KeyError, ValueError):
+            continue
+        ax, ay = pin_world(comp, pin)
+        side = pin_side_world(comp, pin)
+        pt0 = wire.points[0]
+        if (
+            (side == "right" and float(pt0.x) < ax - 0.5)
+            or (side == "left" and float(pt0.x) > ax + 0.5)
+            or (side == "bottom" and float(pt0.y) < ay - 0.5)
+            or (side == "top" and float(pt0.y) > ay + 0.5)
+        ):
+            wire.points = []
+    clear_route_cache()
+
+
+def _parent_is_timer(project: Project, comp_id: str) -> bool:
+    parsed = parse_device_tag(comp_id)
+    if parsed is None:
+        return False
+    base = f"{parsed[0]}{parsed[1]}"
+    if parsed[0].upper() in {"KT", "TR", "T", "TD", "TDR"}:
+        return True
+    for sheet in project.sheets:
+        for other in sheet.components:
+            if other.id == base and "timer" in str(other.library_id or "").lower():
+                return True
+    return False
+
+
+def _remap_contact_properties(project: Project, comp: Any, target: str) -> None:
+    """Normalize contact terminals, pin_labels, and contact_no for the target standard."""
+
+    lid = str(comp.library_id or "")
+    is_contact = (
+        lid.endswith((".aux_no", ".aux_nc", ".ol_contact"))
+        or ".operators." in lid
+    )
+    if not is_contact:
+        return
+    std = target_standard(target)
+    role = str(comp.properties.get("role") or "")
+    delayed = str(comp.properties.get("delayed") or "").upper()
+    is_nc = (
+        lid.endswith((".aux_nc", ".pb_nc", ".estop", ".selector_nc"))
+        or role == "tr_nc"
+        or delayed == "NC"
+    )
+    state = "NC" if is_nc else "NO"
+    if std == "NEMA/ANSI":
+        if "terminals" in comp.properties:
+            comp.properties["terminals"] = convert_contact_terminals(
+                str(comp.properties["terminals"]),
+                "NEMA/ANSI",
+                state=state,
+                delayed=delayed,
+            )
+        labels = comp.properties.get("pin_labels")
+        if isinstance(labels, dict):
+            comp.properties["pin_labels"] = convert_contact_pin_labels(
+                labels,
+                {},
+                "NEMA/ANSI",
+                state=state,
+                delayed=delayed,
+            )
+        for key in ("contact_no", "contact_number"):
+            if key in comp.properties:
+                comp.properties[key] = convert_contact_number(
+                    str(comp.properties[key]),
+                    "NEMA/ANSI",
+                    state=state,
+                    delayed=delayed,
+                )
+        return
+
+    # std == "IEC"
+    if lid.endswith((".aux_no", ".aux_nc")) and (
+        role in {"tr_nc", "tr_no"}
+        or delayed in {"NC", "NO"}
+        or comp.id.endswith(("-16", "-18"))
+        or _parent_is_timer(project, comp.id)
+    ):
+        if is_nc:
+            comp.properties["terminals"] = "15-16"
+            comp.properties["pin_labels"] = {"21": "15", "22": "16"}
+            comp.properties["delayed"] = "NC"
+        else:
+            comp.properties["terminals"] = "15-18"
+            comp.properties["pin_labels"] = {"13": "15", "14": "18"}
+            comp.properties["delayed"] = "NO"
+        return
+
+    if lid.endswith((".aux_no", ".aux_nc")):
+        slot = 1
+        if comp.id.endswith(("-43", "-44", "-41", "-42")):
+            slot = 4
+        elif comp.id.endswith(("-33", "-34", "-31", "-32")):
+            slot = 3
+        elif comp.id.endswith(("-23", "-24")) or role in {
+            "main_aux_tr",
+            "fwd_run_aux",
+            "rev_run_aux",
+            "ss_run_aux",
+        }:
+            slot = 2
+        if slot >= 2:
+            if is_nc:
+                comp.properties["terminals"] = f"{slot}1-{slot}2"
+                comp.properties["pin_labels"] = {"21": f"{slot}1", "22": f"{slot}2"}
+            else:
+                comp.properties["terminals"] = f"{slot}3-{slot}4"
+                comp.properties["pin_labels"] = {"13": f"{slot}3", "14": f"{slot}4"}
+            return
+
+    if "terminals" in comp.properties:
+        comp.properties["terminals"] = convert_contact_terminals(
+            str(comp.properties["terminals"]),
+            "IEC",
+            state=state,
+            delayed=delayed,
+            slot=1,
+        )
+    labels = comp.properties.get("pin_labels")
+    if isinstance(labels, dict):
+        comp.properties["pin_labels"] = convert_contact_pin_labels(
+            labels,
+            {},
+            "IEC",
+            state=state,
+            delayed=delayed,
+            slot=1,
+        )
+    for key in ("contact_no", "contact_number"):
+        if key in comp.properties:
+            comp.properties[key] = convert_contact_number(
+                str(comp.properties[key]),
+                "IEC",
+                state=state,
+                delayed=delayed,
+                slot=1,
+            )
+
+
+def _assign_iec_family_contact_slots(project: Project, target: str, wanted: set[str]) -> None:
+    """Ensure multiple aux contacts on the same non-timer parent get sequential IEC terminal pairs."""
+
+    if target_standard(target) != "IEC":
+        return
+    by_parent: dict[tuple[str, str], list[Any]] = {}
+    for sheet in project.sheets:
+        if sheet.kind in _LAYOUT_KINDS:
+            continue
+        for comp in sheet.components:
+            if comp.id not in wanted:
+                continue
+            lid = str(comp.library_id or "")
+            if not lid.endswith((".aux_no", ".aux_nc")):
+                continue
+            if _parent_is_timer(project, comp.id):
+                continue
+            parsed = parse_device_tag(comp.id)
+            if parsed is None or not parsed[2]:
+                continue
+            base = f"{parsed[0]}{parsed[1]}"
+            state = "NC" if lid.endswith(".aux_nc") else "NO"
+            by_parent.setdefault((base, state), []).append(comp)
+
+    for (_base, state), members in by_parent.items():
+        if len(members) <= 1:
+            continue
+        used_slots: set[int] = set()
+        for comp in members:
+            terms = str(comp.properties.get("terminals") or "")
+            if terms in {"23-24", "21-22"} and comp.properties.get("pin_labels"):
+                used_slots.add(2 if terms == "23-24" else 1)
+            elif terms in {"33-34", "31-32"}:
+                used_slots.add(3)
+            elif terms in {"43-44", "41-42"}:
+                used_slots.add(4)
+        next_slot = 1
+        for comp in members:
+            terms = str(comp.properties.get("terminals") or "")
+            if terms in {"23-24", "33-34", "43-44", "31-32", "41-42"}:
+                continue
+            while next_slot in used_slots:
+                next_slot += 1
+            used_slots.add(next_slot)
+            if next_slot >= 2:
+                if state == "NC":
+                    comp.properties["terminals"] = f"{next_slot}1-{next_slot}2"
+                    comp.properties["pin_labels"] = {"21": f"{next_slot}1", "22": f"{next_slot}2"}
+                else:
+                    comp.properties["terminals"] = f"{next_slot}3-{next_slot}4"
+                    comp.properties["pin_labels"] = {"13": f"{next_slot}3", "14": f"{next_slot}4"}
+            next_slot += 1
 
 
 def _power_route_kind(parts: list[Any]) -> str | None:
@@ -511,6 +890,7 @@ def _swap_one(
         _remap_pins(session.project, comp, mapping, target_pins, rewrites)
     else:
         _drop_unknown_hidden(comp, target_pins)
+    _remap_contact_properties(session.project, comp, target)
     _keep_supply_pin_labels(comp, device)
     _lift_off_title(comp, device, sheet)
     _flag_unwired_overload_aux(comp, source_lib, new_lib, extras, wired, sheet.id, issues)

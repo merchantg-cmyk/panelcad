@@ -274,6 +274,23 @@ def feature_iec_to_nema_convert(app, win) -> None:
     lib_ids = {c["library_id"] for s in sheets for c in (s.get("components") or [])}
     check("components converted to NEMA library_ids", all(lid.startswith("nema.") for lid in lib_ids), str(sorted(lib_ids)))
     check("tags renamed by NEMA roles (PB1, M1, PL1, PL2)", {"PB1", "M1", "PL1", "PL2"} <= comp_ids, str(sorted(comp_ids)))
+    check("control rails converted from L+/0V to 24V/0V",
+          tb.get("rail_hot") == "24V" and tb.get("rail_return") == "0V"
+          and all(s.get("rail_hot") == "24V" and s.get("rail_return") == "0V" for s in sheets),
+          f"tb=({tb.get('rail_hot')},{tb.get('rail_return')}) sheets={[(s.get('rail_hot'), s.get('rail_return')) for s in sheets]}")
+    comps_by_id = {c["id"]: c for s in sheets for c in (s.get("components") or [])}
+    m1_xref = str((comps_by_id.get("M1") or {}).get("properties", {}).get("xref") or "")
+    check("coil M1 xref table uses NEMA 3-4 / 1-2 and line numbers",
+          "3-4 104" in m1_xref and "1-2 107" in m1_xref and "3-4 205" in m1_xref and "/" not in m1_xref,
+          m1_xref)
+    c14_props = (comps_by_id.get("M1-14") or {}).get("properties") or {}
+    c21_props = (comps_by_id.get("M1-21") or {}).get("properties") or {}
+    c43_props = (comps_by_id.get("M1-43") or {}).get("properties") or {}
+    wire_ends = {w.get("from") for s in sheets for w in (s.get("wires") or [])} | {w.get("to") for s in sheets for w in (s.get("wires") or [])}
+    check("child contacts use NEMA pins (.3/.4, .1/.2) and coil line xref (102)",
+          {"M1-14.3", "M1-14.4", "M1-21.1", "M1-21.2", "M1-43.3", "M1-43.4"} <= wire_ends
+          and c14_props.get("xref") == "102" and c21_props.get("xref") == "102" and c43_props.get("xref") == "102",
+          str({"xrefs": [c14_props.get("xref"), c21_props.get("xref"), c43_props.get("xref")], "ends": sorted(wire_ends)}))
 
     ws_files = list((SCRATCH / "work").glob("*.convert.json"))
     check("conversion workspace written", len(ws_files) == 1, str([p.name for p in ws_files]))

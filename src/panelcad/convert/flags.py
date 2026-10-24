@@ -42,10 +42,12 @@ def sheet_flags(session: Any, sheet_id: str) -> list[dict[str, Any]]:
 
 
 def _overflow(session: Any, sheet: Any) -> list[dict[str, Any]]:
-    from panelcad.render.titleblock import working_rect
-    from panelcad.render.wiring import component_obstacle
+    from panelcad.core.ink import schematic_ink_rect
+    from panelcad.render.titleblock import title_block_rect, working_rect
+    from panelcad.render.wiring import component_obstacle, route_sheet_wires
 
     wx, wy, ww, wh = working_rect(sheet)
+    tx, ty, tw, _th = title_block_rect(sheet)
     frame = (wx - 1.0, wy - 1.0, wx + ww + 1.0, wy + wh + 1.0)
     rows: list[dict[str, Any]] = []
     for comp in sheet.components:
@@ -64,6 +66,38 @@ def _overflow(session: Any, sheet: Any) -> list[dict[str, Any]]:
                     sheet=sheet.id,
                 )
             )
+        try:
+            dev = session.catalog.get(comp.library_id)
+            ink = schematic_ink_rect(dev, comp.x, comp.y, comp.id, component=comp)
+            if ink[3] > ty + 0.2 and ink[2] > tx + 0.2 and ink[0] < tx + tw - 0.2:
+                rows.append(
+                    _issue(
+                        "title_block_overlap",
+                        f"{comp.id} overlaps the title block",
+                        ref=comp.id,
+                        sheet=sheet.id,
+                    )
+                )
+        except Exception:  # noqa: BLE001
+            continue
+    try:
+        routes = route_sheet_wires(sheet, session.catalog, project=session.project)
+        for wire in sheet.wires:
+            pts = routes.get(wire.id) or []
+            if any(
+                max(a.y, b.y) > ty + 0.2 and max(a.x, b.x) > tx + 0.2 and min(a.x, b.x) < tx + tw - 0.2
+                for a, b in zip(pts, pts[1:])
+            ):
+                rows.append(
+                    _issue(
+                        "title_block_overlap",
+                        f"{wire.id} enters the title block",
+                        ref=wire.id,
+                        sheet=sheet.id,
+                    )
+                )
+    except Exception:  # noqa: BLE001
+        pass
     return rows
 
 

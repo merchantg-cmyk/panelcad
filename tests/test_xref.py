@@ -590,3 +590,127 @@ def test_xref_overlap_index_matches_a_full_scan():
     elapsed = time.perf_counter() - started
     assert total >= 0
     assert elapsed < 0.75, elapsed
+
+
+def test_contact_list_label_normalizes_iec_terminals_in_nema_style():
+    """Patch 3: contact_list_label normalizes IEC contact terminals to NEMA 3-4 / 1-2."""
+
+    from panelcad.core.models import Component, Device, Sheet
+    from panelcad.core.xref import Location, XrefMember, contact_list_label
+
+    sheet = Sheet(id="s1", title="Control")
+    loc = Location(
+        sheet_id="s1",
+        sheet_no=2,
+        row="B",
+        col=6,
+        row_index=2,
+        line=208,
+        x=120.0,
+        y=60.0,
+    )
+    dummy_dev = Device(id="dummy", name="dummy", library_id="dummy", category="dummy")
+
+    def make_member(comp: Component, state: str, contact_no: str) -> XrefMember:
+        return XrefMember(
+            sheet=sheet,
+            comp=comp,
+            device=dummy_dev,
+            role="contact",
+            state=state,
+            contact_no=contact_no,
+            family="M1",
+            location=loc,
+            element="contact",
+        )
+
+    c_no2 = Component(
+        id="M1-23",
+        library_id="nema.contactors.aux_no",
+        x=0,
+        y=0,
+        properties={"terminals": "23-24", "pin_labels": {"3": "23", "4": "24"}},
+    )
+    m_no2 = make_member(c_no2, "NO", "23-24")
+    assert contact_list_label(m_no2, "nema", "parentheses")[0] == "3-4 208"
+    assert contact_list_label(m_no2, "iec", "parentheses")[0] == "23-24 /2.6"
+
+    c_tr_nc = Component(
+        id="TR1-16",
+        library_id="nema.contactors.aux_nc",
+        x=0,
+        y=0,
+        properties={"terminals": "15-16", "delayed": "NC"},
+    )
+    m_tr_nc = make_member(c_tr_nc, "NC", "15-16")
+    assert contact_list_label(m_tr_nc, "nema", "parentheses")[0] == "(1-2 208)"
+    assert contact_list_label(m_tr_nc, "iec", "parentheses")[0] == "(15-16 /2.6)"
+
+    c_tr_no = Component(
+        id="TR1-18",
+        library_id="nema.contactors.aux_no",
+        x=0,
+        y=0,
+        properties={"terminals": "15-18", "delayed": "NO"},
+    )
+    m_tr_no = make_member(c_tr_no, "NO", "15-18")
+    assert contact_list_label(m_tr_no, "nema", "parentheses")[0] == "3-4 208"
+    assert contact_list_label(m_tr_no, "iec", "parentheses")[0] == "15-18 /2.6"
+
+    c_ol = Component(
+        id="OL1-95",
+        library_id="nema.contactors.ol_contact",
+        x=0,
+        y=0,
+        properties={"terminals": "95-96"},
+    )
+    m_ol = make_member(c_ol, "NC", "95-96")
+    assert contact_list_label(m_ol, "nema", "parentheses")[0] == "(95-96 208)"
+    assert contact_list_label(m_ol, "iec", "parentheses")[0] == "(95-96 /2.6)"
+
+
+def test_offpage_callout_reformats_bare_supply_ref_across_standards():
+    """Patch 3: offpage_callout reformats bare supply_ref xrefs across NEMA and IEC."""
+
+    from panelcad.api.session import Session
+    from panelcad.core.models import Component
+    from panelcad.core.xref import offpage_callout
+
+    s_nema = Session.create("op_nema")
+    s_nema.set_title_block(standard="NEMA/ANSI")
+    sheet_nema = s_nema.project.sheets[0]
+    sheet_nema.standard = "NEMA/ANSI"
+    sheet_nema.drawing_style = "ladder"
+
+    op_from_iec = Component(
+        id="OP1",
+        library_id="nema.interconnect.supply_ref",
+        x=0,
+        y=0,
+        properties={"callout": "/1.2", "net": "L1"},
+    )
+    assert offpage_callout(s_nema.project, s_nema.catalog, sheet_nema, op_from_iec) == "102"
+
+    op_pe_from_iec = Component(
+        id="OP3",
+        library_id="nema.interconnect.supply_ref",
+        x=0,
+        y=0,
+        properties={"callout": "PE /1.1", "net": "PE"},
+    )
+    assert offpage_callout(s_nema.project, s_nema.catalog, sheet_nema, op_pe_from_iec) == "PE 101"
+
+    s_iec = Session.create("op_iec")
+    s_iec.set_title_block(standard="IEC")
+    sheet_iec = s_iec.project.sheets[0]
+    sheet_iec.standard = "IEC"
+    sheet_iec.drawing_style = "iec"
+
+    op_from_nema = Component(
+        id="OP1",
+        library_id="iec.interconnect.supply_ref",
+        x=0,
+        y=0,
+        properties={"callout": "102", "net": "L1"},
+    )
+    assert offpage_callout(s_iec.project, s_iec.catalog, sheet_iec, op_from_nema) == "/1.2"

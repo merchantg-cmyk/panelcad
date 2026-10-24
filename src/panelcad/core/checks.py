@@ -2030,19 +2030,25 @@ def _catalog_match_findings(project: Project, catalog: Catalog, parts: Any = Non
 
 
 def _on_title_block(project: Project, catalog: Catalog) -> list[Finding]:
+    from panelcad.core.ink import schematic_ink_rect
     from panelcad.core.layout import symbol_body_size
-    from panelcad.render.titleblock import body_hits_title_block
+    from panelcad.render.titleblock import body_hits_title_block, title_block_rect
 
     findings: list[Finding] = []
     for sheet in project.sheets:
         if sheet.kind not in {"schematic", "io"}:
             continue
+        tx, ty, tw, _th = title_block_rect(sheet)
         for comp in sheet.components:
             device = _device(catalog, comp)
             if device is None:
                 continue
             width, height = symbol_body_size(sheet, device, comp)
-            if not body_hits_title_block(sheet, comp.x, comp.y, width, height):
+            hit = body_hits_title_block(sheet, comp.x, comp.y, width, height)
+            if not hit and str(comp.properties.get("role") or "") not in {"to", "from"}:
+                ink = schematic_ink_rect(device, comp.x, comp.y, comp.id, component=comp)
+                hit = ink[3] > ty + 1.0 and ink[2] > tx + 0.2 and ink[0] < tx + tw - 0.2
+            if not hit:
                 continue
             findings.append(
                 Finding(

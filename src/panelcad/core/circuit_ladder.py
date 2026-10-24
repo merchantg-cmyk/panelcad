@@ -128,7 +128,8 @@ def _contact_origins(
     gap = max(CONTACT_GAP, MIN_H_MM)
     reserve = RAIL_PAD
     if output is not None and id(output) not in placed:
-        reserve = _body(session, output)[0] + RAIL_PAD + gap
+        coil_buf = 0.0 if len(fresh) >= 4 else 22.0
+        reserve = _body(session, output)[0] + RAIL_PAD + gap + coil_buf
     limit = right - reserve
     return spread_row(cursor, limit, widths, gap)
 
@@ -149,7 +150,9 @@ def layout_rungs(
     left, right = rail_xs(sheet)
     wx, wy, _ww, wh = working_rect(sheet)
     max_y = wy + wh
-    pin_y = wy + 42.0
+    dense = len(rungs) >= 4
+    very_dense = len(rungs) >= 5
+    pin_y = wy + (36.0 if dense else 42.0)
     # A second circuit must start under parts already on the sheet. The contacts
     # this call is about to move are still sitting at their old coordinates, and
     # counting those would shove the next rung into the seal.
@@ -163,7 +166,9 @@ def layout_rungs(
             if getattr(part, "ref", ""):
                 moving.add(part.ref)
     for comp in sheet.components:
-        if comp.id in moving:
+        if comp.id in moving or "offpage" in (comp.library_id or ""):
+            continue
+        if any(p.ref == comp.id and p.role in {"psu", "transformer"} for p in (parts or [])):
             continue
         try:
             _width, height = _size(_device(session, comp.library_id))
@@ -173,8 +178,15 @@ def layout_rungs(
     for part in parts or []:
         if part.role in {"psu", "transformer"}:
             _w, height = _body(session, part)
+            if dense:
+                part.y = wy + (7.5 if very_dense else 10.0)
+                if getattr(part, "ref", ""):
+                    try:
+                        sheet.component(part.ref).y = part.y
+                    except KeyError:
+                        pass
             # First rung must clear the PSU body — later contacts sit under it.
-            pin_y = max(pin_y, part.y + height + 24.0)
+            pin_y = max(pin_y, part.y + height + (22.5 if very_dense else 24.0))
 
     def _fresh(rung: dict[str, Any], seen: set[int]) -> list[_Part]:
         return [
@@ -183,12 +195,22 @@ def layout_rungs(
             if p.role not in {"psu", "transformer"} and id(p) not in seen
         ]
 
-    def _headroom(items: list[_Part]) -> float:
+    def _is_pilot(part: _Part) -> bool:
+        return "pilot" in (part.role or "") or part.role in {"pilot_run", "pilot_fault", "pilot_fwd", "pilot_rev"}
+
+    def _has_top_tag(part: _Part, device: Any) -> bool:
+        from panelcad.core.ladder import is_aux_library
+        from panelcad.render.painter import is_control_coil
+
+        return not is_control_coil(device, part.library_id) and not is_aux_library(part.library_id)
+
+    def _headroom(items: list[_Part], *, as_output: bool = False) -> float:
         heads = []
         for part in items:
             device = _device(session, part.library_id)
             pin = part.align_pin or next((p.id for p in device.pins if p.side == "left"), device.pins[0].id)
-            heads.append(_pin_y(device, pin))
+            tag_pad = 3.5 if (as_output and _has_top_tag(part, device)) else 0.0
+            heads.append(_pin_y(device, pin) + tag_pad)
         return max(heads) if heads else 12.0
 
     placed: set[int] = set()
@@ -228,6 +250,7 @@ def layout_rungs(
                 if other.x - 2.0 <= cursor <= other.x + ow + 2.0:
                     cursor = other.x + ow + CONTACT_GAP
         rung_bottom = pin_y
+        non_seal_bottom = pin_y
         origins = _contact_origins(session, fresh, cursor, right, output, placed, span_lo is None)
         for index, part in enumerate(fresh):
             device = _device(session, part.library_id)
@@ -246,6 +269,7 @@ def layout_rungs(
             placed.add(id(part))
             placed_parts.append(part)
             rung_bottom = max(rung_bottom, part.y + height)
+            non_seal_bottom = max(non_seal_bottom, part.y + height)
         if output is not None and id(output) not in placed:
             device = _device(session, output.library_id)
             width, height = _size(device)
@@ -258,16 +282,22 @@ def layout_rungs(
             output.y = pin_y - _pin_y(device, pin_id)
             if output.x < cursor + 4.0:
                 output.x = min(cursor + 4.0, right - 8.0 - width)
+            out_tag_pad = 3.5 if _has_top_tag(output, device) else 0.0
             for other in placed_parts:
                 ow, oh = _body(session, other)
                 if output.x + width <= other.x or other.x + ow <= output.x:
                     continue
-                need = other.y + oh + BODY_GAP
+                need = other.y + oh + BODY_GAP + out_tag_pad
                 if output.y < need and output.y + height > other.y:
+                    delta = need - output.y
                     output.y = need
+                    pin_y += delta
+                    for p in fresh:
+                        p.y += delta
             placed.add(id(output))
             placed_parts.append(output)
             rung_bottom = max(rung_bottom, output.y + height)
+            non_seal_bottom = max(non_seal_bottom, output.y + height)
         seal: _Part | None = rung.get("seal")
         under: _Part | None = rung.get("seal_under")
         if seal is not None and under is not None:
@@ -292,24 +322,21 @@ def layout_rungs(
             placed.add(id(seal))
             placed_parts.append(seal)
             rung_bottom = max(rung_bottom, seal.y + sh)
-        upcoming = []
         if idx + 1 < len(rungs):
-            upcoming = _fresh(rungs[idx + 1], placed)
+            up_contacts = _fresh(rungs[idx + 1], placed)
             out_n = rungs[idx + 1].get("output")
-            if out_n is not None and id(out_n) not in placed:
-                upcoming.append(out_n)
-        head = _headroom(upcoming)
-        pilots_next = bool(
-            upcoming
-            and all("pilot" in (p.role or "") or p.role in {"pilot_run", "pilot_fault", "pilot_fwd", "pilot_rev"} for p in upcoming)
-        )
-        # LT sits at the bottom of the lamp; keep a full rung so it misses the next tag.
-        step = 48.0 if pilots_next else RUNG_PITCH
-        nxt = max(pin_y + step, rung_bottom + head + BODY_GAP)
-        if nxt + 20.0 > max_y:
-            floor = 46.0 if pilots_next else 26.0
-            nxt = min(nxt, max(pin_y + floor, max_y - 22.0))
-        pin_y = nxt
+            up_out = [out_n] if (out_n is not None and id(out_n) not in placed) else []
+            upcoming = up_contacts + up_out
+            c_head = _headroom(up_contacts) if up_contacts else 2.0
+            o_head = _headroom(up_out, as_output=True) if up_out else 0.0
+            pilots_curr = output is not None and _is_pilot(output)
+            pilots_next = bool(upcoming and all(_is_pilot(p) for p in upcoming))
+            # LT sits at the bottom of a lamp; keep a full step between consecutive lamps.
+            base_pitch = 29.0 if very_dense else (32.0 if dense else RUNG_PITCH)
+            step = (34.0 if dense else 48.0) if (pilots_curr and pilots_next) else base_pitch
+            need_c = rung_bottom + c_head + BODY_GAP
+            need_o = non_seal_bottom + o_head + BODY_GAP
+            pin_y = max(pin_y + step, need_c, need_o)
 
 
 def _in_out(session: Any, part: _Part, pins: Any) -> tuple[str, str]:
@@ -600,14 +627,18 @@ def _route_supply_clear_of_body(session: Any, sheet_id: str, supply: _Part, plus
     left, _right = rail_xs(page)
     wx, wy, _ww, _wh = working_rect(page)
     # Corridor between the rail header and the top of the PSU body.
-    over_y = max(wy + 3.0, min(comp.y - 4.0, py - 8.0))
+    over_y = max(wy + 1.0, min(comp.y - 6.8, py - 8.0))
     stub_x = px + 6.0
+    rail_clear_x = left + 12.0
     plus = f"{supply.ref}.{plus_pin}"
     for wire in page.wires:
         if plus in {wire.frm, wire.to} and hot in {wire.frm, wire.to}:
+            pts = [(stub_x, py), (stub_x, over_y), (rail_clear_x, over_y), (rail_clear_x, py)]
+            if wire.frm == hot:
+                pts = list(reversed(pts))
             session.set_wire_route(
                 wire.id,
-                [(stub_x, py), (stub_x, over_y), (left + 1.0, over_y)],
+                pts,
                 sheet_id=sheet_id,
             )
             return
@@ -1580,8 +1611,22 @@ def route_rail_captions(session: Any, sheet_id: str | None) -> None:
     if not hot and not ret:
         return
     rails = {name for name in (hot, ret) if name}
+    from panelcad.core.pins import pin_caption
+
     iec = is_iec_column_sheet(page)
+    show_ids = iec or str(getattr(page, "standard", "") or "") == "IEC"
     wx, wy, ww, wh = working_rect(page)
+
+    def _left_ladder_has_cap(comp: Any, pin: Any) -> bool:
+        if pin_side_world(comp, pin) != "left":
+            return False
+        cap = pin_caption(pin, comp)
+        if not cap:
+            return False
+        if not show_ids and cap == pin.id:
+            return False
+        return True
+
     changed = False
     for wire in list(page.wires):
         if wire.points:
@@ -1617,7 +1662,7 @@ def route_rail_captions(session: Any, sheet_id: str | None) -> None:
             wire.points = elbow if wire.frm == pin_end else list(reversed(elbow))
             changed = True
             continue
-        if side not in {"left", "right"}:
+        if not _left_ladder_has_cap(comp, pin):
             continue
         rx, _ry, _side = rail_point(page, rail, py, hot, ret)
         if abs(rx - px) <= 9.0:
@@ -1653,10 +1698,10 @@ def route_rail_captions(session: Any, sheet_id: str | None) -> None:
         bx, by = pin_world(b_comp, b_pin)
         if abs(ax - bx) <= 9.0 and abs(ay - by) <= 9.0:
             continue
-        a_side = pin_side_world(a_comp, a_pin)
-        b_side = pin_side_world(b_comp, b_pin)
+        a_has = _left_ladder_has_cap(a_comp, a_pin)
+        b_has = _left_ladder_has_cap(b_comp, b_pin)
         if abs(ay - by) <= 0.6 and abs(ax - bx) > 9.0:
-            if a_side not in {"left", "right"} and b_side not in {"left", "right"}:
+            if not a_has and not b_has:
                 continue
             # Split the run so each caption sits on an 8 mm stub. The text check
             # ignores a stub whose midpoint is within 4 mm of its own pin. A jog
@@ -1676,7 +1721,7 @@ def route_rail_captions(session: Any, sheet_id: str | None) -> None:
             changed = True
             continue
         # Elbow onto a side pin: the long horizontal ends in the caption.
-        if abs(ay - by) > 0.6 and abs(ax - bx) > 18.0 and b_side in {"left", "right"}:
+        if abs(ay - by) > 0.6 and abs(ax - bx) > 18.0 and b_has:
             sign = 1.0 if bx > ax else -1.0
             wire.points = [Point(x=ax, y=by), Point(x=bx - 8.0 * sign, y=by)]
             changed = True

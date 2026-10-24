@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 from panelcad.convert.standard_map import (
+    CONTACT_PIN_MAP_TABLE,
     ENTRIES,
     NEMA_RAIL_ALIASES,
     RAILS,
@@ -336,3 +337,193 @@ def format_wire_number(
             q_num = (ord(b_val[0]) - ord("A") + 2) if b_val else 1
             return str(rule["seq_format"]).format(sheet=s_num, col=c_num, seq=q_num)
     return text
+
+
+_CONTACT_BY_IEC_TERMS: dict[str, dict[str, Any]] = {
+    str(row["iec_terminals"]): row for row in CONTACT_PIN_MAP_TABLE
+}
+_IEC_NO_AUX_PAIRS: set[str] = {
+    "13-14", "23-24", "33-34", "43-44", "53-54", "63-64", "73-74", "83-84",
+}
+_IEC_NC_AUX_PAIRS: set[str] = {
+    "11-12", "21-22", "31-32", "41-42", "51-52", "61-62", "71-72", "81-82",
+}
+_IEC_TIMER_NO_PAIRS: set[str] = {"15-18", "25-28"}
+_IEC_TIMER_NC_PAIRS: set[str] = {"15-16", "25-26"}
+_IEC_PIN_VALUE_TO_NEMA_NO: dict[str, str] = {
+    "13": "3", "14": "4",
+    "23": "3", "24": "4",
+    "33": "3", "34": "4",
+    "43": "3", "44": "4",
+    "53": "3", "54": "4",
+    "63": "3", "64": "4",
+    "73": "3", "74": "4",
+    "83": "3", "84": "4",
+    "15": "3", "18": "4",
+    "25": "3", "28": "4",
+}
+_IEC_PIN_VALUE_TO_NEMA_NC: dict[str, str] = {
+    "11": "1", "12": "2",
+    "21": "1", "22": "2",
+    "31": "1", "32": "2",
+    "41": "1", "42": "2",
+    "51": "1", "52": "2",
+    "61": "1", "62": "2",
+    "71": "1", "72": "2",
+    "81": "1", "82": "2",
+    "15": "1", "16": "2",
+    "25": "1", "26": "2",
+}
+
+
+def contact_pin_map_for(
+    terminals: str = "",
+    *,
+    state: str = "",
+    delayed: str = "",
+    kind: str = "",
+    slot: int = 1,
+) -> dict[str, Any] | None:
+    """Return the contact pin-map row matching ``terminals`` or ``(kind, state, delayed, slot)``."""
+    clean = str(terminals or "").strip().replace("/", "-")
+    if clean in _CONTACT_BY_IEC_TERMS:
+        return _CONTACT_BY_IEC_TERMS[clean]
+    d_up = str(delayed or "").strip().upper()
+    s_up = str(state or d_up or "").strip().upper()
+    k_lo = str(kind or "").strip().lower()
+    if not k_lo and clean.lower() in {"aux_no", "aux_nc", "operator_nc", "timer_nc", "timer_no", "ol_nc", "ol_no"}:
+        k_lo = clean.lower()
+    if k_lo == "ol_nc":
+        return _CONTACT_BY_IEC_TERMS["95-96"]
+    if k_lo == "ol_no":
+        return _CONTACT_BY_IEC_TERMS["97-98"]
+    if k_lo == "aux_nc" and not s_up:
+        s_up = "NC"
+    if k_lo == "aux_no" and not s_up:
+        s_up = "NO"
+    slot_num = max(1, int(slot or 1))
+    if clean in ("95-96", "97-98"):
+        return _CONTACT_BY_IEC_TERMS.get(clean)
+    if d_up == "NC" or k_lo == "timer_nc":
+        for row in CONTACT_PIN_MAP_TABLE:
+            if row.get("kind") == "timer_nc" and int(row.get("slot", 1)) == slot_num:
+                return row
+        return _CONTACT_BY_IEC_TERMS["15-16"]
+    if d_up == "NO" or k_lo == "timer_no":
+        for row in CONTACT_PIN_MAP_TABLE:
+            if row.get("kind") == "timer_no" and int(row.get("slot", 1)) == slot_num:
+                return row
+        return _CONTACT_BY_IEC_TERMS["15-18"]
+    if k_lo == "operator_nc":
+        return _CONTACT_BY_IEC_TERMS["11-12"]
+    if s_up == "NC" or clean == "1-2":
+        for row in CONTACT_PIN_MAP_TABLE:
+            if row.get("kind") == "aux_nc" and int(row.get("slot", 1)) == slot_num:
+                return row
+        return _CONTACT_BY_IEC_TERMS["21-22"]
+    if s_up == "NO" or clean == "3-4":
+        for row in CONTACT_PIN_MAP_TABLE:
+            if row.get("kind") == "aux_no" and int(row.get("slot", 1)) == slot_num:
+                return row
+        return _CONTACT_BY_IEC_TERMS["13-14"]
+    return None
+
+
+def convert_contact_terminals(
+    terminals: str,
+    target: str,
+    *,
+    state: str = "",
+    delayed: str = "",
+    kind: str = "",
+    slot: int = 1,
+) -> str:
+    """Convert a contact terminal pair (e.g. ``23-24`` or ``15-16``) to ``target`` standard."""
+    norm = normalize_standard(target)
+    clean = str(terminals or "").strip().replace("/", "-")
+    if clean in ("95-96", "97-98"):
+        return clean
+    row = contact_pin_map_for(clean, state=state, delayed=delayed, kind=kind, slot=slot)
+    if norm == "NEMA/ANSI":
+        if row is not None:
+            return str(row["nema_terminals"])
+        if clean in _IEC_NO_AUX_PAIRS or clean in _IEC_TIMER_NO_PAIRS:
+            return "3-4"
+        if clean in _IEC_NC_AUX_PAIRS or clean in _IEC_TIMER_NC_PAIRS:
+            return "1-2"
+        return clean
+    if row is not None:
+        return str(row["iec_terminals"])
+    return clean
+
+
+def convert_contact_pin_labels(
+    pin_labels: dict[str, Any],
+    pin_map: dict[str, str],
+    target: str,
+    *,
+    state: str = "",
+    delayed: str = "",
+    slot: int = 1,
+) -> dict[str, str]:
+    """Remap ``pin_labels`` keys and contact-number values across standards."""
+    norm = normalize_standard(target)
+    d_up = str(delayed or "").strip().upper()
+    s_up = str(state or d_up or "").strip().upper()
+    is_nc = s_up == "NC" or "11" in pin_map or "21" in pin_map or "1" in pin_map
+    out: dict[str, str] = {}
+    default_to_nema = {"11": "1", "12": "2", "21": "1", "22": "2", "13": "3", "14": "4"}
+    default_to_iec = {"1": "21", "2": "22", "3": "13", "4": "14"}
+    for k, v in (pin_labels or {}).items():
+        ks = str(k)
+        if ks in pin_map:
+            new_k = pin_map[ks]
+        elif not pin_map and norm == "NEMA/ANSI" and ks in default_to_nema:
+            new_k = default_to_nema[ks]
+        elif not pin_map and norm == "IEC" and ks in default_to_iec:
+            new_k = default_to_iec[ks]
+        else:
+            new_k = ks
+        val = str(v)
+        if norm == "NEMA/ANSI":
+            table = _IEC_PIN_VALUE_TO_NEMA_NC if is_nc else _IEC_PIN_VALUE_TO_NEMA_NO
+            new_v = table.get(val, val)
+        else:
+            row = contact_pin_map_for(state="NC" if is_nc else "NO", delayed=d_up, slot=slot)
+            if row is not None and val in row["pins_nema_to_iec"]:
+                new_v = str(row["pins_nema_to_iec"][val])
+            else:
+                new_v = val
+        out[new_k] = new_v
+    return out
+
+
+def convert_contact_number(
+    contact_no: str,
+    target: str,
+    *,
+    state: str = "",
+    delayed: str = "",
+    slot: int = 1,
+) -> str:
+    """Convert a single contact number (``13``, ``23``, ``11``, ``21``, ``15``, ``18``, ``95``, ``97``) to ``target``."""
+    norm = normalize_standard(target)
+    clean = str(contact_no or "").strip()
+    if not clean:
+        return clean
+    if clean in ("95", "96", "97", "98"):
+        return clean
+    d_up = str(delayed or "").strip().upper()
+    s_up = str(state or d_up or "").strip().upper()
+    if norm == "NEMA/ANSI":
+        if clean in _IEC_PIN_VALUE_TO_NEMA_NC and (s_up == "NC" or clean in {"11", "12", "21", "22", "31", "32", "41", "42", "16", "26"}):
+            return _IEC_PIN_VALUE_TO_NEMA_NC[clean]
+        if clean in _IEC_PIN_VALUE_TO_NEMA_NO:
+            return _IEC_PIN_VALUE_TO_NEMA_NO[clean]
+        return clean
+    row = contact_pin_map_for(state=s_up or ("NC" if clean in {"1", "2"} else "NO"), delayed=d_up, slot=slot)
+    if row is not None:
+        if clean in row["pins_nema_to_iec"]:
+            return str(row["pins_nema_to_iec"][clean])
+        return str(row["iec_contact_no"])
+    return clean

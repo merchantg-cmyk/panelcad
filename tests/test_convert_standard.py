@@ -1684,3 +1684,258 @@ def test_terminal_and_wire_number_format_tables(tmp_path: Path):
     to_iec = _convert(session, "iec", tmp_path, "terminals-iec")
     assert to_iec["connection_check"]["ok"] is True
     assert {comp.id for comp in session.project.sheets[0].components} == {"-X1:1", "-X1:3"}
+
+
+def test_contact_pin_map_table_and_helpers():
+    """Patch 3 contact pin/terminal table covers NO, NC, timed, and overload contacts."""
+
+    from panelcad.convert.table import (
+        CONTACT_PIN_MAP_TABLE,
+        contact_pin_map_for,
+        convert_contact_number,
+        convert_contact_pin_labels,
+        convert_contact_terminals,
+        counterpart,
+    )
+
+    assert len(CONTACT_PIN_MAP_TABLE) == 14
+    # selector_no added to symbol counterpart table
+    entry = counterpart("iec.operators.selector_no", "NEMA/ANSI")
+    assert entry == "nema.operators.selector_no"
+    assert contact_pin_map_for("aux_no", slot=2)["iec_terminals"] == "23-24"
+    assert contact_pin_map_for("aux_no", slot=2)["nema_terminals"] == "3-4"
+    assert contact_pin_map_for("timer_nc")["iec_terminals"] == "15-16"
+    assert contact_pin_map_for("timer_no")["iec_terminals"] == "15-18"
+    assert contact_pin_map_for("ol_nc")["nema_terminals"] == "95-96"
+
+    for iec_terms in ("13-14", "23-24", "33-34", "43-44"):
+        assert convert_contact_terminals(iec_terms, "nema", state="NO") == "3-4"
+    for iec_terms in ("11-12", "21-22", "31-32", "41-42"):
+        assert convert_contact_terminals(iec_terms, "nema", state="NC") == "1-2"
+    assert convert_contact_terminals("15-16", "nema", state="NC", delayed="NC") == "1-2"
+    assert convert_contact_terminals("15-18", "nema", state="NO", delayed="NO") == "3-4"
+    assert convert_contact_terminals("95-96", "nema", state="NC") == "95-96"
+    assert convert_contact_terminals("97-98", "nema", state="NO") == "97-98"
+
+    assert convert_contact_terminals("3-4", "iec", state="NO", slot=1) == "13-14"
+    assert convert_contact_terminals("3-4", "iec", state="NO", slot=2) == "23-24"
+    assert convert_contact_terminals("1-2", "iec", state="NC", delayed="NC") == "15-16"
+    assert convert_contact_terminals("3-4", "iec", state="NO", delayed="NO") == "15-18"
+
+    assert convert_contact_pin_labels({"13": "23", "14": "24"}, {}, "nema", state="NO") == {
+        "3": "3",
+        "4": "4",
+    }
+    assert convert_contact_pin_labels({"21": "15", "22": "16"}, {}, "nema", state="NC", delayed="NC") == {
+        "1": "1",
+        "2": "2",
+    }
+    assert convert_contact_number("23", "nema", state="NO") == "3"
+    assert convert_contact_number("24", "nema", state="NO") == "4"
+    assert convert_contact_number("15", "nema", state="NC", delayed="NC") == "1"
+    assert convert_contact_number("16", "nema", state="NC", delayed="NC") == "2"
+    assert convert_contact_number("18", "nema", state="NO", delayed="NO") == "4"
+    assert convert_contact_number("95", "nema", state="NC") == "95"
+
+
+def test_star_delta_contact_numbering_and_coil_xref_tables_convert_both_ways(tmp_path: Path):
+    """Patch 3: star-delta multi-slot aux and timer contacts normalize in both directions."""
+
+    from panelcad.core.xref import xref_annotations
+
+    # IEC -> NEMA
+    s_iec = _session("sd_iec", "IEC")
+    _insert(s_iec, "star_delta", standard="IEC")
+    _convert(s_iec, "nema", tmp_path, "sd-iec-to-nema")
+    ctrl_nema = s_iec.project.sheets[1]
+    by_id = {c.id: c for c in ctrl_nema.components}
+
+    assert by_id["M1-23"].properties.get("terminals") == "3-4"
+    assert by_id["M1-23"].properties.get("pin_labels") == {"3": "3", "4": "4"}
+    assert by_id["TR1-16"].properties.get("terminals") == "1-2"
+    assert by_id["TR1-16"].properties.get("pin_labels") == {"1": "1", "2": "2"}
+    assert by_id["TR1-18"].properties.get("terminals") == "3-4"
+    assert by_id["TR1-18"].properties.get("pin_labels") == {"3": "3", "4": "4"}
+
+    anns_nema = {
+        (ann.sheet_id, ann.owner, ann.kind): ann.lines
+        for ann in xref_annotations(s_iec.project, s_iec.catalog)
+    }
+    assert all(not ln.startswith("23-24") for ln in anns_nema.get((ctrl_nema.id, "M1", "coil"), []))
+    assert [ln.split()[0] for ln in anns_nema.get((ctrl_nema.id, "M1", "coil"), [])] == ["3-4", "3-4", "poles"]
+    assert [ln.split()[0] for ln in anns_nema.get((ctrl_nema.id, "TR1", "coil"), [])] == ["1-2", "3-4"]
+    assert [ln.split()[0] for ln in anns_nema.get(("main", "OL1", "coil"), [])] == ["95-96"]
+
+    # NEMA -> IEC
+    s_nema = _session("sd_nema", "NEMA/ANSI")
+    _insert(s_nema, "star_delta", standard="NEMA/ANSI")
+    _convert(s_nema, "iec", tmp_path, "sd-nema-to-iec")
+    ctrl_iec = s_nema.project.sheets[1]
+    iec_mirrors = {
+        ann.owner: ann.lines
+        for ann in xref_annotations(s_nema.project, s_nema.catalog)
+        if ann.kind == "mirror" and ann.sheet_id == ctrl_iec.id
+    }
+    assert sorted(ln.split()[0] for ln in iec_mirrors.get("K1", [])) == ["13-14", "23-24"]
+    assert sorted(ln.split()[0] for ln in iec_mirrors.get("KT1", [])) == ["15-16", "15-18"]
+
+
+def test_reversing_and_soft_starter_multi_slot_contacts_convert_both_ways(tmp_path: Path):
+    """Patch 3: reversing (pilot=True) and soft-starter 2nd NO aux contacts convert cleanly."""
+
+    from panelcad.core.xref import xref_annotations
+
+    s_rev = _session("rev_iec", "IEC")
+    s_rev.insert_circuit(kind="reversing", control="local", standard="IEC", pilot_lights=True)
+    _convert(s_rev, "nema", tmp_path, "rev-iec-to-nema")
+    ctrl = s_rev.project.sheets[1]
+    coil_lines = {
+        ann.owner: ann.lines
+        for ann in xref_annotations(s_rev.project, s_rev.catalog)
+        if ann.kind == "coil" and ann.sheet_id == ctrl.id
+    }
+    for owner in ("M1", "M2"):
+        assert all(not ln.startswith("23-24") for ln in coil_lines.get(owner, []))
+
+    s_ss = _session("ss_nema", "NEMA/ANSI")
+    s_ss.insert_circuit(kind="soft_starter", control="local", standard="NEMA/ANSI", pilot_lights=True)
+    _convert(s_ss, "iec", tmp_path, "ss-nema-to-iec")
+    ctrl_ss = s_ss.project.sheets[1]
+    mirrors_ss = {
+        ann.owner: ann.lines
+        for ann in xref_annotations(s_ss.project, s_ss.catalog)
+        if ann.kind == "mirror" and ann.sheet_id == ctrl_ss.id
+    }
+    assert {"13-14", "23-24"}.issubset({ln.split()[0] for ln in mirrors_ss.get("U1", [])})
+
+
+def test_iec_mirror_ladder_sheet_converts_control_rails_and_round_trips(tmp_path: Path):
+    """Patch 3: build_iec_mirror() ladder sheet converts L+/0V control rails to 24V/0V and back."""
+
+    from panelcad.examples.xref_demo import build_iec_mirror
+
+    session = build_iec_mirror()
+    to_nema = _convert(session, "nema", tmp_path, "iec-mirror-nema")
+    assert to_nema["connection_check"]["ok"] is True
+    sheet = session.project.sheets[0]
+    assert sheet.rail_hot == "24V"
+    assert sheet.rail_return == "0V"
+    assert session.project.title_block.rail_hot == "24V"
+    assert all(w.frm != "L+" and w.to != "L+" for w in sheet.wires)
+    assert any(w.frm == "24V" for w in sheet.wires)
+
+    to_iec = _convert(session, "iec", tmp_path, "iec-mirror-iec")
+    assert to_iec["connection_check"]["ok"] is True
+    sheet_back = session.project.sheets[0]
+    assert sheet_back.rail_hot in {"L+", ""}
+    assert session.project.title_block.rail_hot == "L+"
+    assert any(w.frm == "L+" for w in sheet_back.wires)
+
+
+def test_hand_drawn_iec_column_sheet_relayouts_to_horizontal_nema_ladder_rungs(tmp_path: Path):
+    """Patch 3: hand-drawn IEC column sheet without roles converts to horizontal NEMA ladder rungs."""
+
+    session = _session("hand_iec_col", "IEC")
+    s1 = session.project.sheets[0]
+    s1.drawing_style = "iec"
+    s1.rail_hot = "L+"
+    s1.rail_return = "0V"
+
+    # Column 1: Stop S1, Start S2 + parallel seal-in K1-13, Coil K1
+    session.place("iec.operators.pb_nc", ref="S1", x=60, y=50, rotation=90)
+    session.place("iec.operators.pb_no", ref="S2", x=60, y=85, rotation=90)
+    c_seal = session.place("iec.contactors.aux_no", ref="K1-13", x=90, y=85, rotation=90)
+    c_seal.properties["parent"] = "K1"
+    c_seal.properties["terminals"] = "13-14"
+    c_seal.properties["pin_labels"] = {"13": "13", "14": "14"}
+    session.place("iec.contactors.coil", ref="K1", x=60, y=150, rotation=90)
+    session.wire("L+", "S1.11", net="L+")
+    session.wire("S1.12", "S2.13", net="W1")
+    session.wire("S1.12", "K1-13.13", net="W1")
+    session.wire("S2.14", "K1.A1", net="W2")
+    session.wire("K1-13.14", "K1.A1", net="W2")
+    session.wire("K1.A2", "0V", net="0V")
+
+    # Column 2: 2nd NO contact K1-23 (23-24) -> Timer KT1
+    c_k1_23 = session.place("iec.contactors.aux_no", ref="K1-23", x=140, y=70, rotation=90)
+    c_k1_23.properties["parent"] = "K1"
+    c_k1_23.properties["terminals"] = "23-24"
+    c_k1_23.properties["pin_labels"] = {"13": "23", "14": "24"}
+    session.place("iec.timers.on_delay", ref="KT1", x=140, y=150, rotation=90)
+    session.wire("L+", "K1-23.13", net="L+")
+    session.wire("K1-23.14", "KT1.A1", net="W3")
+    session.wire("KT1.A2", "0V", net="0V")
+
+    # Column 3: Timed NC contact KT1-16 (15-16) -> Pilot lamp H1
+    c_kt_nc = session.place("iec.contactors.aux_nc", ref="KT1-16", x=220, y=70, rotation=90)
+    c_kt_nc.properties["parent"] = "KT1"
+    c_kt_nc.properties["terminals"] = "15-16"
+    c_kt_nc.properties["pin_labels"] = {"21": "15", "22": "16"}
+    c_kt_nc.properties["delayed"] = "NC"
+    session.place("iec.operators.pilot_light", ref="P1", x=220, y=150, rotation=90)
+    session.wire("L+", "KT1-16.21", net="L+")
+    session.wire("KT1-16.22", "P1.X1", net="W4")
+    session.wire("P1.X2", "0V", net="0V")
+
+    to_nema = _convert(session, "nema", tmp_path, "hand-iec-col-nema")
+    assert to_nema["connection_check"]["ok"] is True
+    sheet = session.project.sheets[0]
+    assert sheet.drawing_style == "ladder"
+    assert (sheet.rail_hot, sheet.rail_return) == ("24V", "0V")
+
+    by_id = {c.id: c for c in sheet.components}
+    assert all(c.rotation == 0 for c in sheet.components)
+    # Series contacts left-to-right on rung 1, seal-in parallel below PB2, coil M1 at right
+    assert by_id["PB1"].x < by_id["PB2"].x < by_id["M1"].x
+    assert by_id["PB1"].y == by_id["PB2"].y
+    assert by_id["M1-13"].x == by_id["PB2"].x
+    assert by_id["M1-13"].y > by_id["PB2"].y
+    assert by_id["M1"].x >= 350.0
+    assert by_id["TR1"].x >= 350.0
+    assert by_id["PL1"].x >= 350.0
+
+    # Contact properties and xrefs in NEMA style
+    assert by_id["M1-23"].properties.get("terminals") == "3-4"
+    assert by_id["M1-23"].properties.get("pin_labels") == {"3": "3", "4": "4"}
+    assert by_id["TR1-16"].properties.get("terminals") == "1-2"
+    assert by_id["TR1-16"].properties.get("pin_labels") == {"1": "1", "2": "2"}
+    assert "3-4" in str(by_id["M1"].properties.get("xref") or "")
+    assert "23-24" not in str(by_id["M1"].properties.get("xref") or "")
+    assert "1-2" in str(by_id["TR1"].properties.get("xref") or "")
+
+    # Round-trip back to IEC restores columns and rotations
+    to_iec = _convert(session, "iec", tmp_path, "hand-iec-col-back")
+    assert to_iec["connection_check"]["ok"] is True
+    sheet_back = session.project.sheets[0]
+    assert sheet_back.drawing_style == "iec"
+    assert all(c.rotation == 90 for c in sheet_back.components)
+
+
+def test_dol_starter_control_sheet_clamps_above_title_block_and_tidies_waypoints(tmp_path: Path):
+    """Patch 3 R2: 01_dol_starter control sheet clamps PLC1/HMI1 above title_block_rect and clears backtracking waypoints."""
+
+    from panelcad.core.ink import schematic_ink_rect
+    from panelcad.render.label_avoid import resolve_labels
+    from panelcad.render.titleblock import title_block_rect, working_rect
+
+    session = Session.open(Path("examples/dol_starter.pcad.yaml"))
+    to_nema = _convert(session, "nema", tmp_path, "dol-example-nema")
+    assert to_nema["connection_check"]["ok"] is True
+
+    ctrl = session.sheet("control")
+    _wx, wy, _ww, _wh = working_rect(ctrl)
+    _tx, ty, _tw, _th = title_block_rect(ctrl)
+    for comp in ctrl.components:
+        dev = session.catalog.get(comp.library_id)
+        ink = schematic_ink_rect(dev, comp.x, comp.y, comp.id, component=comp)
+        assert ink[1] >= wy, (comp.id, ink[1], wy, "component encroaches on top border")
+        assert ink[3] <= ty - 2.0, (comp.id, ink[3], ty, "component encroaches on title block")
+
+    by_id = {c.id: c for c in ctrl.components}
+    assert by_id["PL1"].x - (by_id["PB2"].x + 24.0) >= 14.0
+    assert by_id["PL2"].x - (by_id["PL1"].x + 26.0) >= 14.0
+    w13 = next(w for w in ctrl.wires if w.id == "w13")
+    assert w13.points == []
+    res = resolve_labels(session.project, session.catalog, ctrl)
+    assert len(res.tags) == len(ctrl.components)
+    assert all(pt.y <= ty - 2.0 for pts in res.routes.values() for pt in pts)

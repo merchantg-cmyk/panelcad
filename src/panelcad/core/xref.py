@@ -492,6 +492,15 @@ def contact_list_label(contact: XrefMember, style: str, nc_mark: str) -> tuple[s
 
     loc = contact.location.display(style)
     terminals = contact_terminals(contact.comp, contact.device)
+    if style == "nema" and terminals:
+        from panelcad.convert.table import convert_contact_terminals
+
+        terminals = convert_contact_terminals(
+            terminals,
+            "NEMA/ANSI",
+            state=str(contact.state or ""),
+            delayed=str(contact.comp.properties.get("delayed") or ""),
+        )
     state = str(contact.state or "").upper()
     if terminals:
         body = f"{terminals} {loc}"
@@ -706,6 +715,33 @@ def offpage_needs_from(project: Project, catalog: Catalog, sheet: Sheet, comp: C
     return offpage_from_match(project, catalog, sheet, comp) is None
 
 
+
+
+_IEC_SLASH_REF_RE = re.compile(r"(?<![A-Za-z0-9])/(\d+)\.(\d+)\b")
+_NEMA_BARE_LINE_RE = re.compile(r"^(PE\s+)?([1-9])(\d{2})$")
+
+
+def _format_callout_for_style(callout: str, style: str) -> str:
+    """Convert bare offpage_ref callouts (/1.2 <-> 102, PE /1.1 <-> PE 101) to match sheet xref style."""
+
+    text = str(callout or "").strip()
+    if not text:
+        return ""
+    if style == "nema":
+        return _IEC_SLASH_REF_RE.sub(
+            lambda m: f"{int(m.group(1))}{int(m.group(2)):02d}",
+            text,
+        )
+    if style == "iec":
+        m = _NEMA_BARE_LINE_RE.match(text)
+        if m:
+            prefix = m.group(1) or ""
+            sheet_no = int(m.group(2))
+            col_no = int(m.group(3))
+            return f"{prefix}/{sheet_no}.{col_no}"
+    return text
+
+
 def offpage_callout(project: Project, catalog: Catalog, sheet: Sheet, comp: Component) -> str:
     peer = offpage_peer(project, catalog, sheet, comp)
     role = str(comp.properties.get("role") or "").lower()
@@ -724,7 +760,8 @@ def offpage_callout(project: Project, catalog: Catalog, sheet: Sheet, comp: Comp
             if other:
                 return f"{prefix} {other} {no}{extra}"
             return f"{prefix} {no}{extra}"
-        return str(comp.properties.get("callout") or "").strip()
+        raw_callout = str(comp.properties.get("callout") or "").strip()
+        return _format_callout_for_style(raw_callout, xref_style(project, sheet))
     dest_sheet, dest = peer
     dest_device = _device(catalog, dest)
     loc = component_location(project, dest_sheet, dest, dest_device)

@@ -706,6 +706,7 @@ def _route_specials(session: Any, sheet_id: str, parts: list[_Part], rungs: list
     ret = str(sheet.rail_return or "")
     supply = next((part for part in parts if part.role in {"psu", "transformer"}), None)
     if supply is not None:
+        _reposition_supply_refs(session, sheet, supply)
         plus = "X1" if supply.role == "transformer" else "plus"
         minus = "X2" if supply.role == "transformer" else "minus"
         if target_standard(target) == "IEC":
@@ -729,6 +730,45 @@ def _route_specials(session: Any, sheet_id: str, parts: list[_Part], rungs: list
 
     route_rail_captions(session, sheet_id)
     _clear_routed_text(session, sheet_id)
+
+
+
+
+def _reposition_supply_refs(session: Any, sheet: Any, supply: _Part) -> None:
+    """Keep L/N/PE off-page supply arrows docked 1.8 mm left of the supply input pins."""
+
+    from panelcad.render.sheet import pin_world
+
+    try:
+        sup_comp = sheet.component(supply.ref)
+        sup_dev = session.catalog.get(sup_comp.library_id)
+    except KeyError:
+        return
+    sup_pins = {p.id: p for p in sup_dev.pins}
+    for wire in sheet.wires:
+        a, b = str(wire.frm or ""), str(wire.to or "")
+        sup_end = a if a.startswith(f"{supply.ref}.") else (b if b.startswith(f"{supply.ref}.") else "")
+        other_end = b if sup_end == a else a
+        if not sup_end or "." not in other_end:
+            continue
+        pin_id = sup_end.split(".", 1)[1]
+        if pin_id not in sup_pins:
+            continue
+        op_ref, op_pid = other_end.split(".", 1)
+        try:
+            op_comp = sheet.component(op_ref)
+            op_dev = session.catalog.get(op_comp.library_id)
+            op_pin = op_dev.pin(op_pid)
+        except (KeyError, ValueError):
+            continue
+        if str(op_comp.properties.get("role") or "") != "supply_ref" and "offpage" not in str(op_comp.library_id or ""):
+            continue
+        px, py = pin_world(sup_comp, sup_pins[pin_id])
+        op_comp.rotation = 0  # type: ignore[assignment]
+        op_comp.scale = 1.0
+        op_comp.x = px - 1.8 - float(op_pin.x)
+        op_comp.y = py - float(op_pin.y)
+        wire.points = []
 
 
 def _pin(session: Any, part: _Part, which: str) -> str:
@@ -878,8 +918,11 @@ def _target_rail_pair(
                 follow_control=False,
             )
         kind = "dc"
+    stored = _stored_rails(session, str(sheet.id))
     alias = _nema_alias(session, sheet, target, old_hot, old_ret)
     if std == "IEC" and not columns and kind != "io":
+        if str(stored.get("from_hot") or "") in {"L+", "24V", "+24V", "X1", "L1"}:
+            return str(stored["from_hot"]), str(stored.get("from_ret") or old_ret or "0V")
         # A DOL / VFD control ladder keeps its rail words. Column circuits use L+/0V.
         if (old_hot, old_ret) in _LADDER_RAILS:
             return old_hot, old_ret
@@ -908,12 +951,27 @@ def apply_sheet_rails(
     kind = rail_kind(sheet, parts)
     old_hot = str(sheet.rail_hot or "")
     old_ret = str(sheet.rail_return or "")
+    tb = getattr(session.project, "title_block", None)
+    tb_hot = str(getattr(tb, "rail_hot", "") or "") if tb is not None else ""
+    tb_ret = str(getattr(tb, "rail_return", "") or "") if tb is not None else ""
+    if str(getattr(sheet, "drawing_style", "") or "") in {"ladder", "iec"}:
+        if not old_hot and tb_hot in {"L+", "24V", "+24V", "X1", "L1"}:
+            old_hot = tb_hot
+        if not old_ret and tb_ret in {"0V", "M", "X2", "N", "L2"}:
+            old_ret = tb_ret
+        sheet.rail_hot = old_hot
+        sheet.rail_return = old_ret
     std = target_standard(target)
     alias = _nema_alias(session, sheet, target, old_hot, old_ret)
     hot, ret = _target_rail_pair(session, sheet, target, parts, columns=columns)
     leaving = nema_alias_for(old_hot, old_ret) if std == "IEC" else (alias or nema_alias_for(hot, ret))
     sheet.rail_hot = hot
     sheet.rail_return = ret
+    if tb is not None and str(getattr(sheet, "drawing_style", "") or "") in {"ladder", "iec"}:
+        if tb_hot and tb_hot == old_hot and old_hot in {"L+", "24V", "+24V", "X1", "L1"}:
+            tb.rail_hot = hot
+        if tb_ret and tb_ret == old_ret and old_ret in {"0V", "M", "X2", "N", "L2"}:
+            tb.rail_return = ret
     rename = _rail_rename(old_hot, old_ret, hot, ret)
     if rename:
         for wire in sheet.wires:
@@ -980,6 +1038,7 @@ def relayout_sheet(session: Any, sheet_id: str, target: str) -> dict[str, str]:
     if left:
         record["unplaced"] = left
     if not parts:
+        _relayout_generic_sheet(session, sheet, std)
         clear_route_cache()
         return record
     arrange_control_ladder(session, sheet_id, parts, extra, key)
@@ -990,6 +1049,187 @@ def relayout_sheet(session: Any, sheet_id: str, target: str) -> dict[str, str]:
     _route_specials(session, sheet_id, parts, rungs, std)
     clear_route_cache()
     return record
+
+
+
+
+def _default_pin_y(session: Any, comp: Any) -> float:
+    try:
+        device = session.catalog.get(comp.library_id)
+    except KeyError:
+        return 0.0
+    for pin in device.pins:
+        if pin.side in {"left", "right"}:
+            return float(pin.y)
+    return float(device.pins[0].y) if device.pins else 0.0
+
+
+def _relayout_generic_sheet(session: Any, sheet: Any, std: str) -> None:
+    """Relayout a control sheet that has no Circuit Builder role metadata."""
+
+    from panelcad.core.geometry import Point
+    from panelcad.render.titleblock import working_rect
+
+    block = session.project.properties.get("convert_standard")
+    if not isinstance(block, dict):
+        block = {}
+        session.project.properties["convert_standard"] = block
+    pos_map = block.setdefault("positions", {})
+    if std == "IEC":
+        saved = pos_map.get(sheet.id)
+        if isinstance(saved, dict):
+            comp_saved = saved.get("components") or {}
+            for comp in sheet.components:
+                row = comp_saved.get(comp.id)
+                if isinstance(row, dict):
+                    comp.x = float(row.get("x", comp.x))
+                    comp.y = float(row.get("y", comp.y))
+                    comp.rotation = int(row.get("rotation", 0))  # type: ignore[assignment]
+                    comp.scale = float(row.get("scale", 1.0))
+            wire_saved = saved.get("wires") or {}
+            for wire in sheet.wires:
+                pts = wire_saved.get(wire.id)
+                if isinstance(pts, list):
+                    wire.points = [Point(x=float(p["x"]), y=float(p["y"])) for p in pts if isinstance(p, dict)]
+        return
+
+    if sheet.id not in pos_map:
+        pos_map[sheet.id] = {
+            "components": {
+                comp.id: {
+                    "x": float(comp.x),
+                    "y": float(comp.y),
+                    "rotation": int(comp.rotation or 0),
+                    "scale": float(comp.scale or 1.0),
+                }
+                for comp in sheet.components
+            },
+            "wires": {
+                wire.id: [{"x": float(pt.x), "y": float(pt.y)} for pt in (wire.points or [])]
+                for wire in sheet.wires
+            },
+        }
+
+    hot = str(sheet.rail_hot or "24V")
+    ret = str(sheet.rail_return or "0V")
+    parent: dict[str, str] = {}
+
+    def find(x: str) -> str:
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: str, b: str) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    for wire in sheet.wires:
+        a, b = str(wire.frm or ""), str(wire.to or "")
+        if a and b:
+            union(a, b)
+
+    by_id = {comp.id: comp for comp in sheet.components}
+    outputs: list[Any] = []
+    contacts: list[Any] = []
+    for comp in sheet.components:
+        lid = str(comp.library_id or "")
+        if "offpage" in lid or "power.psu" in lid or "transformer" in lid:
+            continue
+        try:
+            dev = session.catalog.get(lid)
+        except KeyError:
+            continue
+        pin_ids = [ str(p.id) for p in dev.pins ]
+        on_ret = any(find(f"{comp.id}.{pid}") == find(ret) for pid in pin_ids)
+        if on_ret or {"A1", "A2"} <= set(pin_ids) or (".coils." in lid and not lid.endswith((".aux_no", ".aux_nc", ".ol_contact"))):
+            outputs.append(comp)
+        elif len(pin_ids) == 2:
+            contacts.append(comp)
+
+    outputs.sort(key=lambda c: (float(c.x), float(c.y), c.id))
+    contacts.sort(key=lambda c: (float(c.y), float(c.x), c.id))
+    if not outputs:
+        return
+
+    wx, wy, ww, _wh = working_rect(sheet)
+    hot_net = find(hot)
+    used_contacts: set[str] = set()
+
+    def comp_nets(comp: Any) -> tuple[str, str] | None:
+        try:
+            dev = session.catalog.get(comp.library_id)
+        except KeyError:
+            return None
+        if len(dev.pins) < 2:
+            return None
+        p0, p1 = str(dev.pins[0].id), str(dev.pins[1].id)
+        return find(f"{comp.id}.{p0}"), find(f"{comp.id}.{p1}")
+
+    for idx, out_comp in enumerate(outputs):
+        rung_y = wy + 30.0 + idx * 32.0
+        try:
+            out_dev = session.catalog.get(out_comp.library_id)
+            out_pins = [str(p.id) for p in out_dev.pins]
+        except KeyError:
+            out_pins = ["A1", "A2"]
+        in_pin = next((pid for pid in out_pins if find(f"{out_comp.id}.{pid}") != find(ret)), out_pins[0] if out_pins else "A1")
+        target_net = find(f"{out_comp.id}.{in_pin}")
+
+        # BFS from hot_net to target_net through contacts
+        from collections import deque
+        queue: deque[tuple[str, list[Any]]] = deque([(hot_net, [])])
+        visited_nets: set[str] = {hot_net}
+        chain: list[Any] = []
+        while queue:
+            curr_net, path = queue.popleft()
+            if curr_net == target_net:
+                chain = path
+                break
+            for c in contacts:
+                if c.id in used_contacts or c in path:
+                    continue
+                nets = comp_nets(c)
+                if nets is None:
+                    continue
+                n0, n1 = nets
+                nxt = n1 if n0 == curr_net else (n0 if n1 == curr_net else None)
+                if nxt is not None and nxt not in visited_nets:
+                    visited_nets.add(nxt)
+                    queue.append((nxt, path + [c]))
+
+        for step_i, c in enumerate(chain):
+            used_contacts.add(c.id)
+            c.rotation = 0  # type: ignore[assignment]
+            c.scale = 1.0
+            c.x = wx + 46.0 + step_i * 36.0
+            c.y = rung_y - _default_pin_y(session, c)
+
+        # Find parallel contacts (e.g. seal-in) across any series contact in this chain
+        for under_c in chain:
+            u_nets = comp_nets(under_c)
+            if u_nets is None:
+                continue
+            u_set = frozenset(u_nets)
+            for c in contacts:
+                if c.id in used_contacts:
+                    continue
+                c_nets = comp_nets(c)
+                if c_nets is not None and frozenset(c_nets) == u_set:
+                    used_contacts.add(c.id)
+                    c.rotation = 0  # type: ignore[assignment]
+                    c.scale = 1.0
+                    c.x = under_c.x
+                    c.y = under_c.y + 18.0
+
+        out_comp.rotation = 0  # type: ignore[assignment]
+        out_comp.scale = 1.0
+        out_comp.x = wx + ww - 38.0
+        out_comp.y = rung_y - _default_pin_y(session, out_comp)
+
+    _clear_points(sheet)
 
 
 def sheet_is_target(project: Any, sheet: Any, target: str) -> bool:
