@@ -86,6 +86,11 @@ def normalize_edges(
     return rows
 
 
+def _is_offpage_end(end: str) -> bool:
+    ref = str(end or "").split(".", 1)[0]
+    return ref.startswith("OP") and ref[2:].isdigit()
+
+
 def same_netlist(
     before: list[tuple[str, str, str, str]],
     after: list[tuple[str, str, str, str]],
@@ -94,7 +99,46 @@ def same_netlist(
     pin_rewrites: list[dict[str, str]],
     rail_map: dict[str, dict[str, str]],
 ) -> bool:
-    return normalize_edges(after, tag_map=tag_map, pin_rewrites=pin_rewrites, rail_map=rail_map) == list(before)
+    from collections import Counter
+
+    norm = normalize_edges(after, tag_map=tag_map, pin_rewrites=pin_rewrites, rail_map=rail_map)
+    if norm == list(before):
+        return True
+    before_sheets = {s for s, _, _, _ in before}
+    after_sheets = {s for s, _, _, _ in norm}
+    if not (after_sheets and after_sheets < before_sheets):
+        return False
+    direct_before = Counter(
+        (a, b, num) for _s, a, b, num in before if not _is_offpage_end(a) and not _is_offpage_end(b)
+    )
+    direct_after = Counter(
+        (a, b, num) for _s, a, b, num in norm if not _is_offpage_end(a) and not _is_offpage_end(b)
+    )
+    if any(direct_after[k] < count for k, count in direct_before.items()):
+        return False
+    op_ends_before = {
+        a for _s, a, b, _n in before if _is_offpage_end(b) and not _is_offpage_end(a)
+    } | {
+        b for _s, a, b, _n in before if _is_offpage_end(a) and not _is_offpage_end(b)
+    }
+    rails_before = {
+        str(v)
+        for pair in rail_map.values()
+        for v in (pair.get("from_hot"), pair.get("from_ret"))
+        if v
+    }
+    for (a, b, _num) in (direct_after - direct_before):
+        if (a not in op_ends_before and a not in rails_before) or (
+            b not in op_ends_before and b not in rails_before
+        ):
+            return False
+    real_before = {
+        end for _s, a, b, _n in before for end in (a, b) if not _is_offpage_end(end)
+    }
+    real_after = {
+        end for _s, a, b, _n in norm for end in (a, b) if not _is_offpage_end(end)
+    }
+    return real_before == real_after
 
 
 def dump_rewrites(rows: list[dict[str, str]]) -> list[dict[str, Any]]:

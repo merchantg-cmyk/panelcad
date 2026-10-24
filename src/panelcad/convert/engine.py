@@ -20,6 +20,8 @@ from typing import Any
 from panelcad.convert.flags import sheet_flags, suggest_cleanup
 from panelcad.convert.layout_convert import (
     apply_sheet_rails,
+    consolidate_control_sheets,
+    is_power_sheet,
     needs_column_or_ladder,
     parts_on_sheet,
     rail_kind,
@@ -105,6 +107,99 @@ def conversion_plan(
         session._convert_workspace = Path(ws["path"])
         return _public(ws)
     std = target_standard(target)
+    orig_project: Project = session.project
+    unconsolidate_on_start = False
+    if std == "IEC" and _can_unconsolidate_for_iec(orig_project, sheets):
+        unconsolidated = _build_unconsolidated_project(orig_project)
+        session.project = unconsolidated
+        unconsolidate_on_start = True
+    try:
+        return _build_conversion_plan(
+            session,
+            std,
+            sheets=sheets,
+            out=out,
+            workspace=workspace,
+            keep_numbers=keep_numbers,
+            unconsolidate_on_start=unconsolidate_on_start,
+        )
+    finally:
+        if unconsolidate_on_start:
+            session.project = orig_project
+
+
+def _can_unconsolidate_for_iec(project: Project, sheets: list[str] | None) -> bool:
+    block = project.properties.get("convert_standard")
+    if not isinstance(block, dict):
+        return False
+    mp = block.get("multipage")
+    if not isinstance(mp, dict):
+        return False
+    kept = list(mp.get("kept_sheets") or [])
+    split_map = mp.get("split_nema_sheets")
+    if not kept or not isinstance(split_map, dict) or not split_map:
+        return False
+    present_ids = {s.id for s in project.sheets}
+    if not set(kept).issubset(present_ids):
+        return False
+    if sheets is not None:
+        req = {str(s).strip() for s in sheets if str(s).strip()}
+        if not set(kept).issubset(req):
+            return False
+    return True
+
+
+def _build_unconsolidated_project(project: Project) -> Project:
+    from panelcad.core.models import Sheet
+
+    copy_proj = Project.model_validate(project.model_dump(mode="json"))
+    block = copy_proj.properties.get("convert_standard") or {}
+    mp = block.get("multipage") or {}
+    kept_set = set(mp.get("kept_sheets") or [])
+    consolidated_from = list(mp.get("consolidated_from") or [])
+    sheet_order = list(mp.get("sheet_order") or [])
+    split_map = mp.get("split_nema_sheets") or {}
+
+    by_existing = {s.id: s for s in copy_proj.sheets if s.id not in kept_set}
+    restored_sheets = {
+        sid: Sheet.model_validate(sdata)
+        for sid, sdata in split_map.items()
+        if isinstance(sdata, dict)
+    }
+    new_sheets = []
+    seen: set[str] = set()
+    for sid in sheet_order:
+        if sid in restored_sheets and sid not in seen:
+            new_sheets.append(restored_sheets[sid])
+            seen.add(sid)
+        elif sid in by_existing and sid not in seen:
+            new_sheets.append(by_existing[sid])
+            seen.add(sid)
+    for sid in consolidated_from:
+        if sid in restored_sheets and sid not in seen:
+            new_sheets.append(restored_sheets[sid])
+            seen.add(sid)
+    for s in copy_proj.sheets:
+        if s.id not in kept_set and s.id not in seen:
+            new_sheets.append(s)
+            seen.add(s.id)
+    if new_sheets:
+        copy_proj.sheets = new_sheets
+    if isinstance(block, dict):
+        block.pop("multipage", None)
+    return copy_proj
+
+
+def _build_conversion_plan(
+    session: Any,
+    std: str,
+    *,
+    sheets: list[str] | None = None,
+    out: str | Path | None = None,
+    workspace: str | Path | None = None,
+    keep_numbers: bool = False,
+    unconsolidate_on_start: bool = False,
+) -> dict[str, Any]:
     project: Project = session.project
     if sheets is None:
         sheet_ids = [sheet.id for sheet in project.sheets]
@@ -180,6 +275,7 @@ def conversion_plan(
         "chunks": chunks,
         "source_project": project.model_dump(mode="json"),
         "working_project": None,
+        "unconsolidate_on_start": bool(unconsolidate_on_start),
         "unmapped_preview": _preview_unmapped(session, sheet_ids, std),
     }
     _save(ws)
@@ -325,6 +421,8 @@ def review(session: Any, workspace: str | Path | None = None) -> dict[str, Any]:
 
 
 def _wants_layout(sheet: Any, parts: list[Any], target: str) -> bool:
+    if is_power_sheet(sheet, parts):
+        return False
     if not needs_column_or_ladder(sheet, parts):
         return False
     # PLC I/O keeps a horizontal ladder. Its rails are the control pair
@@ -411,6 +509,12 @@ def _apply_symbols(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> N
     _assign_iec_family_contact_slots(session.project, ws["target"], wanted)
     _apply_ladder_only_rails(session, ws, chunk, sheet)
     _rebuild_power_routes(session, sheet)
+    has_layout = any(
+        c.get("kind") == "layout" and c.get("sheet") == sheet.id
+        for c in (ws.get("chunks") or [])
+    )
+    if not has_layout and str(getattr(sheet, "kind", "") or "") not in _LAYOUT_KINDS:
+        issues.extend(sheet_flags(session, sheet.id))
     chunk["issues"] = issues
     chunk["pin_rewrites"] = rewrites
     chunk["suggestion"] = suggest_cleanup(issues)
@@ -429,20 +533,8 @@ def _apply_ladder_only_rails(session: Any, ws: dict[str, Any], chunk: dict[str, 
         return
     if str(getattr(sheet, "kind", "") or "") in _LAYOUT_KINDS:
         return
-    _power_tokens = (
-        "motors.",
-        "loads.motor",
-        "breakers.mcb_3p",
-        "breakers.mccb",
-        "contactors.ac3",
-        "contactors.three_pole",
-        "drives.",
-        "starters.",
-    )
-    if any(
-        any(tok in str(getattr(c, "library_id", "") or "") for tok in _power_tokens)
-        for c in sheet.components
-    ):
+    if is_power_sheet(sheet):
+        _tidy_power_sheet(session, sheet)
         return
     std = target_standard(ws["target"])
     tb = getattr(session.project, "title_block", None)
@@ -474,6 +566,91 @@ def _apply_ladder_only_rails(session: Any, ws: dict[str, Any], chunk: dict[str, 
         block["rails"] = rails
         chunk["rail"] = record
     _tidy_non_layout_ladder_sheet(session, sheet, std, block)
+
+
+def _tidy_power_sheet(session: Any, sheet: Any) -> None:
+    """Ensure a 3-phase power sheet has no control ladder rails and de-crowd overlapping vertical feeders."""
+
+    from panelcad.render.sheet import pin_world
+    from panelcad.render.titleblock import title_block_rect, working_rect
+    from panelcad.render.wire_labels import boxes_overlap
+    from panelcad.render.wiring import clear_route_cache, component_obstacle
+
+    wire_ends = {str(w.frm or "") for w in sheet.wires} | {str(w.to or "") for w in sheet.wires}
+    hot = str(getattr(sheet, "rail_hot", "") or "")
+    ret = str(getattr(sheet, "rail_return", "") or "")
+    if str(getattr(sheet, "drawing_style", "") or "") in {"ladder", "iec"}:
+        if hot not in wire_ends and ret not in wire_ends:
+            sheet.drawing_style = "freeform"  # type: ignore[assignment]
+            sheet.rail_hot = ""
+            sheet.rail_return = ""
+
+    power_comps = [
+        c
+        for c in sheet.components
+        if str(c.properties.get("role") or "") not in {"to", "from"}
+        and "offpage" not in str(c.library_id or "").lower()
+    ]
+    if len(power_comps) < 2:
+        return
+    boxes: list[tuple[Any, tuple[float, float, float, float]]] = []
+    for c in power_comps:
+        try:
+            boxes.append((c, component_obstacle(sheet, session.catalog, c, pad=0.0)))
+        except Exception:  # noqa: BLE001
+            return
+    has_overlap = any(
+        boxes_overlap(ba, bb, pad=-0.5)
+        for i, (_ca, ba) in enumerate(boxes)
+        for _cb, bb in boxes[i + 1 :]
+    )
+    if not has_overlap:
+        return
+
+    xs = [float(c.x) for c in power_comps]
+    if max(xs) - min(xs) > 30.0:
+        return
+
+    ordered = sorted(boxes, key=lambda item: (float(item[0].y), float(item[0].x), item[0].id))
+    anchor_comp = ordered[0][0]
+    try:
+        anchor_dev = session.catalog.get(anchor_comp.library_id)
+        anchor_pxs = [
+            pin_world(anchor_comp, p)[0]
+            for p in anchor_dev.pins
+            if p.side in {"top", "bottom"}
+        ]
+        anchor_mid_x = (min(anchor_pxs) + max(anchor_pxs)) * 0.5 if anchor_pxs else float(anchor_comp.x) + 20.0
+    except Exception:  # noqa: BLE001
+        anchor_mid_x = float(anchor_comp.x) + 20.0
+
+    _wx, wy, _ww, _wh = working_rect(sheet)
+    _tx, ty, _tw, _th = title_block_rect(sheet)
+    heights = [float(b[3] - b[1]) for _c, b in ordered]
+    total_h = sum(heights)
+    avail_h = (ty - 1.5) - (wy + 5.0)
+    gap = 3.0
+    if total_h + gap * (len(ordered) - 1) > avail_h and len(ordered) > 1:
+        gap = max(1.0, (avail_h - total_h) / (len(ordered) - 1))
+    stack_h = total_h + gap * (len(ordered) - 1)
+    cur_y = max(wy + 5.0, min(float(ordered[0][0].y), (ty - 1.5) - stack_h))
+
+    for comp, box in ordered:
+        h = float(box[3] - box[1])
+        comp.y = round(cur_y, 1)
+        try:
+            dev = session.catalog.get(comp.library_id)
+            local_xs = [float(p.x) for p in dev.pins if p.side in {"top", "bottom"}]
+            if local_xs:
+                local_mid = (min(local_xs) + max(local_xs)) * 0.5
+                comp.x = round(anchor_mid_x - local_mid, 1)
+        except Exception:  # noqa: BLE001
+            pass
+        cur_y += h + gap
+
+    for wire in sheet.wires:
+        wire.points = []
+    clear_route_cache()
 
 
 def _tidy_non_layout_ladder_sheet(session: Any, sheet: Any, std: str, block: dict[str, Any]) -> None:
@@ -810,6 +987,54 @@ def _rebuild_power_routes(session: Any, sheet: Any) -> None:
     finish_power_routes(session, sheet.id, parts, kind)
 
 
+def _consolidatable_control_sheets(session: Any, ws: dict[str, Any]) -> list[str]:
+    if target_standard(ws.get("target") or "") != "NEMA/ANSI":
+        return []
+    src_proj_data = ws.get("source_project")
+    if not isinstance(src_proj_data, dict):
+        return []
+    src_proj = Project.model_validate(src_proj_data)
+    selected = set(ws.get("sheets") or [])
+    layout_sheets = {
+        str(c.get("sheet") or "")
+        for c in (ws.get("chunks") or [])
+        if c.get("kind") == "layout"
+    }
+    _power_tokens = (
+        "motors.",
+        "loads.motor",
+        "breakers.mcb_3p",
+        "breakers.mccb",
+        "contactors.ac3",
+        "contactors.three_pole",
+        "drives.",
+        "starters.",
+    )
+    ctrl_sids: list[str] = []
+    for sh in src_proj.sheets:
+        if sh.id not in selected or sh.id not in layout_sheets:
+            continue
+        if str(getattr(sh, "kind", "") or "") in _LAYOUT_KINDS:
+            continue
+        if any(
+            any(tok in str(getattr(c, "library_id", "") or "").lower() for tok in _power_tokens)
+            for c in sh.components
+        ):
+            continue
+        if any(
+            str(c.properties.get("role") or "") == "plc"
+            or ".plc" in str(getattr(c, "library_id", "") or "").lower()
+            for c in sh.components
+        ):
+            continue
+        parts = parts_on_sheet(session, sh)
+        rk = rail_kind(sh, parts)
+        if rk in {"power", "io"}:
+            continue
+        ctrl_sids.append(sh.id)
+    return ctrl_sids if len(ctrl_sids) >= 2 else []
+
+
 def _apply_layout(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> None:
     sheet_id = str(chunk["sheet"])
     record = relayout_sheet(session, sheet_id, ws["target"])
@@ -826,6 +1051,43 @@ def _apply_layout(session: Any, ws: dict[str, Any], chunk: dict[str, Any]) -> No
     rails[sheet_id] = record
     block["rails"] = rails
     chunk["rail"] = record
+
+    ctrl_sids = _consolidatable_control_sheets(session, ws)
+    if sheet_id in ctrl_sids:
+        pre_map = ws.setdefault("pre_consolidate_sheets", {})
+        pre_map[sheet_id] = session.sheet(sheet_id).model_dump(mode="json")
+        done_layouts = {
+            str(c.get("sheet") or "")
+            for c in (ws.get("chunks") or [])
+            if c.get("kind") == "layout" and (c.get("status") in {"done", "accepted"} or c is chunk)
+        }
+        if set(ctrl_sids).issubset(done_layouts):
+            sheet_order = [s.id for s in session.project.sheets]
+            c_info = consolidate_control_sheets(session, ctrl_sids)
+            block["multipage"] = {
+                "consolidated_from": list(ctrl_sids),
+                "kept_sheets": list(c_info["kept_sheets"]),
+                "removed_sheets": list(c_info["removed_sheets"]),
+                "target_for_sheet": dict(c_info.get("target_for_sheet") or {}),
+                "sheet_order": sheet_order,
+                "split_nema_sheets": dict(pre_map),
+            }
+            kept_set = set(c_info["kept_sheets"])
+            for c_item in ws.get("chunks") or []:
+                if c_item.get("kind") != "layout":
+                    continue
+                c_sid = str(c_item.get("sheet") or "")
+                if c_sid not in ctrl_sids:
+                    continue
+                if c_sid in kept_set:
+                    c_issues = sheet_flags(session, c_sid)
+                    c_item["issues"] = c_issues
+                    c_item["suggestion"] = suggest_cleanup(c_issues)
+                else:
+                    c_item["issues"] = []
+                    c_item["suggestion"] = suggest_cleanup([])
+            return
+
     issues = sheet_flags(session, sheet_id)
     for ref in record.get("unplaced") or []:
         issues.append(
@@ -847,6 +1109,9 @@ def _swap_one(
     issues: list[dict[str, Any]],
     rewrites: list[dict[str, str]],
 ) -> None:
+    low_lib = str(comp.library_id or "").lower()
+    if "offpage" in low_lib or "junction" in low_lib or "connection.node" in low_lib:
+        return
     new_lib = counterpart(comp.library_id, target)
     if new_lib is None:
         issues.append(_unmapped_issue(session, comp, sheet.id))
@@ -1235,6 +1500,8 @@ def _target_prefix(session: Any, project: Project, fam: dict[str, Any], target: 
     role = str(leader.get("role") or "")
     parsed = parse_device_tag(leader["id"])
     src_prefix = parsed[0] if parsed else ""
+    if "offpage" in lib_id.lower() or "junction" in lib_id.lower() or "connection.node" in lib_id.lower():
+        return src_prefix or "OP"
     mapped = counterpart(lib_id, target)
     if mapped:
         lib_id = mapped
@@ -1489,6 +1756,9 @@ def _preview_unmapped(session: Any, sheet_ids: list[str], target: str) -> list[d
         if sheet.id not in selected:
             continue
         for comp in sheet.components:
+            low_lib = str(comp.library_id or "").lower()
+            if "offpage" in low_lib or "junction" in low_lib or "connection.node" in low_lib:
+                continue
             if counterpart(comp.library_id, target) is None:
                 rows.append(_unmapped_issue(session, comp, sheet.id))
     return rows
@@ -1517,12 +1787,19 @@ def _dependents(ws: dict[str, Any], chunk: dict[str, Any]) -> list[dict[str, Any
         return [
             item
             for item in ws["chunks"][index + 1 :]
-            if item["kind"] == "layout" and item.get("sheet") == chunk.get("sheet")
+            if item["kind"] == "layout"
+        ]
+    if chunk["kind"] == "layout":
+        return [
+            item
+            for item in ws["chunks"][index + 1 :]
+            if item["kind"] == "layout"
         ]
     return []
 
 
 def _rebuild(session: Any, ws: dict[str, Any]) -> None:
+    ws.pop("pre_consolidate_sheets", None)
     _install(session, Project.model_validate(ws["source_project"]))
     for chunk in ws["chunks"]:
         if chunk["status"] not in {"done", "accepted"}:
@@ -1531,8 +1808,12 @@ def _rebuild(session: Any, ws: dict[str, Any]) -> None:
 
 
 def _resume_working(session: Any, ws: dict[str, Any]) -> None:
-    if any(chunk["status"] in {"done", "accepted"} for chunk in ws["chunks"]) and ws.get("working_project"):
-        _install(session, Project.model_validate(ws["working_project"]))
+    if any(chunk["status"] in {"done", "accepted"} for chunk in ws["chunks"]):
+        if ws.get("working_project"):
+            _install(session, Project.model_validate(ws["working_project"]))
+        return
+    if ws.get("unconsolidate_on_start") and ws.get("source_project"):
+        _install(session, Project.model_validate(ws["source_project"]))
 
 
 def _install(session: Any, project: Project) -> None:

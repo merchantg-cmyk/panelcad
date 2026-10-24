@@ -306,6 +306,107 @@ def feature_iec_to_nema_convert(app, win) -> None:
               bool(chunks) and all(c.get("status") == "accepted" for c in chunks),
               str([(c.get("id"), c.get("status")) for c in chunks]))
 
+    # Step 2: Drive a 4-sheet multi-page IEC project (1 power + 3 control linked by offpage arrows)
+    mp_in = SCRATCH / "work" / "multipage_iec.pcad.yaml"
+    mp_out = SCRATCH / "work" / "multipage_iec-nema.pcad.yaml"
+    mp_doc = {'format': 'panelcad', 'version': '0.1', 'name': 'iec_conveyor_3page', 'properties': {}, 'title_block': {'company': '', 'address': '', 'logo': '', 'customer': '', 'location': '', 'drawing_number': '', 'drawn_by': '', 'checked_by': '', 'approved_by': '', 'scale': 'NTS', 'standard': 'IEC', 'drawing_style': '', 'coil_style': 'circle', 'rail_hot': 'L1', 'rail_return': 'L2', 'revisions': []}, 'sheets': [{'id': 'main', 'title': '1 - Main Power', 'description': '', 'kind': 'schematic', 'page': {'size': 'A3', 'orientation': 'landscape'}, 'components': [{'id': 'Q1', 'library_id': 'iec.breakers.mccb_3p_100a', 'x': 100.0, 'y': 55.0, 'rotation': 0, 'mirror': False, 'properties': {}}, {'id': 'K1', 'library_id': 'iec.contactors.ac3_9a', 'x': 100.0, 'y': 105.0, 'rotation': 0, 'mirror': False, 'properties': {}}, {'id': 'F1', 'library_id': 'iec.protection.overload_9a', 'x': 100.0, 'y': 150.0, 'rotation': 0, 'mirror': False, 'properties': {}}, {'id': 'M1', 'library_id': 'iec.loads.motor_3ph', 'x': 100.0, 'y': 200.0, 'rotation': 0, 'mirror': False, 'properties': {}}], 'wires': [{'id': 'w1', 'from': 'Q1.2', 'to': 'K1.L1', 'net': 'L1_1', 'label': 'L1_1', 'number': '101', 'points': []}, {'id': 'w2', 'from': 'K1.T1', 'to': 'F1.1', 'net': 'L1_2', 'label': 'L1_2', 'number': '102', 'points': []}, {'id': 'w3', 'from': 'F1.2', 'to': 'M1.U1', 'net': 'T1', 'label': 'T1', 'number': '103', 'points': []}, {'id': 'w4', 'from': 'Q1.4', 'to': 'K1.L2', 'net': 'L2_1', 'label': 'L2_1', 'number': '104', 'points': []}, {'id': 'w5', 'from': 'K1.T2', 'to': 'F1.3', 'net': 'L2_2', 'label': 'L2_2', 'number': '105', 'points': []}, {'id': 'w6', 'from': 'F1.4', 'to': 'M1.V1', 'net': 'T2', 'label': 'T2', 'number': '106', 'points': []}, {'id': 'w7', 'from': 'Q1.6', 'to': 'K1.L3', 'net': 'L3_1', 'label': 'L3_1', 'number': '107', 'points': []}, {'id': 'w8', 'from': 'K1.T3', 'to': 'F1.5', 'net': 'L3_2', 'label': 'L3_2', 'number': '108', 'points': []}, {'id': 'w9', 'from': 'F1.6', 'to': 'M1.W1', 'net': 'T3', 'label': 'T3', 'number': '109', 'points': []}], 'drawing_style': 'iec'}, {'id': 's1', 'title': '2 - Safety & Supply', 'description': '', 'kind': 'schematic', 'page': {'size': 'A3', 'orientation': 'landscape'}, 'components': [{'id': 'S1', 'library_id': 'iec.operators.estop', 'x': 70.0, 'y': 60.0, 'rotation': 90, 'mirror': False, 'properties': {}}, {'id': 'K0', 'library_id': 'iec.relays.cr', 'x': 70.0, 'y': 155.0, 'rotation': 90, 'mirror': False, 'properties': {}}, {'id': 'K0-13', 'library_id': 'iec.contactors.aux_no', 'x': 150.0, 'y': 75.0, 'rotation': 90, 'mirror': False, 'properties': {'parent': 'K0', 'terminals': '13-14', 'pin_labels': {'13': '13', '14': '14'}}}, {'id': 'OP1', 'library_id': 'iec.connection.offpage', 'x': 150.0, 'y': 155.0, 'rotation': 90, 'mirror': False, 'properties': {'label': '/2.1 L+_SAFE', 'link': 'L+_SAFE', 'role': 'to'}}], 'wires': [{'id': 'w10', 'from': 'L+', 'to': 'S1.11', 'net': 'L+', 'label': 'L+', 'number': 'L+', 'points': []}, {'id': 'w11', 'from': 'S1.12', 'to': 'K0.A1', 'net': 'N_ESTOP', 'label': 'N_ESTOP', 'number': '201', 'points': []}, {'id': 'w12', 'from': 'K0.A2', 'to': '0V', 'net': '0V', 'label': '0V', 'number': '0V', 'points': []}, {'id': 'w13', 'from': 'L+', 'to': 'K0-13.13', 'net': 'L+', 'label': 'L+', 'number': 'L+', 'points': []}, {'id': 'w14', 'from': 'K0-13.14', 'to': 'OP1.A', 'net': 'L+_SAFE', 'label': 'L+_SAFE', 'number': '202', 'points': []}], 'rail_hot': 'L+', 'rail_return': '0V', 'drawing_style': 'iec'}, {'id': 's2', 'title': '3 - Conveyor Drive', 'description': '', 'kind': 'schematic', 'page': {'size': 'A3', 'orientation': 'landscape'}, 'components': [{'id': 'OP2', 'library_id': 'iec.connection.offpage_from', 'x': 70.0, 'y': 35.0, 'rotation': 90, 'mirror': False, 'properties': {'label': '/1.2 L+_SAFE', 'link': 'L+_SAFE', 'role': 'from'}}, {'id': 'S2', 'library_id': 'iec.operators.pb_nc', 'x': 70.0, 'y': 65.0, 'rotation': 90, 'mirror': False, 'properties': {}}, {'id': 'S3', 'library_id': 'iec.operators.pb_no', 'x': 70.0, 'y': 100.0, 'rotation': 90, 'mirror': False, 'properties': {}}, {'id': 'K1-13', 'library_id': 'iec.contactors.aux_no', 'x': 105.0, 'y': 100.0, 'rotation': 90, 'mirror': False, 'properties': {'parent': 'K1', 'terminals': '13-14', 'pin_labels': {'13': '13', '14': '14'}}}, {'id': 'F1-95', 'library_id': 'iec.protection.ol_contact', 'x': 70.0, 'y': 135.0, 'rotation': 90, 'mirror': False, 'properties': {'parent': 'F1', 'terminals': '95-96'}}, {'id': 'K1', 'library_id': 'iec.contactors.coil', 'x': 70.0, 'y': 170.0, 'rotation': 90, 'mirror': False, 'properties': {}}, {'id': 'K1-23', 'library_id': 'iec.contactors.aux_no', 'x': 175.0, 'y': 75.0, 'rotation': 90, 'mirror': False, 'properties': {'parent': 'K1', 'terminals': '23-24', 'pin_labels': {'13': '23', '14': '24'}}}, {'id': 'KT1', 'library_id': 'iec.timers.on_delay', 'x': 175.0, 'y': 160.0, 'rotation': 90, 'mirror': False, 'properties': {}}, {'id': 'OP3', 'library_id': 'iec.connection.offpage', 'x': 230.0, 'y': 160.0, 'rotation': 90, 'mirror': False, 'properties': {'label': '/3.1 CONV_RUN', 'link': 'CONV_RUN', 'role': 'to'}}], 'wires': [{'id': 'w15', 'from': 'OP2.A', 'to': 'S2.11', 'net': 'L+_SAFE', 'label': 'L+_SAFE', 'number': '202', 'points': []}, {'id': 'w16', 'from': 'S2.12', 'to': 'S3.13', 'net': 'N_STOP', 'label': 'N_STOP', 'number': '301', 'points': []}, {'id': 'w17', 'from': 'S2.12', 'to': 'K1-13.13', 'net': 'N_STOP', 'label': 'N_STOP', 'number': '301', 'points': []}, {'id': 'w18', 'from': 'S3.14', 'to': 'F1-95.95', 'net': 'N_START', 'label': 'N_START', 'number': '302', 'points': []}, {'id': 'w19', 'from': 'K1-13.14', 'to': 'F1-95.95', 'net': 'N_START', 'label': 'N_START', 'number': '302', 'points': []}, {'id': 'w20', 'from': 'F1-95.96', 'to': 'K1.A1', 'net': 'N_COIL', 'label': 'N_COIL', 'number': '303', 'points': []}, {'id': 'w21', 'from': 'K1.A2', 'to': '0V', 'net': '0V', 'label': '0V', 'number': '0V', 'points': []}, {'id': 'w22', 'from': 'OP2.A', 'to': 'K1-23.13', 'net': 'L+_SAFE', 'label': 'L+_SAFE', 'number': '202', 'points': []}, {'id': 'w23', 'from': 'K1-23.14', 'to': 'KT1.A1', 'net': 'CONV_RUN', 'label': 'CONV_RUN', 'number': '304', 'points': []}, {'id': 'w24', 'from': 'K1-23.14', 'to': 'OP3.A', 'net': 'CONV_RUN', 'label': 'CONV_RUN', 'number': '304', 'points': []}, {'id': 'w25', 'from': 'KT1.A2', 'to': '0V', 'net': '0V', 'label': '0V', 'number': '0V', 'points': []}], 'rail_hot': 'L+', 'rail_return': '0V', 'drawing_style': 'iec'}, {'id': 's3', 'title': '4 - Annunciation', 'description': '', 'kind': 'schematic', 'page': {'size': 'A3', 'orientation': 'landscape'}, 'components': [{'id': 'OP4', 'library_id': 'iec.connection.offpage_from', 'x': 70.0, 'y': 35.0, 'rotation': 90, 'mirror': False, 'properties': {'label': '/2.2 CONV_RUN', 'link': 'CONV_RUN', 'role': 'from'}}, {'id': 'KT1-15', 'library_id': 'iec.contactors.aux_nc', 'x': 70.0, 'y': 80.0, 'rotation': 90, 'mirror': False, 'properties': {'parent': 'KT1', 'terminals': '15-16', 'pin_labels': {'21': '15', '22': '16'}, 'delayed': 'NC'}}, {'id': 'P1', 'library_id': 'iec.operators.pilot_light', 'x': 70.0, 'y': 160.0, 'rotation': 90, 'mirror': False, 'properties': {}}, {'id': 'KT1-27', 'library_id': 'iec.contactors.aux_no', 'x': 160.0, 'y': 80.0, 'rotation': 90, 'mirror': False, 'properties': {'parent': 'KT1', 'terminals': '27-28', 'pin_labels': {'13': '27', '14': '28'}, 'delayed': 'NO'}}, {'id': 'P2', 'library_id': 'iec.operators.pilot_light', 'x': 160.0, 'y': 160.0, 'rotation': 90, 'mirror': False, 'properties': {}}], 'wires': [{'id': 'w26', 'from': 'OP4.A', 'to': 'KT1-15.21', 'net': 'CONV_RUN', 'label': 'CONV_RUN', 'number': '304', 'points': []}, {'id': 'w27', 'from': 'KT1-15.22', 'to': 'P1.X1', 'net': 'N_HORN', 'label': 'N_HORN', 'number': '401', 'points': []}, {'id': 'w28', 'from': 'P1.X2', 'to': '0V', 'net': '0V', 'label': '0V', 'number': '0V', 'points': []}, {'id': 'w29', 'from': 'OP4.A', 'to': 'KT1-27.13', 'net': 'CONV_RUN', 'label': 'CONV_RUN', 'number': '304', 'points': []}, {'id': 'w30', 'from': 'KT1-27.14', 'to': 'P2.X1', 'net': 'N_RUN_LT', 'label': 'N_RUN_LT', 'number': '402', 'points': []}, {'id': 'w31', 'from': 'P2.X2', 'to': '0V', 'net': '0V', 'label': '0V', 'number': '0V', 'points': []}], 'rail_hot': 'L+', 'rail_return': '0V', 'drawing_style': 'iec'}]}
+    mp_in.write_text(yaml.safe_dump(mp_doc, sort_keys=False), encoding="utf-8")
+    from panelcad.theme import remember_project
+    remember_project(str(mp_in))
+    win._fill_recent_menu()
+    recent_act = next((a for a in win._recent_menu.actions() if getattr(a, "_path", None) == str(mp_in)), None)
+    check("multi-page project listed in File > Open Recent", recent_act is not None, str(mp_in))
+    if recent_act is not None:
+        recent_act.trigger()
+        app.processEvents()
+        QTest.qWait(150)
+    check("multi-page project opened (4 sheets)", len(win.session.project.sheets) == 4, str([s.id for s in win.session.project.sheets]))
+
+    def convert_mp_dialog(dlg):
+        dlg.path.selectAll()
+        QTest.keyClicks(dlg.path, str(mp_out))
+        buttons = {b.text(): b for b in dlg.findChildren(QPushButton)}
+        QTest.mouseClick(buttons["Convert"], Qt.MouseButton.LeftButton)
+        app.processEvents()
+        QTest.qWait(100)
+        thumb_after_s2 = dlg.findChild(QFrame, "thumb:After:s2")
+        check("merged sheet After thumbnail rendered", thumb_after_s2 is not None, "thumb:After:s2")
+        if thumb_after_s2 is not None:
+            QTest.mouseClick(thumb_after_s2, Qt.MouseButton.LeftButton)
+            app.processEvents()
+            QTest.qWait(80)
+            compare2 = dlg.findChild(QDialog, "convert-compare")
+            after_lbl = compare2.findChild(QLabel, "compare-image:After") if compare2 is not None else None
+            has_after_pix = after_lbl is not None and after_lbl.pixmap() is not None and not after_lbl.pixmap().isNull()
+            check("CompareDialog opened for merged sheet with consolidated After pixmap",
+                  compare2 is not None and compare2.isVisible() and has_after_pix,
+                  f"{compare2.windowTitle() if compare2 is not None else 'none'} pix={has_after_pix}")
+            if compare2 is not None:
+                shot(compare2, "convert-mp-compare-dialog")
+                compare2.close()
+                app.processEvents()
+        accept_btns = [b for b in dlg.findChildren(QPushButton) if b.objectName().startswith("accept:")]
+        mp_chunks = [b.objectName().split(":", 1)[1] for b in accept_btns]
+        check("multi-page layout chunks present",
+              {"s1:layout", "s2:layout", "s3:layout"} <= set(mp_chunks),
+              str(mp_chunks))
+        for cid in list(mp_chunks):
+            btn = dlg.findChild(QPushButton, f"accept:{cid}")
+            if btn is not None:
+                QTest.mouseClick(btn, Qt.MouseButton.LeftButton)
+                app.processEvents()
+        shot(dlg, "convert-mp-dialog-accepted")
+        close_btn = next((b for b in dlg.findChildren(QPushButton) if b.text() == "Close"), None)
+        if close_btn is not None:
+            QTest.mouseClick(close_btn, Qt.MouseButton.LeftButton)
+
+    pump2 = ModalPump(app, [convert_mp_dialog])
+    act.trigger()
+    for _ in range(40):
+        app.processEvents()
+        QTest.qWait(50)
+        if len(pump2.seen) >= 1:
+            break
+    pump2.timer.stop()
+    shot(win, "main-window-mp-after")
+    check("multi-page converted YAML written", mp_out.is_file() and mp_out.stat().st_size > 500, str(mp_out))
+    if mp_out.is_file():
+        shutil.copy2(mp_out, EVIDENCE / mp_out.name)
+        mp_data = yaml.safe_load(mp_out.read_text(encoding="utf-8"))
+        mp_sheets = mp_data.get("sheets") or []
+        check("3 IEC control sheets consolidated onto 1 NEMA ladder sheet (4 -> 2 total sheets)",
+              [s.get("id") for s in mp_sheets] == ["main", "s1"],
+              str([s.get("id") for s in mp_sheets]))
+        s1_comps = (mp_sheets[1].get("components") or []) if len(mp_sheets) >= 2 else []
+        s1_ids = {c["id"] for c in s1_comps}
+        s1_libs = {c["library_id"] for c in s1_comps}
+        check("zero off-page connectors remain on consolidated NEMA sheet",
+              not any("offpage" in lid for lid in s1_libs) and not any(cid.startswith("OP_") for cid in s1_ids),
+              str(sorted(s1_libs)))
+        check("all control devices from s1/s2/s3 consolidated onto s1",
+              {"ES1", "CR1", "PB1", "PB2", "M1", "PL1", "PL2"} <= s1_ids,
+              str(sorted(s1_ids)))
+        mp_ws_path = SCRATCH / "work" / "multipage_iec-nema.convert.json"
+        if mp_ws_path.is_file():
+            shutil.copy2(mp_ws_path, EVIDENCE / mp_ws_path.name)
+            mp_ws = json.loads(mp_ws_path.read_text(encoding="utf-8"))
+            mp_conn = mp_ws.get("connection_check") or {}
+            mp_meta = ((mp_data.get("properties") or {}).get("convert_standard") or {}).get("multipage") or {}
+            check("multi-page From-To scorer ok=True and multipage consolidation recorded",
+                  mp_conn.get("ok") is True and mp_meta.get("consolidated_from") == ["s1", "s2", "s3"] and mp_meta.get("kept_sheets") == ["s1"],
+                  json.dumps({"conn_ok": mp_conn.get("ok"), "consolidated_from": mp_meta.get("consolidated_from"), "kept_sheets": mp_meta.get("kept_sheets")}))
+        from panelcad.api.session import Session as _VerifySession
+        from panelcad.convert.flags import sheet_flags as _verify_sheet_flags
+        from panelcad.core.ladder import is_ladder_sheet as _verify_is_ladder
+        mp_loaded = _VerifySession.open(mp_out)
+        mp_all_flags = {sh.id: _verify_sheet_flags(mp_loaded, sh.id) for sh in mp_loaded.project.sheets}
+        main_sh = mp_loaded.sheet("main")
+        main_xs = {c.id: round(float(c.x), 1) for c in main_sh.components}
+        check("power sheet main has no ladder rails, components stay on feeder column, and zero geometry flags across all sheets",
+              not _verify_is_ladder(main_sh, mp_loaded.project)
+              and all(85.0 <= x <= 125.0 for x in main_xs.values())
+              and all(fl == [] for fl in mp_all_flags.values()),
+              json.dumps({"main_xs": main_xs, "flags": mp_all_flags}))
 
 FEATURES = {
     "print-package": ("sample_catalog.pcad.yaml", feature_print_package),

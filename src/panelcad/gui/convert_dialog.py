@@ -53,7 +53,19 @@ def sheet_thumbnail(project: Project, sheet_id: str, catalog: object, width: int
     try:
         sheet = project.sheet(sheet_id)
     except KeyError:
-        return None
+        cs_block = dict(project.properties.get("convert_standard") or {})
+        mp_block = dict(cs_block.get("multipage") or {})
+        consol = dict(mp_block.get("target_for_sheet") or dict(cs_block.get("consolidated") or {}).get("target_for_sheet") or {})
+        mapped = str(consol.get(sheet_id) or "")
+        if not mapped and sheet_id in (mp_block.get("removed_sheets") or []):
+            kept = list(mp_block.get("kept_sheets") or [])
+            mapped = str(kept[0]) if kept else ""
+        if not mapped:
+            return None
+        try:
+            sheet = project.sheet(mapped)
+        except KeyError:
+            return None
     try:
         from panelcad.render.page import paint_sheet
 
