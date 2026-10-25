@@ -8,17 +8,72 @@ from io import BytesIO
 from PIL import Image, ImageFilter
 
 
-def prepare_scan(image: Image.Image) -> tuple[Image.Image, dict[str, float]]:
-    """EXIF orientation, 90-degree auto-rotate, small deskew, then denoise.
+def prepare_scan(
+    image: Image.Image,
+    *,
+    rectify: bool = True,
+    normalize_lighting: bool = False,
+):
+    """EXIF orientation, 90-degree auto-rotate, 4-corner perspective dewarp, deskew, then denoise.
 
-    Returns the corrected image and the angles that were applied.
+    Returns a PreparedScan (which unpacks as ``(clean_image, metadata_dict)`` for
+    tuple callers while exposing ``.homography``, ``.perspective_quad``, and
+    ``.map_point()``).
     """
+    from .preprocess import (
+        PreparedScan,
+        normalize_camera_dpi,
+        normalize_illumination,
+        rectify_perspective,
+    )
+    import cv2
+    import numpy as np
+
+    raw_dpi = image.info.get("dpi")
+    dpi_tuple = None
+    if isinstance(raw_dpi, tuple) and len(raw_dpi) == 2:
+        try:
+            dpi_tuple = (float(raw_dpi[0]), float(raw_dpi[1]))
+        except (TypeError, ValueError):
+            dpi_tuple = None
 
     image = ImageOps_exif(image)
     turned, quarter = auto_rotate(image)
-    fixed, skew = deskew(turned)
+
+    work_img = turned
+    quad_list = None
+    homography = None
+    rectified = False
+    if rectify:
+        rect_img, quad_list, homography, rectified = rectify_perspective(turned)
+        if rectified:
+            work_img = rect_img
+
+    fixed, skew = deskew(work_img)
+    illum_applied = False
+    if normalize_lighting:
+        rgb = np.asarray(fixed.convert("RGB"), dtype=np.uint8)
+        gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        norm_gray, illum_applied = normalize_illumination(gray)
+        if illum_applied:
+            fixed = Image.fromarray(cv2.cvtColor(norm_gray, cv2.COLOR_GRAY2RGB))
+
     clean = denoise(fixed)
-    return clean, {"quarter_turns": float(quarter), "deskew_deg": skew}
+    eff_dpi, src_dpi, norm_dpi = normalize_camera_dpi(clean.width, clean.height, dpi_tuple)
+    if norm_dpi and eff_dpi is not None and dpi_tuple is not None:
+        clean.info["dpi"] = eff_dpi
+
+    return PreparedScan(
+        image=clean,
+        quarter_turns=quarter,
+        deskew_deg=skew,
+        rectified=rectified,
+        perspective_quad=quad_list,
+        homography=homography,
+        illumination_normalized=illum_applied,
+        effective_dpi=eff_dpi,
+        source_dpi=src_dpi,
+    )
 
 
 def ImageOps_exif(image: Image.Image) -> Image.Image:
@@ -255,8 +310,10 @@ def _text_score(image: Image.Image, pytesseract: object) -> float:
         )
     try:
         data = pytesseract.image_to_data(probe, output_type=pytesseract.Output.DICT, config="--psm 11")
-    except Exception:  # noqa: BLE001 — missing binary or a blank crop is not a rotation
-        return 0.0
+    except Exception:  # noqa: BLE001 — missing binary falls back to template probe
+        from .preprocess import fallback_probe_text_score
+
+        return fallback_probe_text_score(probe, _TAG_LIKE, _TITLE_WORD)
     total = 0.0
     for raw, conf in zip(data.get("text") or [], data.get("conf") or []):
         text = str(raw or "").strip().upper()

@@ -423,7 +423,10 @@ def _mark_caption_tags(devices: list[dict[str, Any]], tokens: list[dict[str, Any
 
 
 def _ink(gray: np.ndarray) -> np.ndarray:
-    blur = cv2.medianBlur(gray, 3)
+    from panelcad.importer.preprocess import normalize_illumination
+
+    norm, _changed = normalize_illumination(gray)
+    blur = cv2.medianBlur(norm, 3)
     return (blur < 180).astype(np.uint8)
 
 

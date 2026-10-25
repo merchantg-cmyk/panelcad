@@ -433,13 +433,31 @@ def _ingest_image(
         tokens=[],
     )
     record["prepare"] = angles
+    record["rectified"] = bool(angles.get("rectified", False))
+    if angles.get("perspective_quad") is not None:
+        record["perspective_quad"] = angles["perspective_quad"]
+    if angles.get("homography") is not None:
+        record["homography"] = angles["homography"]
+    if angles.get("illumination_normalized") is not None:
+        record["illumination_normalized"] = bool(angles["illumination_normalized"])
+    effective_dpi = (
+        round(float(corrected.width) * 25.4 / max(float(width_mm), 1e-6), 2),
+        round(float(corrected.height) * 25.4 / max(float(height_mm), 1e-6), 2),
+    )
     if dpi_note:
         record["dpi_note"] = dpi_note
         record["dpi_tag_ignored"] = True
-    if source_dpi:
+        if source_dpi:
+            record["source_dpi"] = round(float(source_dpi[0]), 3)
+        record["dpi"] = round(float(effective_dpi[0]), 3)
+        _save_upright(corrected, preview, image, dpi=effective_dpi)
+    elif source_dpi:
         record["dpi"] = round(float(source_dpi[0]), 3)
     elif dpi:
         record["dpi"] = float(dpi)
+    elif max(corrected.width, corrected.height) >= 1600:
+        record["dpi"] = round(float(effective_dpi[0]), 3)
+        _save_upright(corrected, preview, image, dpi=effective_dpi)
     workspace.write_json([], "pages", page_id, "words.json")
     workspace.write_json(record, "pages", page_id, "page.json")
     return record
@@ -483,6 +501,22 @@ def _image_dpi(image: Image.Image) -> tuple[float, float] | None:
             return None
         if xdpi >= 72 and ydpi >= 72:
             return xdpi, ydpi
+    try:
+        exif = image.getexif()
+        if exif:
+            xres = exif.get(282)
+            yres = exif.get(283)
+            unit = exif.get(296, 2)
+            if xres and yres:
+                xdpi = float(xres[0] / xres[1]) if isinstance(xres, tuple) else float(xres)
+                ydpi = float(yres[0] / yres[1]) if isinstance(yres, tuple) else float(yres)
+                if unit == 3:
+                    xdpi *= 2.54
+                    ydpi *= 2.54
+                if xdpi >= 72 and ydpi >= 72:
+                    return xdpi, ydpi
+    except Exception:  # noqa: BLE001
+        pass
     return None
 
 
@@ -506,7 +540,7 @@ _STANDARD_SHEETS_MM = (
 
 
 def _screen_dpi(xdpi: float, ydpi: float) -> bool:
-    return abs(xdpi - _SCREEN_DPI) <= _SCREEN_DPI_SLACK and abs(ydpi - _SCREEN_DPI) <= _SCREEN_DPI_SLACK
+    return 0.0 < xdpi <= 96.5 and 0.0 < ydpi <= 96.5
 
 
 def _near_standard_sheet(width_mm: float, height_mm: float, tol: float = 0.08) -> bool:
@@ -596,13 +630,15 @@ def resolve_sheet_size_mm(
     height = round(image.height / ydpi * 25.4, 3)
     if explicit or not _screen_dpi(xdpi, ydpi):
         return (width, height), ""
-    if _near_standard_sheet(width, height):
+    high_res_photo = max(int(image.width), int(image.height)) >= 1600
+    if not high_res_photo and _near_standard_sheet(width, height):
         return (width, height), ""
-    if max(width, height) <= _MAX_SHEET_MM:
+    if not high_res_photo and max(width, height) <= _MAX_SHEET_MM:
         return (width, height), ""
     assumed = _sheet_for_photo(int(image.width), int(image.height))
+    tag_label = "72 DPI" if abs(xdpi - _SCREEN_DPI) <= _SCREEN_DPI_SLACK else f"{xdpi:g} DPI"
     note = (
-        "72 DPI photo tag ignored; sheet size taken from the nearest standard sheet. "
+        f"{tag_label} photo tag ignored; sheet size taken from the nearest standard sheet. "
         f"The tag would have made this {width:.0f}×{height:.0f} mm."
     )
     return assumed, note
