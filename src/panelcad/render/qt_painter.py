@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRectF
+from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetricsF, QImage, QPainter, QPen
 
 from panelcad.render.painter import Painter
@@ -172,7 +172,10 @@ class QtPainter(Painter):
         self._fill = QColor(color) if color else None
 
     def _pen(self) -> QPen:
-        return QPen(self._stroke, self._sw)
+        pen = QPen(self._stroke, self._sw)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        return pen
 
     def _apply(self) -> None:
         self.qp.setPen(self._pen())

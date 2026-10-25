@@ -27,6 +27,8 @@ DEFAULT_DUCT_DEPTH_ALLOWANCE_MM = 25.0
 DEFAULT_STRIP_SLACK_MM = 30.0
 CUT_INCREMENT_MM = 10.0
 CUT_INCREMENT_IN = 0.5
+DEFAULT_BEND_RADIUS_DRAW_MM = 11.0
+CURVE_SAMPLES_PER_BEND = 16
 
 WIRE_BY_WIRE_COLUMNS: tuple[str, ...] = (
     "step",
@@ -277,6 +279,14 @@ class PanelWireRoute:
     to_landing: PinLanding | None = None
 
     @property
+    def smooth_points(self) -> list[tuple[float, float]]:
+        return self.points
+
+    @property
+    def length_2d_mm(self) -> float:
+        return self.path_2d_mm
+
+    @property
     def from_tag(self) -> str:
         return self.from_ref
 
@@ -327,6 +337,7 @@ class PanelWireRoute:
             "length_in": self.cut_length_in,
             "raw_length_mm": round(self.raw_length_mm, 1),
             "path_2d_mm": round(self.path_2d_mm, 1),
+            "length_2d_mm": round(self.path_2d_mm, 1),
             "points": [(round(x, 2), round(y, 2)) for x, y in self.points],
             "installed": "Yes" if self.installed else "No",
             "installed_bool": self.installed,
@@ -651,17 +662,27 @@ def _pick_entry_duct(
     return min(h_ducts, key=lambda d: abs(d.coord - landing.y))
 
 
+def _dedup_points(
+    pts: list[tuple[float, float]],
+    min_dist: float = 0.08,
+) -> list[tuple[float, float]]:
+    out: list[tuple[float, float]] = []
+    for x, y in pts:
+        p = (round(float(x), 3), round(float(y), 3))
+        if not out or math.hypot(p[0] - out[-1][0], p[1] - out[-1][1]) >= min_dist:
+            out.append(p)
+    if len(out) == 1 and len(pts) >= 2:
+        out.append((round(float(pts[-1][0]), 3), round(float(pts[-1][1]), 3)))
+    return out
+
+
 def _simplify_polyline(
     pts: list[tuple[float, float]],
     preserve: set[tuple[float, float]] | None = None,
 ) -> list[tuple[float, float]]:
     """Remove duplicate and collinear interior vertices while preserving explicit waypoints."""
 
-    dedup: list[tuple[float, float]] = []
-    for x, y in pts:
-        p = (round(float(x), 2), round(float(y), 2))
-        if not dedup or math.hypot(p[0] - dedup[-1][0], p[1] - dedup[-1][1]) > 0.05:
-            dedup.append(p)
+    dedup = _dedup_points(pts, min_dist=0.05)
     if len(dedup) <= 2:
         return dedup
     out: list[tuple[float, float]] = [dedup[0]]
@@ -686,16 +707,149 @@ def _polyline_length(pts: list[tuple[float, float]]) -> float:
     return total
 
 
+def max_turn_angle_deg(pts: list[tuple[float, float]], *, min_seg_len: float = 0.05) -> float:
+    """Return the maximum consecutive segment turn angle (in degrees, `0..180`) along `pts`.
+
+    A straight line has `0.0°` turn angle; a sharp right-angle 90° bend has `90.0°`.
+    Smoothly swept physical wires have small incremental turn angles (`< 22°` per step)
+    and zero 90° corners.
+    """
+
+    clean: list[tuple[float, float]] = []
+    for p in pts:
+        if not clean or math.hypot(p[0] - clean[-1][0], p[1] - clean[-1][1]) >= min_seg_len:
+            clean.append(p)
+    if len(clean) < 3:
+        return 0.0
+    worst = 0.0
+    for i in range(1, len(clean) - 1):
+        v1x = clean[i][0] - clean[i - 1][0]
+        v1y = clean[i][1] - clean[i - 1][1]
+        v2x = clean[i + 1][0] - clean[i][0]
+        v2y = clean[i + 1][1] - clean[i][1]
+        l1 = math.hypot(v1x, v1y)
+        l2 = math.hypot(v2x, v2y)
+        if l1 < 1e-6 or l2 < 1e-6:
+            continue
+        cos_t = max(-1.0, min(1.0, (v1x * v2x + v1y * v2y) / (l1 * l2)))
+        ang = math.degrees(math.acos(cos_t))
+        if ang > worst:
+            worst = ang
+    return round(worst, 2)
+
+
+def _sample_cubic_bezier(
+    p0: tuple[float, float],
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+    p3: tuple[float, float],
+    steps: int = CURVE_SAMPLES_PER_BEND,
+) -> list[tuple[float, float]]:
+    """Sample a cubic Bézier curve `B(t)` for `t in [0, 1]` into `steps + 1` points."""
+
+    n = max(8, int(steps))
+    out: list[tuple[float, float]] = []
+    for i in range(n + 1):
+        t = i / n
+        u = 1.0 - t
+        b0 = u * u * u
+        b1 = 3.0 * u * u * t
+        b2 = 3.0 * u * t * t
+        b3 = t * t * t
+        x = b0 * p0[0] + b1 * p1[0] + b2 * p2[0] + b3 * p3[0]
+        y = b0 * p0[1] + b1 * p1[1] + b2 * p2[1] + b3 * p3[1]
+        out.append((round(x, 3), round(y, 3)))
+    return out
+
+
+def _smooth_corner_fillet_polyline(
+    control_pts: list[tuple[float, float]],
+    *,
+    bend_radius: float = DEFAULT_BEND_RADIUS_DRAW_MM,
+    samples_per_corner: int = CURVE_SAMPLES_PER_BEND,
+) -> list[tuple[float, float]]:
+    """Replace every interior corner in `control_pts` with a smooth physical wire bend sweep.
+
+    Uses cubic Bézier circular-arc approximation (`kappa = 0.55228475`) with radius clamped
+    to adjacent segment lengths so consecutive bends never overlap or kink.
+    """
+
+    pts = _simplify_polyline(control_pts)
+    if len(pts) <= 2:
+        return pts
+
+    seg_lengths = [
+        math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1])
+        for i in range(len(pts) - 1)
+    ]
+
+    result: list[tuple[float, float]] = [pts[0]]
+    kappa = 0.55228475
+
+    for i in range(1, len(pts) - 1):
+        prev_pt = pts[i - 1]
+        curr_pt = pts[i]
+        next_pt = pts[i + 1]
+
+        len_in = seg_lengths[i - 1]
+        len_out = seg_lengths[i]
+        if len_in < 0.25 or len_out < 0.25:
+            result.append(curr_pt)
+            continue
+
+        ux_in = (curr_pt[0] - prev_pt[0]) / len_in
+        uy_in = (curr_pt[1] - prev_pt[1]) / len_in
+        ux_out = (next_pt[0] - curr_pt[0]) / len_out
+        uy_out = (next_pt[1] - curr_pt[1]) / len_out
+
+        dot = max(-1.0, min(1.0, ux_in * ux_out + uy_in * uy_out))
+        if dot > 0.999:
+            continue
+
+        limit_in = 0.82 * len_in if i == 1 else 0.46 * len_in
+        limit_out = 0.82 * len_out if i == len(pts) - 2 else 0.46 * len_out
+        r = min(float(bend_radius), limit_in, limit_out)
+        if r < 0.25:
+            result.append(curr_pt)
+            continue
+
+        entry = (curr_pt[0] - ux_in * r, curr_pt[1] - uy_in * r)
+        exit_ = (curr_pt[0] + ux_out * r, curr_pt[1] + uy_out * r)
+        c1 = (entry[0] + ux_in * r * kappa, entry[1] + uy_in * r * kappa)
+        c2 = (exit_[0] - ux_out * r * kappa, exit_[1] - uy_out * r * kappa)
+
+        curve = _sample_cubic_bezier(entry, c1, c2, exit_, steps=samples_per_corner)
+        result.extend(curve)
+
+    result.append(pts[-1])
+    return _dedup_points(result, min_dist=0.04)
+
+
+def _pin_lead_out_vector(landing: PinLanding) -> tuple[float, float]:
+    if landing.side == "top":
+        return (0.0, -1.0)
+    if landing.side == "bottom":
+        return (0.0, 1.0)
+    if landing.side == "left":
+        return (-1.0, 0.0)
+    return (1.0, 0.0)
+
+
 def _route_via_ducts(
     start: PinLanding,
     end: PinLanding,
     channels: list[_DuctChannel],
+    *,
+    bend_radius: float = DEFAULT_BEND_RADIUS_DRAW_MM,
 ) -> tuple[list[tuple[float, float]], list[str]]:
+    """Route a wire from `start` to `end` through Panduit wireway channels with smooth physical bends."""
+
     h_ducts = [c for c in channels if c.orientation == "h"]
     v_ducts = [c for c in channels if c.orientation == "v"]
     if not h_ducts:
         mid_y = round((start.y + end.y) / 2.0, 2)
-        return _simplify_polyline([(start.x, start.y), (start.x, mid_y), (end.x, mid_y), (end.x, end.y)]), ["direct"]
+        raw = [(start.x, start.y), (start.x, mid_y), (end.x, mid_y), (end.x, end.y)]
+        return _smooth_corner_fillet_polyline(raw, bend_radius=bend_radius), ["direct"]
 
     d_start = _pick_entry_duct(start, h_ducts)
     d_end = _pick_entry_duct(end, h_ducts)
@@ -707,7 +861,8 @@ def _route_via_ducts(
             (end.x, d_start.coord),
             (end.x, end.y),
         ]
-        return _simplify_polyline(pts), [d_start.id]
+        r_eff = max(bend_radius, min(14.0, d_start.width_mm * 0.75))
+        return _smooth_corner_fillet_polyline(pts, bend_radius=r_eff), [d_start.id]
 
     best_pts: list[tuple[float, float]] | None = None
     best_via: list[str] = []
@@ -731,7 +886,8 @@ def _route_via_ducts(
             best_via = [v for i, v in enumerate(via) if i == 0 or v != via[i - 1]]
 
     if best_pts is not None:
-        return best_pts, best_via
+        r_eff = max(bend_radius, min(14.0, d_start.width_mm * 0.75))
+        return _smooth_corner_fillet_polyline(best_pts, bend_radius=r_eff), best_via
 
     pts = [
         (start.x, start.y),
@@ -739,7 +895,83 @@ def _route_via_ducts(
         (end.x, d_start.coord),
         (end.x, end.y),
     ]
-    return _simplify_polyline(pts), [d_start.id]
+    return _smooth_corner_fillet_polyline(pts, bend_radius=bend_radius), [d_start.id]
+
+
+def _tie_tangent_vector(
+    idx: int,
+    ordered_ties: list[ZipTieWaypoint],
+    lead_start: tuple[float, float],
+    lead_end: tuple[float, float],
+) -> tuple[float, float]:
+    """Compute a smooth unit tangent vector `(tx, ty)` through `ordered_ties[idx]`
+    so all bundled wires pass through the zip-tie collar with a shared smooth tangent.
+    """
+
+    curr_pt = (float(ordered_ties[idx].x), float(ordered_ties[idx].y))
+    prev_pt = lead_start if idx == 0 else (float(ordered_ties[idx - 1].x), float(ordered_ties[idx - 1].y))
+    next_pt = lead_end if idx == len(ordered_ties) - 1 else (float(ordered_ties[idx + 1].x), float(ordered_ties[idx + 1].y))
+
+    v_in = (curr_pt[0] - prev_pt[0], curr_pt[1] - prev_pt[1])
+    v_out = (next_pt[0] - curr_pt[0], next_pt[1] - curr_pt[1])
+    lin = math.hypot(v_in[0], v_in[1])
+    lout = math.hypot(v_out[0], v_out[1])
+
+    if lin > 1e-6 and lout > 1e-6:
+        uin = (v_in[0] / lin, v_in[1] / lin)
+        uout = (v_out[0] / lout, v_out[1] / lout)
+        # Catmull-Rom / angle-bisector tangent so even wide or turning spans never fold back
+        bx = uin[0] + uout[0]
+        by = uin[1] + uout[1]
+        bn = math.hypot(bx, by)
+        if bn > 1e-4:
+            ux, uy = bx / bn, by / bn
+        else:
+            ux, uy = -uin[1], uin[0]
+    else:
+        vx = next_pt[0] - prev_pt[0]
+        vy = next_pt[1] - prev_pt[1]
+        norm = math.hypot(vx, vy)
+        if norm < 1e-6:
+            return (1.0, 0.0) if ordered_ties[idx].orientation == "v" else (0.0, 1.0)
+        ux, uy = vx / norm, vy / norm
+
+    tie = ordered_ties[idx]
+    if len(ordered_ties) == 1:
+        if tie.orientation == "h":
+            if abs(uy) >= 0.45:
+                bx, by = 0.35 * ux, (1.0 if uy >= 0 else -1.0)
+            else:
+                bx, by = ux, uy
+        else:
+            if abs(ux) >= 0.45:
+                bx, by = (1.0 if ux >= 0 else -1.0), 0.35 * uy
+            else:
+                bx, by = ux, uy
+        bn = math.hypot(bx, by) or 1.0
+        return (bx / bn, by / bn)
+
+    return (ux, uy)
+
+
+def _smooth_hermite_span(
+    p0: tuple[float, float],
+    t0: tuple[float, float],
+    p1: tuple[float, float],
+    t1: tuple[float, float],
+    *,
+    handle_scale: float = 0.36,
+    steps: int = 28,
+) -> list[tuple[float, float]]:
+    """Sample a smooth C1 cubic Bézier curve from `p0` (unit tangent `t0`) to `p1` (unit tangent `t1`)."""
+
+    dist = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+    if dist < 0.2:
+        return [p0, p1]
+    h = max(2.5, dist * handle_scale)
+    c1 = (p0[0] + t0[0] * h, p0[1] + t0[1] * h)
+    c2 = (p1[0] - t1[0] * h, p1[1] - t1[1] * h)
+    return _sample_cubic_bezier(p0, c1, c2, p1, steps=max(steps, int(dist / 1.8) + 14))
 
 
 def _route_via_zip_ties(
@@ -749,14 +981,19 @@ def _route_via_zip_ties(
     channels: list[_DuctChannel],
     draw_scale: float,
 ) -> tuple[list[tuple[float, float]], list[str]]:
-    """Route `start -> ties -> end` so captured wires converge at each ZipTieWaypoint."""
+    """Route `start -> ties -> end` using smooth physical spline curves (like `@cmzw_`'s zip-ties prototype).
+
+    Each wire exits its source terminal perpendicular to the device edge for a short lead-out,
+    sweeps along a smooth cubic spline into the zip-tie collar(s) (`(tie.x, tie.y)` is hit
+    exactly), follows the shared smooth trunk spline between consecutive zip-ties, and fans
+    out smoothly into the destination terminal lead-in. Zero 90° corners anywhere!
+    """
 
     h_ducts = [c for c in channels if c.orientation == "h"]
-    stub = max(4.0, 10.0 * draw_scale)
+    lead_len = max(3.5, min(7.0, 9.0 * draw_scale))
     d_start = _pick_entry_duct(start, h_ducts) if h_ducts else None
     d_end = _pick_entry_duct(end, h_ducts) if h_ducts else None
 
-    # Sort ties along the vector from start to end
     dx = end.x - start.x
     dy = end.y - start.y
     norm = math.hypot(dx, dy) or 1.0
@@ -765,45 +1002,75 @@ def _route_via_zip_ties(
         key=lambda t: ((t.x - start.x) * dx + (t.y - start.y) * dy) / norm,
     )
 
-    pts: list[tuple[float, float]] = [(start.x, start.y)]
+    s_dir = _pin_lead_out_vector(start)
+    e_dir_out = _pin_lead_out_vector(end)
+    e_dir_in = (-e_dir_out[0], -e_dir_out[1])
+
+    p_start = (float(start.x), float(start.y))
+    p_end = (float(end.x), float(end.y))
+    lead_start = (p_start[0] + s_dir[0] * lead_len, p_start[1] + s_dir[1] * lead_len)
+    lead_end = (p_end[0] + e_dir_out[0] * lead_len, p_end[1] + e_dir_out[1] * lead_len)
+
     via: list[str] = []
-
     first_tie = ordered[0]
-    exit_y0 = d_start.coord if (d_start is not None and abs(d_start.coord - first_tie.y) <= abs(start.y - first_tie.y) + stub) else (
-        start.y - stub if start.side == "top" else start.y + stub
-    )
-    if d_start is not None and abs(exit_y0 - d_start.coord) < 1.0:
-        via.append(d_start.id)
-    pts.append((start.x, exit_y0))
+    if d_start is not None and abs(d_start.coord - first_tie.y) <= abs(start.y - first_tie.y) + lead_len * 1.5:
+        if d_start.id not in via:
+            via.append(d_start.id)
 
-    # Converge into first zip-tie
-    if first_tie.orientation == "v":
-        pts.append((first_tie.x, exit_y0))
-        pts.append((first_tie.x, first_tie.y))
-    else:
-        pts.append((first_tie.x, exit_y0))
-        pts.append((first_tie.x, first_tie.y))
-    via.append(first_tie.id)
-
-    # Shared trunk between consecutive zip-ties
-    for prev_tie, next_tie in zip(ordered, ordered[1:]):
-        if abs(prev_tie.x - next_tie.x) > 0.2 and abs(prev_tie.y - next_tie.y) > 0.2:
-            pts.append((next_tie.x, prev_tie.y))
-        pts.append((next_tie.x, next_tie.y))
-        via.append(next_tie.id)
+    for t in ordered:
+        via.append(t.id)
 
     last_tie = ordered[-1]
-    exit_y1 = d_end.coord if (d_end is not None and abs(d_end.coord - last_tie.y) <= abs(end.y - last_tie.y) + stub) else (
-        end.y - stub if end.side == "top" else end.y + stub
-    )
-    pts.append((last_tie.x, exit_y1))
-    pts.append((end.x, exit_y1))
-    if d_end is not None and abs(exit_y1 - d_end.coord) < 1.0 and (not via or via[-1] != d_end.id):
-        via.append(d_end.id)
-    pts.append((end.x, end.y))
+    if d_end is not None and abs(d_end.coord - last_tie.y) <= abs(end.y - last_tie.y) + lead_len * 1.5:
+        if not via or via[-1] != d_end.id:
+            via.append(d_end.id)
 
-    preserve_pts = {(round(float(t.x), 2), round(float(t.y), 2)) for t in ordered}
-    return _simplify_polyline(pts, preserve=preserve_pts), via
+    tie_tangents = [
+        _tie_tangent_vector(idx, ordered, lead_start, lead_end)
+        for idx in range(len(ordered))
+    ]
+
+    pts: list[tuple[float, float]] = [p_start]
+    first_tie_pt = (float(first_tie.x), float(first_tie.y))
+    pts.extend(
+        _smooth_hermite_span(
+            lead_start,
+            s_dir,
+            first_tie_pt,
+            tie_tangents[0],
+            handle_scale=0.40,
+            steps=22,
+        )
+    )
+    pts.append((round(first_tie_pt[0], 2), round(first_tie_pt[1], 2)))
+
+    for idx in range(len(ordered) - 1):
+        p_a = (float(ordered[idx].x), float(ordered[idx].y))
+        p_b = (float(ordered[idx + 1].x), float(ordered[idx + 1].y))
+        span = _smooth_hermite_span(
+            p_a,
+            tie_tangents[idx],
+            p_b,
+            tie_tangents[idx + 1],
+            handle_scale=0.38,
+            steps=22,
+        )
+        pts.extend(span[1:])
+        pts.append((round(p_b[0], 2), round(p_b[1], 2)))
+
+    last_tie_pt = (float(last_tie.x), float(last_tie.y))
+    fan_out = _smooth_hermite_span(
+        last_tie_pt,
+        tie_tangents[-1],
+        lead_end,
+        e_dir_in,
+        handle_scale=0.40,
+        steps=22,
+    )
+    pts.extend(fan_out[1:])
+    pts.append(p_end)
+
+    return _dedup_points(pts, min_dist=0.04), via
 
 
 def list_zip_tie_waypoints(
@@ -954,7 +1221,8 @@ def route_panel_wires(
         if matching_ties:
             pts, via = _route_via_zip_ties(start, end, matching_ties, channels, draw_scale)
         else:
-            pts, via = _route_via_ducts(start, end, channels)
+            bend_r = max(9.0, min(14.0, 22.0 * draw_scale))
+            pts, via = _route_via_ducts(start, end, channels, bend_radius=bend_r)
 
         path_2d_mm, raw_mm, cut_mm, cut_in = _compute_cut_length(
             pts,
@@ -1106,9 +1374,15 @@ def add_zip_tie_slice(
     sheet = find_layout_sheet(project, sheet_id)
     routes = route_panel_wires(project, sheet.id, cat)
     captured: list[str] = []
+    wnum_counts: dict[str, int] = {}
+    for r in routes:
+        wnum_counts[r.wire_number] = wnum_counts.get(r.wire_number, 0) + 1
     for r in routes:
         if _polyline_intersects_slice(r.points, x1, y1, x2, y2):
-            if r.wire_number not in captured:
+            token = r.wire_number if wnum_counts.get(r.wire_number, 1) == 1 else f"{r.from_endpoint}->{r.to_endpoint}"
+            if token not in captured:
+                captured.append(token)
+            if r.wire_number not in captured and wnum_counts.get(r.wire_number, 1) == 1:
                 captured.append(r.wire_number)
     if not captured and routes:
         # Fallback: capture the 3 nearest wires to the slice midpoint so a slice always bundles nearest wires

@@ -91,64 +91,111 @@ def _offset_polyline_for_bundle(
     ties: list[ZipTieWaypoint],
     strand_offset: float,
 ) -> list[tuple[float, float]]:
-    """Offset interior duct segments slightly so parallel wires in a bundle are distinct,
-    while pinching tightly to zero offset at every ZipTieWaypoint and terminal landing.
+    """Offset interior curve points along the smooth normal vector so parallel wires in a
+    bundle are visually distinct, while pinching smoothly to zero offset at both terminal
+    landings and at every ZipTieWaypoint collar (like `@cmzw_`'s zip-ties prototype).
     """
 
     if len(pts) <= 2 or abs(strand_offset) < 1e-4:
         return list(pts)
 
-    tie_coords = [(t.x, t.y) for t in ties]
+    tie_coords = [(float(t.x), float(t.y)) for t in ties]
+    cum_len: list[float] = [0.0]
+    for i in range(len(pts) - 1):
+        cum_len.append(cum_len[-1] + math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]))
+    total_len = cum_len[-1]
+    if total_len < 1.0:
+        return list(pts)
+
     out: list[tuple[float, float]] = [pts[0]]
+    ramp_mm = min(14.0, total_len * 0.25)
+    tie_pinch_mm = 11.0
+
     for i in range(1, len(pts) - 1):
         x, y = pts[i]
-        if any(math.hypot(x - tx, y - ty) < 1.5 for tx, ty in tie_coords):
-            out.append((x, y))
+        s = cum_len[i]
+        # Smooth cosine ramp from 0 at start/end terminals
+        end_dist = min(s, total_len - s)
+        if end_dist >= ramp_mm:
+            env_end = 1.0
         else:
-            prev_x, prev_y = pts[i - 1]
-            next_x, next_y = pts[i + 1]
-            dx = abs(next_x - prev_x)
-            dy = abs(next_y - prev_y)
-            ox = strand_offset if dy >= dx else 0.0
-            oy = strand_offset if dx >= dy else 0.0
-            out.append((x + ox, y + oy))
+            env_end = 0.5 * (1.0 - math.cos(math.pi * (end_dist / max(1e-3, ramp_mm))))
+
+        # Smooth cosine pinch to 0.12 at each zip-tie collar so wires cinch tightly inside the strap
+        env_tie = 1.0
+        for tx, ty in tie_coords:
+            d_tie = math.hypot(x - tx, y - ty)
+            if d_tie < tie_pinch_mm:
+                pinch = 0.12 + 0.88 * (0.5 * (1.0 - math.cos(math.pi * (d_tie / tie_pinch_mm))))
+                env_tie = min(env_tie, pinch)
+
+        scale = env_end * env_tie
+        prev_x, prev_y = pts[max(0, i - 2)]
+        next_x, next_y = pts[min(len(pts) - 1, i + 2)]
+        tx_vec = next_x - prev_x
+        ty_vec = next_y - prev_y
+        tnorm = math.hypot(tx_vec, ty_vec)
+        if tnorm < 1e-6:
+            out.append((x, y))
+            continue
+        nx = -ty_vec / tnorm
+        ny = tx_vec / tnorm
+        out.append((round(x + nx * strand_offset * scale, 3), round(y + ny * strand_offset * scale, 3)))
+
     out.append(pts[-1])
     return out
 
 
-def _draw_arrow_along_segment(
+def _draw_arrows_along_polyline(
     painter: Painter,
-    p1: tuple[float, float],
-    p2: tuple[float, float],
+    pts: list[tuple[float, float]],
     color: str,
-    size_mm: float = 2.0,
+    size_mm: float = 2.1,
 ) -> None:
-    dx = p2[0] - p1[0]
-    dy = p2[1] - p1[1]
-    seg_len = math.hypot(dx, dy)
-    if seg_len < 12.0:
-        return
-    ux = dx / seg_len
-    uy = dy / seg_len
-    px = -uy
-    py = ux
+    """Place directional chevrons along the smooth curve at 25%, 50%, and 75% arc length."""
 
-    fractions = [0.5] if seg_len < 48.0 else [0.34, 0.68]
+    if len(pts) < 2:
+        return
+    cum: list[float] = [0.0]
+    for i in range(len(pts) - 1):
+        cum.append(cum[-1] + math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]))
+    total = cum[-1]
+    if total < 14.0:
+        return
+
+    fractions = [0.5] if total < 45.0 else [0.24, 0.52, 0.78]
     painter.set_stroke(color, 0.25)
     painter.set_fill(color)
     for frac in fractions:
-        mx = p1[0] + dx * frac
-        my = p1[1] + dy * frac
-        tip = (mx + ux * size_mm * 0.70, my + uy * size_mm * 0.70)
-        left = (
-            mx - ux * size_mm * 0.55 + px * size_mm * 0.52,
-            my - uy * size_mm * 0.55 + py * size_mm * 0.52,
-        )
-        right = (
-            mx - ux * size_mm * 0.55 - px * size_mm * 0.52,
-            my - uy * size_mm * 0.55 - py * size_mm * 0.52,
-        )
-        painter.polygon([tip, left, right])
+        target = total * frac
+        for i in range(len(pts) - 1):
+            if cum[i] <= target <= cum[i + 1]:
+                seg_l = cum[i + 1] - cum[i]
+                if seg_l < 1e-5:
+                    break
+                t = (target - cum[i]) / seg_l
+                mx = pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t
+                my = pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t
+                i0 = max(0, i - 1)
+                i1 = min(len(pts) - 1, i + 2)
+                dx = pts[i1][0] - pts[i0][0]
+                dy = pts[i1][1] - pts[i0][1]
+                dn = math.hypot(dx, dy)
+                if dn < 1e-5:
+                    break
+                ux, uy = dx / dn, dy / dn
+                px, py = -uy, ux
+                tip = (mx + ux * size_mm * 0.72, my + uy * size_mm * 0.72)
+                left = (
+                    mx - ux * size_mm * 0.55 + px * size_mm * 0.54,
+                    my - uy * size_mm * 0.55 + py * size_mm * 0.54,
+                )
+                right = (
+                    mx - ux * size_mm * 0.55 - px * size_mm * 0.54,
+                    my - uy * size_mm * 0.55 - py * size_mm * 0.54,
+                )
+                painter.polygon([tip, left, right])
+                break
     painter.set_fill(None)
 
 
@@ -486,8 +533,7 @@ def draw_panel_wiring_overlay(
         painter.set_stroke(active_col, 0.98)
         painter.polyline(active.points)
 
-        for i in range(len(active.points) - 1):
-            _draw_arrow_along_segment(painter, active.points[i], active.points[i + 1], active_col, size_mm=2.0)
+        _draw_arrows_along_polyline(painter, active.points, active_col, size_mm=2.1)
 
         sx, sy = active.points[0]
         ex, ey = active.points[-1]

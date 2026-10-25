@@ -33,6 +33,7 @@ from panelcad.core.panel_wiring import (
     get_walkthrough_step,
     list_zip_tie_waypoints,
     mark_wire_installed,
+    max_turn_angle_deg,
     move_zip_tie_waypoint,
     remove_zip_tie_waypoint,
     render_panel_wiring_png,
@@ -320,3 +321,36 @@ def test_walkthrough_stepping_headless_and_gui(tmp_path: Path):
         assert len(list_zip_tie_waypoints(session, "enclosure")) == ties_before + 1
     finally:
         win.close()
+
+
+def test_no_sharp_90_degree_corners_on_panel_layout_and_schematic_untouched():
+    """Backpanel layout wires must have smooth physical sweeps (zero 90° corners),
+    while schematic print pages must remain 100% orthogonal and untouched.
+    """
+    sample = Path(__file__).resolve().parents[1] / "examples" / "dol_starter.pcad.yaml"
+    session = Session.open(sample)
+    session.number_wires()
+
+    # 1. Standard Panduit wireway routing on backpanel layout: every curve step is smooth (< 25 deg)
+    routes_duct = route_panel_wires(session, "enclosure")
+    assert len(routes_duct) == 12
+    for r in routes_duct:
+        turn_deg = max_turn_angle_deg(r.points)
+        assert turn_deg < 25.0, f"Wire {r.wire_number} has sharp turn {turn_deg}°"
+        assert r.length_2d_mm == pytest.approx(r.path_2d_mm)
+        assert len(r.smooth_points) == len(r.points)
+
+    # 2. Zip-tie harness bundle routing: smooth cubic splines through ZT-1 and ZT-2 (< 25 deg per step)
+    add_zip_tie_slice(session, "enclosure", 30.0, 140.0, 50.0, 140.0)
+    add_zip_tie_slice(session, "enclosure", 82.0, 98.0, 82.0, 116.0)
+    routes_bundled = route_panel_wires(session, "enclosure")
+    for r in routes_bundled:
+        turn_deg = max_turn_angle_deg(r.points)
+        assert turn_deg < 25.0, f"Bundled wire {r.wire_number} has sharp turn {turn_deg}°"
+
+    # 3. Schematic print page routing (kind == 'schematic') is 100% untouched and does not render panel wiring overlay
+    sch_sheet = session.sheet("power")
+    assert sch_sheet.kind == "schematic"
+    svg_sch = sheet_to_svg(sch_sheet, session.catalog, project=session.project)
+    assert "BACKPANEL WIRE ROUTING" not in svg_sch
+    assert "TECHNICIAN WIRING WALKTHROUGH" not in svg_sch
