@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.5.18 — 2026-10-25
+
+- **Backpanel wire routing and zip-tie bundles (`panelcad.core.panel_wiring`)** — Routes schematic From-To conductors across the physical enclosure layout through connected wire trays (`wt-top`, `wt-mid`, `wt-bot`, `wt-left`, `wt-right`) and interactive **Zip-Tie Waypoints** (`ZipTieWaypoint`: slice across wires to bundle, drag to adjust, or remove to unbundle).
+- **Nearest-tray vertical entry and strict in-tray pathing (`verify_routes_inside_trays`)** — Conductors enter the nearest horizontal wire tray directly from each device terminal, stay strictly inside the wire-tray network in parallel lanes, and turn at slot entries and tray intersections with compact smooth radii (`R <= 4.0 mm`, zero 90° corners).
+- **Wire-by-Wire cut-length schedule (`WireByWireSchedule`)** — Calculates per-wire shop cut lengths (2D routed arc length + source/destination terminal Z-drops + duct depth allowance + strip/termination slack, rounded up to `0.5"` / `10 mm`), exports CSV schedules, and generates a printable **Wire-by-Wire Cut Sheet** (`kind="wire_by_wire"`).
+- **Technician Wiring Walkthrough mode (`WiringWalkthroughPanel`)** — Steps through one wire route at a time (`Step k of N`) on the normal backpanel layout view (`Reports → Wiring Walkthrough / Cut Sheet…`) with `FROM:` / `TO:` terminal callouts, directional flow chevrons, installation checklist state, and shop cut length banner.
+
 ## 0.5.17 — 2026-10-25
 
 - **Picture-to-Print and PDF/scan round-trip** — Fixed `offpage_from_match` neighbor-pin resolution during vector and raster print import, restoring 100% round-trip connectivity and wire-number recall across exported PDFs and scans.
