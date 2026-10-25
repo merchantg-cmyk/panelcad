@@ -1707,10 +1707,13 @@ def _ensure_power_schematic(session: Any, store: Reconstruction):
     for sheet in session.project.sheets:
         if sheet.id in {"asbuilt_power", "asbuilt-power"} and sheet.kind == "schematic":
             sheet.id = "asbuilt_power"
+            sheet.drawing_style = "freeform"
+            sheet.rail_hot = ""
+            sheet.rail_return = ""
             return sheet
     sheet = session.add_sheet("asbuilt_power", title="As-built power schematic", kind="schematic", make_active=False)
     sheet.id = "asbuilt_power"
-    sheet.drawing_style = "iec"
+    sheet.drawing_style = "freeform"
     sheet.rail_hot = ""
     sheet.rail_return = ""
     return sheet
@@ -2087,7 +2090,7 @@ def _layout_control_ladder_sheet(session: Any, store: Reconstruction, sheet: Any
 
 
 def _layout_power_feeder_sheet(session: Any, store: Reconstruction, sheet: Any) -> None:
-    sheet.drawing_style = "iec"
+    sheet.drawing_style = "freeform"
     sheet.rail_hot = ""
     sheet.rail_return = ""
 
@@ -2172,7 +2175,7 @@ def synthesize_reconstruct_schematic(session: Any, sheet_id: str | None = None) 
         else:
             control_wires.append(w)
 
-    if power_wires and (control_wires or asbuilt.components):
+    if power_wires and (control_wires or asbuilt.components or power_sheet is not None):
         if power_sheet is None:
             power_sheet = _ensure_power_schematic(session, store)
         asbuilt.wires = control_wires

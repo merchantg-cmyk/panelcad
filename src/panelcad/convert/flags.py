@@ -235,7 +235,10 @@ def _component_and_rail_collisions(session: Any, sheet: Any) -> list[dict[str, A
                     )
                 )
 
-    if is_ladder_sheet(sheet, session.project):
+    raw_style = str(getattr(sheet, "drawing_style", "") or "").strip().lower()
+    if is_ladder_sheet(sheet, session.project) or (
+        is_power_sheet(sheet) and raw_style == "ladder"
+    ):
         wx, _wy, ww, _wh = working_rect(sheet)
         left_x = wx + RAIL_INSET
         right_x = wx + ww - RAIL_INSET
@@ -252,7 +255,7 @@ def _component_and_rail_collisions(session: Any, sheet: Any) -> list[dict[str, A
                     )
                 )
         if is_power_sheet(sheet) and not any(
-             row.get("flag") == "rail_collision" for row in rows
+            row.get("flag") == "rail_collision" for row in rows
         ):
             first_ref = boxes[0][0].id if boxes else sheet.id
             rows.append(
@@ -263,7 +266,70 @@ def _component_and_rail_collisions(session: Any, sheet: Any) -> list[dict[str, A
                     sheet=sheet.id,
                 )
             )
+    if is_power_sheet(sheet):
+        rows.extend(_power_sheet_rail_issues(session, sheet, boxes))
     return rows
+
+
+def _power_sheet_rail_issues(
+    session: Any,
+    sheet: Any,
+    boxes: list[tuple[Any, tuple[float, float, float, float]]],
+) -> list[dict[str, Any]]:
+    import xml.etree.ElementTree as ET
+    from panelcad.core.ladder import rail_geometry
+    from panelcad.render.svg import sheet_to_svg
+    from panelcad.render.titleblock import working_rect
+
+    style = str(getattr(sheet, "drawing_style", "") or "").strip().lower()
+    hot = str(getattr(sheet, "rail_hot", "") or "").strip().lower()
+    ret = str(getattr(sheet, "rail_return", "") or "").strip().lower()
+    model_has_rails = (
+        style in {"ladder", "iec"}
+        or hot not in {"", "none"}
+        or ret not in {"", "none"}
+        or rail_geometry(sheet, getattr(session, "project", None)) is not None
+    )
+    rendered_has_rails = False
+    try:
+        wx, wy, ww, wh = working_rect(sheet)
+        svg = sheet_to_svg(sheet, session.catalog, project=session.project)
+        root_el = ET.fromstring(svg)
+        for el in root_el.iter():
+            if not el.tag.endswith("line"):
+                continue
+            x1 = float(el.attrib.get("x1", "0"))
+            y1 = float(el.attrib.get("y1", "0"))
+            x2 = float(el.attrib.get("x2", "0"))
+            y2 = float(el.attrib.get("y2", "0"))
+            if (
+                abs(y1 - y2) < 0.5
+                and abs(x2 - x1) >= 0.7 * ww
+                and wy + 2.0 <= y1 <= wy + wh - 2.0
+            ):
+                rendered_has_rails = True
+                break
+            if (
+                abs(x1 - x2) < 0.5
+                and abs(y2 - y1) >= 0.7 * wh
+                and wx + 2.0 <= x1 <= wx + ww - 2.0
+            ):
+                rendered_has_rails = True
+                break
+    except Exception:  # noqa: BLE001
+        pass
+
+    if model_has_rails or rendered_has_rails:
+        first_ref = boxes[0][0].id if boxes else sheet.id
+        return [
+            _issue(
+                "power_sheet_has_ladder_rails",
+                f"3-phase power sheet {sheet.id} has single-phase L1/L2 or control ladder rails",
+                ref=first_ref,
+                sheet=sheet.id,
+            )
+        ]
+    return []
 
 
 def _wire_overlaps(session: Any, sheet: Any) -> list[dict[str, Any]]:

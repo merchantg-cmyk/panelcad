@@ -2039,12 +2039,12 @@ def _build_clean_power_sheet(
     std: str,
     catalog: Catalog,
 ) -> Sheet:
-    """Build a collision-free 3-phase power schematic sheet (drawing_style='iec', no ladder rails)."""
+    """Build a collision-free 3-phase power schematic sheet (drawing_style='freeform', no ladder rails)."""
     sheet = Sheet(
         id=sheet_id,
         name=sheet_name,
         kind="schematic",
-        drawing_style="iec",
+        drawing_style="freeform",
         rail_hot="",
         rail_return="",
     )

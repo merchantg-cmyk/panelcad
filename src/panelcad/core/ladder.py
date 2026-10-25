@@ -47,12 +47,46 @@ def rail_names(sheet: Sheet, project: Project | None = None) -> tuple[str, str]:
 SHEET_OWN_STYLES: frozenset[str] = frozenset({"ladder", "iec", "freeform"})
 
 
+def is_three_phase_power_sheet(sheet: Sheet) -> bool:
+    """True when ``sheet`` is a 3-phase power feeder schematic."""
+
+    if getattr(sheet, "kind", "") != "schematic":
+        return False
+    from panelcad.convert.layout_convert import is_power_sheet
+
+    return is_power_sheet(sheet)
+
+
+def _rails_disabled(sheet: Sheet) -> bool:
+    """True when ``sheet`` disables 2-rail single-phase/control ladder rails."""
+
+    if is_three_phase_power_sheet(sheet):
+        return True
+    style = str(getattr(sheet, "drawing_style", "") or "").strip().lower()
+    if style in {"freeform", "schematic", "power", "point_to_point"}:
+        return True
+    hot = str(getattr(sheet, "rail_hot", "") or "").strip().lower()
+    ret = str(getattr(sheet, "rail_return", "") or "").strip().lower()
+    if hot == "none" or ret == "none":
+        return True
+    return False
+
+
 def stamp_drawing_style(project: Project) -> None:
     """Copy the title-block style onto schematic sheets so the router can see it."""
 
     style = str(getattr(project.title_block, "drawing_style", "") or "")
     for sheet in project.sheets:
         if sheet.kind != "schematic":
+            continue
+        if is_three_phase_power_sheet(sheet):
+            old_hot = str(getattr(sheet, "rail_hot", "") or "").strip()
+            old_ret = str(getattr(sheet, "rail_return", "") or "").strip()
+            if str(getattr(sheet, "drawing_style", "") or "").strip().lower() in {"", "ladder", "iec", "schematic"}:
+                sheet.drawing_style = "freeform"  # type: ignore[assignment]
+            if not _wires_use_rail(sheet, old_hot, old_ret):
+                sheet.rail_hot = ""
+                sheet.rail_return = ""
             continue
         own = str(getattr(sheet, "drawing_style", "") or "")
         # A blank title block means "not chosen yet". It never erases a style
@@ -80,6 +114,13 @@ def sync_sheet_rails(project: Project) -> None:
     ret = str(getattr(project.title_block, "rail_return", "") or "").strip() or "L2"
     for sheet in project.sheets:
         if sheet.kind != "schematic":
+            continue
+        if is_three_phase_power_sheet(sheet):
+            old_hot = str(getattr(sheet, "rail_hot", "") or "").strip()
+            old_ret = str(getattr(sheet, "rail_return", "") or "").strip()
+            if not _wires_use_rail(sheet, old_hot, old_ret):
+                sheet.rail_hot = ""
+                sheet.rail_return = ""
             continue
         old_hot = str(getattr(sheet, "rail_hot", "") or "").strip()
         old_ret = str(getattr(sheet, "rail_return", "") or "").strip()
@@ -183,7 +224,11 @@ def is_lamp_library(library_id: str) -> bool:
 def sheet_drawing_style(sheet: Sheet, project: Project | None = None) -> str:
     """Per-sheet style wins so Motor control can be a ladder next to schematic power."""
 
+    if is_three_phase_power_sheet(sheet):
+        return "freeform"
     own = str(getattr(sheet, "drawing_style", "") or "")
+    if own.strip().lower() in {"point_to_point", "power"}:
+        return "freeform"
     if own:
         return own
     if project is not None:
@@ -430,6 +475,8 @@ def rail_short_message(
 def rail_geometry(sheet: Sheet, project: Project | None = None) -> RailGeometry | None:
     """Rails the sheet paints. Empty on a power schematic, a layout, or freeform."""
 
+    if _rails_disabled(sheet):
+        return None
     style = sheet_drawing_style(sheet, project)
     hot, ret = rail_names(sheet, project)
     if style == "ladder" and sheet.kind in {"schematic", "io"}:

@@ -1080,7 +1080,7 @@ def _tidy_power_sheet(session: Any, sheet: Any) -> None:
     wire_ends = {str(w.frm or "") for w in sheet.wires} | {str(w.to or "") for w in sheet.wires}
     hot = str(getattr(sheet, "rail_hot", "") or "")
     ret = str(getattr(sheet, "rail_return", "") or "")
-    if str(getattr(sheet, "drawing_style", "") or "") in {"ladder", "iec"}:
+    if str(getattr(sheet, "drawing_style", "") or "") in {"", "ladder", "iec", "schematic"}:
         if hot not in wire_ends and ret not in wire_ends:
             sheet.drawing_style = "freeform"  # type: ignore[assignment]
             sheet.rail_hot = ""

@@ -193,10 +193,24 @@ def test_reconstruct_end_to_end_ladder_and_power_separation(tmp_path: Path):
     assert result["power_sheet"] == "asbuilt_power"
     assert result["rungs"] >= 2
 
+    from panelcad.core.ladder import (
+        is_iec_column_sheet,
+        is_ladder_sheet,
+        rail_geometry,
+    )
+
     asbuilt = session.project.sheet("asbuilt")
     assert asbuilt.drawing_style == "ladder"
     assert asbuilt.rail_hot == "L1"
     assert asbuilt.rail_return == "L2"
+
+    pwr = session.project.sheet("asbuilt_power")
+    assert pwr.drawing_style == "freeform"
+    assert pwr.rail_hot == ""
+    assert pwr.rail_return == ""
+    assert rail_geometry(pwr, session.project) is None
+    assert not is_ladder_sheet(pwr, session.project)
+    assert not is_iec_column_sheet(pwr, session.project)
 
     # Distinct rung y coordinates (not flat y = 40.0)
     comp_map = {c.id: c for c in asbuilt.components}
@@ -306,3 +320,124 @@ def test_reconstruct_unconfirmed_parts_keep_not_for_build_and_wizard_rebuild(tmp
     rebuilt = wiz._rebuild_schematic()
     assert rebuilt["rungs"] == 1
     assert check_converted_sheet_layout(session) == []
+
+
+def test_asbuilt_power_renders_zero_l1_l2_rails_and_flags_forced_rails(tmp_path: Path):
+    import xml.etree.ElementTree as ET
+    from PySide6.QtGui import QColor, QImage, QPainter
+    from PySide6.QtSvg import QSvgRenderer
+    from panelcad.core.ladder import (
+        iec_rail_ys,
+        rail_geometry,
+    )
+    from panelcad.render.svg import sheet_to_svg
+    from panelcad.render.titleblock import working_rect
+
+    session = _build_photo_reconstruct_session(tmp_path)
+    for wnum, f_tag, f_pin, t_tag, t_pin in [
+        ("101", "L1", "", "S1", "1"),
+        ("102", "S1", "2", "S2", "3"),
+        ("103", "S2", "4", "M1", "A1"),
+        ("104", "M1", "A2", "OL1", "95"),
+        ("105", "OL1", "96", "L2", ""),
+        ("L1", "CB1", "2", "M1", "1"),
+        ("L2", "CB1", "4", "M1", "3"),
+        ("L3", "CB1", "6", "M1", "5"),
+        ("T1", "M1", "2", "OL1", "L1"),
+        ("T2", "M1", "4", "OL1", "L2"),
+        ("T3", "M1", "6", "OL1", "L3"),
+        ("M1_T1", "OL1", "T1", "MTR1", "T1"),
+        ("M1_T2", "OL1", "T2", "MTR1", "T2"),
+        ("M1_T3", "OL1", "T3", "MTR1", "T3"),
+    ]:
+        record_wire_landing(
+            session,
+            wire_number=wnum,
+            from_tag=f_tag,
+            from_pin=f_pin,
+            to_tag=t_tag,
+            to_pin=t_pin,
+        )
+    apply_to_print(session)
+
+    pwr = session.project.sheet("asbuilt_power")
+    assert pwr.drawing_style == "freeform"
+    assert pwr.rail_hot == ""
+    assert pwr.rail_return == ""
+    assert rail_geometry(pwr, session.project) is None
+    assert check_converted_sheet_layout(session) == []
+
+    # Verify SVG has zero horizontal IEC rails and zero vertical NEMA ladder rails
+    wx, wy, ww, wh = working_rect(pwr)
+    svg = sheet_to_svg(pwr, session.catalog, project=session.project)
+    root_el = ET.fromstring(svg)
+    for el in root_el.iter():
+        if el.tag.endswith("line"):
+            x1 = float(el.attrib.get("x1", "0"))
+            y1 = float(el.attrib.get("y1", "0"))
+            x2 = float(el.attrib.get("x2", "0"))
+            y2 = float(el.attrib.get("y2", "0"))
+            assert not (
+                abs(y1 - y2) < 0.5
+                and abs(x2 - x1) >= 0.7 * ww
+                and wy + 2.0 <= y1 <= wy + wh - 2.0
+            ), f"Unexpected horizontal rail line in SVG: ({x1}, {y1}) -> ({x2}, {y2})"
+            assert not (
+                abs(x1 - x2) < 0.5
+                and abs(y2 - y1) >= 0.7 * wh
+                and wx + 2.0 <= x1 <= wx + ww - 2.0
+            ), f"Unexpected vertical ladder rail line in SVG: ({x1}, {y1}) -> ({x2}, {y2})"
+
+    # Verify PDF export succeeds cleanly
+    pdf_path = tmp_path / "asbuilt_out.pdf"
+    session.export_pdf(pdf_path)
+    assert pdf_path.is_file() and pdf_path.stat().st_size > 1000
+
+    # Verify rendered PNG has no top L1 rail or bottom L2 rail line across the sheet
+    png_path = tmp_path / "asbuilt_power.png"
+    pw, ph = pwr.page.dimensions()
+    img_w, img_h = 1680, 1080
+    renderer = QSvgRenderer(svg.encode("utf-8"))
+    img = QImage(img_w, img_h, QImage.Format_ARGB32)
+    img.fill(QColor("white"))
+    painter = QPainter(img)
+    renderer.render(painter)
+    painter.end()
+    img.save(str(png_path))
+    assert png_path.is_file()
+
+    iec_top_mm, iec_bot_mm = iec_rail_ys(pwr)
+    top_rail_y_px = int(round((iec_top_mm / ph) * img_h))
+    bot_rail_y_px = int(round((iec_bot_mm / ph) * img_h))
+    for y_px in (top_rail_y_px, bot_rail_y_px):
+        dark_pixels = 0
+        for x_mm in range(160, 350, 5):
+            x_px = int(round((x_mm / pw) * img_w))
+            c = img.pixelColor(x_px, y_px)
+            if c.red() < 80 and c.green() < 80 and c.blue() < 80:
+                dark_pixels += 1
+        assert dark_pixels == 0, f"Found {dark_pixels} dark rail pixels along y_px={y_px}"
+
+    # Verify check_converted_sheet_layout flags power_sheet_has_ladder_rails when rails are forced
+    for bad_style, bad_hot, bad_ret in [
+        ("iec", "", ""),
+        ("ladder", "L1", "L2"),
+        ("freeform", "L1", "L2"),
+    ]:
+        broken = Session(session.project.model_copy(deep=True))
+        b_pwr = broken.project.sheet("asbuilt_power")
+        b_pwr.drawing_style = bad_style  # type: ignore[assignment]
+        b_pwr.rail_hot = bad_hot
+        b_pwr.rail_return = bad_ret
+        flags = [
+            f
+            for f in check_converted_sheet_layout(broken)
+            if f.get("sheet_id") == "asbuilt_power"
+        ]
+        flag_names = {f["flag"] for f in flags}
+        assert "power_sheet_has_ladder_rails" in flag_names, (
+            bad_style,
+            bad_hot,
+            bad_ret,
+            flag_names,
+        )

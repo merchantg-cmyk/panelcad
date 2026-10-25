@@ -143,15 +143,18 @@ def draw_sheet_chrome(
         from panelcad.core.xref import xref_style
 
         nema_lines = xref_style(project, sheet) == "nema"
+    from panelcad.core.ladder import _rails_disabled
+
     _draw_zones(painter, wx, wy, ww, wh)
-    if drawing_style == "ladder" and sheet.kind == "schematic":
+    rails_off = _rails_disabled(sheet)
+    if not rails_off and drawing_style == "ladder" and sheet.kind == "schematic":
         draw_ladder_rails(painter, sheet, project)
         if catalog is not None:
             draw_ladder_rung_lines(painter, sheet, catalog)
-    elif drawing_style == "ladder" and sheet.kind == "io":
+    elif not rails_off and drawing_style == "ladder" and sheet.kind == "io":
         # Generated I/O sheets use the ladder rails. Rung ticks stay off; the module sets the pitch.
         draw_ladder_rails(painter, sheet, project)
-    if drawing_style == "iec" and sheet.kind == "schematic":
+    if not rails_off and drawing_style == "iec" and sheet.kind == "schematic":
         draw_iec_rails(painter, sheet, project)
     if nema_lines and project is not None:
         draw_nema_rung_numbers(painter, project, sheet, catalog, sheet_no=sheet_index + 1)
@@ -160,7 +163,10 @@ def draw_sheet_chrome(
 def draw_ladder_rails(painter: Painter, sheet: Sheet, project: Project | None = None) -> None:
     """Hot (left) and return (right) rails. Labels follow the sheet, not a fixed L1/L2."""
 
-    from panelcad.core.ladder import RAIL_INSET, ladder_rail_ys, rail_names
+    from panelcad.core.ladder import RAIL_INSET, _rails_disabled, ladder_rail_ys, rail_names
+
+    if _rails_disabled(sheet):
+        return
 
     wx, _wy, ww, _wh = working_rect(sheet)
     left = wx + RAIL_INSET
@@ -180,7 +186,10 @@ def draw_ladder_rails(painter: Painter, sheet: Sheet, project: Project | None = 
 def draw_iec_rails(painter: Painter, sheet: Sheet, project: Project | None = None) -> None:
     """Hot rail across the top, return rail across the bottom."""
 
-    from panelcad.core.ladder import RAIL_INSET, iec_rail_ys, rail_names
+    from panelcad.core.ladder import RAIL_INSET, _rails_disabled, iec_rail_ys, rail_names
+
+    if _rails_disabled(sheet):
+        return
 
     wx, _wy, ww, _wh = working_rect(sheet)
     left = wx + RAIL_INSET

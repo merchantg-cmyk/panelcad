@@ -436,7 +436,13 @@ def _trace_phase_maps(sheet: Sheet, catalog: Catalog) -> tuple[dict[str, str], d
         cat = str(getattr(device, "category", "") or "")
         if cat.startswith("load.motor"):
             continue
-        ids = {pin.id for pin in device.pins}
+        overrides = getattr(comp, "pin_overrides", None) or {}
+        ids = {pin.id for pin in device.pins} | set(overrides.keys())
+        for pin in device.pins:
+            for ov_id, ov_pt in overrides.items():
+                if abs(float(pin.x) - float(ov_pt.x)) < 0.2 and abs(float(pin.y) - float(ov_pt.y)) < 0.2:
+                    poles.setdefault(f"{comp.id}.{pin.id}", []).append(f"{comp.id}.{ov_id}")
+                    poles.setdefault(f"{comp.id}.{ov_id}", []).append(f"{comp.id}.{pin.id}")
         for src, dst in _POLES:
             if src in ids and dst in ids:
                 poles.setdefault(f"{comp.id}.{src}", []).append(f"{comp.id}.{dst}")

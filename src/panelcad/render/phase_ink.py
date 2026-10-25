@@ -48,12 +48,18 @@ def line_side_runs(project: Project, sheet: Sheet, catalog: Catalog) -> list[Sup
         pin_ids = {pin.id for pin in device.pins}
         if not ({"1", "3", "5"} <= pin_ids or {"L1", "L2", "L3"} <= pin_ids):
             continue
+        overrides = getattr(comp, "pin_overrides", None) or {}
         for pin in device.pins:
             phase = _SEED.get(pin.id)
             if phase is None:
                 continue
             ref = f"{comp.id}.{pin.id}"
-            if ref in wired:
+            if ref in wired or any(
+                f"{comp.id}.{ov_id}" in wired
+                and abs(float(pin.x) - float(ov_pt.x)) < 0.2
+                and abs(float(pin.y) - float(ov_pt.y)) < 0.2
+                for ov_id, ov_pt in overrides.items()
+            ):
                 continue
             pen = pen_for_phase(project, sheet, phase)
             if pen is None:
@@ -95,8 +101,16 @@ def pole_runs(project: Project, sheet: Sheet, catalog: Catalog) -> list[SupplyRu
 
 
 def _control_sheet(sheet: Sheet) -> bool:
+    if sheet.kind not in {"schematic", "io"}:
+        return True
+    if sheet.kind == "io":
+        return True
+    from panelcad.core.ladder import is_three_phase_power_sheet
+
+    if is_three_phase_power_sheet(sheet):
+        return False
     style = str(getattr(sheet, "drawing_style", "") or "")
-    return style in {"ladder", "iec"} or sheet.kind not in {"schematic", "io"}
+    return style in {"ladder", "iec"}
 
 
 def _lead_depth(device: Device, pin: PinDef) -> float:
