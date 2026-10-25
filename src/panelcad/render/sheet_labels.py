@@ -293,6 +293,12 @@ def _place_device_tags(
                 text_obstacles.append((box, 2.2))
     line_boxes: list[tuple[float, float, float, float]] = []
     if project is not None:
+        from panelcad.render.phase_ink import line_side_callouts
+
+        for callout in line_side_callouts(project, sheet, catalog):
+            cbox = text_box(callout.x, callout.y, callout.text, callout.size, callout.align)
+            if cbox is not None:
+                text_obstacles.append((cbox, callout.size))
         for _name, box in _line_number_boxes(project, sheet, catalog, sheet_no=sheet_no):
             line_boxes.append(box)
             text_obstacles.append((box, 2.0))
@@ -607,6 +613,12 @@ def sheet_text_boxes(
 
     items.extend(_line_number_boxes(project, sheet, catalog, sheet_no=sheet_no))
     items.extend(pin_caption_boxes(sheet, catalog))
+    from panelcad.render.phase_ink import line_side_callouts
+
+    for callout in line_side_callouts(project, sheet, catalog):
+        cbox = text_box(callout.x, callout.y, callout.text, callout.size, callout.align)
+        if cbox is not None:
+            items.append((f"supply:{callout.ref}:{callout.text}", cbox))
     return items
 
 

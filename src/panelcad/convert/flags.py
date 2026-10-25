@@ -319,17 +319,37 @@ def _power_sheet_rail_issues(
     except Exception:  # noqa: BLE001
         pass
 
+    issues: list[dict[str, Any]] = []
     if model_has_rails or rendered_has_rails:
         first_ref = boxes[0][0].id if boxes else sheet.id
-        return [
+        issues.append(
             _issue(
                 "power_sheet_has_ladder_rails",
                 f"3-phase power sheet {sheet.id} has single-phase L1/L2 or control ladder rails",
                 ref=first_ref,
                 sheet=sheet.id,
             )
-        ]
-    return []
+        )
+    try:
+        from panelcad.render.phase_ink import line_side_callouts, line_side_runs
+
+        runs = line_side_runs(session.project, sheet, session.catalog)
+        if runs:
+            callouts = line_side_callouts(session.project, sheet, session.catalog)
+            callout_phases = {c.text for c in callouts}
+            if not ({"L1", "L2", "L3"} <= callout_phases):
+                first_ref = runs[0].ref.split(".")[0] if runs[0].ref else (boxes[0][0].id if boxes else sheet.id)
+                issues.append(
+                    _issue(
+                        "missing_three_phase_supply_callouts",
+                        f"3-phase power sheet {sheet.id} has unwired line-side stubs without L1/L2/L3 supply callouts",
+                        ref=first_ref,
+                        sheet=sheet.id,
+                    )
+                )
+    except Exception:  # noqa: BLE001
+        pass
+    return issues
 
 
 def _wire_overlaps(session: Any, sheet: Any) -> list[dict[str, Any]]:

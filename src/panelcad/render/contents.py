@@ -160,7 +160,7 @@ def draw_sheet_body(
     default_width = 0.55 if elementary else 0.45
     pens = wire_phase_pens(project, sheet, catalog) if project is not None else {}
     if project is not None:
-        from panelcad.render.phase_ink import line_side_runs, pole_runs
+        from panelcad.render.phase_ink import line_side_callouts, line_side_runs, pole_runs
 
         # Paper under the phase color hides the black symbol ink: the supply
         # lead, and each pole's own blade, heater, and load lead. The trip bar
@@ -179,6 +179,25 @@ def draw_sheet_body(
                 painter.polyline(run.points)
             painter.set_stroke(run.pen.stroke, run.pen.width)
             painter.polyline(run.points)
+        for callout in line_side_callouts(project, sheet, catalog):
+            painter.set_layer("WIRES")
+            if callout.cap is not None:
+                if callout.pen.outline:
+                    painter.set_stroke(callout.pen.outline, callout.pen.outline_width)
+                    painter.polyline(list(callout.cap))
+                painter.set_stroke(callout.pen.stroke, callout.pen.width)
+                painter.polyline(list(callout.cap))
+            c_color = callout.pen.stroke if not callout.pen.outline else INK
+            painter.set_stroke(c_color, 0.3)
+            painter.set_fill(c_color)
+            painter.text(
+                callout.x,
+                callout.y,
+                callout.text,
+                size=callout.size,
+                align=callout.align,
+            )
+            painter.set_fill(None)
     if generated_io:
         for wire in sheet.wires:
             subs = (paths or {}).get(wire.id) or []

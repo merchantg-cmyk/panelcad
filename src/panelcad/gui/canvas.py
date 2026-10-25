@@ -1268,6 +1268,43 @@ class WireItem(QGraphicsPathItem):
         event.accept()
 
 
+class PhaseCalloutItem(QGraphicsItem):
+    """Incoming 3-phase supply callout (L1, L2, L3) above an unwired line-side lead."""
+
+    def __init__(
+        self,
+        text: str,
+        x: float,
+        y: float,
+        size: float,
+        align: str,
+        stroke: str,
+        *,
+        outline: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._text = text
+        self._x = x
+        self._y = y
+        self._size = size
+        self._align = align
+        self._stroke = stroke
+        self._outline = outline
+        self.setZValue(17)
+        self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+
+    def boundingRect(self) -> QRectF:
+        w = max(4.0, len(self._text) * self._size * 0.8)
+        h = self._size * 1.4
+        return QRectF(self._x - w, self._y - h, w * 2, h * 1.6)
+
+    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None) -> None:
+        color = _qc("ink") if self._outline else QColor(_screen_hex(self._stroke))
+        painter.setPen(QPen(color, 0.35))
+        draw_world_text(painter, self._x, self._y, self._text, self._size, align=self._align)
+
+
 class PhaseLeadItem(QGraphicsItem):
     """Colored breaker lead. Not a wire, so it cannot be selected or dragged."""
 
@@ -2513,7 +2550,7 @@ class SchematicView(QGraphicsView):
         self._wire_hit_scale = -1.0
         kept: list[QGraphicsItem] = []
         for item in self._items:
-            if isinstance(item, (WireItem, PhaseLeadItem, RailJunctionItem)):
+            if isinstance(item, (WireItem, PhaseLeadItem, PhaseCalloutItem, RailJunctionItem)):
                 if item.scene() is self.scene:
                     self.scene.removeItem(item)
             else:
@@ -2529,7 +2566,7 @@ class SchematicView(QGraphicsView):
         elementary = ladder or column
         from panelcad.core.phase_color import wire_phase_pens
         from panelcad.render.crossings import hop_routes
-        from panelcad.render.phase_ink import line_side_runs, pole_runs
+        from panelcad.render.phase_ink import line_side_callouts, line_side_runs, pole_runs
         from panelcad.render.label_avoid import resolve_labels
         from panelcad.render.wiring import route_sheet_wires
 
@@ -2569,6 +2606,32 @@ class SchematicView(QGraphicsView):
                     run.pen.width,
                     outline=run.pen.outline,
                     outline_width=run.pen.outline_width,
+                )
+            )
+        try:
+            callouts = line_side_callouts(self.session.project, sheet, self.session.catalog)
+        except (KeyError, ValueError, IndexError):
+            callouts = []
+        for callout in callouts:
+            if callout.cap is not None:
+                self._add(
+                    PhaseLeadItem(
+                        list(callout.cap),
+                        callout.pen.stroke,
+                        callout.pen.width,
+                        outline=callout.pen.outline,
+                        outline_width=callout.pen.outline_width,
+                    )
+                )
+            self._add(
+                PhaseCalloutItem(
+                    callout.text,
+                    callout.x,
+                    callout.y,
+                    callout.size,
+                    callout.align,
+                    callout.pen.stroke,
+                    outline=callout.pen.outline,
                 )
             )
         hopped = hop_routes(routes)

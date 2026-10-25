@@ -2052,11 +2052,11 @@ def _build_clean_power_sheet(
 
     cols = _group_power_columns(power_devs)
     role_y = {
-        "power_breaker": 18.0,
-        "power_contactor": 76.0,
-        "power_vfd": 76.0,
-        "power_overload": 148.0,
-        "power_motor": 200.0,
+        "power_breaker": 22.0,
+        "power_contactor": 79.0,
+        "power_vfd": 79.0,
+        "power_overload": 151.0,
+        "power_motor": 203.0,
     }
 
     placed_by_tag: dict[str, Component] = {}
@@ -2065,7 +2065,7 @@ def _build_clean_power_sheet(
         # Keep power columns left of the bottom-right title block (x < 215 if y > 180)
         if base_x >= 210.0:
             base_x = 60.0 + (col_idx % 2) * 85.0
-        next_min_y = 18.0
+        next_min_y = 22.0
         for dev in col_devs:
             # Align 3-pole contactor L1/L2/L3 pins (dx=10,20,30) and IEC motor pins (dx=6,16,26) with breaker/overload pins (dx=8,18,28)
             if "ac3_" in dev.library_id:
@@ -2075,9 +2075,9 @@ def _build_clean_power_sheet(
             else:
                 comp_x = base_x
             comp_y = max(role_y.get(dev.role, next_min_y), next_min_y)
-            if dev.role == "power_motor" and comp_y > 202.0:
-                comp_y = 200.0
-            next_min_y = comp_y + (58.0 if dev.role == "power_contactor" else 52.0)
+            if dev.role == "power_motor" and comp_y > 204.0:
+                comp_y = 203.0
+            next_min_y = comp_y + (57.0 if dev.role == "power_contactor" else 52.0)
             base_tag = dev.tag.split("-")[0]
             props: dict[str, Any] = {
                 "print_tag": base_tag,

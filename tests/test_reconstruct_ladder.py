@@ -367,10 +367,23 @@ def test_asbuilt_power_renders_zero_l1_l2_rails_and_flags_forced_rails(tmp_path:
     assert rail_geometry(pwr, session.project) is None
     assert check_converted_sheet_layout(session) == []
 
+    # Verify top-of-feeder L1/L2/L3 supply callouts and terminal caps are present above CB1
+    from panelcad.render.phase_ink import line_side_callouts
+
+    callouts = line_side_callouts(session.project, pwr, session.catalog)
+    assert [c.text for c in callouts] == ["L1", "L2", "L3"]
+    assert all(c.cap is not None for c in callouts)
+
     # Verify SVG has zero horizontal IEC rails and zero vertical NEMA ladder rails
     wx, wy, ww, wh = working_rect(pwr)
     svg = sheet_to_svg(pwr, session.catalog, project=session.project)
     root_el = ET.fromstring(svg)
+    top_supply_texts = [
+        (el.text or "").strip()
+        for el in root_el.iter()
+        if el.tag.endswith("text") and float(el.attrib.get("y", "999")) <= wy + 4.0
+    ]
+    assert {"L1", "L2", "L3"} <= set(top_supply_texts), top_supply_texts
     for el in root_el.iter():
         if el.tag.endswith("line"):
             x1 = float(el.attrib.get("x1", "0"))
@@ -441,3 +454,18 @@ def test_asbuilt_power_renders_zero_l1_l2_rails_and_flags_forced_rails(tmp_path:
             bad_ret,
             flag_names,
         )
+
+    # Verify check_converted_sheet_layout flags missing_three_phase_supply_callouts if callouts are suppressed
+    import panelcad.render.phase_ink as _pi
+
+    orig_callouts = _pi.line_side_callouts
+    try:
+        _pi.line_side_callouts = lambda *_a, **_kw: []
+        flags_no_callouts = [
+            f
+            for f in check_converted_sheet_layout(session)
+            if f.get("sheet_id") == "asbuilt_power"
+        ]
+        assert "missing_three_phase_supply_callouts" in {f["flag"] for f in flags_no_callouts}
+    finally:
+        _pi.line_side_callouts = orig_callouts

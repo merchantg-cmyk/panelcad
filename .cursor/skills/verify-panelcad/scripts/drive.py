@@ -429,21 +429,24 @@ def feature_iec_to_nema_convert(app, win) -> None:
         from panelcad.convert.flags import sheet_flags as _verify_sheet_flags
         from panelcad.core.ladder import is_ladder_sheet as _verify_is_ladder, rail_geometry as _verify_rail_geom
         from panelcad.importer.ladder_synth import check_converted_sheet_layout as _verify_check_layout
+        from panelcad.render.phase_ink import line_side_callouts as _verify_line_side_callouts
         mp_loaded = _VerifySession.open(mp_out)
         mp_all_flags = {sh.id: _verify_sheet_flags(mp_loaded, sh.id) for sh in mp_loaded.project.sheets}
         mp_layout_issues = _verify_check_layout(mp_loaded)
         main_sh = mp_loaded.sheet("main")
         main_xs = {c.id: round(float(c.x), 1) for c in main_sh.components}
-        check("power sheet main has no ladder/IEC rails, components stay on feeder column, and zero geometry flags across all sheets",
+        main_callouts = [c.text for c in _verify_line_side_callouts(mp_loaded.project, main_sh, mp_loaded.catalog)]
+        check("power sheet main has no ladder/IEC rails, L1/L2/L3 supply callouts, components on feeder column, and zero geometry flags across all sheets",
               not _verify_is_ladder(main_sh, mp_loaded.project)
               and _verify_rail_geom(main_sh, mp_loaded.project) is None
               and main_sh.drawing_style == "freeform"
               and main_sh.rail_hot == ""
               and main_sh.rail_return == ""
+              and main_callouts == ["L1", "L2", "L3"]
               and all(85.0 <= x <= 125.0 for x in main_xs.values())
               and all(fl == [] for fl in mp_all_flags.values())
               and mp_layout_issues == [],
-              json.dumps({"main_xs": main_xs, "drawing_style": main_sh.drawing_style, "rails": [main_sh.rail_hot, main_sh.rail_return], "flags": mp_all_flags, "layout_issues": mp_layout_issues}))
+              json.dumps({"main_xs": main_xs, "supply_callouts": main_callouts, "drawing_style": main_sh.drawing_style, "rails": [main_sh.rail_hot, main_sh.rail_return], "flags": mp_all_flags, "layout_issues": mp_layout_issues}))
 
 FEATURES = {
     "print-package": ("sample_catalog.pcad.yaml", feature_print_package),

@@ -2106,7 +2106,7 @@ def _layout_power_feeder_sheet(session: Any, store: Reconstruction, sheet: Any) 
             role = "bottom" if idx == 0 else "top"
             pin_roles_by_ref.setdefault(ref, {})[pin] = role
 
-    rank_y = {0: 18.0, 1: 76.0, 2: 148.0, 3: 200.0}
+    rank_y = {0: 22.0, 1: 79.0, 2: 151.0, 3: 203.0}
     rank_counts = {0: 0, 1: 0, 2: 0, 3: 0}
 
     def _power_rank(comp: Any) -> int:
@@ -2139,7 +2139,7 @@ def _layout_power_feeder_sheet(session: Any, store: Reconstruction, sheet: Any) 
         rank_counts[rank] = col + 1
         col_x = 60.0 + col * 90.0
         comp.x = (col_x - 2.0) if "contactors.ac3" in str(comp.library_id or "") else col_x
-        comp.y = rank_y.get(rank, 200.0)
+        comp.y = rank_y.get(rank, 203.0)
         for pin, role in pin_roles_by_ref.get(comp.id, {}).items():
             _ensure_named_pin_and_override(session, comp, pin, is_power=True, pin_role=role)
 
@@ -2216,7 +2216,7 @@ def synthesize_reconstruct_schematic(session: Any, sheet_id: str | None = None) 
                                 lib_id,
                                 ref=r,
                                 x=60.0,
-                                y=18.0,
+                                y=22.0,
                                 sheet_id=power_sheet.id,
                                 properties=props,
                                 snap=False,

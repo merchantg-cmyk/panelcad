@@ -15,7 +15,17 @@ from panelcad.core.models import Component, Device, PinDef, Project, Sheet
 from panelcad.core.phase_color import PhasePen, palette_for, pen_for_phase
 from panelcad.library.catalog import Catalog
 
-_SEED = {"L1": "L1", "L2": "L2", "L3": "L3", "1": "L1", "3": "L2", "5": "L3"}
+_SEED = {
+    "L1": "L1",
+    "L2": "L2",
+    "L3": "L3",
+    "1L1": "L1",
+    "2L2": "L2",
+    "3L3": "L3",
+    "1": "L1",
+    "3": "L2",
+    "5": "L3",
+}
 
 
 @dataclass(frozen=True)
@@ -24,6 +34,20 @@ class SupplyRun:
 
     points: list[tuple[float, float]]
     pen: PhasePen
+    ref: str = ""
+
+
+@dataclass(frozen=True)
+class SupplyCallout:
+    """Incoming 3-phase supply callout (``L1``, ``L2``, ``L3``) at the top of a line-side lead."""
+
+    text: str
+    x: float
+    y: float
+    size: float
+    align: str
+    pen: PhasePen
+    cap: tuple[tuple[float, float], tuple[float, float]] | None = None
     ref: str = ""
 
 
@@ -45,12 +69,17 @@ def line_side_runs(project: Project, sheet: Sheet, catalog: Catalog) -> list[Sup
             device = catalog.get(comp.library_id)
         except KeyError:
             continue
-        pin_ids = {pin.id for pin in device.pins}
-        if not ({"1", "3", "5"} <= pin_ids or {"L1", "L2", "L3"} <= pin_ids):
+        pin_labels = (comp.properties or {}).get("pin_labels") or {}
+        pin_ids = {str(pin.id) for pin in device.pins} | {str(v) for v in pin_labels.values()}
+        if not (
+            {"1", "3", "5"} <= pin_ids
+            or {"L1", "L2", "L3"} <= pin_ids
+            or {"1L1", "2L2", "3L3"} <= pin_ids
+        ):
             continue
         overrides = getattr(comp, "pin_overrides", None) or {}
         for pin in device.pins:
-            phase = _SEED.get(pin.id)
+            phase = _SEED.get(str(pin.id)) or _SEED.get(str(pin_labels.get(pin.id, "")))
             if phase is None:
                 continue
             ref = f"{comp.id}.{pin.id}"
@@ -292,9 +321,14 @@ def _lead_polyline(comp: Component, device: Device, pin: PinDef, wy: float) -> l
         ux, uy = dx / span, dy / span
     if uy < -0.5:
         # Stay inside the drawing frame. A tail that crosses wy lands in the
-        # column-number strip.
-        room = pin_w[1] - (wy + 0.55)
-        tail = min(6.0, max(0.0, room))
+        # column-number strip; when the breaker has headroom, reserve space
+        # above the tail cap for the L1/L2/L3 supply callout.
+        if pin_w[1] >= wy + 6.0:
+            room = pin_w[1] - (wy + 3.8)
+            tail = min(6.0, max(2.2, room))
+        else:
+            room = pin_w[1] - (wy + 0.55)
+            tail = min(6.0, max(0.0, room))
     else:
         tail = 4.0
     tail_w = (pin_w[0] + ux * tail, pin_w[1] + uy * tail)
@@ -302,3 +336,54 @@ def _lead_polyline(comp: Component, device: Device, pin: PinDef, wy: float) -> l
     if span >= 0.4:
         points.append(lead_w)
     return points
+
+
+def line_side_callouts(project: Project, sheet: Sheet, catalog: Catalog) -> list[SupplyCallout]:
+    """Supply callout labels (``L1``, ``L2``, ``L3``) and terminal caps for unwired line-side leads."""
+
+    runs = line_side_runs(project, sheet, catalog)
+    if not runs:
+        return []
+    try:
+        from panelcad.render.titleblock import working_rect
+
+        _wx, wy, _ww, _wh = working_rect(sheet)
+    except (KeyError, AttributeError, ValueError):
+        wy = 15.0
+    callouts: list[SupplyCallout] = []
+    for run in runs:
+        if len(run.points) < 2:
+            continue
+        tx, ty = run.points[0]
+        _px, py = run.points[1]
+        phase = str(getattr(run.pen, "phase", "") or "").strip()
+        if not phase:
+            continue
+        if ty < py - 0.5:
+            if ty >= wy + 3.4:
+                callouts.append(
+                    SupplyCallout(
+                        text=phase,
+                        x=tx,
+                        y=ty - 1.15,
+                        size=2.5,
+                        align="middle",
+                        pen=run.pen,
+                        cap=((tx - 1.8, ty), (tx + 1.8, ty)),
+                        ref=run.ref,
+                    )
+                )
+            else:
+                callouts.append(
+                    SupplyCallout(
+                        text=phase,
+                        x=tx - 0.85,
+                        y=max(wy + 2.1, ty + 1.55),
+                        size=1.9,
+                        align="end",
+                        pen=run.pen,
+                        cap=None,
+                        ref=run.ref,
+                    )
+                )
+    return callouts

@@ -265,6 +265,12 @@ def _avoid(
     tx, ty, tw, th = title_block_rect(sheet)
     fixed = [box for _name, box in pin_caption_boxes(sheet, catalog)]
     fixed.extend(box for _name, box in _line_number_boxes(project, sheet, catalog, sheet_no=sheet_no))
+    from panelcad.render.phase_ink import line_side_callouts
+
+    for callout in line_side_callouts(project, sheet, catalog):
+        cbox = text_box(callout.x, callout.y, callout.text, callout.size, callout.align)
+        if cbox is not None:
+            fixed.append(cbox)
     fixed.append((tx, ty, tx + tw, ty + th))
     fixed.extend(_rating_boxes(sheet, catalog))
     by_id = {wire.id: wire for wire in sheet.wires}

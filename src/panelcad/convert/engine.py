@@ -1129,12 +1129,12 @@ def _tidy_power_sheet(session: Any, sheet: Any) -> None:
     _tx, ty, _tw, _th = title_block_rect(sheet)
     heights = [float(b[3] - b[1]) for _c, b in ordered]
     total_h = sum(heights)
-    avail_h = (ty - 1.5) - (wy + 5.0)
+    avail_h = (ty - 1.5) - (wy + 7.0)
     gap = 3.0
     if total_h + gap * (len(ordered) - 1) > avail_h and len(ordered) > 1:
         gap = max(1.0, (avail_h - total_h) / (len(ordered) - 1))
     stack_h = total_h + gap * (len(ordered) - 1)
-    cur_y = max(wy + 5.0, min(float(ordered[0][0].y), (ty - 1.5) - stack_h))
+    cur_y = max(wy + 7.0, min(float(ordered[0][0].y), (ty - 1.5) - stack_h))
 
     for comp, box in ordered:
         h = float(box[3] - box[1])
