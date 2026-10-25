@@ -551,28 +551,46 @@ class _DuctChannel:
     width_mm: float = 16.0
 
 
-def _build_duct_channels(
-    sheet: Sheet,
-    boxes: dict[str, tuple[float, float, float, float, float, Device | None]],
-) -> list[_DuctChannel]:
-    channels: list[_DuctChannel] = []
+def _extract_sheet_trays(sheet: Sheet) -> list[WireTray]:
+    """Return all physical WireTray ducts defined on `sheet` (from `sheet.trays` and `layout_items`)."""
+
     trays: list[WireTray] = list(sheet.trays or [])
+    seen_ids = {t.id for t in trays}
     raw_items = (sheet.properties or {}).get("layout_items") or (sheet.properties or {}).get("items") or []
     for item in raw_items:
         row = item.to_row() if hasattr(item, "to_row") else (item if isinstance(item, dict) else {})
-        if str(row.get("kind") or "") == "duct":
-            ident = str(row.get("ref") or f"wt-{len(trays)+1}")
-            x = float(row.get("x") or 0.0)
-            y = float(row.get("y") or 0.0)
+        if str(row.get("kind") or "") != "duct":
+            continue
+        ident = str(row.get("id") or row.get("ref") or f"wt-{len(trays)+1}")
+        if ident in seen_ids:
+            continue
+        x = float(row.get("x") or 0.0)
+        y = float(row.get("y") or 0.0)
+        if "length_mm" in row or "width_mm" in row:
+            length_mm = float(row.get("length_mm") or 100.0)
+            width_mm = float(row.get("width_mm") or 16.0)
+            orient = str(row.get("orientation") or "h").lower()
+            orient_lit: Literal["h", "v"] = "v" if orient.startswith("v") else "h"
+            trays.append(WireTray(id=ident, x=x, y=y, length_mm=length_mm, width_mm=width_mm, orientation=orient_lit))
+        else:
             w = float(row.get("w") or 16.0)
             h = float(row.get("h") or 16.0)
             if h >= w:
                 trays.append(WireTray(id=ident, x=x, y=y, length_mm=h, width_mm=w, orientation="v"))
             else:
                 trays.append(WireTray(id=ident, x=x, y=y, length_mm=w, width_mm=h, orientation="h"))
+        seen_ids.add(ident)
+    return trays
+
+
+def _build_duct_channels(
+    sheet: Sheet,
+    boxes: dict[str, tuple[float, float, float, float, float, Device | None]],
+) -> list[_DuctChannel]:
+    channels: list[_DuctChannel] = []
+    trays = _extract_sheet_trays(sheet)
 
     for tray in trays:
-        pad = max(8.0, float(tray.width_mm))
         if tray.orientation == "h":
             yc = float(tray.y) + float(tray.width_mm) / 2.0
             channels.append(
@@ -580,8 +598,8 @@ def _build_duct_channels(
                     id=tray.id,
                     orientation="h",
                     coord=yc,
-                    span_min=float(tray.x) - pad,
-                    span_max=float(tray.x) + float(tray.length_mm) + pad,
+                    span_min=float(tray.x),
+                    span_max=float(tray.x) + float(tray.length_mm),
                     width_mm=float(tray.width_mm),
                 )
             )
@@ -592,57 +610,22 @@ def _build_duct_channels(
                     id=tray.id,
                     orientation="v",
                     coord=xc,
-                    span_min=float(tray.y) - pad,
-                    span_max=float(tray.y) + float(tray.length_mm) + pad,
+                    span_min=float(tray.y),
+                    span_max=float(tray.y) + float(tray.length_mm),
                     width_mm=float(tray.width_mm),
                 )
             )
 
-    # Detect vertical gaps between component rows where an inter-row wireway channel belongs
-    if boxes:
-        v_ducts = [c for c in channels if c.orientation == "v"]
-        h_ducts = [c for c in channels if c.orientation == "h"]
-        x_min = min((c.coord for c in v_ducts), default=min(b[0] for b in boxes.values()) - 15.0)
-        x_max = max((c.coord for c in v_ducts), default=max(b[0] + b[2] for b in boxes.values()) + 15.0)
-
-        # Group components into horizontal rows by vertical overlap
-        sorted_boxes = sorted(boxes.values(), key=lambda b: b[1])
-        rows: list[tuple[float, float]] = []
-        for _bx, by, _bw, bh, _z, _d in sorted_boxes:
-            if not rows or by > rows[-1][1] + 2.0:
-                rows.append((by, by + bh))
-            else:
-                rows[-1] = (min(rows[-1][0], by), max(rows[-1][1], by + bh))
-
-        for idx in range(len(rows) - 1):
-            gap_top = rows[idx][1]
-            gap_bot = rows[idx + 1][0]
-            if gap_bot - gap_top >= 2.0:
-                mid_y = (gap_top + gap_bot) / 2.0
-                if not any(abs(hd.coord - mid_y) < (gap_bot - gap_top) * 0.6 for hd in h_ducts):
-                    channels.append(
-                        _DuctChannel(
-                            id="wt-mid" if idx == 0 else f"wt-mid-{idx+1}",
-                            orientation="h",
-                            coord=mid_y,
-                            span_min=x_min - 8.0,
-                            span_max=x_max + 8.0,
-                            width_mm=12.0,
-                        )
-                    )
-
-        # If there are no horizontal ducts at all, synthesize top and bottom channels
-        if not any(c.orientation == "h" for c in channels):
-            top_y = rows[0][0] - 12.0
-            bot_y = rows[-1][1] + 12.0
-            channels.append(_DuctChannel(id="wt-top", orientation="h", coord=top_y, span_min=x_min - 8.0, span_max=x_max + 8.0))
-            channels.append(_DuctChannel(id="wt-bot", orientation="h", coord=bot_y, span_min=x_min - 8.0, span_max=x_max + 8.0))
-        if not any(c.orientation == "v" for c in channels):
-            h_now = [c for c in channels if c.orientation == "h"]
-            y_min = min(c.coord for c in h_now) - 8.0
-            y_max = max(c.coord for c in h_now) + 8.0
-            channels.append(_DuctChannel(id="wt-left", orientation="v", coord=x_min, span_min=y_min, span_max=y_max))
-            channels.append(_DuctChannel(id="wt-right", orientation="v", coord=x_max, span_min=y_min, span_max=y_max))
+    # Fallback only when a sheet has no trays defined at all
+    if not channels and boxes:
+        x_min = min(b[0] for b in boxes.values()) - 15.0
+        x_max = max(b[0] + b[2] for b in boxes.values()) + 15.0
+        y_min = min(b[1] for b in boxes.values()) - 12.0
+        y_max = max(b[1] + b[3] for b in boxes.values()) + 12.0
+        channels.append(_DuctChannel(id="wt-top", orientation="h", coord=y_min, span_min=x_min, span_max=x_max))
+        channels.append(_DuctChannel(id="wt-bot", orientation="h", coord=y_max, span_min=x_min, span_max=x_max))
+        channels.append(_DuctChannel(id="wt-left", orientation="v", coord=x_min, span_min=y_min, span_max=y_max))
+        channels.append(_DuctChannel(id="wt-right", orientation="v", coord=x_max, span_min=y_min, span_max=y_max))
 
     return channels
 
@@ -651,6 +634,8 @@ def _pick_entry_duct(
     landing: PinLanding,
     h_ducts: list[_DuctChannel],
 ) -> _DuctChannel:
+    """Pick the nearest horizontal wire tray in the terminal's exit direction."""
+
     if landing.side == "top":
         above = [d for d in h_ducts if d.coord <= landing.y + 1.0]
         if above:
@@ -765,16 +750,15 @@ def _sample_cubic_bezier(
 def _smooth_corner_fillet_polyline(
     control_pts: list[tuple[float, float]],
     *,
-    bend_radius: float = DEFAULT_BEND_RADIUS_DRAW_MM,
+    bend_radius: float = 4.2,
     samples_per_corner: int = CURVE_SAMPLES_PER_BEND,
+    preserve: set[tuple[float, float]] | None = None,
 ) -> list[tuple[float, float]]:
-    """Replace every interior corner in `control_pts` with a smooth physical wire bend sweep.
-
-    Uses cubic Bézier circular-arc approximation (`kappa = 0.55228475`) with radius clamped
-    to adjacent segment lengths so consecutive bends never overlap or kink.
+    """Replace every interior corner in `control_pts` with a compact smooth bend sweep
+    that stays strictly inside the wire tray boundaries (`bend_radius <= 4.2 mm`).
     """
 
-    pts = _simplify_polyline(control_pts)
+    pts = _simplify_polyline(control_pts, preserve=preserve)
     if len(pts) <= 2:
         return pts
 
@@ -791,6 +775,10 @@ def _smooth_corner_fillet_polyline(
         curr_pt = pts[i]
         next_pt = pts[i + 1]
 
+        if preserve and any(math.hypot(curr_pt[0] - px, curr_pt[1] - py) < 0.15 for px, py in preserve):
+            result.append(curr_pt)
+            continue
+
         len_in = seg_lengths[i - 1]
         len_out = seg_lengths[i]
         if len_in < 0.25 or len_out < 0.25:
@@ -806,8 +794,8 @@ def _smooth_corner_fillet_polyline(
         if dot > 0.999:
             continue
 
-        limit_in = 0.82 * len_in if i == 1 else 0.46 * len_in
-        limit_out = 0.82 * len_out if i == len(pts) - 2 else 0.46 * len_out
+        limit_in = 0.80 * len_in if i == 1 else 0.45 * len_in
+        limit_out = 0.80 * len_out if i == len(pts) - 2 else 0.45 * len_out
         r = min(float(bend_radius), limit_in, limit_out)
         if r < 0.25:
             result.append(curr_pt)
@@ -825,14 +813,102 @@ def _smooth_corner_fillet_polyline(
     return _dedup_points(result, min_dist=0.04)
 
 
-def _pin_lead_out_vector(landing: PinLanding) -> tuple[float, float]:
-    if landing.side == "top":
-        return (0.0, -1.0)
-    if landing.side == "bottom":
-        return (0.0, 1.0)
-    if landing.side == "left":
-        return (-1.0, 0.0)
-    return (1.0, 0.0)
+def _lane_offset_for_step(step_index: int, duct_width_mm: float = 16.0) -> float:
+    """Deterministic parallel lane offset inside a tray (`[-2.25, +2.25] mm` for 16 mm tray)."""
+
+    slot = (int(step_index) % 7) - 3
+    max_off = max(0.8, min(2.25, float(duct_width_mm) * 0.15))
+    return round((slot / 3.0) * max_off, 3)
+
+
+def _build_in_tray_skeleton(
+    start: PinLanding,
+    end: PinLanding,
+    channels: list[_DuctChannel],
+    *,
+    step_index: int = 0,
+    ties: list[ZipTieWaypoint] | None = None,
+) -> tuple[list[tuple[float, float]], list[_DuctChannel]]:
+    """Build the orthogonal in-tray skeleton from `start` into the nearest horizontal tray,
+    along the tray network, and straight out to `end`.
+    Returns `(skeleton_points, ducts_along_segments)`.
+    """
+
+    h_ducts = [c for c in channels if c.orientation == "h"]
+    v_ducts = [c for c in channels if c.orientation == "v"]
+    if not h_ducts:
+        mid_y = round((start.y + end.y) / 2.0, 2)
+        dummy = _DuctChannel(id="direct", orientation="h", coord=mid_y, span_min=min(start.x, end.x), span_max=max(start.x, end.x))
+        return [(start.x, start.y), (start.x, mid_y), (end.x, mid_y), (end.x, end.y)], [dummy]
+
+    d_start = _pick_entry_duct(start, h_ducts)
+    d_end = _pick_entry_duct(end, h_ducts)
+
+    off_s = _lane_offset_for_step(step_index, d_start.width_mm)
+    off_e = _lane_offset_for_step(step_index, d_end.width_mm)
+    y_start = round(d_start.coord + off_s, 3)
+    y_end = round(d_end.coord + off_e, 3)
+
+    # Check if any assigned zip-tie forces routing through a vertical duct
+    tie_forces_v = False
+    if ties and v_ducts:
+        for t in ties:
+            if any(abs(t.x - vd.coord) <= max(10.0, vd.width_mm * 0.75) for vd in v_ducts):
+                if abs(t.y - d_start.coord) > d_start.width_mm * 0.65:
+                    tie_forces_v = True
+
+    if (d_start.id == d_end.id or abs(d_start.coord - d_end.coord) < 0.5) and not tie_forces_v:
+        pts = [
+            (start.x, start.y),
+            (start.x, y_start),
+            (end.x, y_start),
+            (end.x, end.y),
+        ]
+        return pts, [d_start]
+
+    if v_ducts:
+        best_vd = v_ducts[0]
+        best_score = float("inf")
+        for vd in v_ducts:
+            off_v = _lane_offset_for_step(step_index, vd.width_mm)
+            xv = vd.coord + off_v
+            cand_pts = [
+                (start.x, start.y),
+                (start.x, y_start),
+                (xv, y_start),
+                (xv, y_end),
+                (end.x, y_end),
+                (end.x, end.y),
+            ]
+            score = _polyline_length(cand_pts)
+            if ties:
+                # Strongly prefer the vertical duct that hosts an assigned zip-tie
+                for t in ties:
+                    if abs(t.x - vd.coord) <= max(25.0, vd.width_mm * 1.5):
+                        score -= 500.0
+            if score < best_score:
+                best_score = score
+                best_vd = vd
+
+        off_v = _lane_offset_for_step(step_index, best_vd.width_mm)
+        x_vert = round(best_vd.coord + off_v, 3)
+        pts = [
+            (start.x, start.y),
+            (start.x, y_start),
+            (x_vert, y_start),
+            (x_vert, y_end),
+            (end.x, y_end),
+            (end.x, end.y),
+        ]
+        return pts, [d_start, best_vd, d_end]
+
+    pts = [
+        (start.x, start.y),
+        (start.x, y_start),
+        (end.x, y_start),
+        (end.x, end.y),
+    ]
+    return pts, [d_start]
 
 
 def _route_via_ducts(
@@ -840,138 +916,110 @@ def _route_via_ducts(
     end: PinLanding,
     channels: list[_DuctChannel],
     *,
-    bend_radius: float = DEFAULT_BEND_RADIUS_DRAW_MM,
+    bend_radius: float = 4.0,
+    step_index: int = 0,
 ) -> tuple[list[tuple[float, float]], list[str]]:
-    """Route a wire from `start` to `end` through Panduit wireway channels with smooth physical bends."""
-
-    h_ducts = [c for c in channels if c.orientation == "h"]
-    v_ducts = [c for c in channels if c.orientation == "v"]
-    if not h_ducts:
-        mid_y = round((start.y + end.y) / 2.0, 2)
-        raw = [(start.x, start.y), (start.x, mid_y), (end.x, mid_y), (end.x, end.y)]
-        return _smooth_corner_fillet_polyline(raw, bend_radius=bend_radius), ["direct"]
-
-    d_start = _pick_entry_duct(start, h_ducts)
-    d_end = _pick_entry_duct(end, h_ducts)
-
-    if d_start.id == d_end.id or abs(d_start.coord - d_end.coord) < 0.5:
-        pts = [
-            (start.x, start.y),
-            (start.x, d_start.coord),
-            (end.x, d_start.coord),
-            (end.x, end.y),
-        ]
-        r_eff = max(bend_radius, min(14.0, d_start.width_mm * 0.75))
-        return _smooth_corner_fillet_polyline(pts, bend_radius=r_eff), [d_start.id]
-
-    best_pts: list[tuple[float, float]] | None = None
-    best_via: list[str] = []
-    best_len = float("inf")
-
-    for vd in v_ducts:
-        pts = [
-            (start.x, start.y),
-            (start.x, d_start.coord),
-            (vd.coord, d_start.coord),
-            (vd.coord, d_end.coord),
-            (end.x, d_end.coord),
-            (end.x, end.y),
-        ]
-        cand = _simplify_polyline(pts)
-        length = _polyline_length(cand)
-        if length < best_len:
-            best_len = length
-            best_pts = cand
-            via = [d_start.id, vd.id, d_end.id]
-            best_via = [v for i, v in enumerate(via) if i == 0 or v != via[i - 1]]
-
-    if best_pts is not None:
-        r_eff = max(bend_radius, min(14.0, d_start.width_mm * 0.75))
-        return _smooth_corner_fillet_polyline(best_pts, bend_radius=r_eff), best_via
-
-    pts = [
-        (start.x, start.y),
-        (start.x, d_start.coord),
-        (end.x, d_start.coord),
-        (end.x, end.y),
-    ]
-    return _smooth_corner_fillet_polyline(pts, bend_radius=bend_radius), [d_start.id]
-
-
-def _tie_tangent_vector(
-    idx: int,
-    ordered_ties: list[ZipTieWaypoint],
-    lead_start: tuple[float, float],
-    lead_end: tuple[float, float],
-) -> tuple[float, float]:
-    """Compute a smooth unit tangent vector `(tx, ty)` through `ordered_ties[idx]`
-    so all bundled wires pass through the zip-tie collar with a shared smooth tangent.
+    """Route a wire from `start` into the nearest tray, strictly along the tray interior,
+    and straight out to `end` with compact smooth in-tray corner radii.
     """
 
-    curr_pt = (float(ordered_ties[idx].x), float(ordered_ties[idx].y))
-    prev_pt = lead_start if idx == 0 else (float(ordered_ties[idx - 1].x), float(ordered_ties[idx - 1].y))
-    next_pt = lead_end if idx == len(ordered_ties) - 1 else (float(ordered_ties[idx + 1].x), float(ordered_ties[idx + 1].y))
-
-    v_in = (curr_pt[0] - prev_pt[0], curr_pt[1] - prev_pt[1])
-    v_out = (next_pt[0] - curr_pt[0], next_pt[1] - curr_pt[1])
-    lin = math.hypot(v_in[0], v_in[1])
-    lout = math.hypot(v_out[0], v_out[1])
-
-    if lin > 1e-6 and lout > 1e-6:
-        uin = (v_in[0] / lin, v_in[1] / lin)
-        uout = (v_out[0] / lout, v_out[1] / lout)
-        # Catmull-Rom / angle-bisector tangent so even wide or turning spans never fold back
-        bx = uin[0] + uout[0]
-        by = uin[1] + uout[1]
-        bn = math.hypot(bx, by)
-        if bn > 1e-4:
-            ux, uy = bx / bn, by / bn
-        else:
-            ux, uy = -uin[1], uin[0]
-    else:
-        vx = next_pt[0] - prev_pt[0]
-        vy = next_pt[1] - prev_pt[1]
-        norm = math.hypot(vx, vy)
-        if norm < 1e-6:
-            return (1.0, 0.0) if ordered_ties[idx].orientation == "v" else (0.0, 1.0)
-        ux, uy = vx / norm, vy / norm
-
-    tie = ordered_ties[idx]
-    if len(ordered_ties) == 1:
-        if tie.orientation == "h":
-            if abs(uy) >= 0.45:
-                bx, by = 0.35 * ux, (1.0 if uy >= 0 else -1.0)
-            else:
-                bx, by = ux, uy
-        else:
-            if abs(ux) >= 0.45:
-                bx, by = (1.0 if ux >= 0 else -1.0), 0.35 * uy
-            else:
-                bx, by = ux, uy
-        bn = math.hypot(bx, by) or 1.0
-        return (bx / bn, by / bn)
-
-    return (ux, uy)
+    skel_pts, skel_ducts = _build_in_tray_skeleton(start, end, channels, step_index=step_index)
+    min_w = min((d.width_mm for d in skel_ducts), default=16.0)
+    # Keep corner fillet radius <= 0.25 * width_mm so the entire 90-deg turn stays inside the tray walls
+    r_in_tray = min(4.1, max(2.8, min_w * 0.25), float(bend_radius))
+    via: list[str] = []
+    for d in skel_ducts:
+        if not via or via[-1] != d.id:
+            via.append(d.id)
+    return _smooth_corner_fillet_polyline(skel_pts, bend_radius=r_in_tray), via
 
 
-def _smooth_hermite_span(
-    p0: tuple[float, float],
-    t0: tuple[float, float],
-    p1: tuple[float, float],
-    t1: tuple[float, float],
-    *,
-    handle_scale: float = 0.36,
-    steps: int = 28,
+def _sample_in_tray_pinch_segment(
+    p_start: tuple[float, float],
+    p_end: tuple[float, float],
+    seg_ties: list[ZipTieWaypoint],
+    orientation: Literal["h", "v"],
 ) -> list[tuple[float, float]]:
-    """Sample a smooth C1 cubic Bézier curve from `p0` (unit tangent `t0`) to `p1` (unit tangent `t1`)."""
+    """Sample a straight tray segment `p_start -> p_end` that smoothly pinches to each
+    in-tray `ZipTieWaypoint` `(tie.x, tie.y)` and returns to the wire's lane without leaving the tray.
+    """
 
-    dist = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
-    if dist < 0.2:
-        return [p0, p1]
-    h = max(2.5, dist * handle_scale)
-    c1 = (p0[0] + t0[0] * h, p0[1] + t0[1] * h)
-    c2 = (p1[0] - t1[0] * h, p1[1] - t1[1] * h)
-    return _sample_cubic_bezier(p0, c1, c2, p1, steps=max(steps, int(dist / 1.8) + 14))
+    if not seg_ties:
+        return [p_start, p_end]
+
+    out: list[tuple[float, float]] = [p_start]
+    if orientation == "v":
+        x_lane = p_start[0]
+        y0, y1 = p_start[1], p_end[1]
+        direction = 1.0 if y1 >= y0 else -1.0
+        ordered = sorted(seg_ties, key=lambda t: (t.y - y0) * direction)
+        curr_y = y0
+        for tie in ordered:
+            tx, ty = round(float(tie.x), 3), round(float(tie.y), 3)
+            if abs(tx - x_lane) < 0.08:
+                out.append((tx, ty))
+                curr_y = ty
+                continue
+            avail_before = (ty - curr_y) * direction
+            avail_after = (y1 - ty) * direction
+            span_before = min(13.0, max(4.0, avail_before * 0.88))
+            span_after = min(13.0, max(4.0, avail_after * 0.88))
+            if avail_before >= 4.0 and avail_after >= 4.0:
+                n_half = 8
+                for k in range(-n_half, 0):
+                    frac = k / n_half  # -1.0 .. 0
+                    yk = ty + direction * frac * span_before
+                    w = 0.5 * (1.0 + math.cos(math.pi * frac))
+                    xk = x_lane + (tx - x_lane) * w
+                    out.append((round(xk, 3), round(yk, 3)))
+                out.append((tx, ty))
+                for k in range(1, n_half + 1):
+                    frac = k / n_half  # 0 .. +1.0
+                    yk = ty + direction * frac * span_after
+                    w = 0.5 * (1.0 + math.cos(math.pi * frac))
+                    xk = x_lane + (tx - x_lane) * w
+                    out.append((round(xk, 3), round(yk, 3)))
+                curr_y = ty + direction * span_after
+            else:
+                out.append((tx, ty))
+        out.append(p_end)
+    else:
+        y_lane = p_start[1]
+        x0, x1 = p_start[0], p_end[0]
+        direction = 1.0 if x1 >= x0 else -1.0
+        ordered = sorted(seg_ties, key=lambda t: (t.x - x0) * direction)
+        curr_x = x0
+        for tie in ordered:
+            tx, ty = round(float(tie.x), 3), round(float(tie.y), 3)
+            if abs(ty - y_lane) < 0.08:
+                out.append((tx, ty))
+                curr_x = tx
+                continue
+            avail_before = (tx - curr_x) * direction
+            avail_after = (x1 - tx) * direction
+            span_before = min(13.0, max(4.0, avail_before * 0.88))
+            span_after = min(13.0, max(4.0, avail_after * 0.88))
+            if avail_before >= 4.0 and avail_after >= 4.0:
+                n_half = 8
+                for k in range(-n_half, 0):
+                    frac = k / n_half
+                    xk = tx + direction * frac * span_before
+                    w = 0.5 * (1.0 + math.cos(math.pi * frac))
+                    yk = y_lane + (ty - y_lane) * w
+                    out.append((round(xk, 3), round(yk, 3)))
+                out.append((tx, ty))
+                for k in range(1, n_half + 1):
+                    frac = k / n_half
+                    xk = tx + direction * frac * span_after
+                    w = 0.5 * (1.0 + math.cos(math.pi * frac))
+                    yk = y_lane + (ty - y_lane) * w
+                    out.append((round(xk, 3), round(yk, 3)))
+                curr_x = tx + direction * span_after
+            else:
+                out.append((tx, ty))
+        out.append(p_end)
+
+    return _dedup_points(out, min_dist=0.04)
 
 
 def _route_via_zip_ties(
@@ -980,97 +1028,181 @@ def _route_via_zip_ties(
     ties: list[ZipTieWaypoint],
     channels: list[_DuctChannel],
     draw_scale: float,
+    *,
+    step_index: int = 0,
 ) -> tuple[list[tuple[float, float]], list[str]]:
-    """Route `start -> ties -> end` using smooth physical spline curves (like `@cmzw_`'s zip-ties prototype).
+    """Route `start -> ties -> end` strictly through the nearest wire trays.
 
-    Each wire exits its source terminal perpendicular to the device edge for a short lead-out,
-    sweeps along a smooth cubic spline into the zip-tie collar(s) (`(tie.x, tie.y)` is hit
-    exactly), follows the shared smooth trunk spline between consecutive zip-ties, and fans
-    out smoothly into the destination terminal lead-in. Zero 90° corners anywhere!
+    Wires enter the nearest horizontal tray vertically from their terminal, travel inside
+    the connected wire trays with compact smooth corner radii (`R <= 4.1 mm`), cinch smoothly
+    through any `ZipTieWaypoint` along the tray without bulging outside the tray walls,
+    and exit vertically into the destination terminal.
     """
 
-    h_ducts = [c for c in channels if c.orientation == "h"]
-    lead_len = max(3.5, min(7.0, 9.0 * draw_scale))
-    d_start = _pick_entry_duct(start, h_ducts) if h_ducts else None
-    d_end = _pick_entry_duct(end, h_ducts) if h_ducts else None
-
-    dx = end.x - start.x
-    dy = end.y - start.y
-    norm = math.hypot(dx, dy) or 1.0
-    ordered = sorted(
-        ties,
-        key=lambda t: ((t.x - start.x) * dx + (t.y - start.y) * dy) / norm,
+    skel_pts, skel_ducts = _build_in_tray_skeleton(
+        start,
+        end,
+        channels,
+        step_index=step_index,
+        ties=ties,
     )
+    min_w = min((d.width_mm for d in skel_ducts), default=16.0)
+    r_in_tray = min(4.1, max(2.8, min_w * 0.25))
 
-    s_dir = _pin_lead_out_vector(start)
-    e_dir_out = _pin_lead_out_vector(end)
-    e_dir_in = (-e_dir_out[0], -e_dir_out[1])
+    # Map each zip-tie to the closest tray segment in `skel_pts` (segments 1 .. len(skel_pts)-2)
+    seg_count = len(skel_ducts)
+    in_tray_ties: dict[int, list[ZipTieWaypoint]] = {i: [] for i in range(seg_count)}
+    external_ties: dict[int, list[ZipTieWaypoint]] = {i: [] for i in range(seg_count)}
 
-    p_start = (float(start.x), float(start.y))
-    p_end = (float(end.x), float(end.y))
-    lead_start = (p_start[0] + s_dir[0] * lead_len, p_start[1] + s_dir[1] * lead_len)
-    lead_end = (p_end[0] + e_dir_out[0] * lead_len, p_end[1] + e_dir_out[1] * lead_len)
+    for tie in ties:
+        best_seg = 0
+        best_dist = float("inf")
+        for s_idx in range(seg_count):
+            ax, ay = skel_pts[s_idx + 1]
+            bx, by = skel_pts[s_idx + 2]
+            d = _point_to_segment_dist(float(tie.x), float(tie.y), ax, ay, bx, by)
+            if d < best_dist:
+                best_dist = d
+                best_seg = s_idx
+        duct = skel_ducts[best_seg]
+        perp = abs(float(tie.y) - duct.coord) if duct.orientation == "h" else abs(float(tie.x) - duct.coord)
+        if perp <= duct.width_mm * 0.55:
+            in_tray_ties[best_seg].append(tie)
+        else:
+            external_ties[best_seg].append(tie)
+
+    # If any zip-tie was explicitly dragged outside the tray (e.g. move_zip_tie_waypoint test),
+    # insert a smooth filleted detour on that segment while preserving the exact tie coordinate.
+    preserve_pts: set[tuple[float, float]] = set()
+    expanded_pts: list[tuple[float, float]] = [skel_pts[0], skel_pts[1]]
+    for s_idx in range(seg_count):
+        p_a = expanded_pts[-1]
+        p_b = skel_pts[s_idx + 2]
+        duct = skel_ducts[s_idx]
+        ext = external_ties[s_idx]
+        if ext:
+            for t in ext:
+                tx, ty = round(float(t.x), 3), round(float(t.y), 3)
+                preserve_pts.add((tx, ty))
+                if duct.orientation == "v":
+                    dy_dir = 1.0 if p_b[1] >= p_a[1] else -1.0
+                    lead = 6.0 * dy_dir
+                    expanded_pts.append((p_a[0], round(ty - lead, 3)))
+                    expanded_pts.append((tx, round(ty - lead * 0.35, 3)))
+                    expanded_pts.append((tx, ty))
+                    expanded_pts.append((tx, round(ty + lead * 0.35, 3)))
+                    expanded_pts.append((p_a[0], round(ty + lead, 3)))
+                else:
+                    dx_dir = 1.0 if p_b[0] >= p_a[0] else -1.0
+                    lead = 6.0 * dx_dir
+                    expanded_pts.append((round(tx - lead, 3), p_a[1]))
+                    expanded_pts.append((round(tx - lead * 0.35, 3), ty))
+                    expanded_pts.append((tx, ty))
+                    expanded_pts.append((round(tx + lead * 0.35, 3), ty))
+                    expanded_pts.append((round(tx + lead, 3), p_a[1]))
+        expanded_pts.append(p_b)
+    expanded_pts.append(skel_pts[-1])
+
+    # If an in-tray zip-tie is close (< 13 mm) to either corner of its tray segment,
+    # align that segment's lane directly with the zip-tie coordinate so the corner fillet
+    # lands smoothly on the zip-tie line without a tight double S-bend next to the corner.
+    skel_pts = list(skel_pts)
+    for s_idx in range(seg_count):
+        ties_here = in_tray_ties[s_idx]
+        if not ties_here:
+            continue
+        duct = skel_ducts[s_idx]
+        ax, ay = skel_pts[s_idx + 1]
+        bx, by = skel_pts[s_idx + 2]
+        for t in ties_here:
+            if duct.orientation == "h":
+                if min(abs(t.x - ax), abs(bx - t.x)) < 13.0:
+                    ty = round(float(t.y), 3)
+                    skel_pts[s_idx + 1] = (skel_pts[s_idx + 1][0], ty)
+                    skel_pts[s_idx + 2] = (skel_pts[s_idx + 2][0], ty)
+                    break
+            else:
+                if min(abs(t.y - ay), abs(by - t.y)) < 13.0:
+                    tx = round(float(t.x), 3)
+                    skel_pts[s_idx + 1] = (tx, skel_pts[s_idx + 1][1])
+                    skel_pts[s_idx + 2] = (tx, skel_pts[s_idx + 2][1])
+                    break
+
+    # If we only have in-tray ties (normal case), fillet the tray corners first and then pinch
+    # along the straight interior portion of each tray segment so 100% of points stay in the tray.
+    if not any(external_ties.values()):
+        n_pts = len(skel_pts)
+        seg_lengths = [
+            math.hypot(skel_pts[i + 1][0] - skel_pts[i][0], skel_pts[i + 1][1] - skel_pts[i][1])
+            for i in range(n_pts - 1)
+        ]
+        corner_r: dict[int, float] = {}
+        corner_curves: dict[int, tuple[tuple[float, float], tuple[float, float], list[tuple[float, float]]]] = {}
+        kappa = 0.55228475
+        for i in range(1, n_pts - 1):
+            prev_pt = skel_pts[i - 1]
+            curr_pt = skel_pts[i]
+            next_pt = skel_pts[i + 1]
+            len_in = seg_lengths[i - 1]
+            len_out = seg_lengths[i]
+            if len_in < 0.25 or len_out < 0.25:
+                corner_r[i] = 0.0
+                continue
+            ux_in = (curr_pt[0] - prev_pt[0]) / len_in
+            uy_in = (curr_pt[1] - prev_pt[1]) / len_in
+            ux_out = (next_pt[0] - curr_pt[0]) / len_out
+            uy_out = (next_pt[1] - curr_pt[1]) / len_out
+            dot = max(-1.0, min(1.0, ux_in * ux_out + uy_in * uy_out))
+            if dot > 0.999:
+                corner_r[i] = 0.0
+                continue
+            r = min(r_in_tray, 0.42 * len_in, 0.42 * len_out)
+            corner_r[i] = r
+            entry = (curr_pt[0] - ux_in * r, curr_pt[1] - uy_in * r)
+            exit_ = (curr_pt[0] + ux_out * r, curr_pt[1] + uy_out * r)
+            c1 = (entry[0] + ux_in * r * kappa, entry[1] + uy_in * r * kappa)
+            c2 = (exit_[0] - ux_out * r * kappa, exit_[1] - uy_out * r * kappa)
+            curve = _sample_cubic_bezier(entry, c1, c2, exit_, steps=CURVE_SAMPLES_PER_BEND)
+            corner_curves[i] = (entry, exit_, curve)
+
+        result: list[tuple[float, float]] = [skel_pts[0]]
+        if 1 in corner_curves:
+            result.extend(corner_curves[1][2])
+        else:
+            result.append(skel_pts[1])
+
+        for s_idx in range(seg_count):
+            c_left = s_idx + 1
+            c_right = s_idx + 2
+            seg_start = corner_curves[c_left][1] if c_left in corner_curves else skel_pts[c_left]
+            seg_end = corner_curves[c_right][0] if c_right in corner_curves else skel_pts[c_right]
+            duct = skel_ducts[s_idx]
+            ties_here = in_tray_ties[s_idx]
+            if ties_here:
+                pinched = _sample_in_tray_pinch_segment(seg_start, seg_end, ties_here, duct.orientation)
+                result.extend(pinched[1:])
+            if c_right in corner_curves:
+                result.extend(corner_curves[c_right][2])
+            else:
+                result.append(skel_pts[c_right])
+
+        result.append(skel_pts[-1])
+        pts_final = _dedup_points(result, min_dist=0.04)
+    else:
+        pts_final = _smooth_corner_fillet_polyline(expanded_pts, bend_radius=r_in_tray, preserve=preserve_pts)
 
     via: list[str] = []
-    first_tie = ordered[0]
-    if d_start is not None and abs(d_start.coord - first_tie.y) <= abs(start.y - first_tie.y) + lead_len * 1.5:
-        if d_start.id not in via:
-            via.append(d_start.id)
+    for s_idx, duct in enumerate(skel_ducts):
+        if not via or via[-1] != duct.id:
+            via.append(duct.id)
+        for t in in_tray_ties[s_idx] + external_ties[s_idx]:
+            if t.id not in via:
+                via.append(t.id)
+    for t in ties:
+        if t.id not in via:
+            via.append(t.id)
 
-    for t in ordered:
-        via.append(t.id)
-
-    last_tie = ordered[-1]
-    if d_end is not None and abs(d_end.coord - last_tie.y) <= abs(end.y - last_tie.y) + lead_len * 1.5:
-        if not via or via[-1] != d_end.id:
-            via.append(d_end.id)
-
-    tie_tangents = [
-        _tie_tangent_vector(idx, ordered, lead_start, lead_end)
-        for idx in range(len(ordered))
-    ]
-
-    pts: list[tuple[float, float]] = [p_start]
-    first_tie_pt = (float(first_tie.x), float(first_tie.y))
-    pts.extend(
-        _smooth_hermite_span(
-            lead_start,
-            s_dir,
-            first_tie_pt,
-            tie_tangents[0],
-            handle_scale=0.40,
-            steps=22,
-        )
-    )
-    pts.append((round(first_tie_pt[0], 2), round(first_tie_pt[1], 2)))
-
-    for idx in range(len(ordered) - 1):
-        p_a = (float(ordered[idx].x), float(ordered[idx].y))
-        p_b = (float(ordered[idx + 1].x), float(ordered[idx + 1].y))
-        span = _smooth_hermite_span(
-            p_a,
-            tie_tangents[idx],
-            p_b,
-            tie_tangents[idx + 1],
-            handle_scale=0.38,
-            steps=22,
-        )
-        pts.extend(span[1:])
-        pts.append((round(p_b[0], 2), round(p_b[1], 2)))
-
-    last_tie_pt = (float(last_tie.x), float(last_tie.y))
-    fan_out = _smooth_hermite_span(
-        last_tie_pt,
-        tie_tangents[-1],
-        lead_end,
-        e_dir_in,
-        handle_scale=0.40,
-        steps=22,
-    )
-    pts.extend(fan_out[1:])
-    pts.append(p_end)
-
-    return _dedup_points(pts, min_dist=0.04), via
+    return pts_final, via
 
 
 def list_zip_tie_waypoints(
@@ -1219,10 +1351,9 @@ def route_panel_wires(
             or "*" in t.wire_numbers
         ]
         if matching_ties:
-            pts, via = _route_via_zip_ties(start, end, matching_ties, channels, draw_scale)
+            pts, via = _route_via_zip_ties(start, end, matching_ties, channels, draw_scale, step_index=step_idx)
         else:
-            bend_r = max(9.0, min(14.0, 22.0 * draw_scale))
-            pts, via = _route_via_ducts(start, end, channels, bend_radius=bend_r)
+            pts, via = _route_via_ducts(start, end, channels, bend_radius=4.0, step_index=step_idx)
 
         path_2d_mm, raw_mm, cut_mm, cut_in = _compute_cut_length(
             pts,
@@ -1403,6 +1534,20 @@ def add_zip_tie_slice(
     cx = round((float(x1) + float(x2)) / 2.0, 2)
     cy = round((float(y1) + float(y2)) / 2.0, 2)
     orient: Literal["h", "v"] = "h" if abs(x2 - x1) >= abs(y2 - y1) else "v"
+    boxes = _component_boxes_on_sheet(sheet, cat)
+    channels = _build_duct_channels(sheet, boxes)
+    for ch in channels:
+        half_inner = ch.width_mm * 0.30
+        if ch.orientation == "v" and orient == "h":
+            if min(x1, x2) - 4.0 <= ch.coord <= max(x1, x2) + 4.0 and ch.span_min - 4.0 <= cy <= ch.span_max + 4.0:
+                if abs(cx - ch.coord) > half_inner:
+                    cx = round(ch.coord, 2)
+                break
+        elif ch.orientation == "h" and orient == "v":
+            if min(y1, y2) - 4.0 <= ch.coord <= max(y1, y2) + 4.0 and ch.span_min - 4.0 <= cx <= ch.span_max + 4.0:
+                if abs(cy - ch.coord) > half_inner:
+                    cy = round(ch.coord, 2)
+                break
     tie = ZipTieWaypoint(
         id=zt_id,
         x=cx,
@@ -1792,3 +1937,124 @@ def render_panel_wiring_png(
     dest.parent.mkdir(parents=True, exist_ok=True)
     export_sheet_png(sheet, dest, catalog=cat, dpi=dpi, project=project)
     return dest
+
+
+def verify_routes_inside_trays(
+    session_or_project: Any,
+    sheet_id: str | None = None,
+    *,
+    catalog: Catalog | None = None,
+    tol_mm: float = 0.25,
+) -> dict[str, Any]:
+    """Verify mathematically that every routed panel wire:
+    1. Travels vertically from its source terminal into the nearest horizontal wire tray
+       without crossing any other component body.
+    2. Stays 100% inside the union of the sheet's wire tray rectangles between tray entry and tray exit.
+    3. Exits vertically from the destination wire tray into the destination terminal
+       without crossing any other component body.
+    4. Uses smooth bends (`max_turn_angle_deg < 25.0°`, zero sharp 90° corners).
+    """
+
+    project, cat = _unwrap_project_and_catalog(session_or_project, catalog)
+    sheet = find_layout_sheet(project, sheet_id)
+    trays = _extract_sheet_trays(sheet)
+    boxes = _component_boxes_on_sheet(sheet, cat)
+    routes = route_panel_wires(project, sheet.id, cat)
+
+    # Expand tray rectangles slightly at intersections so junction corners are continuous
+    tray_rects: list[tuple[str, float, float, float, float]] = []
+    for t in trays:
+        if t.orientation == "h":
+            tray_rects.append((t.id, float(t.x) - tol_mm, float(t.y) - tol_mm, float(t.x) + float(t.length_mm) + tol_mm, float(t.y) + float(t.width_mm) + tol_mm))
+        else:
+            tray_rects.append((t.id, float(t.x) - tol_mm, float(t.y) - tol_mm, float(t.x) + float(t.width_mm) + tol_mm, float(t.y) + float(t.length_mm) + tol_mm))
+
+    def _in_any_tray(px: float, py: float) -> bool:
+        return any(x0 <= px <= x1 and y0 <= py <= y1 for _, x0, y0, x1, y1 in tray_rects)
+
+    def _in_other_component(px: float, py: float, ignore_refs: set[str]) -> str | None:
+        for ref, (bx, by, bw, bh, _z, _dev) in boxes.items():
+            if ref in ignore_refs:
+                continue
+            if bx + 0.3 < px < bx + bw - 0.3 and by + 0.3 < py < by + bh - 0.3:
+                return ref
+        return None
+
+    violations: list[str] = []
+    per_wire: list[dict[str, Any]] = []
+
+    for r in routes:
+        pts = r.points
+        in_flags = [_in_any_tray(px, py) for px, py in pts]
+        in_indices = [idx for idx, flag in enumerate(in_flags) if flag]
+        if not in_indices:
+            violations.append(f"{r.wire_number}: never enters any wire tray")
+            continue
+
+        idx_enter = in_indices[0]
+        idx_exit = in_indices[-1]
+
+        # 1. Straight vertical entry into nearest tray
+        sx, sy = pts[0]
+        for k in range(0, idx_enter + 1):
+            px, py = pts[k]
+            if abs(px - sx) > tol_mm:
+                violations.append(f"{r.wire_number}: non-vertical entry point ({px}, {py}) vs start.x={sx}")
+                break
+            hit = _in_other_component(px, py, {r.from_ref, r.to_ref})
+            if hit:
+                violations.append(f"{r.wire_number}: entry lead crosses component {hit} at ({px}, {py})")
+                break
+
+        # 2. 100% of points and segment midpoints between idx_enter and idx_exit inside trays
+        outside_pts: list[tuple[float, float]] = []
+        for k in range(idx_enter, idx_exit + 1):
+            px, py = pts[k]
+            if not _in_any_tray(px, py):
+                outside_pts.append((px, py))
+            if k < idx_exit:
+                mx = 0.5 * (px + pts[k + 1][0])
+                my = 0.5 * (py + pts[k + 1][1])
+                if not _in_any_tray(mx, my):
+                    outside_pts.append((round(mx, 2), round(my, 2)))
+        if outside_pts:
+            violations.append(f"{r.wire_number}: {len(outside_pts)} interior points outside wire trays (first: {outside_pts[0]})")
+
+        # 3. Straight vertical exit from nearest tray to destination terminal
+        ex, ey = pts[-1]
+        for k in range(idx_exit, len(pts)):
+            px, py = pts[k]
+            if abs(px - ex) > tol_mm:
+                violations.append(f"{r.wire_number}: non-vertical exit point ({px}, {py}) vs end.x={ex}")
+                break
+            hit = _in_other_component(px, py, {r.from_ref, r.to_ref})
+            if hit:
+                violations.append(f"{r.wire_number}: exit lead crosses component {hit} at ({px}, {py})")
+                break
+
+        # 4. Smooth bend check
+        turn_deg = max_turn_angle_deg(pts)
+        if turn_deg >= 25.0:
+            violations.append(f"{r.wire_number}: max_turn_angle_deg={turn_deg}° >= 25.0°")
+
+        per_wire.append(
+            {
+                "wire_number": r.wire_number,
+                "from": r.from_endpoint,
+                "to": r.to_endpoint,
+                "via": list(r.via),
+                "idx_enter": idx_enter,
+                "idx_exit": idx_exit,
+                "total_points": len(pts),
+                "outside_tray_points": len(outside_pts),
+                "max_turn_angle_deg": turn_deg,
+            }
+        )
+
+    return {
+        "ok": len(violations) == 0,
+        "wire_count": len(routes),
+        "tray_count": len(tray_rects),
+        "violations": violations,
+        "wires": per_wire,
+    }

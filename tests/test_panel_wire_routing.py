@@ -43,6 +43,7 @@ from panelcad.core.panel_wiring import (
     set_panel_wiring_mode,
     set_walkthrough_step,
     step_walkthrough,
+    verify_routes_inside_trays,
 )
 from panelcad.io.yaml_format import dump_project, load_project
 from panelcad.render.pdf import sheet_to_pdf
@@ -354,3 +355,37 @@ def test_no_sharp_90_degree_corners_on_panel_layout_and_schematic_untouched():
     svg_sch = sheet_to_svg(sch_sheet, session.catalog, project=session.project)
     assert "BACKPANEL WIRE ROUTING" not in svg_sch
     assert "TECHNICIAN WIRING WALKTHROUGH" not in svg_sch
+
+
+def test_wires_travel_into_nearest_tray_and_path_strictly_inside_trays():
+    """Every wire must travel straight from its terminal into the nearest horizontal tray,
+    stay 100% inside the wire tray rectangles between tray entry and tray exit (both with
+    and without zip-tie waypoints), and exit straight into the destination terminal.
+    """
+    sample = Path(__file__).resolve().parents[1] / "examples" / "dol_starter.pcad.yaml"
+    session = Session.open(sample)
+    session.number_wires()
+
+    # 1. Verify 100% in-tray containment without zip-ties
+    chk_plain = verify_routes_inside_trays(session, "enclosure")
+    assert chk_plain["ok"], f"In-tray violations (no ties): {chk_plain['violations']}"
+    assert chk_plain["wire_count"] == 12
+    assert chk_plain["tray_count"] == 5
+    for w in chk_plain["wires"]:
+        assert w["outside_tray_points"] == 0
+        assert w["max_turn_angle_deg"] < 25.0
+
+    # 2. Verify 100% in-tray containment with zip-ties across wt-left, wt-top, and wt-mid
+    add_zip_tie_slice(session, "enclosure", 31.7, 150.0, 47.7, 150.0)
+    add_zip_tie_slice(session, "enclosure", 78.0, 98.7, 78.0, 114.7)
+    add_zip_tie_slice(session, "enclosure", 150.0, 184.0, 150.0, 200.0)
+    chk_ties = verify_routes_inside_trays(session, "enclosure")
+    assert chk_ties["ok"], f"In-tray violations (with ties): {chk_ties['violations']}"
+    for w in chk_ties["wires"]:
+        assert w["outside_tray_points"] == 0
+        assert w["max_turn_angle_deg"] < 25.0
+
+    # 3. Also verify on synthetic layout_kind project
+    proj_syn = _build_layout_kind_project()
+    chk_syn = verify_routes_inside_trays(proj_syn, "layout1")
+    assert chk_syn["ok"], f"In-tray violations (synthetic): {chk_syn['violations']}"

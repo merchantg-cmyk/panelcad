@@ -483,18 +483,16 @@ def draw_panel_wiring_overlay(
 
     if mode == "all":
         painter.set_fill(None)
-        painter.set_stroke("#94a3b8", 1.35)
+        painter.set_stroke("#f8fafc", 0.90)
         for route in routes:
-            if len(route.points) >= 3:
-                painter.polyline(route.points[1:-1])
+            if len(route.points) >= 2:
+                painter.polyline(route.points)
 
         for route in routes:
             col = wire_color_hex(route.color, route.step_index)
-            strand_offset = ((route.step_index % 5) - 2) * 0.42
-            pts = _offset_polyline_for_bundle(route.points, ties, strand_offset)
             painter.set_fill(None)
-            painter.set_stroke(col, 0.48)
-            painter.polyline(pts)
+            painter.set_stroke(col, 0.54)
+            painter.polyline(route.points)
 
             painter.set_stroke("#ffffff", 0.18)
             painter.set_fill(col)

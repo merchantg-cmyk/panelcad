@@ -528,6 +528,11 @@ def feature_panel_wiring(app, win) -> None:
     check("zip-tie waypoint zt-1 created and bundles intersected wires",
           any("zt-1" in r for r in routes_col),
           str(routes_col))
+    from panelcad.core.panel_wiring import verify_routes_inside_trays
+    tray_chk = verify_routes_inside_trays(win.session)
+    check("all panel wires enter nearest tray vertically and stay 100% inside trays",
+          tray_chk["ok"],
+          str(tray_chk["violations"] or f"{len(tray_chk['wires'])} wires verified inside trays"))
     shot(win, "panel-layout-with-zip-tie")
 
     # 5. Switch to Technician Walkthrough (1-by-1) mode and step through wires

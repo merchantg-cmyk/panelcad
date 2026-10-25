@@ -375,7 +375,7 @@ sheets:
   - id: U1
     library_id: adc.durapulse.gs21_20p5
     x: 63.7
-    y: 177.5
+    y: 212.0
     rotation: 0
     mirror: false
     scale: 0.4
@@ -394,6 +394,12 @@ sheets:
     x: 31.7
     y: 98.7
     length_mm: 233.60000000000002
+    width_mm: 16.0
+    orientation: h
+  - id: wt-mid
+    x: 47.7
+    y: 184.0
+    length_mm: 201.60000000000002
     width_mm: 16.0
     orientation: h
   - id: wt-bot
