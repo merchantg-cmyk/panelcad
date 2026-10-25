@@ -7797,6 +7797,48 @@ class Session:
 
         return status(self)
 
+    def reconstruct_record_wire_landing(
+        self,
+        wire_number: str = "",
+        *,
+        number: str = "",
+        from_tag: str = "",
+        from_pin: str = "",
+        to_tag: str = "",
+        to_pin: str = "",
+        from_ref: str = "",
+        to_ref: str = "",
+        confirmed: bool = True,
+        inferred: bool | None = None,
+        note: str = "",
+    ) -> dict[str, Any]:
+        from panelcad.reconstruct.service import record_wire_landing
+
+        return record_wire_landing(
+            self,
+            wire_number=wire_number,
+            number=number,
+            from_tag=from_tag,
+            from_pin=from_pin,
+            to_tag=to_tag,
+            to_pin=to_pin,
+            from_ref=from_ref,
+            to_ref=to_ref,
+            confirmed=confirmed,
+            inferred=inferred,
+            note=note,
+        )
+
+    def reconstruct_synthesize_schematic(self, sheet_id: str | None = None) -> dict[str, Any]:
+        from panelcad.reconstruct.service import synthesize_reconstruct_schematic
+
+        return synthesize_reconstruct_schematic(self, sheet_id=sheet_id)
+
+    def reconstruct_apply_to_print(self, sheet_id: str | None = None) -> dict[str, Any]:
+        from panelcad.reconstruct.service import apply_to_print
+
+        return apply_to_print(self, sheet_id=sheet_id)
+
     def describe(self, sheet_id: str | None = None) -> dict[str, Any]:
         """Full structured snapshot for an AI to read without the GUI."""
         target = [self.sheet(sheet_id)] if sheet_id else list(self.project.sheets)

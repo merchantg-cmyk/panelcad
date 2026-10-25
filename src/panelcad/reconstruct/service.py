@@ -586,6 +586,7 @@ def confirm_connection(session: Any, step_id: str | None = None, wire_id: str | 
             step.status = "confirmed"
             step.confirmed = True
             step.inferred = False
+    synthesize_reconstruct_schematic(session)
     return {"wire_id": wire_id, "confirmed": True}
 
 
@@ -1231,6 +1232,7 @@ def _record_inferred_wire(session: Any, store: Reconstruction, step) -> str | No
     wire.inferred = True
     if step.wire_number and not wire.number:
         wire.number = step.wire_number
+    synthesize_reconstruct_schematic(session)
     return wire.id
 
 
@@ -1437,4 +1439,849 @@ def list_unconfirmed(session: Any) -> dict[str, Any]:
             for item in store.items
             if item.role == "part" and not item_is_layout_ready(item)
         ]
+    }
+
+
+_LADDER_RAILS = {"L1", "L2"}
+_CONTROL_COIL_PINS = {"A1", "A2"}
+_CONTROL_OL_PINS = {"95", "96", "97", "98"}
+_CONTROL_AUX_NO_PINS = {"13", "14"}
+_CONTROL_AUX_NC_PINS = {"21", "22"}
+_CONTROL_PB_NC_PINS = {"1", "2"}
+_CONTROL_PB_NO_PINS = {"3", "4"}
+_CONTROL_LIGHT_PINS = {"X1", "X2"}
+_POWER_NAMED_PINS = {"L1", "L2", "L3", "T1", "T2", "T3", "U", "V", "W", "R", "S", "T"}
+
+
+def _normalize_landing_end(tag: str = "", pin: str = "", ref: str = "") -> str:
+    raw_ref = str(ref or "").strip()
+    if raw_ref:
+        cleaned = raw_ref.replace(":", ".")
+        upper = cleaned.upper()
+        if upper in _LADDER_RAILS or upper in {"L1.L1", "L2.L2"}:
+            return upper.split(".", 1)[0]
+        return cleaned
+    t = str(tag or "").strip()
+    p = str(pin or "").strip()
+    if not t and p.upper() in _LADDER_RAILS:
+        return p.upper()
+    if t.upper() in _LADDER_RAILS and (not p or p.upper() == t.upper()):
+        return t.upper()
+    if "." in t and not p:
+        return t
+    if ":" in t and not p:
+        return t.replace(":", ".", 1)
+    if t and p:
+        return f"{t}.{p}"
+    raise ValueError("wire landing requires both from and to endpoints")
+
+
+def _split_endpoint(endpoint: str) -> tuple[str, str]:
+    token = str(endpoint or "").strip()
+    if token.upper() in _LADDER_RAILS:
+        return token.upper(), ""
+    from panelcad.render.sheet import parse_pin_ref
+
+    return parse_pin_ref(token)
+
+
+def _tag_prefix_letters(ref: str) -> str:
+    base = str(ref or "").split("-", 1)[0].strip().upper()
+    letters: list[str] = []
+    for ch in base:
+        if ch.isalpha():
+            letters.append(ch)
+        else:
+            break
+    return "".join(letters)
+
+
+def _base_library_for_tag(session: Any, store: Reconstruction, ref: str) -> str:
+    from panelcad.library.panel import MEASURED_ENVELOPE_LIBRARY_ID
+
+    observed = _observed_for_tag(store, ref)
+    if observed is None and "-" in ref:
+        observed = _observed_for_tag(store, ref.split("-", 1)[0])
+    if observed is not None and observed.role == "part":
+        if observed.library_id and observed.library_id not in {"reconstruct.needs_info", MEASURED_ENVELOPE_LIBRARY_ID}:
+            return str(observed.library_id)
+        if observed.status == "envelope" or observed.library_id == MEASURED_ENVELOPE_LIBRARY_ID:
+            return MEASURED_ENVELOPE_LIBRARY_ID
+        if observed.matches and observed.matches[0].library_id:
+            return str(observed.matches[0].library_id)
+    elif observed is not None and observed.role in {"terminal", "wire_number"}:
+        return "iec.terminals.x_2p5"
+    existing = _component_library(session, ref)
+    if not existing and "-" in ref:
+        existing = _component_library(session, ref.split("-", 1)[0])
+    return existing
+
+
+def _is_power_endpoint(session: Any, store: Reconstruction, endpoint: str) -> bool:
+    if not endpoint or endpoint.upper() in _LADDER_RAILS or "." not in endpoint:
+        return False
+    try:
+        ref, pin = _split_endpoint(endpoint)
+    except ValueError:
+        return False
+    pin_u = pin.upper()
+    prefix = _tag_prefix_letters(ref)
+    base_lib = _base_library_for_tag(session, store, ref).lower()
+    if "-" in ref:
+        return False
+    if pin_u in (
+        _CONTROL_COIL_PINS
+        | _CONTROL_OL_PINS
+        | _CONTROL_AUX_NO_PINS
+        | _CONTROL_AUX_NC_PINS
+        | _CONTROL_LIGHT_PINS
+    ):
+        return False
+    if prefix in {"S", "PB", "PL", "LT", "H", "CR", "X", "TB"}:
+        return False
+    if any(tok in base_lib for tok in ("operators.", "terminals.", "pilot_light", "pb_n", "aux_n", "ol_contact", "coil")):
+        return False
+    if pin_u in _POWER_NAMED_PINS:
+        return True
+    if pin_u in {"1", "2", "3", "4", "5", "6"} and (
+        prefix in {"CB", "Q", "FU", "F", "M", "K", "OL", "MTR", "MOT", "VFD"}
+        or any(tok in base_lib for tok in ("breaker", "contactor", "overload", "motor", "fuse", "disconnect", "vfd"))
+    ):
+        return True
+    return False
+
+
+def _is_power_wire_landing(session: Any, store: Reconstruction, frm: str, to: str) -> bool:
+    if frm.upper() in _LADDER_RAILS or to.upper() in _LADDER_RAILS:
+        return False
+    return _is_power_endpoint(session, store, frm) or _is_power_endpoint(session, store, to)
+
+
+def _control_library_for_ref(
+    session: Any,
+    store: Reconstruction,
+    ref: str,
+    used_pins: set[str],
+    current_lib: str = "",
+) -> tuple[str, dict[str, Any]]:
+    from panelcad.library.panel import MEASURED_ENVELOPE_LIBRARY_ID
+
+    observed = _observed_for_tag(store, ref)
+    base_ref = ref.split("-", 1)[0]
+    if observed is None and "-" in ref:
+        observed = _observed_for_tag(store, base_ref)
+    props: dict[str, Any] = {"reconstruct_schematic_stub": "yes", "in_panel": "no", "bom": "no"}
+    if current_lib == MEASURED_ENVELOPE_LIBRARY_ID:
+        if observed is not None and observed.envelope_w_mm and observed.envelope_h_mm and observed.envelope_d_mm:
+            props.update(
+                {
+                    "width_mm": observed.envelope_w_mm,
+                    "height_mm": observed.envelope_h_mm,
+                    "depth_mm": observed.envelope_d_mm,
+                    "mount": observed.mount,
+                    "dim_source": "measured",
+                    "envelope_confirmed": "yes",
+                }
+            )
+        return MEASURED_ENVELOPE_LIBRARY_ID, props
+
+    pins_u = {p.upper() for p in used_pins if p}
+    prefix = _tag_prefix_letters(ref)
+    base_lib = (current_lib or _base_library_for_tag(session, store, ref)).lower()
+
+    if "-" in ref:
+        props["device_tag"] = base_ref
+        if pins_u and pins_u <= _CONTROL_AUX_NC_PINS:
+            return "iec.contactors.aux_nc", props
+        if pins_u and pins_u <= _CONTROL_PB_NO_PINS:
+            return "nema.contactors.aux_no", props
+        return "iec.contactors.aux_no", props
+
+    if pins_u and pins_u <= _CONTROL_OL_PINS and (prefix in {"OL", "F"} or "overload" in base_lib or "ol_contact" in base_lib):
+        props["device_tag"] = base_ref
+        return "nema.protection.ol_contact", props
+
+    if pins_u and pins_u <= _CONTROL_COIL_PINS and (
+        prefix in {"M", "K", "CR"} or "contactor" in base_lib or "coil" in base_lib or "relay" in base_lib
+    ):
+        props["device_tag"] = base_ref
+        return "nema.contactors.coil", props
+
+    if pins_u and pins_u <= _CONTROL_AUX_NO_PINS and (
+        prefix in {"M", "K", "CR"} or "contactor" in base_lib or "aux" in base_lib
+    ):
+        props["device_tag"] = base_ref
+        return "iec.contactors.aux_no", props
+
+    if pins_u and pins_u <= _CONTROL_AUX_NC_PINS and (
+        prefix in {"M", "K", "CR"} or "contactor" in base_lib or "aux" in base_lib
+    ):
+        props["device_tag"] = base_ref
+        return "iec.contactors.aux_nc", props
+
+    if pins_u and pins_u <= _CONTROL_LIGHT_PINS and (prefix in {"PL", "LT", "H"} or "pilot_light" in base_lib):
+        return "nema.operators.pilot_light", props
+
+    if prefix in {"S", "PB"} or "pb_nc" in base_lib or "pb_no" in base_lib:
+        if pins_u and pins_u <= _CONTROL_PB_NC_PINS:
+            return "nema.operators.pb_nc", props
+        if pins_u and pins_u <= _CONTROL_PB_NO_PINS:
+            return "nema.operators.pb_no", props
+        if "pb_nc" in base_lib:
+            return "nema.operators.pb_nc", props
+        return "nema.operators.pb_no", props
+
+    if (observed is not None and observed.role in {"terminal", "wire_number"}) or prefix in {"X", "TB"} or "terminals." in base_lib:
+        return "iec.terminals.x_2p5", props
+
+    chosen = current_lib or _base_library_for_tag(session, store, ref)
+    if not chosen:
+        if prefix in {"PL", "LT", "H"}:
+            chosen = "nema.operators.pilot_light"
+        elif prefix in {"M", "K", "CR"}:
+            chosen = "nema.contactors.coil"
+        elif prefix in {"OL"}:
+            chosen = "nema.protection.ol_contact"
+        elif prefix in {"S", "PB"}:
+            chosen = "nema.operators.pb_no"
+        else:
+            chosen = "iec.terminals.x_2p5"
+    return chosen, props
+
+
+def _power_library_for_ref(
+    session: Any,
+    store: Reconstruction,
+    ref: str,
+    current_lib: str = "",
+) -> tuple[str, dict[str, Any]]:
+    from panelcad.library.panel import MEASURED_ENVELOPE_LIBRARY_ID
+
+    props: dict[str, Any] = {"reconstruct_schematic_stub": "yes", "in_panel": "no", "bom": "no"}
+    base_lib = current_lib or _base_library_for_tag(session, store, ref)
+    if current_lib == MEASURED_ENVELOPE_LIBRARY_ID:
+        observed = _observed_for_tag(store, ref)
+        if observed is not None and observed.envelope_w_mm and observed.envelope_h_mm and observed.envelope_d_mm:
+            props.update(
+                {
+                    "width_mm": observed.envelope_w_mm,
+                    "height_mm": observed.envelope_h_mm,
+                    "depth_mm": observed.envelope_d_mm,
+                    "mount": observed.mount,
+                    "dim_source": "measured",
+                    "envelope_confirmed": "yes",
+                }
+            )
+        return MEASURED_ENVELOPE_LIBRARY_ID, props
+    low = base_lib.lower()
+    prefix = _tag_prefix_letters(ref)
+    if any(tok in low for tok in ("breaker", "contactor", "overload", "motor", "fuse", "disconnect", "vfd")) and not low.endswith(
+        (".coil", ".ol_contact", ".aux_no", ".aux_nc")
+    ):
+        return base_lib, props
+    if prefix in {"CB", "Q", "FU", "F"}:
+        return "iec.breakers.mcb_3p_32a", props
+    if prefix in {"M", "K"}:
+        return "iec.contactors.ac3_9a", props
+    if prefix in {"OL"}:
+        return "iec.protection.overload_9a", props
+    if prefix in {"MTR", "MOT"}:
+        return "nema.loads.motor_3ph", props
+    return (base_lib or "iec.contactors.ac3_9a"), props
+
+
+def _ensure_asbuilt_sheet(session: Any, store: Reconstruction):
+    for sheet in session.project.sheets:
+        if sheet.id == "asbuilt" and sheet.kind == "schematic":
+            store.schematic_sheet = "asbuilt"
+            return sheet
+    sheet = _ensure_schematic(session, store)
+    if sheet.id == "main" and not sheet.components and not sheet.wires:
+        sheet.id = "asbuilt"
+        sheet.title = "As-built schematic"
+        store.schematic_sheet = "asbuilt"
+    return sheet
+
+
+def _ensure_power_schematic(session: Any, store: Reconstruction):
+    for sheet in session.project.sheets:
+        if sheet.id in {"asbuilt_power", "asbuilt-power"} and sheet.kind == "schematic":
+            sheet.id = "asbuilt_power"
+            return sheet
+    sheet = session.add_sheet("asbuilt_power", title="As-built power schematic", kind="schematic", make_active=False)
+    sheet.id = "asbuilt_power"
+    sheet.drawing_style = "iec"
+    sheet.rail_hot = ""
+    sheet.rail_return = ""
+    return sheet
+
+
+def _ensure_named_pin_and_override(
+    session: Any,
+    comp: Any,
+    pin_id: str,
+    *,
+    is_power: bool = False,
+    pin_role: str = "right",
+) -> None:
+    from panelcad.core.models import PinOverride
+
+    device = session.catalog.get(comp.library_id)
+    try:
+        device.pin(pin_id)
+        return
+    except KeyError:
+        pass
+    raw = str((comp.properties or {}).get("reconstruct_named_pins") or "")
+    names = [part.strip() for part in raw.split(",") if part.strip()]
+    if pin_id not in names:
+        names.append(pin_id)
+    comp.properties["reconstruct_named_pins"] = ",".join(names)
+
+    width = float(getattr(device, "schematic_width", 0) or 28.0)
+    height = float(getattr(device, "schematic_height", 0) or 20.0)
+    pin_u = pin_id.upper()
+    if is_power:
+        pole_dx = {
+            "L1": 8.0,
+            "1": 8.0,
+            "U": 8.0,
+            "R": 8.0,
+            "T1": 8.0,
+            "2": 8.0,
+            "L2": 18.0,
+            "3": 18.0,
+            "V": 18.0,
+            "S": 18.0,
+            "T2": 18.0,
+            "4": 18.0,
+            "L3": 28.0,
+            "5": 28.0,
+            "W": 28.0,
+            "T": 28.0,
+            "T3": 28.0,
+            "6": 28.0,
+        }
+        if "contactors.ac3" in str(comp.library_id or ""):
+            pole_dx = {k: v + 2.0 for k, v in pole_dx.items()}
+        dx = pole_dx.get(pin_u, 18.0)
+        is_bottom = pin_role == "bottom" or pin_u in {"T1", "T2", "T3", "2", "4", "6"}
+        if "loads.motor" in str(comp.library_id or ""):
+            is_bottom = False
+        dy = height if is_bottom else 0.0
+        side = "bottom" if is_bottom else "top"
+    else:
+        py = height / 2.0
+        if device.pins:
+            py = float(device.pins[0].y)
+        is_left = pin_role == "left" or pin_u in {"1", "3", "11", "13", "21", "95", "A1", "X1", "A"}
+        dx = 0.0 if is_left else width
+        dy = py
+        side = "left" if is_left else "right"
+
+    overrides = dict(comp.pin_overrides or {})
+    overrides[pin_id] = PinOverride(x=dx, y=dy, side=side)
+    comp.pin_overrides = overrides
+
+
+def record_wire_landing(
+    session: Any,
+    wire_number: str = "",
+    *,
+    number: str = "",
+    from_tag: str = "",
+    from_pin: str = "",
+    to_tag: str = "",
+    to_pin: str = "",
+    from_ref: str = "",
+    to_ref: str = "",
+    confirmed: bool = True,
+    inferred: bool | None = None,
+    note: str = "",
+) -> dict[str, Any]:
+    """Record a traced From-To wire landing and synthesize a clean schematic."""
+
+    from panelcad.library.panel import MEASURED_ENVELOPE_LIBRARY_ID
+
+    store = ensure_reconstruction(session.project)
+    frm = _normalize_landing_end(from_tag, from_pin, from_ref)
+    to = _normalize_landing_end(to_tag, to_pin, to_ref)
+    wire_no = str(wire_number or number or "").strip()
+    is_inferred = bool(inferred) if inferred is not None else (not confirmed)
+    is_power = _is_power_wire_landing(session, store, frm, to)
+
+    asbuilt = _ensure_asbuilt_sheet(session, store)
+    target_sheet = _ensure_power_schematic(session, store) if is_power else asbuilt
+    if not is_power and (frm.upper() in _LADDER_RAILS or to.upper() in _LADDER_RAILS):
+        target_sheet.drawing_style = "ladder"
+        target_sheet.rail_hot = target_sheet.rail_hot or "L1"
+        target_sheet.rail_return = target_sheet.rail_return or "L2"
+
+    for idx, endpoint in enumerate((frm, to)):
+        if endpoint.upper() in _LADDER_RAILS:
+            target_sheet.drawing_style = "ladder"
+            target_sheet.rail_hot = target_sheet.rail_hot or "L1"
+            target_sheet.rail_return = target_sheet.rail_return or "L2"
+            continue
+        ref, pin = _split_endpoint(endpoint)
+        try:
+            comp = target_sheet.component(ref)
+        except KeyError:
+            if is_power:
+                lib_id, props = _power_library_for_ref(session, store, ref)
+            else:
+                lib_id, props = _control_library_for_ref(session, store, ref, {pin})
+            comp = session.place(
+                lib_id,
+                ref=ref,
+                x=92.0,
+                y=48.0,
+                sheet_id=target_sheet.id,
+                properties=props,
+                snap=False,
+                from_reconstruct_confirm=lib_id == MEASURED_ENVELOPE_LIBRARY_ID,
+            )
+        role = ("bottom" if idx == 0 else "top") if is_power else ("right" if idx == 0 else "left")
+        _ensure_named_pin_and_override(session, comp, pin, is_power=is_power, pin_role=role)
+
+    existing_wire = None
+    for candidate in target_sheet.wires:
+        if candidate.frm == frm and candidate.to == to and (not wire_no or str(candidate.number or "") == wire_no):
+            existing_wire = candidate
+            break
+    if existing_wire is None:
+        wire = session.wire(frm, to, sheet_id=target_sheet.id, number=wire_no or None)
+    else:
+        wire = existing_wire
+        if wire_no:
+            wire.number = wire_no
+    wire.inferred = is_inferred
+    if note:
+        wire.properties = dict(wire.properties or {})
+        wire.properties["note"] = str(note)
+
+    synthesize_reconstruct_schematic(session)
+    rebuild_checklist(store)
+    return {
+        "wire_id": wire.id,
+        "number": str(wire.number or ""),
+        "from_ref": wire.frm,
+        "to_ref": wire.to,
+        "sheet": target_sheet.id,
+        "inferred": bool(wire.inferred),
+        "confirmed": not bool(wire.inferred),
+    }
+
+
+def _primary_pin_y(session: Any, comp: Any) -> float:
+    device = session.catalog.get(comp.library_id)
+    if device.pins:
+        return float(device.pins[0].y)
+    return float(getattr(device, "schematic_height", 0) or 20.0) / 2.0
+
+
+def _layout_control_ladder_sheet(session: Any, store: Reconstruction, sheet: Any) -> int:
+    from panelcad.core.models import Point
+    from panelcad.library.panel import MEASURED_ENVELOPE_LIBRARY_ID
+
+    pins_by_ref: dict[str, set[str]] = {}
+    pin_roles_by_ref: dict[str, dict[str, str]] = {}
+    has_rail_ref = False
+    for wire in sheet.wires:
+        for idx, endpoint in enumerate((wire.frm, wire.to)):
+            if endpoint.upper() in _LADDER_RAILS:
+                has_rail_ref = True
+                continue
+            if "." not in endpoint:
+                continue
+            try:
+                ref, pin = _split_endpoint(endpoint)
+            except ValueError:
+                continue
+            pins_by_ref.setdefault(ref, set()).add(pin)
+            role = "right" if idx == 0 else "left"
+            pin_roles_by_ref.setdefault(ref, {}).setdefault(pin, role)
+
+    for comp in list(sheet.components):
+        used_pins = pins_by_ref.get(comp.id, set())
+        if not used_pins:
+            continue
+        new_lib, new_props = _control_library_for_ref(
+            session,
+            store,
+            comp.id,
+            used_pins,
+            current_lib=str(comp.library_id or ""),
+        )
+        if new_lib != comp.library_id and comp.library_id != MEASURED_ENVELOPE_LIBRARY_ID:
+            try:
+                session.catalog.get(new_lib)
+                comp.library_id = new_lib
+                comp.pin_overrides = {}
+            except KeyError:
+                pass
+        merged = dict(comp.properties or {})
+        for k, v in new_props.items():
+            merged.setdefault(k, v)
+        comp.properties = merged
+        for pin, role in pin_roles_by_ref.get(comp.id, {}).items():
+            _ensure_named_pin_and_override(session, comp, pin, is_power=False, pin_role=role)
+
+    if has_rail_ref or sheet.wires or sheet.components:
+        from panelcad.convert.layout_convert import is_power_sheet
+
+        if not is_power_sheet(sheet):
+            sheet.drawing_style = "ladder"
+            sheet.rail_hot = sheet.rail_hot or "L1"
+            sheet.rail_return = sheet.rail_return or "L2"
+
+    comp_map = {comp.id: comp for comp in sheet.components}
+    if not comp_map:
+        return 0
+
+    adj: dict[str, list[str]] = {cid: [] for cid in comp_map}
+    hot_connected: set[str] = set()
+    return_connected: set[str] = set()
+    for wire in sheet.wires:
+        u_raw, v_raw = wire.frm, wire.to
+        u_ref = u_raw.upper() if u_raw.upper() in _LADDER_RAILS else (_split_endpoint(u_raw)[0] if "." in u_raw else "")
+        v_ref = v_raw.upper() if v_raw.upper() in _LADDER_RAILS else (_split_endpoint(v_raw)[0] if "." in v_raw else "")
+        if u_ref == "L1" and v_ref in adj:
+            hot_connected.add(v_ref)
+        elif v_ref == "L1" and u_ref in adj:
+            hot_connected.add(u_ref)
+        if u_ref == "L2" and v_ref in adj:
+            return_connected.add(v_ref)
+        elif v_ref == "L2" and u_ref in adj:
+            return_connected.add(u_ref)
+        if u_ref in adj and v_ref in adj and u_ref != v_ref:
+            if v_ref not in adj[u_ref]:
+                adj[u_ref].append(v_ref)
+            if u_ref not in adj[v_ref]:
+                adj[v_ref].append(u_ref)
+
+    visited: set[str] = set()
+    rung_groups: list[list[str]] = []
+    for cid in comp_map:
+        if cid in visited:
+            continue
+        queue = [cid]
+        visited.add(cid)
+        group: list[str] = []
+        while queue:
+            cur = queue.pop(0)
+            group.append(cur)
+            for nb in adj.get(cur, []):
+                if nb not in visited:
+                    visited.add(nb)
+                    queue.append(nb)
+        rung_groups.append(group)
+
+    rung_y = 48.0
+    comp_rung_y: dict[str, float] = {}
+    parallel_meta: dict[str, tuple[float, float, float]] = {}
+
+    for group in rung_groups:
+        return_contacts: list[str] = []
+        loads: list[str] = []
+        contacts: list[str] = []
+
+        for cid in group:
+            comp = comp_map[cid]
+            lib = str(comp.library_id or "").lower()
+            prefix = _tag_prefix_letters(cid)
+            if lib.endswith(".ol_contact") or prefix == "OL":
+                return_contacts.append(cid)
+            elif (
+                lib.endswith((".coil", ".pilot_light"))
+                or comp.library_id == MEASURED_ENVELOPE_LIBRARY_ID
+                or prefix in {"PL", "LT", "H"}
+                or (prefix in {"M", "K", "CR"} and "-" not in cid and not lib.endswith((".aux_no", ".aux_nc")))
+            ):
+                loads.append(cid)
+            else:
+                contacts.append(cid)
+
+        if not loads and len(contacts) >= 2 and not return_contacts:
+            loads.append(contacts.pop(-1))
+
+        series_contacts: list[str] = []
+        parallel_contacts: list[str] = []
+        for cid in contacts:
+            comp = comp_map[cid]
+            lib = str(comp.library_id or "").lower()
+            is_aux_branch = (
+                ("-" in cid or lib.endswith((".aux_no", ".aux_nc")))
+                and cid not in hot_connected
+                and len(contacts) >= 2
+            )
+            if is_aux_branch:
+                parallel_contacts.append(cid)
+            else:
+                series_contacts.append(cid)
+
+        series_contacts.sort(key=lambda cid: (0 if cid in hot_connected else 1, group.index(cid)))
+
+        for idx, cid in enumerate(series_contacts):
+            comp = comp_map[cid]
+            py = _primary_pin_y(session, comp)
+            comp.x = 92.0 + idx * 56.0
+            comp.y = rung_y - py
+            comp_rung_y[cid] = rung_y
+
+        anchor_x = comp_map[series_contacts[-1]].x if series_contacts else 148.0
+        for p_idx, cid in enumerate(parallel_contacts):
+            comp = comp_map[cid]
+            py = _primary_pin_y(session, comp)
+            sub_y = rung_y + 20.0 * (p_idx + 1)
+            comp.x = anchor_x
+            comp.y = sub_y - py
+            comp_rung_y[cid] = sub_y
+            parallel_meta[cid] = (anchor_x, sub_y, rung_y)
+
+        for l_idx, cid in enumerate(loads):
+            comp = comp_map[cid]
+            py = _primary_pin_y(session, comp)
+            row_y = rung_y + 24.0 * l_idx
+            comp.x = 310.0
+            comp.y = row_y - py
+            comp_rung_y[cid] = row_y
+
+        for r_idx, cid in enumerate(return_contacts):
+            comp = comp_map[cid]
+            py = _primary_pin_y(session, comp)
+            comp.x = 354.0 + r_idx * 30.0
+            comp.y = rung_y - py
+            comp_rung_y[cid] = rung_y
+
+        extra_rows = max(len(parallel_contacts), max(len(loads) - 1, 0))
+        rung_y += 48.0 + 20.0 * extra_rows
+
+    for wire in sheet.wires:
+        u_raw, v_raw = wire.frm, wire.to
+        u_ref = "" if u_raw.upper() in _LADDER_RAILS else (_split_endpoint(u_raw)[0] if "." in u_raw else "")
+        u_pin = "" if u_raw.upper() in _LADDER_RAILS else (_split_endpoint(u_raw)[1] if "." in u_raw else "")
+        v_ref = "" if v_raw.upper() in _LADDER_RAILS else (_split_endpoint(v_raw)[0] if "." in v_raw else "")
+        v_pin = "" if v_raw.upper() in _LADDER_RAILS else (_split_endpoint(v_raw)[1] if "." in v_raw else "")
+
+        if u_ref in parallel_meta and v_ref not in parallel_meta:
+            bx, sub_y, main_y = parallel_meta[u_ref]
+            comp = comp_map[u_ref]
+            dev = session.catalog.get(comp.library_id)
+            w_sym = float(getattr(dev, "schematic_width", 0) or 28.0)
+            is_left = u_pin.upper() in {"1", "3", "11", "13", "21", "A1", "X1", "A"}
+            tap_x = (bx - 8.0) if is_left else (bx + w_sym + 8.0)
+            wire.points = [Point(x=tap_x, y=sub_y), Point(x=tap_x, y=main_y)]
+        elif v_ref in parallel_meta and u_ref not in parallel_meta:
+            bx, sub_y, main_y = parallel_meta[v_ref]
+            comp = comp_map[v_ref]
+            dev = session.catalog.get(comp.library_id)
+            w_sym = float(getattr(dev, "schematic_width", 0) or 28.0)
+            is_left = v_pin.upper() in {"1", "3", "11", "13", "21", "A1", "X1", "A"}
+            tap_x = (bx - 8.0) if is_left else (bx + w_sym + 8.0)
+            wire.points = [Point(x=tap_x, y=main_y), Point(x=tap_x, y=sub_y)]
+        else:
+            wire.points = []
+
+    return len(rung_groups)
+
+
+def _layout_power_feeder_sheet(session: Any, store: Reconstruction, sheet: Any) -> None:
+    sheet.drawing_style = "iec"
+    sheet.rail_hot = ""
+    sheet.rail_return = ""
+
+    pin_roles_by_ref: dict[str, dict[str, str]] = {}
+    for wire in sheet.wires:
+        for idx, endpoint in enumerate((wire.frm, wire.to)):
+            if "." not in endpoint:
+                continue
+            try:
+                ref, pin = _split_endpoint(endpoint)
+            except ValueError:
+                continue
+            role = "bottom" if idx == 0 else "top"
+            pin_roles_by_ref.setdefault(ref, {})[pin] = role
+
+    rank_y = {0: 18.0, 1: 76.0, 2: 148.0, 3: 200.0}
+    rank_counts = {0: 0, 1: 0, 2: 0, 3: 0}
+
+    def _power_rank(comp: Any) -> int:
+        lib = str(comp.library_id or "").lower()
+        prefix = _tag_prefix_letters(comp.id)
+        if "breaker" in lib or "fuse" in lib or "disconnect" in lib or prefix in {"CB", "Q", "FU", "F"}:
+            return 0
+        if "contactor" in lib or prefix in {"M", "K"}:
+            return 1
+        if "overload" in lib or prefix in {"OL"}:
+            return 2
+        return 3
+
+    for comp in sorted(sheet.components, key=_power_rank):
+        new_lib, new_props = _power_library_for_ref(session, store, comp.id, current_lib=str(comp.library_id or ""))
+        if new_lib != comp.library_id:
+            try:
+                session.catalog.get(new_lib)
+                comp.library_id = new_lib
+                comp.pin_overrides = {}
+            except KeyError:
+                pass
+        merged = dict(comp.properties or {})
+        for k, v in new_props.items():
+            merged.setdefault(k, v)
+        comp.properties = merged
+
+        rank = _power_rank(comp)
+        col = rank_counts.get(rank, 0)
+        rank_counts[rank] = col + 1
+        col_x = 60.0 + col * 90.0
+        comp.x = (col_x - 2.0) if "contactors.ac3" in str(comp.library_id or "") else col_x
+        comp.y = rank_y.get(rank, 200.0)
+        for pin, role in pin_roles_by_ref.get(comp.id, {}).items():
+            _ensure_named_pin_and_override(session, comp, pin, is_power=True, pin_role=role)
+
+    for wire in sheet.wires:
+        wire.points = []
+
+
+def synthesize_reconstruct_schematic(session: Any, sheet_id: str | None = None) -> dict[str, Any]:
+    """Organize the reconstruct schematic into a collision-free NEMA ladder layout."""
+
+    from panelcad.library.panel import MEASURED_ENVELOPE_LIBRARY_ID
+
+    store = ensure_reconstruction(session.project)
+    asbuilt = session.project.sheet(sheet_id) if sheet_id else _ensure_schematic(session, store)
+    power_sheet = None
+    for s in session.project.sheets:
+        if s.id in {"asbuilt_power", "asbuilt-power"} and s.kind == "schematic":
+            s.id = "asbuilt_power"
+            power_sheet = s
+            break
+
+    all_wires: list[Any] = list(asbuilt.wires)
+    if power_sheet is not None and power_sheet is not asbuilt:
+        for w in power_sheet.wires:
+            if all(existing.id != w.id for existing in all_wires):
+                all_wires.append(w)
+
+    power_wires: list[Any] = []
+    control_wires: list[Any] = []
+    for w in all_wires:
+        if _is_power_wire_landing(session, store, w.frm, w.to):
+            power_wires.append(w)
+        else:
+            control_wires.append(w)
+
+    if power_wires and (control_wires or asbuilt.components):
+        if power_sheet is None:
+            power_sheet = _ensure_power_schematic(session, store)
+        asbuilt.wires = control_wires
+        power_sheet.wires = power_wires
+    elif power_wires and not control_wires:
+        asbuilt.wires = power_wires
+        _layout_power_feeder_sheet(session, store, asbuilt)
+        return {
+            "schematic_sheet": asbuilt.id,
+            "power_sheet": asbuilt.id,
+            "rungs": 0,
+            "wires": len(asbuilt.wires),
+        }
+
+    control_refs: set[str] = set()
+    for w in asbuilt.wires:
+        for ep in (w.frm, w.to):
+            if ep.upper() not in _LADDER_RAILS and "." in ep:
+                try:
+                    r, _p = _split_endpoint(ep)
+                    control_refs.add(r)
+                except ValueError:
+                    pass
+
+    power_refs: set[str] = set()
+    if power_sheet is not None:
+        for w in power_sheet.wires:
+            for ep in (w.frm, w.to):
+                if "." in ep:
+                    try:
+                        r, p = _split_endpoint(ep)
+                        power_refs.add(r)
+                        try:
+                            power_sheet.component(r)
+                        except KeyError:
+                            lib_id, props = _power_library_for_ref(session, store, r)
+                            session.place(
+                                lib_id,
+                                ref=r,
+                                x=60.0,
+                                y=18.0,
+                                sheet_id=power_sheet.id,
+                                properties=props,
+                                snap=False,
+                                from_reconstruct_confirm=lib_id == MEASURED_ENVELOPE_LIBRARY_ID,
+                            )
+                    except ValueError:
+                        pass
+        _layout_power_feeder_sheet(session, store, power_sheet)
+
+    if power_refs and control_refs:
+        asbuilt.components = [
+            comp for comp in asbuilt.components if comp.id in control_refs or comp.id not in power_refs
+        ]
+
+    for w in asbuilt.wires:
+        for idx, ep in enumerate((w.frm, w.to)):
+            if ep.upper() in _LADDER_RAILS or "." not in ep:
+                continue
+            ref, pin = _split_endpoint(ep)
+            try:
+                asbuilt.component(ref)
+            except KeyError:
+                lib_id, props = _control_library_for_ref(session, store, ref, {pin})
+                session.place(
+                    lib_id,
+                    ref=ref,
+                    x=92.0,
+                    y=48.0,
+                    sheet_id=asbuilt.id,
+                    properties=props,
+                    snap=False,
+                    from_reconstruct_confirm=lib_id == MEASURED_ENVELOPE_LIBRARY_ID,
+                )
+
+    rungs = _layout_control_ladder_sheet(session, store, asbuilt)
+    try:
+        session.update_cross_references()
+    except Exception:  # noqa: BLE001
+        pass
+
+    total_wires = len(asbuilt.wires) + (len(power_sheet.wires) if power_sheet is not None else 0)
+    return {
+        "schematic_sheet": asbuilt.id,
+        "power_sheet": power_sheet.id if power_sheet is not None else "",
+        "rungs": rungs,
+        "wires": total_wires,
+    }
+
+
+def apply_to_print(session: Any, sheet_id: str | None = None) -> dict[str, Any]:
+    """Place confirmed parts, hold needs-info parts, and synthesize the clean ladder schematic."""
+
+    from panelcad.reconstruct.placeholder import project_has_needs_info, reconstruct_mode
+
+    confirmed = place_confirmed(session, sheet_id=sheet_id)
+    if reconstruct_mode(session):
+        held = place_needs_info(session)
+    else:
+        held = {"placed": [], "skipped": []}
+    _ensure_asbuilt_sheet(session, ensure_reconstruction(session.project))
+    synth = synthesize_reconstruct_schematic(session)
+    return {
+        "placed": confirmed["placed"],
+        "needs_info": held["placed"],
+        "skipped": list(confirmed["skipped"]) + list(held["skipped"]),
+        "schematic_sheet": synth["schematic_sheet"],
+        "power_sheet": synth.get("power_sheet", ""),
+        "rungs": synth["rungs"],
+        "wires": synth["wires"],
+        "not_for_build": project_has_needs_info(session.project),
     }

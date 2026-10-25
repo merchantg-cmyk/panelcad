@@ -403,7 +403,7 @@ def test_fixture_photos_are_perspective_warped_and_noisy(tmp_path: Path):
     assert drawing["corners"][0] == (0, 0)
 
 
-def test_drawing_scan_is_secondary_print_not_photo_input(tmp_path: Path):
+def test_drawing_scan_is_secondary_print_not_photo_input(tmp_path: Path, monkeypatch):
     session, _job, meta = _photo_job(tmp_path)
     session.reconstruct_identify(vision=FakeVision(_recordings(meta)))
     item = next(row for row in session.reconstruct_status()["items"] if row["role"] == "part")
@@ -412,6 +412,7 @@ def test_drawing_scan_is_secondary_print_not_photo_input(tmp_path: Path):
     scan = tmp_path / "old-ladder.png"
     write_drawing_scan(scan)
     assert classify_print_path(scan) == "scan"
+    monkeypatch.setattr("panelcad.reconstruct.prints._from_importer", lambda _p: None)
     attached = session.reconstruct_attach_print(scan)
     assert attached["kind"] == "scan"
     photos = {row["id"] for row in session.reconstruct_list_photos()["photos"]}

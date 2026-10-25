@@ -393,9 +393,15 @@ class ReconstructWizard(QDialog):
         send.clicked.connect(self._answer)
         cmp = QPushButton("Compare attached print")
         cmp.clicked.connect(self._compare)
+        self.rebuild_schematic_btn = QPushButton("Rebuild Clean Schematic")
+        self.rebuild_schematic_btn.clicked.connect(self._rebuild_schematic)
         row.addWidget(send)
         row.addWidget(cmp)
+        row.addWidget(self.rebuild_schematic_btn)
         layout.addLayout(row)
+        self.wire_schedule_summary = QLabel("From-To Wire Landings: 0 traced")
+        self.wire_schedule_summary.setWordWrap(True)
+        layout.addWidget(self.wire_schedule_summary)
         return page
 
     def _review_page(self) -> QWidget:
@@ -752,6 +758,39 @@ class ReconstructWizard(QDialog):
             row = QListWidgetItem(f"{step.get('id')}  [{step.get('status')}]  {step.get('prompt')}")
             row.setData(Qt.ItemDataRole.UserRole, step.get("id"))
             self.step_list.addItem(row)
+        self._refresh_wire_schedule()
+
+    def _traced_wires(self) -> list[Any]:
+        wires: list[Any] = []
+        store = self.session.project.reconstruct
+        target_ids = {"asbuilt", "asbuilt_power", "asbuilt-power"}
+        if store is not None and store.schematic_sheet:
+            target_ids.add(store.schematic_sheet)
+        for sheet in self.session.project.sheets:
+            if sheet.kind == "schematic" and (sheet.id in target_ids or sheet.wires):
+                wires.extend(sheet.wires)
+        return wires
+
+    def _refresh_wire_schedule(self) -> None:
+        if not hasattr(self, "wire_schedule_summary"):
+            return
+        wires = self._traced_wires()
+        if not wires:
+            self.wire_schedule_summary.setText("From-To Wire Landings: 0 traced")
+            return
+        preview = ", ".join(
+            f"{(w.number + ': ') if w.number else ''}{w.frm} -> {w.to}" for w in wires[:6]
+        )
+        if len(wires) > 6:
+            preview += f" (+{len(wires) - 6} more)"
+        self.wire_schedule_summary.setText(f"From-To Wire Landings ({len(wires)} traced): {preview}")
+
+    def _rebuild_schematic(self) -> dict[str, Any]:
+        from panelcad.reconstruct.service import synthesize_reconstruct_schematic
+
+        result = synthesize_reconstruct_schematic(self.session)
+        self._refresh_wire_schedule()
+        return result
 
     def _set_review(self, text: str) -> None:
         self.review_summary.setText(text)
@@ -801,6 +840,13 @@ class ReconstructWizard(QDialog):
                 QMessageBox.warning(self, "Apply to print", str(exc))
                 self._refresh_review()
                 return
+        if any(
+            s.kind == "schematic" and (s.id in {"asbuilt", "asbuilt_power", "asbuilt-power"} or s.wires)
+            for s in self.session.project.sheets
+        ):
+            from panelcad.reconstruct.service import synthesize_reconstruct_schematic
+
+            synthesize_reconstruct_schematic(self.session)
         placed, pending, blocked, needs = self._classify()
         if placed:
             summary = _added_summary(self, placed, needs)
@@ -1171,6 +1217,12 @@ def _review_body(
         lines.append("On the drawing:")
         for item in placed:
             lines.append(f"  ✔ {_review_label(item)} placed")
+    traced = wizard._traced_wires() if hasattr(wizard, "_traced_wires") else []
+    if traced:
+        lines.append(f"From-To Wire Landings ({len(traced)} traced):")
+        for wire in traced[:8]:
+            num = f"[{wire.number}] " if wire.number else ""
+            lines.append(f"  • {num}{wire.frm} -> {wire.to}")
     if needs:
         lines.append("Needs size:")
         for item in needs:
