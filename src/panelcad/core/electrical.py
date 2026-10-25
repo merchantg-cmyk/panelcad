@@ -20,7 +20,7 @@ from panelcad.library.catalog import Catalog
 from panelcad.library.panel import effective_footprint, is_child_contact, is_incabinet
 
 SCHEMATIC_KINDS = {"schematic", "io"}
-LAYOUT_KINDS = {"panel_layout", "door_layout"}
+LAYOUT_KINDS = {"panel_layout", "door_layout", "layout"}
 _SKIP_CATEGORIES = ("connection.notes", "connection.offpage", "connection.node", "connection.ground")
 _CHILD_RE = re.compile(r"^([A-Za-z]+\d+)[-.](\d+)$")
 _CHILD_NAME_RE = re.compile(r"^([A-Za-z]+\d+)[-.]([A-Za-z][A-Za-z0-9]*)$")

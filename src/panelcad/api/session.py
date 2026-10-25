@@ -924,9 +924,9 @@ class Session:
         sid = _slug(sheet_id)
         if any(s.id == sid for s in self.project.sheets):
             raise ValueError(f"sheet '{sid}' already exists")
-        page = Page(size="A3", orientation="portrait") if kind == "panel_layout" else Page()
+        page = Page(size="A3", orientation="portrait") if kind in ("panel_layout", "layout") else Page()
         sheet = Sheet(id=sid, title=title or sid, kind=kind, page=page)
-        if kind == "panel_layout":
+        if kind in ("panel_layout", "layout"):
             enc, rails = default_enclosure_and_rails(sheet.page)
             sheet.enclosure = enc
             sheet.rails = rails
@@ -934,7 +934,7 @@ class Session:
             sheet.network = NetworkInfo(name=title or sid, medium="mixed")
         if kind == "schematic":
             sheet.drawing_style = self.project.title_block.drawing_style
-        if kind in {"panel_layout", "door_layout", "terminal"} and self.project.active_panel:
+        if kind in {"panel_layout", "layout", "door_layout", "terminal"} and self.project.active_panel:
             from panelcad.core.panels import find_panel
 
             if find_panel(self.project, self.project.active_panel) is not None:
@@ -6546,7 +6546,7 @@ class Session:
         is placed.
         """
         dest = self.sheet(sheet_id)
-        if dest.kind != "panel_layout":
+        if dest.kind not in ("panel_layout", "layout"):
             raise ValueError(f"sheet '{dest.id}' is {dest.kind}, need panel_layout")
 
         seen: set[str] = set()
@@ -7161,7 +7161,7 @@ class Session:
             dest = next((sh for sh in self.project.sheets if sh.kind == "panel_layout"), None)
         if dest is None:
             dest = self.add_sheet("enclosure", title="Enclosure", kind="panel_layout")
-        if dest.kind != "panel_layout":
+        if dest.kind not in ("panel_layout", "layout"):
             raise ValueError(f"sheet '{dest.id}' is {dest.kind}, need panel_layout")
         old_enc = dest.enclosure.model_copy(deep=True) if dest.enclosure is not None else None
         snapshot = [comp.model_copy(deep=True) for comp in dest.components]
@@ -8134,6 +8134,157 @@ class Session:
         return {"sheet": dest.id, "modules": packed["modules"], "field": packed["field"]}
 
 
+    # ------------------------------------------------------------------
+    # Backpanel Wire Routing, Zip-Tie Bundles & Technician Walkthrough
+    # ------------------------------------------------------------------
+    def route_panel_wires(self, sheet_id: str | None = None) -> list[Any]:
+        from panelcad.core.panel_wiring import route_panel_wires
+
+        return route_panel_wires(self, sheet_id=sheet_id)
+
+    def build_wire_by_wire_schedule(self, sheet_id: str | None = None) -> Any:
+        from panelcad.core.panel_wiring import build_wire_by_wire_schedule
+
+        return build_wire_by_wire_schedule(self, sheet_id=sheet_id)
+
+    def add_zip_tie_slice(
+        self,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        sheet_id: str | None = None,
+    ) -> Any:
+        from panelcad.core.panel_wiring import add_zip_tie_slice
+
+        return add_zip_tie_slice(self, sheet_id, x1, y1, x2, y2)
+
+    def add_zip_tie_waypoint(
+        self,
+        x: float,
+        y: float,
+        wire_numbers: list[str] | None = None,
+        orientation: str = "h",
+        sheet_id: str | None = None,
+    ) -> Any:
+        from panelcad.core.panel_wiring import add_zip_tie_waypoint
+
+        return add_zip_tie_waypoint(
+            self,
+            sheet_id,
+            x,
+            y,
+            wire_numbers=wire_numbers,
+            orientation=orientation,
+        )
+
+    def move_zip_tie_waypoint(
+        self,
+        zip_tie_id: str,
+        new_x: float,
+        new_y: float,
+        sheet_id: str | None = None,
+    ) -> Any:
+        from panelcad.core.panel_wiring import move_zip_tie_waypoint
+
+        return move_zip_tie_waypoint(self, sheet_id, zip_tie_id, new_x, new_y)
+
+    def remove_zip_tie_waypoint(
+        self,
+        zip_tie_id: str,
+        sheet_id: str | None = None,
+    ) -> bool:
+        from panelcad.core.panel_wiring import remove_zip_tie_waypoint
+
+        return remove_zip_tie_waypoint(self, sheet_id, zip_tie_id)
+
+    def list_zip_tie_waypoints(self, sheet_id: str | None = None) -> list[Any]:
+        from panelcad.core.panel_wiring import list_zip_tie_waypoints
+
+        return list_zip_tie_waypoints(self, sheet_id=sheet_id)
+
+    def set_panel_wiring_mode(self, mode: str, sheet_id: str | None = None) -> dict[str, Any]:
+        from panelcad.core.panel_wiring import set_panel_wiring_mode
+
+        return set_panel_wiring_mode(self, mode, sheet_id=sheet_id)
+
+    def get_panel_wiring_mode(self, sheet_id: str | None = None) -> str:
+        from panelcad.core.panel_wiring import get_panel_wiring_mode
+
+        return get_panel_wiring_mode(self, sheet_id=sheet_id)
+
+    def set_walkthrough_step(self, step_index: int, sheet_id: str | None = None) -> dict[str, Any]:
+        from panelcad.core.panel_wiring import set_walkthrough_step
+
+        return set_walkthrough_step(self, step_index, sheet_id=sheet_id)
+
+    def get_walkthrough_step(self, sheet_id: str | None = None) -> int:
+        from panelcad.core.panel_wiring import get_walkthrough_step
+
+        return get_walkthrough_step(self, sheet_id=sheet_id)
+
+    def step_walkthrough(self, delta: int = 1, sheet_id: str | None = None) -> dict[str, Any]:
+        from panelcad.core.panel_wiring import step_walkthrough
+
+        return step_walkthrough(self, delta=delta, sheet_id=sheet_id)
+
+    def mark_wire_installed(
+        self,
+        wire_number_or_index: str | int,
+        installed: bool = True,
+        sheet_id: str | None = None,
+    ) -> dict[str, Any]:
+        from panelcad.core.panel_wiring import mark_wire_installed
+
+        return mark_wire_installed(
+            self,
+            wire_number_or_index,
+            installed=installed,
+            sheet_id=sheet_id,
+        )
+
+    def add_wire_by_wire_sheet(
+        self,
+        sheet_id: str = "wire_by_wire",
+        title: str = "Wire-by-Wire Cut Sheet",
+        layout_sheet_id: str | None = None,
+    ) -> Sheet:
+        from panelcad.core.panel_wiring import add_wire_by_wire_sheet
+
+        return add_wire_by_wire_sheet(
+            self,
+            sheet_id=sheet_id,
+            title=title,
+            layout_sheet_id=layout_sheet_id,
+        )
+
+    def export_wire_by_wire_csv(
+        self,
+        path: Path | str,
+        sheet_id: str | None = None,
+    ) -> Path:
+        from panelcad.core.panel_wiring import export_wire_by_wire_csv
+
+        return export_wire_by_wire_csv(self, path, sheet_id=sheet_id)
+
+    def render_walkthrough_step_png(
+        self,
+        step_index: int,
+        output_path: Path | str,
+        sheet_id: str | None = None,
+        dpi: float = 200.0,
+    ) -> Path:
+        from panelcad.core.panel_wiring import render_walkthrough_step_png
+
+        return render_walkthrough_step_png(
+            self,
+            step_index,
+            output_path,
+            sheet_id=sheet_id,
+            dpi=dpi,
+        )
+
+
 def _summary_place(self: Session, result: Any, args: tuple, kwargs: dict) -> str:
     return f"place {result.id} ({result.library_id}) at {result.x:g},{result.y:g}"
 
@@ -8260,6 +8411,15 @@ _ACTIVITY_METHODS: dict[str, Any] = {
     "sequence_terminal_strip": lambda s, r, a, k: f"sequence terminals {a[0] if a else k.get('strip', '')}",
     "import_print": lambda s, r, a, k: "import print",
     "import_sheet": lambda s, r, a, k: f"import sheet {r}",
+    "add_zip_tie_slice": lambda s, r, a, k: f"zip-tie {getattr(r, 'id', '')} ({len(getattr(r, 'wire_numbers', []))})",
+    "add_zip_tie_waypoint": lambda s, r, a, k: f"zip-tie {getattr(r, 'id', '')}",
+    "move_zip_tie_waypoint": lambda s, r, a, k: f"move zip-tie {getattr(r, 'id', '')}",
+    "remove_zip_tie_waypoint": _summary_generic("remove zip-tie"),
+    "set_panel_wiring_mode": lambda s, r, a, k: f"wiring mode {r.get('mode', '')}",
+    "set_walkthrough_step": lambda s, r, a, k: f"walkthrough step {int(r.get('step_index', 0)) + 1}/{r.get('total_steps', 0)}",
+    "step_walkthrough": lambda s, r, a, k: f"walkthrough step {int(r.get('step_index', 0)) + 1}/{r.get('total_steps', 0)}",
+    "mark_wire_installed": lambda s, r, a, k: f"wire {r.get('wire_number', '')} installed={r.get('installed')}",
+    "add_wire_by_wire_sheet": _summary_generic("wire-by-wire sheet"),
 }
 
 

@@ -266,6 +266,8 @@ def dump_project(project: Project) -> str:
             sheet.pop("panel", None)
         if not sheet.get("overview"):
             sheet.pop("overview", None)
+        if not sheet.get("properties"):
+            sheet.pop("properties", None)
         if sheet.get("kind") not in ("schematic", "network") and not sheet.get("wires"):
             sheet.pop("wires", None)
         for wire in sheet.get("wires") or []:
@@ -317,6 +319,8 @@ def omit_default_panel_fields(data: dict) -> None:
     for sheet in data.get("sheets") or []:
         if isinstance(sheet, dict) and not sheet.get("panel"):
             sheet.pop("panel", None)
+        if isinstance(sheet, dict) and not sheet.get("properties"):
+            sheet.pop("properties", None)
         for comp in (sheet.get("components") or []) if isinstance(sheet, dict) else []:
             if isinstance(comp, dict) and not comp.get("panel"):
                 comp.pop("panel", None)

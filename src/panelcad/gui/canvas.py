@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from panelcad.api.session import Session
-from panelcad.core.layout import clip_offset, is_io_sheet, is_layout_sheet, is_network_sheet, rail_height
+from panelcad.core.layout import clip_offset, is_io_sheet, is_layout_sheet, is_network_sheet, is_wire_by_wire_sheet, rail_height
 from panelcad.library.ports import effective_ports, network_node_caption
 from panelcad.render.io_ladder import io_card_size, io_pin_layout, is_io_module
 from panelcad.render.network import node_size, port_layout
@@ -1541,6 +1541,62 @@ class TitleBlockItem(QGraphicsItem):
         )
 
 
+class PanelWiringOverlayItem(QGraphicsItem):
+    """Draws backpanel wire routing, zip-tie bundles, and technician walkthrough overlays."""
+
+    def __init__(self, session: Session) -> None:
+        super().__init__()
+        self.session = session
+        self.setZValue(65)
+        self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+        w, h = session.sheet().page.dimensions()
+        self._rect = QRectF(0, 0, w, h)
+
+    def boundingRect(self) -> QRectF:
+        return self._rect
+
+    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None) -> None:
+        from panelcad.render.panel_wiring_render import draw_panel_wiring_overlay
+
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        sheet = self.session.sheet()
+        draw_panel_wiring_overlay(
+            QtPainter(painter),
+            sheet,
+            self.session.catalog,
+            self.session.project,
+        )
+
+
+class WireByWireSheetItem(QGraphicsItem):
+    """Draws the dedicated Wire-by-Wire Cut Sheet table on canvas."""
+
+    def __init__(self, session: Session) -> None:
+        super().__init__()
+        self.session = session
+        self.setZValue(30)
+        self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+        w, h = session.sheet().page.dimensions()
+        self._rect = QRectF(0, 0, w, h)
+
+    def boundingRect(self) -> QRectF:
+        return self._rect
+
+    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None) -> None:
+        from panelcad.render.panel_wiring_render import draw_wire_by_wire_sheet
+
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        sheet = self.session.sheet()
+        draw_wire_by_wire_sheet(
+            QtPainter(painter),
+            sheet,
+            self.session.catalog,
+            self.session.project,
+        )
+
+
 class LogoSlotItem(QGraphicsRectItem):
     """Click the LOGO cell to pick an image."""
 
@@ -2021,6 +2077,8 @@ class SchematicView(QGraphicsView):
         self._wire_preview: QGraphicsPathItem | None = None
         self._cloud_origin: QPointF | None = None
         self._cloud_preview: QGraphicsPathItem | None = None
+        self._zip_tie_origin: QPointF | None = None
+        self._zip_tie_preview: QGraphicsPathItem | None = None
         self._slide_pin: PinItem | None = None
         self._slide_moved = False
         self._pull_wire: WireItem | None = None
@@ -2149,16 +2207,18 @@ class SchematicView(QGraphicsView):
         project = self.session.project
         catalog = self.session.catalog
         theme = (get_theme(), get_canvas())
+        props_sig = tuple((s.id, repr(sorted((s.properties or {}).items()))) for s in project.sheets)
         key = (
             int(getattr(self.session, "_drawing_generation", 0)),
             id(project),
             id(catalog),
             _digest(_library_key(project, catalog)),
             theme,
+            props_sig,
         )
         if key == getattr(self, "_scene_stamp_key", None):
             return self._scene_stamp_value
-        stamp = f"{project_drawing_stamp(project, catalog)}|{theme[0]}|{theme[1]}"
+        stamp = f"{project_drawing_stamp(project, catalog)}|{theme[0]}|{theme[1]}|{_digest(repr(props_sig))}"
         self._scene_stamp_key = key
         self._scene_stamp_value = stamp
         return stamp
@@ -2425,6 +2485,15 @@ class SchematicView(QGraphicsView):
         self._add(SheetChromeItem(self.session))
         self._add(TitleBlockItem(self.session))
         self._add(LogoSlotItem(company_logo_rect(sheet), self.logo_clicked.emit))
+        self._zip_tie_origin = None
+        self._zip_tie_preview = None
+        if is_wire_by_wire_sheet(sheet):
+            self._add(WireByWireSheetItem(self.session))
+            self._draw_revision_clouds()
+            self._draw_trace_highlight()
+            self.status.emit(self._status_text())
+            self.project_changed.emit()
+            return
         if sheet.kind == "terminal":
             self._draw_terminal_strip(sheet)
             self._draw_revision_clouds()
@@ -2458,7 +2527,9 @@ class SchematicView(QGraphicsView):
             if comp.id in tags:
                 item.set_tag_layout(tags[comp.id])
             self._add(item)
-        if not layout:
+        if layout:
+            self._add(PanelWiringOverlayItem(self.session))
+        else:
             self._redraw_wires()
         self._apply_pin_mode()
         self._draw_finding_markers()
@@ -3368,6 +3439,12 @@ class SchematicView(QGraphicsView):
             self._update_cloud_preview(scene_pos, scene_pos)
             event.accept()
             return
+        if self.mode == "zip_tie":
+            self.setDragMode(QGraphicsView.DragMode.NoDrag)
+            self._zip_tie_origin = scene_pos
+            self._update_zip_tie_preview(scene_pos, scene_pos)
+            event.accept()
+            return
 
         pin = None if is_layout_sheet(self.session.sheet()) else self._pin_at(event.position())
         # Rails are wire ends only while the Wire tool is on, or a wire is
@@ -3452,6 +3529,11 @@ class SchematicView(QGraphicsView):
             self._update_cloud_preview(self._cloud_origin, end)
             event.accept()
             return
+        if getattr(self, "_zip_tie_origin", None) is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            end = self.mapToScene(event.position().toPoint())
+            self._update_zip_tie_preview(self._zip_tie_origin, end)
+            event.accept()
+            return
         if self._slide_pin is not None:
             self._slide_pin_to(event)
             event.accept()
@@ -3513,6 +3595,17 @@ class SchematicView(QGraphicsView):
             self._middle_press_pos = None
             self._middle_hit_device = None
             self._middle_hit_wire = None
+            event.accept()
+            return
+        if getattr(self, "_zip_tie_origin", None) is not None and event.button() == Qt.MouseButton.LeftButton:
+            origin = self._zip_tie_origin
+            end = self.mapToScene(event.position().toPoint())
+            self._cancel_zip_tie_drag()
+            dist = ((end.x() - origin.x()) ** 2 + (end.y() - origin.y()) ** 2) ** 0.5
+            if dist >= 2.0:
+                self.commit_zip_tie_slice(origin.x(), origin.y(), end.x(), end.y())
+            else:
+                self.status.emit("drag across routed wires (at least 2 mm) to bundle with a zip-tie")
             event.accept()
             return
         if self._cloud_origin is not None and event.button() == Qt.MouseButton.LeftButton:
@@ -4037,9 +4130,83 @@ class SchematicView(QGraphicsView):
         self.place_library_id = None
         self.cancel_wire()
         self._cancel_cloud_drag()
+        self._cancel_zip_tie_drag()
         self._apply_pin_mode()
         self.unsetCursor()
         self.status.emit(self._status_text())
+
+    @property
+    def zip_tie_mode(self) -> bool:
+        return self.mode == "zip_tie"
+
+    @property
+    def _zip_tie_mode(self) -> bool:
+        return self.mode == "zip_tie"
+
+    def set_zip_tie_mode(self, enabled: bool = True) -> None:
+        if not enabled:
+            self._cancel_zip_tie_drag()
+            if self.mode == "zip_tie":
+                self.set_select_mode()
+            return
+        self.mode = "zip_tie"
+        self.place_library_id = None
+        self.cancel_wire()
+        self._cancel_cloud_drag()
+        self._apply_pin_mode()
+        self.setCursor(Qt.CursorShape.CrossCursor)
+        self.status.emit("ZIP-TIE SLICE — drag a line across panel wires to bundle them into a zip-tie waypoint")
+
+    def commit_zip_tie_slice(self, x1: float, y1: float, x2: float, y2: float) -> object:
+        tie = self.session.add_zip_tie_slice(float(x1), float(y1), float(x2), float(y2))
+        self.reload()
+        self.status.emit(f"zip-tie {tie.id} bundled {len(tie.wire_numbers)} wire(s)")
+        return tie
+
+    def _cancel_zip_tie_drag(self) -> None:
+        self._zip_tie_origin = None
+        item = getattr(self, "_zip_tie_preview", None)
+        self._zip_tie_preview = None
+        if item is None:
+            return
+        if item.scene() is not None:
+            self.scene.removeItem(item)
+        try:
+            self._items.remove(item)
+        except ValueError:
+            pass
+
+    def _update_zip_tie_preview(self, origin: QPointF, end: QPointF) -> None:
+        path = QPainterPath()
+        path.moveTo(origin.x(), origin.y())
+        path.lineTo(end.x(), end.y())
+        pen = QPen(QColor("#f59e0b"), 0.8, Qt.PenStyle.DashLine)
+        if getattr(self, "_zip_tie_preview", None) is None:
+            item = QGraphicsPathItem()
+            item.setPen(pen)
+            item.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+            item.setZValue(75)
+            item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+            self._add(item)
+            self._zip_tie_preview = item
+        self._zip_tie_preview.setPen(pen)
+        self._zip_tie_preview.setPath(path)
+
+    def set_panel_wiring_mode(self, mode: str) -> dict:
+        res = self.session.set_panel_wiring_mode(mode)
+        self.reload()
+        return res
+
+    def set_walkthrough_step(self, step_index: int) -> dict:
+        res = self.session.set_walkthrough_step(step_index)
+        self.reload()
+        return res
+
+    def step_walkthrough(self, delta: int = 1) -> dict:
+        res = self.session.step_walkthrough(delta)
+        self.reload()
+        return res
 
     def set_cloud_mode(self) -> None:
         self.mode = "cloud"
@@ -4438,3 +4605,6 @@ def _ignore_mouse(item: QGraphicsItem) -> None:
     item.setZValue(-10)
     if isinstance(item, (QGraphicsLineItem, QGraphicsRectItem)):
         item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
+
+
+LayoutView = SchematicView

@@ -40,7 +40,11 @@ DOOR_HEADING_MM = 22.0
 
 
 def is_layout_sheet(sheet: Sheet) -> bool:
-    return sheet.kind in ("panel_layout", "door_layout")
+    return sheet.kind in ("panel_layout", "door_layout", "layout")
+
+
+def is_wire_by_wire_sheet(sheet: Sheet) -> bool:
+    return sheet.kind in ("wire_by_wire", "wire_schedule") or bool((sheet.properties or {}).get("wire_by_wire"))
 
 
 def symbol_body_size(sheet: Sheet, device: Device, component: Component | None = None) -> tuple[float, float]:

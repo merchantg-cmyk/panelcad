@@ -448,9 +448,158 @@ def feature_iec_to_nema_convert(app, win) -> None:
               and mp_layout_issues == [],
               json.dumps({"main_xs": main_xs, "supply_callouts": main_callouts, "drawing_style": main_sh.drawing_style, "rails": [main_sh.rail_hot, main_sh.rail_return], "flags": mp_all_flags, "layout_issues": mp_layout_issues}))
 
+
+def feature_panel_wiring(app, win) -> None:
+    import yaml
+    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QCheckBox, QComboBox, QDialog, QLabel, QPushButton, QTableWidget
+
+    shot(win, "main-window-before")
+
+    # 1. Trigger Reports -> Number wires
+    act_num = menu_action(win, "Reports", "Number wires")
+    log(f"triggering Reports -> {act_num.text()}")
+    act_num.trigger()
+    app.processEvents()
+    QTest.qWait(80)
+
+    # 2. Switch to the Panel Layout tab via SheetBar QTabBar click
+    tabs = win.sheet_bar.tabs
+    enclosure_tab = -1
+    for i in range(tabs.count()):
+        if tabs.tabData(i) == "enclosure" or "Layout" in tabs.tabText(i):
+            enclosure_tab = i
+            break
+    check("enclosure tab found in SheetBar", enclosure_tab >= 0, f"tab={enclosure_tab}")
+    if enclosure_tab >= 0:
+        rect = tabs.tabRect(enclosure_tab)
+        QTest.mouseClick(tabs, Qt.MouseButton.LeftButton, pos=rect.center())
+        app.processEvents()
+        QTest.qWait(100)
+    check("switched to enclosure layout sheet", win.session.active_sheet_id == "enclosure", win.session.active_sheet_id)
+    shot(win, "panel-layout-before-walkthrough")
+
+    # 3. Open Reports -> Wiring Walkthrough & Cut Sheet…
+    act_ww = menu_action(win, "Reports", "Wiring Walkthrough / Cut Sheet…")
+    log(f"triggering Reports -> {act_ww.text()}")
+    act_ww.trigger()
+    app.processEvents()
+    QTest.qWait(100)
+
+    dlg = win.findChild(QDialog, "wiring-walkthrough-dialog")
+    check("Wiring Walkthrough dialog opened", dlg is not None and dlg.isVisible(),
+          dlg.windowTitle() if dlg is not None else "missing")
+    if dlg is None:
+        return
+    shot(dlg, "walkthrough-dialog-initial")
+
+    table = dlg.findChild(QTableWidget, "wire-by-wire-table")
+    check("wire-by-wire-table populated with 12 routed wires",
+          table is not None and table.rowCount() == 12,
+          f"rows={table.rowCount() if table is not None else 0}")
+
+    # 4. Select Show All Bundles mode and slice across left duct wires to create a Zip-Tie waypoint
+    mode_combo = dlg.findChild(QComboBox, "wiring-mode-combo")
+    check("wiring-mode-combo has 3 modes", mode_combo is not None and mode_combo.count() == 3,
+          str(mode_combo.count() if mode_combo else 0))
+    if mode_combo is not None:
+        mode_combo.setCurrentIndex(mode_combo.findData("all"))
+        app.processEvents()
+        QTest.qWait(60)
+    shot(win, "panel-layout-all-bundles")
+
+    slice_btn = dlg.findChild(QPushButton, "wiring-slice-btn")
+    check("Zip-Tie Slice Tool button present", slice_btn is not None, "wiring-slice-btn")
+    if slice_btn is not None:
+        QTest.mouseClick(slice_btn, Qt.MouseButton.LeftButton)
+        app.processEvents()
+        check("canvas entered zip_tie slice mode", win.canvas.mode == "zip_tie", win.canvas.mode)
+        vp = win.canvas.viewport()
+        p1 = win.canvas.mapFromScene(QPointF(28.0, 140.0))
+        p2 = win.canvas.mapFromScene(QPointF(52.0, 140.0))
+        QTest.mousePress(vp, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p1)
+        QTest.mouseMove(vp, p2)
+        QTest.mouseRelease(vp, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p2)
+        app.processEvents()
+        QTest.qWait(80)
+
+    routes_col = [table.item(r, 5).text() for r in range(table.rowCount())] if table is not None else []
+    check("zip-tie waypoint zt-1 created and bundles intersected wires",
+          any("zt-1" in r for r in routes_col),
+          str(routes_col))
+    shot(win, "panel-layout-with-zip-tie")
+
+    # 5. Switch to Technician Walkthrough (1-by-1) mode and step through wires
+    if mode_combo is not None:
+        mode_combo.setCurrentIndex(mode_combo.findData("walkthrough"))
+        app.processEvents()
+        QTest.qWait(60)
+
+    step_lbl = dlg.findChild(QLabel, "wiring-step-label")
+    next_btn = dlg.findChild(QPushButton, "wiring-next-btn")
+    inst_chk = dlg.findChild(QCheckBox, "wiring-installed-check")
+    check("walkthrough step 1 shown", step_lbl is not None and "Wire 1 of 12" in step_lbl.text(),
+          step_lbl.text() if step_lbl else "")
+    shot(win, "walkthrough-step-1")
+
+    if inst_chk is not None:
+        QTest.mouseClick(inst_chk, Qt.MouseButton.LeftButton)
+        app.processEvents()
+        check("wire 1 marked installed in table",
+              table is not None and table.item(0, 8).text() == "DONE",
+              table.item(0, 8).text() if table else "")
+
+    if next_btn is not None:
+        QTest.mouseClick(next_btn, Qt.MouseButton.LeftButton)
+        app.processEvents()
+        QTest.qWait(60)
+        check("Next Wire button advances to Wire 2 of 12",
+              step_lbl is not None and "Wire 2 of 12" in step_lbl.text(),
+              step_lbl.text() if step_lbl else "")
+    shot(win, "walkthrough-step-2")
+
+    # Click row 3 (4th wire) in the table to jump directly to Wire 4 of 12
+    if table is not None:
+        item_rect = table.visualItemRect(table.item(3, 1))
+        QTest.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=item_rect.center())
+        app.processEvents()
+        QTest.qWait(60)
+        check("clicking table row 4 jumps walkthrough to Wire 4 of 12",
+              step_lbl is not None and "Wire 4 of 12" in step_lbl.text(),
+              step_lbl.text() if step_lbl else "")
+    shot(dlg, "walkthrough-dialog-step-4")
+
+    # 6. Click "+ Add Wire-by-Wire Sheet" to add printable cut sheet to project
+    add_sheet_btn = dlg.findChild(QPushButton, "wiring-add-sheet-btn")
+    if add_sheet_btn is not None:
+        QTest.mouseClick(add_sheet_btn, Qt.MouseButton.LeftButton)
+        app.processEvents()
+        QTest.qWait(100)
+    sheet_ids = [s.id for s in win.session.project.sheets]
+    check("Wire-by-Wire Cut Sheet added to project", "wire_by_wire" in sheet_ids, str(sheet_ids))
+    shot(win, "wire-by-wire-cut-sheet")
+
+    # 7. Save project via File -> Save and verify persisted YAML
+    act_save = menu_action(win, "File", "Save")
+    act_save.trigger()
+    app.processEvents()
+    QTest.qWait(80)
+    saved_path = Path(win.session.path)
+    shutil.copy2(saved_path, EVIDENCE / saved_path.name)
+    saved_data = yaml.safe_load(saved_path.read_text(encoding="utf-8"))
+    enc_sheet = next((s for s in (saved_data.get("sheets") or []) if s.get("id") == "enclosure"), {})
+    enc_props = enc_sheet.get("properties") or {}
+    check("persisted YAML stores zip_ties, walkthrough_step, and installed_wires",
+          bool(enc_props.get("zip_ties")) and enc_props.get("walkthrough_step") == 3 and "101" in (enc_props.get("installed_wires") or []),
+          json.dumps({"zip_ties": len(enc_props.get("zip_ties") or []), "step": enc_props.get("walkthrough_step"), "installed": enc_props.get("installed_wires")}))
+    dlg.close()
+    app.processEvents()
+
 FEATURES = {
     "print-package": ("sample_catalog.pcad.yaml", feature_print_package),
     "iec-to-nema-convert": ("xref_iec_mirror.pcad.yaml", feature_iec_to_nema_convert),
+    "panel-wiring": ("dol_starter.pcad.yaml", feature_panel_wiring),
 }
 
 

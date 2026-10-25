@@ -555,6 +555,18 @@ class MainWindow(QMainWindow):
         self.troubleshoot.set_session(self.session)
         self.troubleshoot.help_requested.connect(self.show_help)
 
+        from panelcad.gui.wiring_walkthrough import WiringWalkthroughPanel
+
+        self.wiring_walkthrough_panel = WiringWalkthroughPanel(self.session)
+        self.wiring_walkthrough = self.wiring_walkthrough_panel
+        self.wire_by_wire_table = self.wiring_walkthrough_panel.wire_by_wire_table
+        self._wiring_walkthrough_dialog = None
+        self.wiring_walkthrough_panel.changed.connect(self.canvas.reload)
+        self.wiring_walkthrough_panel.slice_tool_requested.connect(self.canvas.set_zip_tie_mode)
+        self.wiring_walkthrough_panel.status_message.connect(self._status)
+        self.wiring_walkthrough_panel.sheet_added.connect(self._on_wire_by_wire_sheet_added)
+        self.canvas.project_changed.connect(self.wiring_walkthrough_panel.refresh)
+
         from panelcad.gui.import_review import ImportReviewPanel
 
         self.import_review = ImportReviewPanel()
@@ -1599,6 +1611,7 @@ class MainWindow(QMainWindow):
         reports.addAction(self._act("Export cable &pull list…", None, lambda: self._export_report("Cable pull list", self.session.export_cable_pull_list)))
         reports.addAction(self._act("Export cable &terminations…", None, lambda: self._export_report("Cable terminations", self.session.export_cable_terminations)))
         reports.addAction(self._act("Panel wire &annotation…", None, lambda: self._export_report("Panel wire annotation", self.session.export_panel_wires)))
+        reports.addAction(self._act("&Wiring Walkthrough / Cut Sheet…", None, self.show_wiring_walkthrough))
         reports.addSeparator()
         reports.addAction(self._act("&Quote", None, self.show_quote))
 
@@ -2629,6 +2642,31 @@ class MainWindow(QMainWindow):
             self.props.show_component(self.session, ref)
             self.bom.refresh()
             self._status(f"updated {ref} ports")
+
+    @property
+    def view(self):
+        return self.canvas
+
+    def show_wiring_walkthrough(self) -> WiringWalkthroughPanel:
+        """Open the Technician Wiring Walkthrough & Wire-by-Wire Cut Sheet window."""
+
+        self.wiring_walkthrough_panel.set_session(self.session)
+        if self._wiring_walkthrough_dialog is None:
+            dlg = QDialog(self)
+            dlg.setObjectName("wiring-walkthrough-dialog")
+            dlg.setWindowTitle("Technician Wiring Walkthrough & Wire-by-Wire Cut Sheet")
+            dlg.resize(920, 360)
+            lay = QVBoxLayout(dlg)
+            lay.setContentsMargins(4, 4, 4, 4)
+            lay.addWidget(self.wiring_walkthrough_panel)
+            self._wiring_walkthrough_dialog = dlg
+        self._wiring_walkthrough_dialog.show()
+        self._wiring_walkthrough_dialog.raise_()
+        return self.wiring_walkthrough_panel
+
+    def _on_wire_by_wire_sheet_added(self, sheet_id: str) -> None:
+        self.sheet_bar.refresh()
+        self._switch_sheet(sheet_id)
 
     def show_troubleshoot(self) -> None:
         """Open the guided fault-finding dock for the drawing that is open."""
@@ -5003,6 +5041,8 @@ class MainWindow(QMainWindow):
         self.next_steps.set_session(self.session)
         if hasattr(self, "troubleshoot"):
             self.troubleshoot.set_session(self.session)
+        if hasattr(self, "wiring_walkthrough_panel"):
+            self.wiring_walkthrough_panel.set_session(self.session)
         self.setWindowTitle(self._title())
         self._bind_ai()
         self._sync_ai_page()

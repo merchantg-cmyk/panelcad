@@ -23,7 +23,7 @@ class BaseModel(PydanticBaseModel):
 
     model_config = ConfigDict(defer_build=True)
 
-SheetKind = Literal["schematic", "panel_layout", "door_layout", "terminal", "network", "io"]
+SheetKind = Literal["schematic", "panel_layout", "door_layout", "layout", "terminal", "network", "io", "wire_by_wire", "wire_schedule"]
 PortKind = Literal["ethernet", "serial", "usb", "can", "fieldbus", "other"]
 NetworkMedium = Literal["ethernet", "serial", "usb", "mixed", "other"]
 
@@ -450,6 +450,7 @@ class Sheet(BaseModel):
     # Overview page (network, rack, block overview). Devices on it are
     # references to the primary device on its own sheet. Omitted when false.
     overview: bool = False
+    properties: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("control_voltage", mode="before")
     @classmethod

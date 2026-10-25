@@ -1180,6 +1180,9 @@ def draw_panel_sheet(
             wire_note=note,
             strip_label=labels.get(comp.id),
         )
+    from panelcad.render.panel_wiring_render import draw_panel_wiring_overlay
+
+    draw_panel_wiring_overlay(painter, sheet, catalog, project)
 
 
 def _draw_keepout(painter: Painter, device: Device, component: Component) -> None:

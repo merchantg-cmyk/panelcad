@@ -9,3 +9,4 @@ One file per user-facing feature. Each lists its sub-features, how a user reache
 | Ladder wiring, wires landing on pins | [ladder-wiring.md](ladder-wiring.md) | none yet | Mapped |
 | IEC-to-NEMA conversion with the From-To check | [iec-to-nema-convert.md](iec-to-nema-convert.md) | `iec-to-nema-convert` | Proven |
 | Problems list (design checks) | [problems-list.md](problems-list.md) | none yet | Mapped |
+| Backpanel wire routing, zip-ties & technician walkthrough | [panel-wiring.md](panel-wiring.md) | `panel-wiring` | Proven |

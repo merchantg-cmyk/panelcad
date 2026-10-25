@@ -25,6 +25,13 @@ def draw_sheet_body(
     project=None,
     sheet_no: int = 1,
 ) -> None:
+    from panelcad.core.layout import is_wire_by_wire_sheet
+
+    if is_wire_by_wire_sheet(sheet):
+        from panelcad.render.panel_wiring_render import draw_wire_by_wire_sheet
+
+        draw_wire_by_wire_sheet(painter, sheet, catalog, project)
+        return
     if is_layout_sheet(sheet):
         draw_panel_sheet(painter, sheet, catalog, base_dir=base_dir, project=project)
         return
