@@ -1903,7 +1903,7 @@ def build_iec_project_from_imported_from_to(
         power_sheet = sess.project.sheets[0]
         power_sheet.id = "power"
         power_sheet.title = "Power"
-        power_sheet.drawing_style = "freeform"
+        power_sheet.drawing_style = "iec"
         power_sheet.rail_hot = ""
         power_sheet.rail_return = ""
         sheets_created.append(power_sheet)
@@ -1997,6 +1997,10 @@ def build_iec_project_from_imported_from_to(
                     net=r.potential or r.wire_number,
                 )
             )
+        from panelcad.core.ladder import is_three_phase_power_sheet
+
+        if is_three_phase_power_sheet(power_sheet):
+            power_sheet.drawing_style = "freeform"
     else:
         # Either control-only or shared tags: put all non-power rows in control flow
         control_rows = rows

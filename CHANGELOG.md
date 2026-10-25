@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.5.17 — 2026-10-25
+
+- **Picture-to-Print and PDF/scan round-trip** — Fixed `offpage_from_match` neighbor-pin resolution during vector and raster print import, restoring 100% round-trip connectivity and wire-number recall across exported PDFs and scans.
+- **Phone photo preprocessing** — `panelcad.importer.preprocess` adds automatic 4-corner perspective rectification, uneven lighting and shadow normalization, and camera EXIF `72/96 DPI` page-scale normalization before symbol and wire extraction.
+- **Universal From-To extraction and Clean NEMA Ladder synthesis** — `panelcad.importer.ladder_synth` (`infer_rungs`) extracts a universal From-To wire schedule from imported prints, surfaces an interactive **From-To Wire Schedule** tab in `ImportReviewPanel`, and synthesizes a **Clean NEMA Ladder** (`layout_mode="ladder"`) directly from extracted connectivity.
+- **As-built reconstruction ladder and 3-phase power split** — `panelcad.reconstruct` builds a clean horizontal NEMA control ladder (`"asbuilt"`) and splits 3-phase motor and feeder circuits onto a dedicated vertical power feeder sheet (`"asbuilt_power"`) from traced wire landings.
+- **3-phase power sheet rendering and checks** — Suppressed single-phase `L1`/`L2` ladder rails on 3-phase power sheets (`power_sheet_has_ladder_rails`), added `L1`/`L2`/`L3` 3-phase supply T-caps and source callouts (`missing_three_phase_supply_callouts`), and traced continuous 3-phase phase colors through power devices.
+
 ## 0.5.16 — 2026-10-24
 
 - **IEC-to-NEMA From-To gate** — Standard conversion runs `verify_converted_from_to` (`check_connections`, scorer `from-to-check/1`) before and after conversion. If any net is lost, added, or merged, `ConnectionLost` rolls back the change and does not write the output file. Chunk reverts are guarded the same way with `RevertRefused`. Wire numbering supports NEMA sheet-and-line (`line_ref`) or preserving existing labels (`keep`), and IEC terminal blocks map `-X1:3` to `TB1-3`.
