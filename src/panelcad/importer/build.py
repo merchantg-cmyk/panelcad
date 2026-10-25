@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import math
 import re
 from typing import Any
@@ -13,13 +15,35 @@ from panelcad.importer.symbols import print_tag_placeable, resolve_symbol
 
 
 def build_session(
-    stitched: dict[str, Any],
+    stitched: dict[str, Any] | Any,
     *,
     catalog: Any = None,
     parts: Any = None,
     name: str = "",
     photo_targets: list[dict[str, Any]] | None = None,
+    layout_mode: str = "preserve",
+    target_standard: str = "auto",
 ) -> tuple[Session, dict[str, Any]]:
+    if not isinstance(stitched, dict):
+        import json as _json
+
+        root_dir: Path | None = None
+        if isinstance(stitched, (str, Path)):
+            root_dir = Path(stitched)
+        elif hasattr(stitched, "ws") and hasattr(stitched.ws, "root"):
+            root_dir = Path(stitched.ws.root)
+        elif hasattr(stitched, "root"):
+            root_dir = Path(stitched.root)
+        loaded_dict: dict[str, Any] | None = None
+        if root_dir is not None and root_dir.is_dir():
+            for fname in ("facts.json", "stitch.json"):
+                cand = root_dir / fname
+                if cand.is_file():
+                    loaded_dict = _json.loads(cand.read_text(encoding="utf-8"))
+                    break
+        if loaded_dict is None and hasattr(stitched, "stitch"):
+            loaded_dict = stitched.stitch()
+        stitched = loaded_dict or {}
     block = stitched.get("title_block") or {}
     title = name or block.get("project") or block.get("title") or block.get("drawing_number") or "Imported print"
     session = Session.create(title, sheet_id="import-hold", title="hold")
@@ -42,10 +66,61 @@ def build_session(
             fields[key] = block[key]
     session.set_title_block(**fields)
 
+    eff_mode = str(
+        layout_mode
+        if layout_mode and layout_mode != "preserve"
+        else (stitched.get("layout_mode") or layout_mode or "preserve")
+    ).strip().lower()
+    if eff_mode in {"ladder", "clean_ladder", "clean"}:
+        from panelcad.importer.ladder_synth import synthesize_imported_ladder
+
+        session = synthesize_imported_ladder(
+            stitched,
+            target_standard=target_standard,
+            catalog=catalog,
+            parts=parts,
+            name=title,
+        )
+        report: dict[str, Any] = {"placed": [], "wires": [], "skipped": [], "unresolved_wires": [], "photos": []}
+        existing_ids = {s.id for s in session.project.sheets}
+        for sheet in stitched.get("sheets") or []:
+            kind = sheet.get("kind") or "schematic"
+            if kind in LAYOUT_KINDS and sheet.get("id") not in existing_ids:
+                created = session.add_sheet(sheet["id"], title=sheet.get("title") or sheet["id"], kind=kind)
+                _apply_page_size(created, sheet)
+                _place_sheet(session, created.id, sheet, report)
+                existing_ids.add(created.id)
+        placed_keys = {(r.get("sheet"), r.get("tag")) for r in report["placed"]}
+        for sh in session.project.sheets:
+            for comp in sh.components:
+                if (sh.id, comp.id) not in placed_keys:
+                    report["placed"].append(
+                        {
+                            "tag": comp.id,
+                            "library_id": comp.library_id,
+                            "sheet": sh.id,
+                            "confidence": float((comp.properties or {}).get("print_import_confidence", 0.92)),
+                        }
+                    )
+            for wire in sh.wires:
+                report["wires"].append(
+                    {
+                        "number": wire.number or wire.id,
+                        "sheet": sh.id,
+                        "from": wire.frm,
+                        "to": wire.to,
+                    }
+                )
+        if session.project.sheets:
+            session.set_active_sheet(session.project.sheets[0].id)
+        _apply_photo_targets(session, stitched, photo_targets or [], report)
+        _stamp_properties(session, stitched, report, layout_mode="ladder", target_standard=target_standard)
+        return session, report
+
     from panelcad.importer.tile import collapse_devices_across_sheets
 
     collapse_devices_across_sheets(list(stitched.get("sheets") or []))
-    report: dict[str, Any] = {"placed": [], "wires": [], "skipped": [], "unresolved_wires": [], "photos": []}
+    report = {"placed": [], "wires": [], "skipped": [], "unresolved_wires": [], "photos": []}
     sheet_ids: list[str] = []
     # A layout tag that did not match ink is the device already placed on the
     # schematic. Place those sheets after the schematics so the twin exists.
@@ -76,7 +151,7 @@ def build_session(
     if sheet_ids:
         session.set_active_sheet(sheet_ids[0])
     _apply_photo_targets(session, stitched, photo_targets or [], report)
-    _stamp_properties(session, stitched, report)
+    _stamp_properties(session, stitched, report, layout_mode="preserve", target_standard=target_standard)
     return session, report
 
 
@@ -2592,7 +2667,14 @@ def _find_component(session: Session, tag: str) -> Any | None:
     return None
 
 
-def _stamp_properties(session: Session, stitched: dict[str, Any], report: dict[str, Any]) -> None:
+def _stamp_properties(
+    session: Session,
+    stitched: dict[str, Any],
+    report: dict[str, Any],
+    *,
+    layout_mode: str = "preserve",
+    target_standard: str = "auto",
+) -> None:
     items = []
     for row in report["skipped"]:
         items.append({"kind": "device", "text": row.get("tag") or "", "sheet": row.get("sheet") or "", "reason": row.get("reason"), "confidence": 0})
@@ -2676,6 +2758,19 @@ def _stamp_properties(session: Session, stitched: dict[str, Any], report: dict[s
     needs_info = any(str(row.get("reason") or "") == "needs_info" for row in report["skipped"]) or any(
         str(item.get("reason") or "") == "needs_info" for item in items
     )
+    existing_pi = (session.project.properties or {}).get("print_import")
+    from_to_sched = None
+    if isinstance(existing_pi, dict) and isinstance(existing_pi.get("from_to_schedule"), dict):
+        from_to_sched = existing_pi["from_to_schedule"]
+    elif isinstance(stitched.get("from_to_schedule"), dict):
+        from_to_sched = stitched["from_to_schedule"]
+    else:
+        try:
+            from panelcad.importer.ladder_synth import extract_import_from_to
+
+            from_to_sched = extract_import_from_to(stitched, catalog=session.catalog).to_dict()
+        except Exception:  # noqa: BLE001
+            from_to_sched = {}
     session.project.properties["print_import"] = {
         "items": items,
         "unresolved_xrefs": xrefs,
@@ -2683,6 +2778,9 @@ def _stamp_properties(session: Session, stitched: dict[str, Any], report: dict[s
         "sheet_numbers": numbers,
         "sheet_number_needs_info": sheet_needs_info,
         "not_for_build": "yes" if needs_info else "",
+        "layout_mode": "ladder" if str(layout_mode).strip().lower() in {"ladder", "clean_ladder", "clean"} else "preserve",
+        "target_standard": str(target_standard or "auto"),
+        "from_to_schedule": from_to_sched or {},
     }
 
 

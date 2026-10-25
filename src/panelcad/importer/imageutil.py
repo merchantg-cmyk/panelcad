@@ -49,7 +49,7 @@ def prepare_scan(
         if rectified:
             work_img = rect_img
 
-    fixed, skew = deskew(work_img)
+    fixed, skew = (work_img.convert("RGB"), 0.0) if rectified else deskew(work_img)
     illum_applied = False
     if normalize_lighting:
         rgb = np.asarray(fixed.convert("RGB"), dtype=np.uint8)

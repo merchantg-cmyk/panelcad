@@ -568,6 +568,8 @@ class MainWindow(QMainWindow):
         self.tabifyDockWidget(self.problems_wrap, self.import_review_wrap)
         self.import_review.decision_made.connect(self._import_decision)
         self.import_review.rerun_requested.connect(self._import_rerun)
+        self.import_review.from_to_edited.connect(self._import_from_to_edited)
+        self.import_review.rebuild_clean_ladder_requested.connect(self._import_rebuild_clean_ladder)
         self._import_job = None
         # Print review stays closed until an import. Its crop panes are tall
         # enough to squeeze the sheet when the dock opens on an empty project.
@@ -4176,6 +4178,11 @@ class MainWindow(QMainWindow):
         self.import_review.set_items(job.review_items())
         report = job.diagnostics_public() if hasattr(job, "diagnostics_public") else {}
         self.import_review.set_diagnostics(report)
+        try:
+            if hasattr(job, "from_to_schedule"):
+                self.import_review.set_from_to_schedule(job.from_to_schedule())
+        except Exception:  # noqa: BLE001
+            pass
 
     def _import_decision(self, item_id: str, action: str, text: str) -> None:
         job = getattr(self, "_import_job", None)
@@ -4201,6 +4208,52 @@ class MainWindow(QMainWindow):
             return
         self._show_import_review(job)
         self._status("re-ran print import")
+
+    def _import_from_to_edited(self, rows: list) -> None:
+        from panelcad.importer.ladder_synth import apply_import_from_to_edits
+
+        job = getattr(self, "_import_job", None)
+        try:
+            if job is not None:
+                apply_import_from_to_edits(job, from_to_rows=rows, catalog=self.session.catalog)
+            elif self.session is not None:
+                apply_import_from_to_edits(self.session, from_to_rows=rows, catalog=self.session.catalog)
+        except Exception as exc:  # noqa: BLE001
+            self._status(str(exc))
+            return
+        self._status("updated From-To wire schedule")
+
+    def _import_rebuild_clean_ladder(self, layout_mode: str = "ladder") -> None:
+        from panelcad.importer.ladder_synth import apply_import_from_to_edits, synthesize_imported_ladder
+
+        mode = str(layout_mode or self.import_review.layout_mode() or "ladder")
+        rows = self.import_review.from_to_rows()
+        job = getattr(self, "_import_job", None)
+        try:
+            if job is not None:
+                if rows:
+                    apply_import_from_to_edits(job, from_to_rows=rows, catalog=self.session.catalog)
+                self.session = job.build(layout_mode=mode)
+                self._reattach()
+                self._show_import_review(job)
+            elif self.session is not None:
+                if rows:
+                    apply_import_from_to_edits(self.session, from_to_rows=rows, catalog=self.session.catalog)
+                if mode in {"ladder", "clean_ladder", "clean"}:
+                    self.session = synthesize_imported_ladder(
+                        self.session,
+                        catalog=self.session.catalog,
+                        parts=self.session.parts,
+                        name=self.session.project.name,
+                    )
+                    self._reattach()
+                    pi = (self.session.project.properties or {}).get("print_import") or {}
+                    if isinstance(pi.get("from_to_schedule"), dict):
+                        self.import_review.set_from_to_schedule(pi["from_to_schedule"])
+        except Exception as exc:  # noqa: BLE001
+            self._status(str(exc))
+            return
+        self._status("rebuilt clean ladder")
 
     def import_any(self) -> None:
         path, _ = QFileDialog.getOpenFileName(

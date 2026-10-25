@@ -170,8 +170,17 @@ class EmptyImport(RuntimeError):
 
 
 class ImportJob:
-    def __init__(self, root: Path | str) -> None:
-        self.ws = Workspace(root)
+    def __init__(self, root: Path | str | Workspace) -> None:
+        if isinstance(root, Workspace):
+            self.ws = root
+        elif isinstance(root, (str, Path)):
+            self.ws = Workspace(root)
+        elif hasattr(root, "ws"):
+            self.ws = root.ws
+        elif hasattr(root, "root"):
+            self.ws = Workspace(root.root)
+        else:
+            self.ws = Workspace(root)
         self.manifest: dict[str, Any] = self.ws.manifest()
         self.backend_name = str(self.manifest.get("backend") or "auto")
         self._recordings: dict[str, dict[str, Any]] | None = None
@@ -190,6 +199,10 @@ class ImportJob:
         self._page_started: dict[str, float] = {}
         self.diagnostics: ImportDiagnostics | None = None
         self._load_bookkeeping()
+
+    @classmethod
+    def open(cls, root: Path | str | Workspace) -> "ImportJob":
+        return cls(root)
 
     @classmethod
     def start(
@@ -508,7 +521,46 @@ class ImportJob:
         self._drain()
         return self.status()
 
-    def build(self, *, out: Path | str | None = None, name: str = "") -> Session:
+    @property
+    def root(self) -> Path:
+        return self.ws.root
+
+    def stitch(self) -> dict[str, Any]:
+        pages = []
+        for page_id in self.manifest.get("pages") or []:
+            page = self._page(page_id)
+            page["merged"] = self.ws.read_json("pages", page_id, "merged.json", default={}) or {}
+            pages.append(page)
+        items = self.review_items()
+        decided = pages_with_decisions(pages, items) if items else pages
+        stitched = stitch_pages(decided, standard_override=str(self.manifest.get("standard") or ""))
+        self._apply_part_matches(stitched)
+        for fname in ("facts.json", "stitch.json"):
+            prior = self.ws.read_json(fname, default=None)
+            if isinstance(prior, dict) and isinstance(prior.get("from_to_schedule"), dict):
+                if prior["from_to_schedule"].get("user_edited"):
+                    stitched["from_to_schedule"] = prior["from_to_schedule"]
+                    break
+        return stitched
+
+    def from_to_schedule(self) -> Any:
+        from panelcad.importer.ladder_synth import extract_import_from_to
+
+        return extract_import_from_to(self)
+
+    def apply_from_to_edits(self, **kwargs: Any) -> Any:
+        from panelcad.importer.ladder_synth import apply_import_from_to_edits
+
+        return apply_import_from_to_edits(self, **kwargs)
+
+    def build(
+        self,
+        *,
+        out: Path | str | None = None,
+        name: str = "",
+        layout_mode: str = "preserve",
+        target_standard: str = "auto",
+    ) -> Session:
         if self.manifest.get("stage") not in {"ready", "built"}:
             self.pump()
             self._drain()
@@ -523,6 +575,22 @@ class ImportJob:
         decided = pages_with_decisions(pages, items) if items else pages
         stitched = stitch_pages(decided, standard_override=str(self.manifest.get("standard") or ""))
         self._apply_part_matches(stitched)
+        for fname in ("facts.json", "stitch.json"):
+            prior = self.ws.read_json(fname, default=None)
+            if isinstance(prior, dict) and isinstance(prior.get("from_to_schedule"), dict):
+                if prior["from_to_schedule"].get("user_edited"):
+                    stitched["from_to_schedule"] = prior["from_to_schedule"]
+                    break
+        eff_layout = str(
+            layout_mode
+            if layout_mode and layout_mode != "preserve"
+            else (self.manifest.get("layout_mode") or layout_mode or "preserve")
+        )
+        eff_target_std = str(
+            target_standard
+            if target_standard and target_standard != "auto"
+            else (self.manifest.get("target_standard") or target_standard or "auto")
+        )
         photo_docs = []
         for photo_id in self.manifest.get("photos") or []:
             doc = self.ws.read_json("photos", f"{photo_id}.json", default=None)
@@ -534,7 +602,14 @@ class ImportJob:
             stitched,
             name=name or block.get("project") or block.get("title") or block.get("drawing_number") or "Imported print",
             photo_targets=targets,
+            layout_mode=eff_layout,
+            target_standard=eff_target_std,
         )
+        pi = (session.project.properties or {}).get("print_import")
+        if isinstance(pi, dict) and isinstance(pi.get("from_to_schedule"), dict):
+            stitched["from_to_schedule"] = pi["from_to_schedule"]
+        self.manifest["layout_mode"] = eff_layout
+        self.manifest["target_standard"] = eff_target_std
         self._publish_diagnostics(session, report)
         self.ws.write_json(stitched, "stitch.json")
         self.ws.write_json(report, "build.json")

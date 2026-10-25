@@ -36,17 +36,25 @@ from panelcad.convert.engine import (
 )
 from panelcad.convert.import_convert import (
     DEFAULT_IMPORT_CONFIDENCE_THRESHOLD,
+    ImportDeviceEntry,
+    ImportFromToRow,
+    ImportFromToSchedule,
     ImportedConversionResult,
     ImportedDeviceRecord,
     ImportedFromToRow,
     ImportedIECPrintDraft,
     RecordedImportVisionBackend,
     apply_from_to_corrections,
+    apply_import_from_to_edits,
     build_iec_project_from_imported_from_to,
+    check_converted_sheet_layout,
     clean_iec_tag,
     convert_imported_iec_print,
+    extract_import_from_to,
     import_iec_print_to_from_to,
     split_endpoint_token,
+    synthesize_imported_ladder,
+    verify_imported_from_to,
 )
 from panelcad.convert.from_to_check import (
     SCORER_VERSION as FROM_TO_SCORER_VERSION,
@@ -186,4 +194,12 @@ __all__ = [
     "run_conversion_scorecard",
     "score_conversion_item",
     "verify_golden_nema_from_to_csvs",
+    "ImportDeviceEntry",
+    "ImportFromToRow",
+    "ImportFromToSchedule",
+    "apply_import_from_to_edits",
+    "check_converted_sheet_layout",
+    "extract_import_from_to",
+    "synthesize_imported_ladder",
+    "verify_imported_from_to",
 ]

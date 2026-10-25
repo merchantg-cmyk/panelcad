@@ -6,11 +6,13 @@ import json
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QFileDialog,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -19,6 +21,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -94,6 +98,8 @@ class ImportReviewPanel(QWidget):
 
     decision_made = Signal(str, str, str)
     rerun_requested = Signal(str, str)
+    from_to_edited = Signal(list)
+    rebuild_clean_ladder_requested = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -219,8 +225,61 @@ class ImportReviewPanel(QWidget):
         diagnostics_lay.addWidget(self.diag_counts)
         diagnostics_lay.addWidget(diag_split, 1)
 
+        self.layout_mode_combo = QComboBox()
+        self.layout_mode_combo.setObjectName("importLayoutModeCombo")
+        self.layout_mode_combo.addItem("Preserve Scan Positions", "preserve")
+        self.layout_mode_combo.addItem("Clean NEMA Ladder", "ladder")
+        self.rebuild_clean_ladder_button = QPushButton("Rebuild Clean Ladder")
+        self.rebuild_clean_ladder_button.setObjectName("rebuildCleanLadderButton")
+        self.rebuild_clean_ladder_button.clicked.connect(self._on_rebuild_clean_ladder_clicked)
+
+        header_bar = QWidget()
+        header_lay = QHBoxLayout(header_bar)
+        header_lay.setContentsMargins(0, 0, 0, 0)
+        header_lay.setSpacing(6)
+        header_lay.addWidget(self.caption, 1)
+        header_lay.addWidget(QLabel("Layout Mode:"))
+        header_lay.addWidget(self.layout_mode_combo)
+        header_lay.addWidget(self.rebuild_clean_ladder_button)
+
+        self.from_to_table = QTableWidget(0, 5)
+        self.from_to_table.setObjectName("fromToScheduleTable")
+        self.from_to_table.setHorizontalHeaderLabels(
+            ["Wire #", "From Device.Pin", "To Device.Pin", "Sheet/Rung", "Confidence"]
+        )
+        hdr = self.from_to_table.horizontalHeader()
+        if hdr is not None:
+            hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.from_to_table.itemChanged.connect(self._on_from_to_item_changed)
+        self._updating_from_to = False
+
+        self.add_from_to_row_button = QPushButton("Add Row")
+        self.add_from_to_row_button.setObjectName("addFromToRowButton")
+        self.add_from_to_row_button.clicked.connect(self._on_add_from_to_row)
+        self.remove_from_to_row_button = QPushButton("Remove Row")
+        self.remove_from_to_row_button.setObjectName("removeFromToRowButton")
+        self.remove_from_to_row_button.clicked.connect(self.remove_selected_from_to_row)
+        self.apply_from_to_edits_button = QPushButton("Apply From-To Edits")
+        self.apply_from_to_edits_button.setObjectName("applyFromToEditsButton")
+        self.apply_from_to_edits_button.clicked.connect(self._emit_from_to_edits)
+
+        ft_btn_row = QWidget()
+        ft_btn_lay = QHBoxLayout(ft_btn_row)
+        ft_btn_lay.setContentsMargins(0, 0, 0, 0)
+        ft_btn_lay.addWidget(self.add_from_to_row_button)
+        ft_btn_lay.addWidget(self.remove_from_to_row_button)
+        ft_btn_lay.addWidget(self.apply_from_to_edits_button)
+        ft_btn_lay.addStretch(1)
+
+        self.from_to_tab = QWidget()
+        ft_lay = QVBoxLayout(self.from_to_tab)
+        ft_lay.setContentsMargins(0, 0, 0, 0)
+        ft_lay.addWidget(self.from_to_table, 1)
+        ft_lay.addWidget(ft_btn_row, 0)
+
         self.tabs = QTabWidget()
         self.tabs.addTab(review, "Review")
+        self.tabs.addTab(self.from_to_tab, "From-To Wire Schedule")
         self.tabs.addTab(diagnostics, "Diagnostics")
         self._diag: dict = {}
         self._diag_items: list[dict] = []
@@ -228,7 +287,7 @@ class ImportReviewPanel(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(6, 2, 6, 2)
         lay.setSpacing(2)
-        lay.addWidget(self.caption, 0)
+        lay.addWidget(header_bar, 0)
         lay.addWidget(self.tabs, 1)
         self.apply_theme()
 
@@ -542,3 +601,215 @@ class ImportReviewPanel(QWidget):
         if item is None:
             return
         self.rerun_requested.emit("", str(item.get("page_id") or ""))
+
+    def layout_mode(self) -> str:
+        data = self.layout_mode_combo.currentData()
+        return str(data or "preserve")
+
+    def set_layout_mode(self, mode: str) -> None:
+        norm = "ladder" if str(mode or "").strip().lower() in {"ladder", "clean_ladder", "clean"} else "preserve"
+        idx = self.layout_mode_combo.findData(norm)
+        if idx >= 0:
+            self.layout_mode_combo.setCurrentIndex(idx)
+
+    def set_from_to_schedule(self, schedule_or_rows: object) -> None:
+        rows_list: list[dict] = []
+        if hasattr(schedule_or_rows, "to_dict"):
+            d = schedule_or_rows.to_dict()
+            rows_list = list(d.get("from_to_rows") or [])
+        elif isinstance(schedule_or_rows, dict):
+            rows_list = list(schedule_or_rows.get("from_to_rows") or [])
+        elif isinstance(schedule_or_rows, list):
+            for item in schedule_or_rows:
+                if hasattr(item, "to_dict"):
+                    rows_list.append(item.to_dict())
+                elif isinstance(item, dict):
+                    rows_list.append(dict(item))
+        self._updating_from_to = True
+        try:
+            self.from_to_table.setRowCount(0)
+            for r in rows_list:
+                w_num = str(r.get("wire_number") or r.get("number") or "")
+                f_ep = str(r.get("from") or "")
+                if not f_ep:
+                    ft = str(r.get("from_tag") or "")
+                    fp = str(r.get("from_pin") or "")
+                    f_ep = f"{ft}.{fp}" if (ft and fp) else ft
+                t_ep = str(r.get("to") or "")
+                if not t_ep:
+                    tt = str(r.get("to_tag") or "")
+                    tp = str(r.get("to_pin") or "")
+                    t_ep = f"{tt}.{tp}" if (tt and tp) else tt
+                sh = str(r.get("sheet_id") or r.get("page_id") or "page-001")
+                rung = int(r.get("rung") or 1)
+                conf = float(r.get("confidence", 0.90))
+                needs_rev = bool(r.get("needs_review", conf < 0.80))
+                self._insert_from_to_table_row(
+                    w_num,
+                    f_ep,
+                    t_ep,
+                    f"{sh}:{rung}",
+                    conf,
+                    needs_review=needs_rev,
+                    source=str(r.get("source") or "extracted"),
+                )
+        finally:
+            self._updating_from_to = False
+
+    def _insert_from_to_table_row(
+        self,
+        wire_number: str,
+        from_ep: str,
+        to_ep: str,
+        sheet_rung: str,
+        confidence: float,
+        *,
+        needs_review: bool = False,
+        source: str = "extracted",
+    ) -> int:
+        row_idx = self.from_to_table.rowCount()
+        self.from_to_table.insertRow(row_idx)
+        conf_label = f"{confidence:.2f}" + (" (needs review)" if needs_review else "")
+        cells = [wire_number, from_ep, to_ep, sheet_rung, conf_label]
+        for col_idx, val in enumerate(cells):
+            item = QTableWidgetItem(val)
+            if col_idx == 4:
+                item.setData(Qt.ItemDataRole.UserRole, float(confidence))
+                item.setData(Qt.ItemDataRole.UserRole + 1, str(source))
+                item.setData(Qt.ItemDataRole.UserRole + 2, bool(needs_review))
+            if needs_review:
+                item.setBackground(QColor(255, 243, 205))
+            self.from_to_table.setItem(row_idx, col_idx, item)
+        return row_idx
+
+    def add_from_to_row(
+        self,
+        wire_number: str = "",
+        from_ep: str = "L1",
+        to_ep: str = "",
+        sheet_rung: str = "page-001:1",
+        confidence: float = 1.0,
+    ) -> int:
+        self._updating_from_to = True
+        try:
+            w_num = wire_number or f"W{self.from_to_table.rowCount() + 1}"
+            idx = self._insert_from_to_table_row(
+                w_num,
+                from_ep,
+                to_ep,
+                sheet_rung,
+                confidence,
+                needs_review=False,
+                source="user_added",
+            )
+        finally:
+            self._updating_from_to = False
+        return idx
+
+    def _on_add_from_to_row(self) -> None:
+        self.add_from_to_row()
+        self._emit_from_to_edits()
+
+    def remove_selected_from_to_row(self) -> None:
+        sel = sorted({idx.row() for idx in self.from_to_table.selectedIndexes()}, reverse=True)
+        if not sel and self.from_to_table.currentRow() >= 0:
+            sel = [self.from_to_table.currentRow()]
+        elif not sel and self.from_to_table.rowCount() > 0:
+            sel = [self.from_to_table.rowCount() - 1]
+        self._updating_from_to = True
+        try:
+            for r in sel:
+                if 0 <= r < self.from_to_table.rowCount():
+                    self.from_to_table.removeRow(r)
+        finally:
+            self._updating_from_to = False
+        self._emit_from_to_edits()
+
+    def _on_from_to_item_changed(self, item: QTableWidgetItem) -> None:
+        if self._updating_from_to:
+            return
+        row_idx = item.row()
+        conf_item = self.from_to_table.item(row_idx, 4)
+        if conf_item is not None and item.column() != 4:
+            self._updating_from_to = True
+            try:
+                conf_item.setText("1.00")
+                conf_item.setData(Qt.ItemDataRole.UserRole, 1.0)
+                conf_item.setData(Qt.ItemDataRole.UserRole + 1, "user_edit")
+                conf_item.setData(Qt.ItemDataRole.UserRole + 2, False)
+            finally:
+                self._updating_from_to = False
+
+    def from_to_rows(self) -> list[dict]:
+        rows: list[dict] = []
+        for r in range(self.from_to_table.rowCount()):
+            w_item = self.from_to_table.item(r, 0)
+            f_item = self.from_to_table.item(r, 1)
+            t_item = self.from_to_table.item(r, 2)
+            s_item = self.from_to_table.item(r, 3)
+            c_item = self.from_to_table.item(r, 4)
+            w_num = (w_item.text() if w_item else "").strip() or f"W{r + 1}"
+            f_ep = (f_item.text() if f_item else "").strip()
+            t_ep = (t_item.text() if t_item else "").strip()
+            if not f_ep or not t_ep:
+                continue
+            sr_text = (s_item.text() if s_item else "page-001:1").strip()
+            if ":" in sr_text:
+                sh_part, rg_part = sr_text.rsplit(":", 1)
+                sheet_id = sh_part.strip() or "page-001"
+                try:
+                    rung = int(rg_part.strip())
+                except ValueError:
+                    rung = r + 1
+            else:
+                sheet_id = sr_text or "page-001"
+                rung = r + 1
+            conf = 1.0
+            source = "user_edit"
+            needs_review = False
+            if c_item is not None:
+                raw_c = c_item.data(Qt.ItemDataRole.UserRole)
+                if isinstance(raw_c, (int, float)):
+                    conf = float(raw_c)
+                else:
+                    try:
+                        conf = float(c_item.text().split()[0])
+                    except (ValueError, IndexError):
+                        conf = 1.0
+                raw_s = c_item.data(Qt.ItemDataRole.UserRole + 1)
+                if raw_s:
+                    source = str(raw_s)
+                raw_nr = c_item.data(Qt.ItemDataRole.UserRole + 2)
+                if isinstance(raw_nr, bool):
+                    needs_review = raw_nr
+                else:
+                    needs_review = conf < 0.80
+            f_tag, f_pin = (f_ep.rsplit(".", 1) if "." in f_ep else (f_ep, ""))
+            t_tag, t_pin = (t_ep.rsplit(".", 1) if "." in t_ep else (t_ep, ""))
+            rows.append(
+                {
+                    "wire_number": w_num,
+                    "from": f_ep,
+                    "from_tag": f_tag.strip(),
+                    "from_pin": f_pin.strip(),
+                    "to": t_ep,
+                    "to_tag": t_tag.strip(),
+                    "to_pin": t_pin.strip(),
+                    "sheet_id": sheet_id,
+                    "rung": rung,
+                    "confidence": conf,
+                    "source": source,
+                    "needs_review": needs_review,
+                }
+            )
+        return rows
+
+    def _emit_from_to_edits(self) -> None:
+        self.from_to_edited.emit(self.from_to_rows())
+
+    def _on_rebuild_clean_ladder_clicked(self) -> None:
+        self.set_layout_mode("ladder")
+        rows = self.from_to_rows()
+        if rows:
+            self.from_to_edited.emit(rows)
+        self.rebuild_clean_ladder_requested.emit("ladder")
