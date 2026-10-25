@@ -6854,3 +6854,24 @@ def test_reimported_ethernet_wire_does_not_cut_a_device(dol, tmp_path: Path):
         if row["kind"] == "body" and titles.get(row["sheet"], row["sheet"]) == "Ethernet"
     ]
     assert bodies == []
+
+
+def test_pdf_round_trip_examples_reach_95_percent_connectivity_and_wire_recall(tmp_path: Path):
+    from panelcad.api.session import Session
+    from panelcad.importer import ImportJob
+    from panelcad.importer.accuracy import score_projects
+
+    examples_dir = Path(__file__).resolve().parents[1] / "examples"
+    for name in ("dol_starter", "xref_nema_seal_in", "xref_iec_mirror"):
+        truth = Session.open(examples_dir / f"{name}.pcad.yaml")
+        pdf = tmp_path / f"{name}.pdf"
+        truth.export_pdf(pdf)
+        built = ImportJob.start([pdf], tmp_path / f"ws_{name}", backend="raster").build()
+        sc = score_projects(truth.project, built.project, catalog=truth.catalog)
+        assert sc["connectivity_recall"] >= 0.95, f"{name}: {sc}"
+        assert sc["wire_numbers"] >= 0.95, f"{name}: {sc}"
+    # Specifically verify wire 107 is recovered on xref_nema_seal_in
+    nema_truth = Session.open(examples_dir / "xref_nema_seal_in.pcad.yaml")
+    nema_built = ImportJob.start([tmp_path / "xref_nema_seal_in.pdf"], tmp_path / "ws_nema_check", backend="raster").build()
+    nema_score = score_projects(nema_truth.project, nema_built.project, catalog=nema_truth.catalog)
+    assert "107" not in nema_score["missing_wires"]

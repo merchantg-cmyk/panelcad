@@ -500,7 +500,9 @@ def resolve_symbol(
     std = normalize_standard(standard, default="") if standard else ""
     nema = std == "NEMA/ANSI"
     explicit = str(library_id or "").strip()
-    if explicit and explicit in catalog.devices and (not nema or explicit.startswith("nema.")):
+    if explicit and explicit in catalog.devices and (
+        not nema or explicit.startswith("nema.") or explicit.startswith("iec.connection.offpage")
+    ):
         device = catalog.devices[explicit]
         return {"library_id": explicit, "confidence": 0.95, "guess": False, "symbol": shape_class(device)}
     prefix = catalog_prefix(tag)

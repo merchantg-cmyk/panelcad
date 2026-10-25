@@ -717,6 +717,7 @@ def read_drawing(
             )
         )
     devices = restored_rows
+    devices = _drop_interior_guesses(devices, catalog)
     devices = _drop_lead_marks(devices, lines)
     devices = _claim_conductor_numbers(devices, facts["wires"], lines)
     _promote_by_geometry(lines, devices, catalog, curves)
@@ -753,6 +754,22 @@ def _lead_row(device: dict[str, Any], devices: list[dict[str, Any]]) -> bool:
         if abs(oy - y) <= 1.5 and abs(ox - x) <= 16.0:
             return True
     return False
+
+
+def _drop_interior_guesses(devices: list[dict[str, Any]], catalog: Any) -> list[dict[str, Any]]:
+    """A pin label or model caption drawn inside a matched device frame is not a separate device."""
+
+    if catalog is None:
+        return devices
+    kept = []
+    for device in devices:
+        matched = bool(device.get("library_id")) and not device.get("guess")
+        if not matched:
+            tx, ty = _text_point(device)
+            if _inside_symbol({"x": tx, "y": ty}, devices, catalog):
+                continue
+        kept.append(device)
+    return kept
 
 
 def _drop_lead_marks(devices: list[dict[str, Any]], lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1118,7 +1135,7 @@ def _prefix_devices(catalog: Any, prefix: str, standard: str) -> list[Any]:
         if device.ref_prefix.upper() != prefix:
             continue
         lib = device.library_id.lower()
-        if "offpage" in lib or "notes" in lib:
+        if "notes" in lib or ("offpage" in lib and prefix != "OP"):
             continue
         found.append(device)
     # The title-block standard is a tie-break. An OEM part drawn on an IEC
@@ -1132,7 +1149,7 @@ def _standard_symbol(device: Any, standard: str) -> bool:
         return True
     lib = str(getattr(device, "library_id", "") or "")
     if standard == "NEMA/ANSI":
-        return lib.startswith("nema.")
+        return lib.startswith("nema.") or lib.startswith("iec.connection.offpage")
     if standard == "IEC":
         return lib.startswith("iec.")
     return True
@@ -2193,7 +2210,7 @@ def _choose_contact(
             scored.append(best)
     if not scored:
         return None
-    opened = [item for item in scored if _blade_joins(item[1]) is False]
+    opened = [item for item in scored if not _blade_joins(item[1])]
     closed = [item for item in scored if _blade_joins(item[1]) is True]
     if not opened or not closed:
         scored.sort(key=lambda item: item[0], reverse=True)
@@ -2534,15 +2551,7 @@ def _blade_joins(device: Any) -> bool | None:
     if not slanted:
         return None
     for seg in slanted:
-        hosts: list[set[int]] = []
-        for end in seg:
-            held = {
-                id(other)
-                for other in segs
-                if other != seg and _point_seg(end, other[0], other[1]) <= 0.8
-            }
-            hosts.append(held)
-        if hosts[0] and hosts[1] and hosts[0] != hosts[1]:
+        if _segment_joins(seg, segs):
             return True
     return False
 
@@ -2573,6 +2582,29 @@ def _nc_blade_drawn(device: Any, ox: float, oy: float, lines: list[dict[str, Any
     return any(_lies_along(blade, ink) for blade in blades)
 
 
+def _segments_intersect(
+    seg_a: tuple[tuple[float, float], tuple[float, float]],
+    seg_b: tuple[tuple[float, float], tuple[float, float]],
+) -> bool:
+    def _ccw(p1: tuple[float, float], p2: tuple[float, float], p3: tuple[float, float]) -> float:
+        return (p2[0] - p1[0]) * (p3[1] - p1[1]) - (p2[1] - p1[1]) * (p3[0] - p1[0])
+
+    a0, a1 = seg_a
+    b0, b1 = seg_b
+    if (
+        max(a0[0], a1[0]) + 1e-6 < min(b0[0], b1[0])
+        or max(b0[0], b1[0]) + 1e-6 < min(a0[0], a1[0])
+        or max(a0[1], a1[1]) + 1e-6 < min(b0[1], b1[1])
+        or max(b0[1], b1[1]) + 1e-6 < min(a0[1], a1[1])
+    ):
+        return False
+    d1 = _ccw(a0, a1, b0)
+    d2 = _ccw(a0, a1, b1)
+    d3 = _ccw(b0, b1, a0)
+    d4 = _ccw(b0, b1, a1)
+    return (d1 * d2 <= 1e-9) and (d3 * d4 <= 1e-9)
+
+
 def _segment_joins(
     seg: tuple[tuple[float, float], tuple[float, float]],
     segs: list[tuple[tuple[float, float], tuple[float, float]]],
@@ -2581,7 +2613,19 @@ def _segment_joins(
     for end in seg:
         held = {id(other) for other in segs if other != seg and _point_seg(end, other[0], other[1]) <= 0.8}
         hosts.append(held)
-    return bool(hosts[0] and hosts[1] and hosts[0] != hosts[1])
+    if hosts[0] and hosts[1] and hosts[0] != hosts[1]:
+        return True
+    crossed = {
+        id(other)
+        for other in segs
+        if other != seg
+        and (
+            _segments_intersect(seg, other)
+            or _point_seg(seg[0], other[0], other[1]) <= 0.8
+            or _point_seg(seg[1], other[0], other[1]) <= 0.8
+        )
+    }
+    return len(crossed) >= 2
 
 
 def _lies_along(
@@ -4757,7 +4801,7 @@ def _attach_drops(
             hit = False
             for start, end in other.get("segments") or []:
                 gap = max(0.4, 0.02 * _dist(start, end))
-                if _point_seg(point, start, end) <= gap and min(_dist(point, start), _dist(point, end)) > gap:
+                if _point_seg(point, start, end) <= gap and min(_dist(point, start), _dist(point, end)) > 0.4:
                     hit = True
                     break
             if not hit:
@@ -4837,6 +4881,24 @@ def _pair_spokes(
         prev = nodes[-2] if len(nodes) > 1 else None
         prepared.append({"nodes": nodes, "far": far, "hop": hop, "snap": _land(far, pins, rails, tokens, groups, prev)})
     pinned = [item for item in prepared if item["snap"] is not None]
+    if len(pinned) >= 3:
+        stubs = [
+            idx
+            for idx, item in enumerate(pinned)
+            if not item["snap"].get("rail") and _dist(junction, item["far"]) <= 6.0
+        ]
+        if len(stubs) == 1:
+            hub_idx = stubs[0]
+            if all(_dist(junction, item["far"]) > 15.0 for idx, item in enumerate(pinned) if idx != hub_idx):
+                hub_item = pinned[hub_idx]
+                return [
+                    {
+                        "segments": _segments(list(reversed(hub_item["nodes"])) + branch["nodes"][1:]),
+                        "ends": [hub_item["snap"], branch["snap"]],
+                    }
+                    for idx, branch in enumerate(pinned)
+                    if idx != hub_idx
+                ]
     used: set[int] = set()
     ranked: list[tuple[float, int, int]] = []
     for i in range(len(pinned)):

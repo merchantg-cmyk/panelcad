@@ -661,6 +661,16 @@ def offpage_partner(project: Project, catalog: Catalog, sheet: Sheet, comp: Comp
     return None
 
 
+def _offpage_neighbor_pin(sheet: Sheet, comp_id: str) -> str:
+    prefix = f"{comp_id}."
+    for wire in sheet.wires:
+        if wire.frm == comp_id or wire.frm.startswith(prefix):
+            return wire.to
+        if wire.to == comp_id or wire.to.startswith(prefix):
+            return wire.frm
+    return ""
+
+
 def offpage_from_match(project: Project, catalog: Catalog, sheet: Sheet, comp: Component) -> tuple[Sheet, Component] | None:
     """The FROM arrow on the far page that answers this TO arrow (same link, names this page)."""
 
@@ -679,19 +689,30 @@ def offpage_from_match(project: Project, catalog: Catalog, sheet: Sheet, comp: C
             continue
         return page, other
     # A FROM arrow drawn by hand may carry its own link. It still answers this
-    # TO arrow when it points back at this page under the same tag.
+    # TO arrow when it points back at this page under the same tag, or when it
+    # feeds the destination pin / names this arrow's source pin.
     tag = str(comp.properties.get("tag") or "").strip()
-    if tag:
-        for other in page.components:
-            if other is comp or str(other.properties.get("tag") or "").strip() != tag:
-                continue
-            if str(other.properties.get("dest_sheet") or "").strip() != sheet.id:
-                continue
-            role = str(other.properties.get("role") or "").lower()
-            if role != "from" and "offpage_from" not in (other.library_id or "").lower():
-                continue
-            if not is_offpage_component(other, _device(catalog, other)):
-                continue
+    dest_ref = str(comp.properties.get("dest_ref") or "").strip()
+    dest_pin = str(comp.properties.get("dest_pin") or "").strip()
+    target_endpoint = f"{dest_ref}.{dest_pin}" if dest_ref and dest_pin else ""
+    source_endpoint = _offpage_neighbor_pin(sheet, comp.id)
+    for other in page.components:
+        if other is comp:
+            continue
+        if str(other.properties.get("dest_sheet") or "").strip() != sheet.id:
+            continue
+        role = str(other.properties.get("role") or "").lower()
+        if role != "from" and "offpage_from" not in (other.library_id or "").lower():
+            continue
+        if not is_offpage_component(other, _device(catalog, other)):
+            continue
+        if tag and str(other.properties.get("tag") or "").strip() == tag:
+            return page, other
+        if target_endpoint and _offpage_neighbor_pin(page, other.id) == target_endpoint:
+            return page, other
+        other_ref = str(other.properties.get("dest_ref") or "").strip()
+        other_pin = str(other.properties.get("dest_pin") or "").strip()
+        if source_endpoint and other_ref and other_pin and f"{other_ref}.{other_pin}" == source_endpoint:
             return page, other
     return None
 

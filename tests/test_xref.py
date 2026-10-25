@@ -714,3 +714,13 @@ def test_offpage_callout_reformats_bare_supply_ref_across_standards():
         properties={"callout": "102", "net": "L1"},
     )
     assert offpage_callout(s_iec.project, s_iec.catalog, sheet_iec, op_from_nema) == "/1.2"
+
+
+def test_xref_nema_seal_in_example_has_zero_offpage_missing_from():
+    from pathlib import Path
+    from panelcad.api.session import Session
+
+    example = Path(__file__).resolve().parents[1] / "examples" / "xref_nema_seal_in.pcad.yaml"
+    s = Session.open(example)
+    missing = [row for row in s.design_checks() if row.get("check") == "offpage_missing_from"]
+    assert missing == []
