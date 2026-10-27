@@ -618,13 +618,28 @@ def place_xref_labels(
     """Annotations on *sheet* with a clear (x, y, align)."""
 
     global _PLACING
+    from panelcad.render.wire_labels import _mark_cache, _sheet_token, share_wire_marks
+
+    cache = _mark_cache.get()
+    cache_key = None
+    if cache is not None:
+        cache_key = (
+            "xref",
+            bool(ladder),
+            id(catalog),
+            id(project) if project is not None else 0,
+            _sheet_token(sheet),
+        )
+        if cache_key in cache:
+            return list(cache[cache_key])
     outer = not _PLACING
     _PLACING = True
     try:
-        from panelcad.render.wire_labels import share_wire_marks
-
         with share_wire_marks():
-            return _place_xref_labels(project, catalog, sheet, ladder=ladder)
+            placed = _place_xref_labels(project, catalog, sheet, ladder=ladder)
+        if cache is not None and cache_key is not None:
+            cache[cache_key] = list(placed)
+        return placed
     finally:
         if outer:
             _PLACING = False

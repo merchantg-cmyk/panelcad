@@ -572,7 +572,13 @@ def _label_covered(project: Project, catalog: Catalog, *, compute: bool = True) 
         )
         try:
             items = covered_labels(
-                project, catalog, sheet, ladder=ladder, sheet_no=sheet_no, captions=not hand_io, peek=not compute
+                project,
+                catalog,
+                sheet,
+                ladder=ladder,
+                sheet_no=1 if hand_io else sheet_no,
+                captions=not hand_io,
+                peek=not compute,
             )
         except (KeyError, ValueError, IndexError):
             continue

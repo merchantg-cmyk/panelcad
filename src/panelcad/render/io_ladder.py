@@ -271,10 +271,13 @@ def draw_io_sheet(
     from panelcad.render.wire_labels import bundle_spec_plan, place_wire_marks
     from panelcad.render.wiring import route_sheet_wires
 
-    try:
-        routes = route_sheet_wires(sheet, catalog, project=project)
-    except (KeyError, ValueError):
-        routes = {}
+    if resolved is not None:
+        routes = dict(resolved.routes)
+    else:
+        try:
+            routes = route_sheet_wires(sheet, catalog, project=project)
+        except (KeyError, ValueError):
+            routes = {}
     marks = dict(resolved.marks) if resolved is not None else place_wire_marks(sheet, catalog, routes, ladder=False)
     specs = bundle_spec_plan(sheet, routes, ladder=False)
     for wire in sheet.wires:

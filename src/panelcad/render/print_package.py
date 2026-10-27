@@ -192,6 +192,14 @@ class PackagePlan:
     sections: list[str]
     drawing_count: int
     index_rows: list[IndexRow] = field(default_factory=list)
+    _report_rows: dict[tuple[str, str], list[dict[str, str]]] = field(
+        default_factory=dict, repr=False, compare=False
+    )
+    _thermal: dict[str, Any] | None = field(default=None, repr=False, compare=False)
+    _power_budgets: list[Any] | None = field(default=None, repr=False, compare=False)
+    _cutout_drawings: dict[str, Any] = field(
+        default_factory=dict, repr=False, compare=False
+    )
 
     def first_page(self, section: str) -> int | None:
         for i, page in enumerate(self.pages):
@@ -530,7 +538,13 @@ def _collect_report_rows_and_note(session: Any, kind: str) -> tuple[list[dict[st
     return open_rows, note
 
 
-def _panel_bom_pages(session: Any, report_w: float, report_h: float) -> list[PackagePage]:
+def _panel_bom_pages(
+    session: Any,
+    report_w: float,
+    report_h: float,
+    *,
+    cache: dict[tuple[str, str], list[dict[str, str]]] | None = None,
+) -> list[PackagePage]:
     """One BOM block per panel, then the summed project bill."""
 
     from panelcad.core.panels import panel_tag
@@ -542,6 +556,8 @@ def _panel_bom_pages(session: Any, report_w: float, report_h: float) -> list[Pac
         rows = _bom_display_rows(bom_for_panel(project, session.catalog, panel.id))
         if not rows:
             continue
+        if cache is not None:
+            cache[("bom", panel.id)] = rows
         pages.extend(
             _paginated_report(
                 "bom",
@@ -558,6 +574,8 @@ def _panel_bom_pages(session: Any, report_w: float, report_h: float) -> list[Pac
 
     rolled = with_needs_info_section(rolled, project, session.catalog)
     if rolled:
+        if cache is not None:
+            cache[("bom", "project")] = rolled
         pages.extend(
             _paginated_report(
                 "bom",
@@ -697,20 +715,28 @@ def _plan_print_package(
             )
         )
 
+    report_rows_cache: dict[tuple[str, str], list[dict[str, str]]] = {}
+    thermal_cache: dict[str, Any] | None = None
+    power_budgets_cache: list[Any] | None = None
+    cutout_drawings_cache: dict[str, Any] = {}
+
     cutout_pages: list[PackagePage] = []
     if "cutouts" in enabled:
-        cutout_pages.extend(_cutout_package_pages(session, paper))
+        cutout_pages.extend(_cutout_package_pages(session, paper, cache=cutout_drawings_cache))
 
     report_pages: list[PackagePage] = []
     for kind, title in _REPORT_TITLES.items():
         if kind not in enabled:
             continue
         if kind == "bom" and len(project.panels) >= 2:
-            report_pages.extend(_panel_bom_pages(session, report_w, report_h))
+            report_pages.extend(
+                _panel_bom_pages(session, report_w, report_h, cache=report_rows_cache)
+            )
             continue
         rows, note = _collect_report_rows_and_note(session, kind)
         if not rows:
             continue
+        report_rows_cache[(kind, "")] = rows
         keys, _labels, raw_widths = _report_spec(kind, rows)
         widths = _resolved_widths(raw_widths, report_w)
         usable = _report_table_usable(report_h, extra_lines=1 if note else 0)
@@ -733,6 +759,7 @@ def _plan_print_package(
         from panelcad.render.thermal_page import thermal_spans
 
         thermal = compute_heat_load(project, session.catalog, getattr(session, "parts", None))
+        thermal_cache = thermal
         if thermal.get("enclosure") or thermal.get("devices"):
             for start, count in thermal_spans(thermal, report_w, report_h):
                 report_pages.append(
@@ -750,7 +777,9 @@ def _plan_print_package(
     if "power" in enabled:
         from panelcad.core.power_budget import analyze
 
-        for budget in analyze(project, session.catalog, getattr(session, "parts", None)):
+        budgets = analyze(project, session.catalog, getattr(session, "parts", None))
+        power_budgets_cache = budgets
+        for budget in budgets:
             report_pages.append(
                 PackagePage(
                     "power",
@@ -869,16 +898,27 @@ def _plan_print_package(
         sections=used,
         drawing_count=drawing_count,
         index_rows=index_rows,
+        _report_rows=report_rows_cache,
+        _thermal=thermal_cache,
+        _power_budgets=power_budgets_cache,
+        _cutout_drawings=cutout_drawings_cache,
     )
 
 
-def _cutout_package_pages(session: Any, paper: str) -> list[PackagePage]:
+def _cutout_package_pages(
+    session: Any,
+    paper: str,
+    *,
+    cache: dict[str, Any] | None = None,
+) -> list[PackagePage]:
     from panelcad.core.cutout import surface_title
 
     pages: list[PackagePage] = []
     for drawing in session.cutout_drawings(None):
         if not drawing.features:
             continue
+        if cache is not None:
+            cache[drawing.surface] = drawing
         width, height = _fitted_page(drawing.page_width_mm, drawing.page_height_mm, paper)
         pages.append(
             PackagePage(
@@ -944,6 +984,7 @@ def _import_not_for_build(project: Any) -> bool:
 def _paint_package_pages(painter, writer, session, plan, hotspots: list, base_dir: Path) -> None:
     from panelcad.reconstruct.placeholder import project_has_needs_info
 
+    needs_banner = project_has_needs_info(session.project) or _import_not_for_build(session.project)
     for i, page in enumerate(plan.pages):
         if i > 0:
             configure_full_page(writer, page.width_mm, page.height_mm)
@@ -960,7 +1001,7 @@ def _paint_package_pages(painter, writer, session, plan, hotspots: list, base_di
             i,
             base_dir=base_dir,
         )
-        if project_has_needs_info(session.project) or _import_not_for_build(session.project):
+        if needs_banner:
             qp = QtPainter(painter, print_paper=True)
             qp.set_stroke("#c45c00", 0.6)
             qp.text(page.width_mm / 2.0, 8.0, "NOT FOR BUILD — info needed", 3.2, align="middle")
@@ -1150,16 +1191,21 @@ def _paint_page(
         _paint_drawing(painter, session, page, base_dir)
         return []
     if page.section == "cutouts":
-        _paint_cutout(painter, session, page)
+        _paint_cutout(painter, session, page, plan=plan)
         return []
     if page.section == "power":
-        _paint_power(qp, session, page, page_index, len(plan.pages))
+        _paint_power(qp, session, page, page_index, len(plan.pages), plan=plan)
         return []
     if page.section == "thermal":
-        from panelcad.core.thermal import compute_heat_load
         from panelcad.render.thermal_page import paint_thermal_page
 
-        thermal = compute_heat_load(session.project, session.catalog, getattr(session, "parts", None))
+        thermal = plan._thermal
+        if thermal is None:
+            from panelcad.core.thermal import compute_heat_load
+
+            thermal = compute_heat_load(
+                session.project, session.catalog, getattr(session, "parts", None)
+            )
         paint_thermal_page(
             qp,
             session.project,
@@ -1176,7 +1222,13 @@ def _paint_page(
     return []
 
 
-def _paint_cutout(painter, session: Any, page: PackagePage) -> None:
+def _paint_cutout(
+    painter,
+    session: Any,
+    page: PackagePage,
+    *,
+    plan: PackagePlan | None = None,
+) -> None:
     from panelcad.render.cutout_draw import (
         legend_reserves,
         needs_package_legend,
@@ -1185,10 +1237,12 @@ def _paint_cutout(painter, session: Any, page: PackagePage) -> None:
     )
     from panelcad.render.qt_painter import QtPainter
 
-    drawing = next(
-        (item for item in session.cutout_drawings(None) if item.surface == page.sheet_id),
-        None,
-    )
+    drawing = plan._cutout_drawings.get(page.sheet_id) if plan is not None else None
+    if drawing is None:
+        drawing = next(
+            (item for item in session.cutout_drawings(None) if item.surface == page.sheet_id),
+            None,
+        )
     if drawing is None:
         return
     sw, sh = drawing.page_width_mm, drawing.page_height_mm
@@ -1493,11 +1547,22 @@ def _rows_for_package_page(session: Any, page: PackagePage) -> list[dict[str, st
     return _collect_report_rows(session, page.report)
 
 
-def _paint_power(qp, session: Any, page: PackagePage, page_index: int, page_count: int) -> None:
-    from panelcad.core.power_budget import analyze
+def _paint_power(
+    qp,
+    session: Any,
+    page: PackagePage,
+    page_index: int,
+    page_count: int,
+    *,
+    plan: PackagePlan | None = None,
+) -> None:
     from panelcad.render.power_report import paint_supply_page
 
-    budgets = analyze(session.project, session.catalog, getattr(session, "parts", None))
+    budgets = plan._power_budgets if plan is not None else None
+    if budgets is None:
+        from panelcad.core.power_budget import analyze
+
+        budgets = analyze(session.project, session.catalog, getattr(session, "parts", None))
     match = next((item for item in budgets if item.ref == page.sheet_id), None)
     if match is None:
         return
@@ -1522,7 +1587,9 @@ def _paint_report(
 ) -> None:
     _frame(qp, page.width_mm, page.height_mm)
     y0 = _header(qp, page.title.upper(), session.project, page, page_index, page_count)
-    rows = _rows_for_package_page(session, page)
+    rows = plan._report_rows.get((page.report, page.sheet_id)) if plan is not None else None
+    if rows is None:
+        rows = _rows_for_package_page(session, page)
     keys, labels, raw_widths = _report_spec(page.report, rows)
     widths = _resolved_widths(raw_widths, page.width_mm)
     usable = page.width_mm - 2 * MARGIN_X

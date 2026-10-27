@@ -62,9 +62,105 @@ def _blob(value: object) -> str:
     return json.dumps(value, sort_keys=True, default=str, separators=(",", ":"))
 
 
+def _prim_tuple(prim: object) -> tuple:
+    if isinstance(prim, dict):
+        return tuple(
+            (
+                k,
+                tuple(tuple(pt) if isinstance(pt, (list, tuple)) else pt for pt in v)
+                if isinstance(v, (list, tuple))
+                else v,
+            )
+            for k, v in sorted(prim.items())
+        )
+    d = getattr(prim, "__dict__", None)
+    if d is None:
+        return (repr(prim),)
+    pts = d.get("points")
+    if pts is not None:
+        return (
+            d.get("kind"),
+            tuple((p.x, p.y) if hasattr(p, "x") else tuple(p) for p in pts),
+            d.get("closed"),
+            d.get("stroke_width"),
+            d.get("fill"),
+            d.get("dashed"),
+        )
+    return (
+        d.get("kind"),
+        d.get("x1"),
+        d.get("y1"),
+        d.get("x2"),
+        d.get("y2"),
+        d.get("x"),
+        d.get("y"),
+        d.get("w"),
+        d.get("h"),
+        d.get("cx"),
+        d.get("cy"),
+        d.get("r"),
+        d.get("rx"),
+        d.get("ry"),
+        d.get("start_deg"),
+        d.get("span_deg"),
+        d.get("d"),
+        d.get("text"),
+        d.get("size"),
+        d.get("anchor"),
+        d.get("stroke_width"),
+        d.get("fill"),
+        d.get("dashed"),
+    )
+
+
 def _device_key(device: object) -> str:
-    dump = device.model_dump(mode="json") if hasattr(device, "model_dump") else repr(device)
-    return _blob(dump)
+    if not hasattr(device, "pins") or not hasattr(device, "primitives"):
+        dump = device.model_dump(mode="json") if hasattr(device, "model_dump") else repr(device)
+        return _blob(dump)
+    panel = getattr(device, "panel", None)
+    panel_t = (
+        (
+            panel.width_mm,
+            panel.height_mm,
+            panel.depth_mm,
+            panel.din_rail,
+            panel.in_panel,
+            panel.mount,
+            panel.dim_source,
+            panel.depth_from_generic,
+        )
+        if panel is not None and hasattr(panel, "width_mm")
+        else None
+    )
+    props = getattr(device, "properties", None)
+    props_t = tuple(sorted((str(k), repr(v)) for k, v in props.items())) if isinstance(props, dict) else ()
+    payload = (
+        getattr(device, "library_id", None),
+        getattr(device, "id", None),
+        getattr(device, "name", None),
+        getattr(device, "category", None),
+        getattr(device, "ref_prefix", None),
+        tuple(getattr(device, "tags", ()) or ()),
+        getattr(device, "schematic_width", None),
+        getattr(device, "schematic_height", None),
+        getattr(device, "block_kind", None),
+        getattr(device, "standard", None),
+        panel_t,
+        props_t,
+        tuple(
+            (p.id, p.x, p.y, p.side, p.electrical, p.label, p.jumper)
+            for p in device.pins
+        ),
+        tuple((a.tag, a.x, a.y, a.h) for a in getattr(device, "attributes", ())),
+        tuple((a.tag, a.x, a.y, a.h) for a in getattr(device, "footprint_attributes", ())),
+        tuple(
+            (cp.id, cp.kind, cp.medium, cp.protocol, cp.connector, cp.side, cp.label)
+            for cp in getattr(device, "ports", ())
+        ),
+        tuple(_prim_tuple(pr) for pr in device.primitives),
+        tuple(_prim_tuple(pr) for pr in getattr(device, "footprint_primitives", ())),
+    )
+    return hashlib.sha256(repr(payload).encode("utf-8")).hexdigest()
 
 
 def _library_key(project: Project, catalog: Catalog) -> tuple:
@@ -208,15 +304,22 @@ def resolve_labels(
     import panelcad.render.wire_labels as wire_labels
     import panelcad.render.xref as xref_mod
 
-    tags = dict(sheet_labels.place_device_tags(sheet, catalog, ladder=ladder, project=project, sheet_no=sheet_no))
-    # A missing pin or a rail that was renamed out from under a wire has to
-    # raise. Swallowing it drew the sheet with no wires and no error.
-    routes = route_sheet_wires(sheet, catalog, project=project)
-    marks = dict(wire_labels.place_wire_marks(sheet, catalog, routes, ladder=ladder, project=project))
-    try:
-        xrefs = list(xref_mod.place_xref_labels(project, catalog, sheet, ladder=ladder))
-    except (KeyError, ValueError, IndexError):
-        xrefs = []
+    with wire_labels.share_wire_marks():
+        tags = dict(
+            sheet_labels.place_device_tags(
+                sheet, catalog, ladder=ladder, project=project, sheet_no=sheet_no
+            )
+        )
+        # A missing pin or a rail that was renamed out from under a wire has to
+        # raise. Swallowing it drew the sheet with no wires and no error.
+        routes = route_sheet_wires(sheet, catalog, project=project)
+        marks = dict(
+            wire_labels.place_wire_marks(sheet, catalog, routes, ladder=ladder, project=project)
+        )
+        try:
+            xrefs = list(xref_mod.place_xref_labels(project, catalog, sheet, ladder=ladder))
+        except (KeyError, ValueError, IndexError):
+            xrefs = []
     _avoid(sheet, catalog, project, tags, marks, xrefs, routes, ladder=ladder, sheet_no=sheet_no, captions=captions)
     resolved = ResolvedLabels(tags=tags, marks=marks, xrefs=xrefs, routes=routes)
     _STORED[key] = resolved

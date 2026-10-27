@@ -760,19 +760,19 @@ def _foreign_cover_cost(
     score = 0.0
     wide = (box[2] - box[0]) >= 8.0
     if strokes is not None:
-        for wid, (segs, ends) in parts.items():
-            if wid == own_id:
+        if not strokes:
+            return 0.0
+        for wid, got in strokes.items():
+            if wid == own_id or not got:
                 continue
-            got = strokes.get(wid)
-            if not got:
-                continue
+            segs, ends = parts.get(wid, ((), ()))
             covered_this = False
-            for i, _point in enumerate(ends):
+            for i in range(len(ends)):
                 if (0, i) not in got:
                     continue
                 score += _CROSS_CONDUCTOR
                 covered_this = True
-            for i, _seg in enumerate(segs):
+            for i in range(len(segs)):
                 if (1, i) not in got:
                     continue
                 score += _CROSS_CONDUCTOR if not covered_this else (2400.0 if wide else 90.0)
@@ -886,6 +886,8 @@ def _split_column_penalty(
     side left 106 beside the motor while 105 sat on the open side.
     """
 
+    if not placed or not own_segs:
+        return 0.0
     xs: list[float] = []
     for a, b in own_segs:
         if abs(a.x - b.x) > 0.4:
@@ -1017,13 +1019,30 @@ class _RouteIndex:
 
         meta: list[tuple[str, int, int]] = []
         boxes: list[tuple[float, float, float, float]] = []
+        own_dots: dict[str, list[tuple[float, float, float, float]]] = {}
+        own_pads: dict[str, list[tuple[float, float, float, float]]] = {}
+        own_strokes: dict[str, list[tuple[float, float, float, float]]] = {}
         for wid, (segs, ends) in parts.items():
+            dots_w: list[tuple[float, float, float, float]] = []
+            pads_w: list[tuple[float, float, float, float]] = []
+            strokes_w: list[tuple[float, float, float, float]] = []
             for i, (x, y) in enumerate(ends):
-                boxes.append(_dot_box(x, y))
+                dbox = _dot_box(x, y)
+                dots_w.append(dbox)
+                boxes.append(dbox)
                 meta.append((wid, 0, i))
             for i, (a, b) in enumerate(segs):
-                boxes.append(_seg_box(a, b, WIRE_PAD))
+                pbox = _seg_box(a, b, WIRE_PAD)
+                pads_w.append(pbox)
+                strokes_w.append((min(a.x, b.x), min(a.y, b.y), max(a.x, b.x), max(a.y, b.y)))
+                boxes.append(pbox)
                 meta.append((wid, 1, i))
+            own_dots[wid] = dots_w
+            own_pads[wid] = pads_w
+            own_strokes[wid] = strokes_w
+        self._own_dots = own_dots
+        self._own_pads = own_pads
+        self._own_strokes = own_strokes
         self._stroke_meta = meta
         self._stroke_index = _BoxIndex(boxes)
 
@@ -1283,18 +1302,31 @@ def _score(
     route_index: _RouteIndex | None = None,
     obstacles: _MarkFields | None = None,
     ceiling: float | None = None,
+    pts_span: float | None = None,
+    pts_bounds: tuple[float, float, float, float] | None = None,
 ) -> float:
     if bounds is not None and not _inside_working(box, bounds):
         return _OFF_SHEET
     score = 0.0
     own_segs, own_ends = parts.get(own_id, ([], []))
-    for x, y in own_ends:
-        if boxes_overlap(box, _dot_box(x, y)):
-            score += 1200.0
-    for a, b in own_segs:
-        if boxes_overlap(box, _seg_box(a, b, WIRE_PAD)):
-            # The glyph may sit beside its wire. It may not cover the stroke.
-            score += _CROSS_CONDUCTOR
+    index = route_index
+    if pts and index is None:
+        index = _RouteIndex(parts)
+    if index is not None:
+        for dbox in index._own_dots.get(own_id, ()):
+            if boxes_overlap(box, dbox):
+                score += 1200.0
+        for pbox in index._own_pads.get(own_id, ()):
+            if boxes_overlap(box, pbox):
+                score += _CROSS_CONDUCTOR
+    else:
+        for x, y in own_ends:
+            if boxes_overlap(box, _dot_box(x, y)):
+                score += 1200.0
+        for a, b in own_segs:
+            if boxes_overlap(box, _seg_box(a, b, WIRE_PAD)):
+                # The glyph may sit beside its wire. It may not cover the stroke.
+                score += _CROSS_CONDUCTOR
     # The router ends at the pin. The symbol still draws a lead through that
     # point, and the gauge line hangs under the number. Covering that stem is
     # the same fault as covering the route.
@@ -1306,7 +1338,11 @@ def _score(
             if boxes_overlap(box, _seg_box(a, b, _STEM_PAD)):
                 score += _CROSS_CONDUCTOR
                 break
-    own_gap = _gap_to_strokes(box, own_segs)
+    if index is not None:
+        own_strokes = index._own_strokes.get(own_id, ())
+        own_gap = min((box_gap(box, s) for s in own_strokes), default=None)
+    else:
+        own_gap = _gap_to_strokes(box, own_segs)
     if own_gap is not None:
         # A free slot next to this conductor beats an equally clear slot
         # several millimetres off the line (the 104/105/106 row).
@@ -1314,9 +1350,6 @@ def _score(
     skip = ignore_ids or set()
     # Companions in *skip* still pay for covering a stroke. They are not the
     # next phase, so they stay out of the nearest-foreign distance.
-    index = route_index
-    if pts and index is None:
-        index = _RouteIndex(parts)
     # Later terms subtract at most the bundle bonus and the length bonus.
     # A seat that is already behind by that much cannot win.
     if ceiling is not None and score - (25.0 + 40.0 * 0.35) >= ceiling:
@@ -1332,6 +1365,8 @@ def _score(
     # 105 and 106 stayed on the open side.
     if bundle and (box[2] - box[0]) >= 8.0 and align == "end":
         score -= 25.0
+    if ceiling is not None and score - (40.0 * 0.35) >= ceiling:
+        return score
     if obstacles is not None:
         pin_hits = obstacles.pins.overlap_ids(box, 0.0)
         for i in sorted(pin_hits):
@@ -1345,7 +1380,11 @@ def _score(
                 # Symbol bodies are stored with a sentinel width so a label can leave
                 # the 4 mm gap between stacked Circuit Builder symbols.
                 score += 3200.0 if (pin[2] - pin[0]) > 8.0 and (pin[3] - pin[1]) > 8.0 else 600.0
-    span = sum(hypot(b.x - a.x, b.y - a.y) for a, b in zip(pts, pts[1:])) if pts else 0.0
+    span = (
+        pts_span
+        if pts_span is not None
+        else (sum(hypot(b.x - a.x, b.y - a.y) for a, b in zip(pts, pts[1:])) if pts else 0.0)
+    )
     # Only a stub shorter than the glyph. 104 beside F1:4 was a fraction of a
     # millimetre from the next pole. The same penalty on a long run (star-delta
     # 105 on K2:T2) made the only nearer-own seat lose to one nearer 106.
@@ -1381,8 +1420,11 @@ def _score(
                 score += 2800.0
     score += _split_column_penalty(box, own_segs, placed)
     if pts:
-        y0, y1 = min(p.y for p in pts), max(p.y for p in pts)
-        x0, x1 = min(p.x for p in pts), max(p.x for p in pts)
+        if pts_bounds is not None:
+            x0, y0, x1, y1 = pts_bounds
+        else:
+            y0, y1 = min(p.y for p in pts), max(p.y for p in pts)
+            x0, x1 = min(p.x for p in pts), max(p.x for p in pts)
         cy = (box[1] + box[3]) / 2.0
         cx = (box[0] + box[2]) / 2.0
         if vertical_pref and (cy < y0 - 1.2 or cy > y1 + 1.2):
@@ -1392,6 +1434,8 @@ def _score(
         if vertical_pref and align == "middle":
             score += 80.0
     score -= min(length, 40.0) * 0.35
+    if ceiling is not None and score >= ceiling:
+        return score
     if index is not None:
         crossed = index.conductor_between(box, own_id)
     else:
@@ -1823,8 +1867,14 @@ def _wire_mark_key(
     ladder: bool,
     project: object,
 ) -> tuple:
+    iec_placing = False
+    if project is not None and str(getattr(sheet, "drawing_style", "") or "") == "iec":
+        from panelcad.render import xref
+
+        iec_placing = bool(xref._PLACING)
     return (
         bool(ladder),
+        iec_placing,
         id(catalog),
         id(project) if project is not None else 0,
         _sheet_token(sheet),
@@ -2027,6 +2077,12 @@ def place_wire_marks(
         }
         best: tuple[float, float, str] | None = None
         best_score = 10**12
+        pts_span = sum(hypot(b.x - a.x, b.y - a.y) for a, b in zip(pts, pts[1:])) if pts else 0.0
+        pts_bounds = (
+            (min(p.x for p in pts), min(p.y for p in pts), max(p.x for p in pts), max(p.y for p in pts))
+            if pts
+            else None
+        )
         foreign = [routes.get(other.id) or [] for other in sheet.wires if other.id != wire.id]
         for x, y, align, length in _candidates(
             pts, mark, spec, close=close, tight=tight, foreign=foreign
@@ -2057,6 +2113,8 @@ def place_wire_marks(
                 route_index=route_index,
                 obstacles=obstacles,
                 ceiling=best_score,
+                pts_span=pts_span,
+                pts_bounds=pts_bounds,
             )
             if score < best_score:
                 best = (x, y, align)

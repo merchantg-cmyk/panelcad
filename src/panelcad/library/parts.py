@@ -843,7 +843,8 @@ def _parts_source_key(project_dir: Path | None) -> tuple:
         except OSError:
             files.append((str(directory), 0, 0))
             continue
-        files.append((str(directory.resolve()), int(folder.st_mtime_ns), 0))
+        resolved_dir = directory.resolve()
+        files.append((str(resolved_dir), int(folder.st_mtime_ns), 0))
         names = sorted(directory.glob("*.yaml")) + sorted(directory.glob("*.yml"))
         for path in names:
             try:
@@ -851,7 +852,7 @@ def _parts_source_key(project_dir: Path | None) -> tuple:
             except OSError:
                 files.append((str(path), 0, 0))
             else:
-                files.append((str(path.resolve()), int(stat.st_mtime_ns), int(stat.st_size)))
+                files.append((str(resolved_dir / path.name), int(stat.st_mtime_ns), int(stat.st_size)))
     return (env, root, tuple(files))
 
 

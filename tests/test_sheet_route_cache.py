@@ -168,3 +168,101 @@ def test_canvas_reload_follows_edit_and_undo(dol: Session) -> None:
     assert dol.undo()
     assert paths() == original
     view.close()
+
+
+def test_resolve_labels_shares_wire_marks_and_xref_within_pass(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One resolve_labels pass must not recompute _place_xref_labels or identical _place_wire_marks."""
+
+    from panelcad.render import wire_labels, xref as xref_mod
+
+    clear_resolved_labels()
+    session = Session.open(_ROOT / "examples" / "xref_nema_seal_in.pcad.yaml")
+    sheet = session.project.sheet("control")
+    xref_calls = 0
+    real_xref = xref_mod._place_xref_labels
+
+    def counted_xref(*args, **kwargs):
+        nonlocal xref_calls
+        xref_calls += 1
+        return real_xref(*args, **kwargs)
+
+    score_calls = 0
+    real_score = wire_labels._score
+
+    def counted_score(*args, **kwargs):
+        nonlocal score_calls
+        score_calls += 1
+        return real_score(*args, **kwargs)
+
+    monkeypatch.setattr(xref_mod, "_place_xref_labels", counted_xref)
+    monkeypatch.setattr(wire_labels, "_score", counted_score)
+    resolved = resolve_labels(session.project, session.catalog, sheet, ladder=True, sheet_no=1)
+    assert resolved.xrefs
+    assert resolved.marks
+    assert xref_calls == 1
+    first_pass_scores = score_calls
+    assert first_pass_scores > 0
+
+    # Inside the same share_wire_marks scope, a second place_wire_marks call with identical inputs hits cache.
+    with wire_labels.share_wire_marks():
+        score_calls = 0
+        wire_labels.place_wire_marks(sheet, session.catalog, resolved.routes, ladder=True, project=session.project)
+        after_first = score_calls
+        wire_labels.place_wire_marks(sheet, session.catalog, resolved.routes, ladder=True, project=session.project)
+        assert score_calls == after_first
+
+
+def test_hand_drawn_io_check_shares_resolve_labels_with_io_sheet_draw() -> None:
+    """run_checks on a hand-drawn I/O sheet must reuse the same resolve_labels cache key as draw_io_sheet."""
+
+    from panelcad.core.checks import run_checks
+    from panelcad.render.io_ladder import draw_io_sheet
+    from panelcad.render.svg import SvgPainter
+
+    clear_resolved_labels()
+    session = Session.open(_ROOT / "examples" / "dol_starter.pcad.yaml")
+    io_sheet = session.project.sheet("io")
+    assert io_sheet is not None
+
+    before = label_cache_stats()[0]
+    run_checks(session.project, session.catalog, label_cover=True)
+    after_checks = label_cache_stats()[0]
+    assert after_checks > before
+
+    painter = SvgPainter()
+    draw_io_sheet(painter, io_sheet, session.catalog, project=session.project)
+    assert label_cache_stats()[0] == after_checks
+
+
+def test_print_package_reuses_planned_reports_thermal_and_power(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """write_print_package must reuse the rows/thermal/power computed during plan_print_package."""
+
+    from panelcad.render import print_package as pp
+    from panelcad.render import thermal_page as tp
+
+    session = Session.open(_ROOT / "examples" / "dol_starter.pcad.yaml")
+    report_calls: list[str] = []
+    real_collect = pp._collect_report_rows_and_note
+
+    def counted_collect(sess, kind: str):
+        report_calls.append(kind)
+        return real_collect(sess, kind)
+
+    painted_thermals: list[int] = []
+    real_paint_thermal = tp.paint_thermal_page
+
+    def counted_paint_thermal(qp, project, thermal_dict, **kwargs):
+        painted_thermals.append(id(thermal_dict))
+        return real_paint_thermal(qp, project, thermal_dict, **kwargs)
+
+    monkeypatch.setattr(pp, "_collect_report_rows_and_note", counted_collect)
+    monkeypatch.setattr(tp, "paint_thermal_page", counted_paint_thermal)
+
+    out_pdf = tmp_path / "pkg.pdf"
+    pp.write_print_package(session, out_pdf)
+    assert out_pdf.is_file()
+    # Every report kind is collected once during planning and reused during painting.
+    assert len(report_calls) == len(set(report_calls))
+    assert len(painted_thermals) == 1

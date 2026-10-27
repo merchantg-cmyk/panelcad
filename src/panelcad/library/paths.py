@@ -4,11 +4,18 @@ import os
 from pathlib import Path
 
 
+_REPO_ROOT: Path | None = None
+
+
 def repo_root() -> Path:
     """C:\\programming when running from source; falls back to package parent."""
+    global _REPO_ROOT
+    if _REPO_ROOT is not None:
+        return _REPO_ROOT
     here = Path(__file__).resolve()
     for parent in here.parents:
         if (parent / "libraries" / "builtin").is_dir() and (parent / "pyproject.toml").is_file():
+            _REPO_ROOT = parent
             return parent
     return Path.cwd()
 
