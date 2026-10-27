@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.5.19 — 2026-10-27
+
+- **Faster PDF export, print package generation, and label resolution (`label_avoid`, `wire_labels`, `xref`, `print_package`, `io_ladder`, `checks`)** — Shares wire-mark and cross-reference placement within `resolve_labels` (`with wire_labels.share_wire_marks():`), reuses planned report rows, thermal heat loads, power budgets, and cutout drawings during `_paint_package_pages`, precomputes per-wire stroke/pad/dot geometry and span bounds outside `wire_labels._score`, and replaces per-call `model_dump(mode="json")` and per-file `Path.resolve()` in `drawing_key` (`2.19x–2.60x` faster cold PDF and print-package export).
+
 ## 0.5.18 — 2026-10-25
 
 - **Backpanel wire routing and zip-tie bundles (`panelcad.core.panel_wiring`)** — Routes schematic From-To conductors across the physical enclosure layout through connected wire trays (`wt-top`, `wt-mid`, `wt-bot`, `wt-left`, `wt-right`) and interactive **Zip-Tie Waypoints** (`ZipTieWaypoint`: slice across wires to bundle, drag to adjust, or remove to unbundle).
