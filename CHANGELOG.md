@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.5.20 — 2026-10-28
+
+- **Cabinet photo feedback overlay and Capture-Phase Site-Exit Check (`panelcad.reconstruct.feedback`)** — Highlights every detected device on the real cabinet photo: devices missing information get an amber/red box with a callout listing what is missing (part number, verified W×H×D envelope, mounting, unreadable label or close-up needed, wire landing, print mismatch), and layout-ready devices get a green box with a checkmark so any physical device with no box stands out as missed. A missed device can be added straight from a box drawn on the photo (`add_missed_device_on_photo`). The site-exit check (`safe_to_leave_site`, `site_exit_banner`, `on_site_shot_list`, `link_closeup_to_device`) runs during Add Photos so a technician knows before closing the cabinet which close-ups or device details are still needed.
+
 ## 0.5.19 — 2026-10-27
 
 - **Faster PDF export, print package generation, and label resolution (`label_avoid`, `wire_labels`, `xref`, `print_package`, `io_ladder`, `checks`)** — Shares wire-mark and cross-reference placement within `resolve_labels` (`with wire_labels.share_wire_marks():`), reuses planned report rows, thermal heat loads, power budgets, and cutout drawings during `_paint_package_pages`, precomputes per-wire stroke/pad/dot geometry and span bounds outside `wire_labels._score`, and replaces per-call `model_dump(mode="json")` and per-file `Path.resolve()` in `drawing_key` (`2.19x–2.60x` faster cold PDF and print-package export).
