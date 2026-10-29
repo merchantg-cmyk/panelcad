@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListView,
     QListWidget,
     QListWidgetItem,
     QMessageBox,
@@ -258,6 +259,10 @@ class ReconstructWizard(QDialog):
         right_col = QVBoxLayout()
         right_col.addWidget(QLabel("Before You Leave Site — Required Close-Ups & Context:"))
         self.shot_list = QListWidget()
+        self.shot_list.setWordWrap(True)
+        self.shot_list.setTextElideMode(Qt.TextElideMode.ElideNone)
+        self.shot_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.shot_list.setResizeMode(QListView.ResizeMode.Adjust)
         right_col.addWidget(self.shot_list, 1)
 
         cap_btns = QHBoxLayout()
@@ -744,6 +749,10 @@ class ReconstructWizard(QDialog):
         self._refresh_steps()
 
     def _refresh_photos(self) -> None:
+        from panelcad.reconstruct.feedback import default_capture_photo_id
+
+        prev = self.photo_list.currentItem()
+        keep_pid = str(prev.data(Qt.ItemDataRole.UserRole) or "") if prev is not None else ""
         self.photo_list.clear()
         self.scale_photo.blockSignals(True)
         self.scale_photo.clear()
@@ -760,8 +769,14 @@ class ReconstructWizard(QDialog):
             self.photo_list.addItem(row)
             self.scale_photo.addItem(name, photo.get("id"))
         self.scale_photo.blockSignals(False)
-        if self.photo_list.count() > 0 and self.photo_list.currentRow() < 0:
-            self.photo_list.setCurrentRow(0)
+        if self.photo_list.count() > 0:
+            # Keep the user's pick; otherwise use the same default photo as the phone page.
+            want = keep_pid or default_capture_photo_id(self.session)
+            rows = [
+                r for r in range(self.photo_list.count())
+                if str(self.photo_list.item(r).data(Qt.ItemDataRole.UserRole) or "") == want
+            ]
+            self.photo_list.setCurrentRow(rows[0] if rows else 0)
         self._show_scale_photo()
         self.refresh_capture_feedback()
 
@@ -771,11 +786,9 @@ class ReconstructWizard(QDialog):
             pid = str(cur.data(Qt.ItemDataRole.UserRole) or "")
             if pid:
                 return pid
-        photos = self.session.reconstruct_list_photos().get("photos") or []
-        for p_entry in photos:
-            if p_entry.get("role") == "backpanel":
-                return str(p_entry.get("id") or "")
-        return str(photos[0].get("id") or "") if photos else None
+        from panelcad.reconstruct.feedback import default_capture_photo_id
+
+        return default_capture_photo_id(self.session) or None
 
     def run_capture_site_exit_check(self) -> dict[str, Any]:
         """Run label/device detection if needed and refresh Step 1 Site-Exit Readiness."""
@@ -794,7 +807,7 @@ class ReconstructWizard(QDialog):
         return self.refresh_capture_feedback(photo_id=pid)
 
     def refresh_capture_feedback(self, photo_id: str | None = None) -> dict[str, Any]:
-        from panelcad.reconstruct.feedback import build_photo_feedback_report, render_annotated_cabinet_photo
+        from panelcad.reconstruct.feedback import capture_site_exit_readiness, render_annotated_cabinet_photo
 
         pid = photo_id or self._selected_capture_photo_id()
         if not hasattr(self, "site_exit_banner"):
@@ -809,7 +822,7 @@ class ReconstructWizard(QDialog):
             self.shot_list.clear()
             return {}
         try:
-            report = build_photo_feedback_report(self.session, photo_id=pid)
+            report = capture_site_exit_readiness(self.session, photo_id=pid)
         except Exception:
             return {}
 

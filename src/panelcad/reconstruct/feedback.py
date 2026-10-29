@@ -103,6 +103,7 @@ class PhotoFeedbackReport(BaseModel):
     on_site_shot_list: list[str] = Field(default_factory=list)
     boxes: list[DeviceFeedbackBox] = Field(default_factory=list)
     summary_text: str = ""
+    detail_text: str = ""
     missed_device_prompt: str = MISSED_DEVICE_PROMPT
 
 
@@ -125,16 +126,28 @@ def _resolve_store(target: Any) -> tuple[Reconstruction, Any, Path | None]:
     return store, session, base_path
 
 
+# Photo roles that show the cabinet itself (not a close-up of one label), in preference order.
+CAPTURE_PRIMARY_ROLES: tuple[str, ...] = ("backpanel", "door_inside", "door_outside", "other")
+
+
+def default_capture_photo_id(target: Any) -> str:
+    """The one photo every capture surface (desktop Step 1, phone page, API) checks by default."""
+    store = target if isinstance(target, Reconstruction) else _resolve_store(target)[0]
+    for preferred in CAPTURE_PRIMARY_ROLES:
+        for candidate in store.photos:
+            if candidate.role == preferred:
+                return candidate.id
+    return store.photos[0].id if store.photos else ""
+
+
+def ready_device_count(boxes: list[DeviceFeedbackBox]) -> int:
+    return sum(1 for b in boxes if b.status_category == "confirmed")
+
+
 def _pick_photo(store: Reconstruction, photo_id: str | None = None) -> Photo:
     if not store.photos:
         raise ValueError("no panel photos in reconstruction")
-    if photo_id:
-        return store.photo(photo_id)
-    for preferred in ("backpanel", "door_inside", "door_outside"):
-        for candidate in store.photos:
-            if candidate.role == preferred:
-                return candidate
-    return store.photos[0]
+    return store.photo(photo_id or default_capture_photo_id(store))
 
 
 def _item_dimensions_label(item: ObservedItem) -> str:
@@ -399,7 +412,7 @@ def _build_on_site_shot_list(
     if issue_count > 0:
         banner = (
             f"⚠ DO NOT LEAVE SITE YET — {issue_count} Device Close-Up(s) / Context Item(s) Needed "
-            f"({len(all_boxes) - sum(1 for b in all_boxes if b.status_category == 'missing_info')}/{len(all_boxes)} Ready)"
+            f"({ready_device_count(all_boxes)}/{len(all_boxes)} Ready)"
         )
         return False, "do_not_leave", banner, shot_list
 
@@ -436,7 +449,7 @@ def build_photo_feedback_model(
             continue
         all_boxes.append(build_device_feedback_box(store, photo, item))
 
-    confirmed_count = sum(1 for b in all_boxes if b.status_category == "confirmed")
+    confirmed_count = ready_device_count(all_boxes)
     missing_count = sum(1 for b in all_boxes if b.status_category == "missing_info")
     closeup_needed_count = sum(1 for b in all_boxes if b.needs_closeup)
     total_detected = len(all_boxes)
@@ -456,11 +469,12 @@ def build_photo_feedback_model(
     ratio = mm_per_px(photo)
     scaled = ratio is not None
     photo_name = str(photo.original_name or "").strip() or Path(str(photo.path or photo.id)).name
-    summary = (
-        f"{exit_banner}  |  {photo_name}: {total_detected} detected "
+    detail = (
+        f"{photo_name}: {total_detected} detected "
         f"({confirmed_count} confirmed ✓, {missing_count} missing info ⚠). "
         f"{MISSED_DEVICE_PROMPT}"
     )
+    summary = f"{exit_banner}  |  {detail}"
 
     return PhotoFeedbackReport(
         photo_id=photo.id,
@@ -483,6 +497,7 @@ def build_photo_feedback_model(
         on_site_shot_list=shot_list,
         boxes=filtered,
         summary_text=summary,
+        detail_text=detail,
         missed_device_prompt=MISSED_DEVICE_PROMPT,
     )
 
@@ -503,6 +518,27 @@ def build_photo_feedback_report(
         unboxed_callouts=unboxed_callouts,
     )
     return report.model_dump(mode="json")
+
+
+def capture_site_exit_readiness(
+    target: Any,
+    photo_id: str | None = None,
+    *,
+    unboxed_callouts: list[dict[str, Any]] | None = None,
+    filter_mode: FeedbackFilterMode = "all",
+) -> dict[str, Any]:
+    """Site-exit readiness for the capture phase.
+
+    Desktop Step 1, the phone capture page, and the session API all call this so the
+    photo picked by default and the Ready/total counts are computed one way only.
+    """
+    pid = str(photo_id or "").strip() or default_capture_photo_id(target)
+    return build_photo_feedback_report(
+        target,
+        photo_id=pid or None,
+        filter_mode=filter_mode,
+        unboxed_callouts=unboxed_callouts,
+    )
 
 
 def _parse_region(
@@ -895,18 +931,36 @@ def render_annotated_cabinet_photo(
             ui_scale=ui_scale,
         )
 
-    # Track occupied callout rectangles so callouts don't collide
-    occupied: list[QRectF] = []
+    # Every device box and unboxed-gap box on the photo: callout cards must not cover them.
+    box_rects: list[QRectF] = []
     for box_entry in report.boxes:
         r = box_entry.region
-        occupied.append(
+        box_rects.append(
             QRectF(
                 float(r["x"]),
                 float(r["y"]) + top_banner_h,
-                float(r["w"]),
-                float(r["h"]),
+                max(float(r["w"]), 8.0),
+                max(float(r["h"]), 8.0),
             )
         )
+    for raw_callout in unboxed_callouts or []:
+        box_rects.append(
+            QRectF(
+                float(raw_callout.get("x", 0.0)),
+                float(raw_callout.get("y", 0.0)) + top_banner_h,
+                max(float(raw_callout.get("w", 40.0)), 12.0),
+                max(float(raw_callout.get("h", 40.0)), 12.0),
+            )
+        )
+    # Cards already placed: later cards must not cover them.
+    label_rects: list[QRectF] = []
+    # Cards are drawn after every box so no box fill paints over a card.
+    pending_cards: list[dict[str, Any]] = []
+    card_bounds = {
+        "min_y": float(top_banner_h + 4 * ui_scale),
+        "max_y": float(top_banner_h + photo_h - 4 * ui_scale),
+        "max_x": float(photo_w - 4 * ui_scale),
+    }
 
     ordered_boxes = sorted(
         report.boxes,
@@ -955,20 +1009,16 @@ def render_annotated_cabinet_photo(
         painter.drawLine(QPointF(bx + bw, by + bh), QPointF(bx + bw - bracket, by + bh))
         painter.drawLine(QPointF(bx + bw, by + bh), QPointF(bx + bw, by + bh - bracket))
 
-        _draw_device_callout_card(
-            painter,
-            box_rect=rect,
-            header_text=box_entry.header_label,
-            lines=box_entry.badge_lines,
-            header_bg=header_bg,
-            header_fg=header_fg,
-            border_color=accent_color if box_entry.status_category == "missing_info" else stroke_color,
-            is_missing=(box_entry.status_category == "missing_info"),
-            min_y=float(top_banner_h + 4 * ui_scale),
-            max_y=float(top_banner_h + photo_h - 4 * ui_scale),
-            max_x=float(photo_w - 4 * ui_scale),
-            occupied=occupied,
-            ui_scale=ui_scale,
+        pending_cards.append(
+            dict(
+                box_rect=rect,
+                header_text=box_entry.header_label,
+                lines=box_entry.badge_lines,
+                header_bg=header_bg,
+                header_fg=header_fg,
+                border_color=accent_color if box_entry.status_category == "missing_info" else stroke_color,
+                is_missing=(box_entry.status_category == "missing_info"),
+            )
         )
 
     for raw_callout in unboxed_callouts or []:
@@ -985,19 +1035,25 @@ def render_annotated_cabinet_photo(
         painter.fillRect(crect, QColor(56, 189, 248, 42))
         painter.setPen(dash_pen)
         painter.drawRect(crect)
+        pending_cards.append(
+            dict(
+                box_rect=crect,
+                header_text=label,
+                lines=[detail],
+                header_bg=QColor(3, 105, 161, 242),
+                header_fg=QColor("#f0f9ff"),
+                border_color=QColor("#38bdf8"),
+                is_missing=True,
+            )
+        )
+
+    for card in pending_cards:
         _draw_device_callout_card(
             painter,
-            box_rect=crect,
-            header_text=label,
-            lines=[detail],
-            header_bg=QColor(3, 105, 161, 242),
-            header_fg=QColor("#f0f9ff"),
-            border_color=QColor("#38bdf8"),
-            is_missing=True,
-            min_y=float(top_banner_h + 4 * ui_scale),
-            max_y=float(top_banner_h + photo_h - 4 * ui_scale),
-            max_x=float(photo_w - 4 * ui_scale),
-            occupied=occupied,
+            **card,
+            **card_bounds,
+            occupied=box_rects,
+            placed_labels=label_rects,
             ui_scale=ui_scale,
         )
 
@@ -1065,6 +1121,93 @@ def _draw_pill(
     painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
 
 
+def _wrap_text_lines(fm: Any, text: str, width: float, max_lines: int) -> list[str]:
+    """Word-wrap ``text`` to ``width`` px in at most ``max_lines`` lines; elide only the last line."""
+    from PySide6.QtCore import Qt
+
+    words = str(text or "").split()
+    lines: list[str] = []
+    cur = ""
+    idx = 0
+    while idx < len(words):
+        trial = f"{cur} {words[idx]}".strip()
+        if not cur or fm.horizontalAdvance(trial) <= width:
+            cur = trial
+            idx += 1
+            continue
+        lines.append(cur)
+        cur = ""
+        if len(lines) == max_lines - 1:
+            break
+    rest = " ".join(([cur] if cur else []) + words[idx:]).strip()
+    if rest:
+        lines.append(rest)
+    lines = lines[:max_lines] or [""]
+    lines[-1] = fm.elidedText(lines[-1], Qt.TextElideMode.ElideRight, int(width))
+    return lines
+
+
+def place_callout_card(
+    box_rect: Any,
+    card_w: float,
+    card_h: float,
+    *,
+    min_y: float,
+    max_y: float,
+    max_x: float,
+    boxes: list[Any],
+    labels: list[Any],
+    gap: float = 6.0,
+    min_x: float = 6.0,
+) -> Any:
+    """Pick where a callout card goes next to ``box_rect``.
+
+    Tries positions above, below, right of, and left of the box (each aligned to the box's
+    left edge, right edge, and centre), then the same rows stacked further away. A position
+    that covers no other card and no other device box wins; nearer positions win ties.
+    If every position collides, the one with the least weighted overlap is used
+    (covering another card costs more than covering a box).
+    """
+    from PySide6.QtCore import QRectF
+
+    b = box_rect
+    xs = (b.left(), b.right() - card_w, b.center().x() - card_w / 2.0)
+    ys_side = (b.top(), b.bottom() - card_h, b.center().y() - card_h / 2.0)
+    raw: list[tuple[float, float]] = []
+    for step in range(4):
+        off = step * (card_h + gap)
+        raw += [(x, b.top() - card_h - gap - off) for x in xs]
+        raw += [(x, b.bottom() + gap + off) for x in xs]
+        side = step * (card_w + gap)
+        raw += [(b.right() + gap + side, y) for y in ys_side]
+        raw += [(b.left() - card_w - gap - side, y) for y in ys_side]
+
+    own = QRectF(b)
+    best: Any = None
+    best_key: tuple[float, float, int] | None = None
+    for order, (x, y) in enumerate(raw):
+        cx = max(min_x, min(x, max_x - card_w))
+        cy = max(min_y, min(y, max_y - card_h))
+        cand = QRectF(cx, cy, card_w, card_h)
+        cost = 0.0
+        for other in labels:
+            inter = cand.intersected(other)
+            if not inter.isEmpty():
+                cost += 4.0 * inter.width() * inter.height()
+        for other in boxes:
+            inter = cand.intersected(other)
+            if inter.isEmpty():
+                continue
+            weight = 2.0 if other == own else 1.0
+            cost += weight * inter.width() * inter.height()
+        dist = abs(cand.center().x() - b.center().x()) + abs(cand.center().y() - b.center().y())
+        key = (cost, dist, order)
+        if best_key is None or key < best_key:
+            best_key = key
+            best = cand
+    return best
+
+
 def _draw_device_callout_card(
     painter: Any,
     *,
@@ -1079,11 +1222,13 @@ def _draw_device_callout_card(
     max_y: float,
     max_x: float,
     occupied: list[Any],
+    placed_labels: list[Any] | None = None,
     ui_scale: float = 1.0,
-) -> None:
+) -> Any:
     from PySide6.QtCore import QPointF, QRectF, Qt
     from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainterPath, QPen
 
+    labels = placed_labels if placed_labels is not None else []
     head_font = QFont("DejaVu Sans", max(8, int(round(8 * ui_scale))), QFont.Weight.Bold)
     body_font = QFont(
         "DejaVu Sans",
@@ -1095,52 +1240,37 @@ def _draw_device_callout_card(
 
     shown_lines = lines[:4]
     pad_x = 7.0 * ui_scale
-    head_h = 19.0 * ui_scale
     line_h = 15.0 * ui_scale
+    head_line_h = 15.0 * ui_scale
+
+    # Width: as wide as the text needs, but no wider than the device box unless the box is
+    # too narrow to read (then a fixed readable width). Long titles wrap to a second line.
+    text_w = float(fm_head.horizontalAdvance(header_text))
+    for ln in shown_lines:
+        text_w = max(text_w, float(fm_body.horizontalAdvance(ln)))
+    readable_w = 170.0 * ui_scale
+    cap_w = min(max(float(box_rect.width()), readable_w), max(readable_w, max_x * 0.44))
+    card_w = max(min(text_w + pad_x * 2 + 6.0 * ui_scale, cap_w), min(110.0 * ui_scale, cap_w))
+    inner_w = card_w - pad_x * 2
+
+    head_lines = _wrap_text_lines(fm_head, header_text, inner_w, 2)
+    head_h = len(head_lines) * head_line_h + 4.0 * ui_scale
     body_h = (len(shown_lines) * line_h + 6.0 * ui_scale) if shown_lines else 0.0
     card_h = head_h + body_h
 
-    max_text_w = fm_head.horizontalAdvance(header_text)
-    for ln in shown_lines:
-        max_text_w = max(max_text_w, fm_body.horizontalAdvance(ln))
-    card_w = min(
-        max(float(max_text_w) + pad_x * 2 + 6.0 * ui_scale, 128.0 * ui_scale),
-        max(220.0 * ui_scale, max_x * 0.44),
+    chosen = place_callout_card(
+        box_rect,
+        card_w,
+        card_h,
+        min_y=min_y,
+        max_y=max_y,
+        max_x=max_x,
+        boxes=occupied,
+        labels=labels,
+        gap=6.0 * ui_scale,
+        min_x=6.0 * ui_scale,
     )
-
-    candidates = [
-        QRectF(box_rect.left(), box_rect.top() - card_h - 6.0 * ui_scale, card_w, card_h),
-        QRectF(box_rect.left(), box_rect.bottom() + 6.0 * ui_scale, card_w, card_h),
-        QRectF(box_rect.right() + 8.0 * ui_scale, box_rect.top(), card_w, card_h),
-        QRectF(box_rect.left() - card_w - 8.0 * ui_scale, box_rect.top(), card_w, card_h),
-    ]
-
-    chosen: QRectF | None = None
-    for cand in candidates:
-        cx = max(6.0 * ui_scale, min(cand.left(), max_x - card_w))
-        cy = max(min_y, min(cand.top(), max_y - card_h))
-        clamped = QRectF(cx, cy, card_w, card_h)
-        if not any(clamped.intersects(other) for other in occupied):
-            chosen = clamped
-            break
-
-    if chosen is None:
-        best_score = float("inf")
-        for cand in candidates:
-            cx = max(6.0 * ui_scale, min(cand.left(), max_x - card_w))
-            cy = max(min_y, min(cand.top(), max_y - card_h))
-            clamped = QRectF(cx, cy, card_w, card_h)
-            overlap = 0.0
-            for other in occupied:
-                inter = clamped.intersected(other)
-                if not inter.isEmpty():
-                    overlap += inter.width() * inter.height()
-            if overlap < best_score:
-                best_score = overlap
-                chosen = clamped
-
-    assert chosen is not None
-    occupied.append(chosen)
+    labels.append(chosen)
 
     card_center = chosen.center()
     if not chosen.intersects(box_rect.adjusted(-4 * ui_scale, -4 * ui_scale, 4 * ui_scale, 4 * ui_scale)):
@@ -1167,12 +1297,12 @@ def _draw_device_callout_card(
 
     painter.setFont(head_font)
     painter.setPen(header_fg)
-    elided_head = fm_head.elidedText(header_text, Qt.TextElideMode.ElideRight, int(chosen.width() - pad_x * 2))
-    painter.drawText(
-        QRectF(chosen.left() + pad_x, chosen.top(), chosen.width() - pad_x * 2, head_h),
-        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-        elided_head,
-    )
+    for idx, hl in enumerate(head_lines):
+        painter.drawText(
+            QRectF(chosen.left() + pad_x, chosen.top() + 2.0 * ui_scale + idx * head_line_h, inner_w, head_line_h),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            hl,
+        )
 
     if shown_lines:
         painter.setFont(body_font)
@@ -1182,12 +1312,13 @@ def _draw_device_callout_card(
                 painter.setPen(QColor("#fde047"))
             else:
                 painter.setPen(QColor("#a7f3d0"))
-            elided = fm_body.elidedText(line, Qt.TextElideMode.ElideRight, int(chosen.width() - pad_x * 2))
+            elided = fm_body.elidedText(line, Qt.TextElideMode.ElideRight, int(inner_w))
             painter.drawText(
-                QRectF(chosen.left() + pad_x, ly, chosen.width() - pad_x * 2, line_h),
+                QRectF(chosen.left() + pad_x, ly, inner_w, line_h),
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                 elided,
             )
+    return chosen
 
 
 def export_photo_feedback(

@@ -7864,9 +7864,9 @@ class Session:
         unboxed_callouts: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Capture-phase check: may the tech close the cabinet and leave site?"""
-        from panelcad.reconstruct.feedback import build_photo_feedback_report
+        from panelcad.reconstruct.feedback import capture_site_exit_readiness
 
-        report = build_photo_feedback_report(self, photo_id=photo_id, unboxed_callouts=unboxed_callouts)
+        report = capture_site_exit_readiness(self, photo_id=photo_id, unboxed_callouts=unboxed_callouts)
         keys = (
             "photo_id",
             "safe_to_leave_site",

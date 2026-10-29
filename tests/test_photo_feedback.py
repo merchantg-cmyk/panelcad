@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen
 from PySide6.QtWidgets import QApplication
 
@@ -790,3 +791,76 @@ def test_mobile_web_update_box_and_refine_box_endpoints_and_two_click_mode(tmp_p
     finally:
         dlg.stop_server()
         dlg.close()
+
+
+def test_desktop_step1_and_phone_status_report_the_same_readiness(tmp_path: Path) -> None:
+    """Desktop Step 1 and /api/sessions/<id>/status must check the same photo and count Ready the same way."""
+    import json
+    import urllib.request
+    from panelcad.reconstruct.capture_web import CaptureWebServer
+    from panelcad.reconstruct.feedback import default_capture_photo_id
+
+    _app()
+    session, photo_id = _build_mixed_reconstruct_session(tmp_path)
+    # A door photo listed before the backpanel used to send desktop (first row) and the
+    # phone page (its own role list) to different photos.
+    door = QImage(320, 240, QImage.Format.Format_RGB32)
+    door.fill(QColor("#475569"))
+    door_path = tmp_path / "door_inside.png"
+    assert door.save(str(door_path))
+    session.reconstruct_add_photos([door_path], role="door_inside")
+    store = ensure_reconstruction(session.project)
+    store.photos.insert(0, store.photos.pop())
+    assert default_capture_photo_id(session) == photo_id
+
+    wiz = ReconstructWizard(session)
+    wiz._refresh_photos()
+    desktop = wiz.refresh_capture_feedback()
+    assert desktop["photo_id"] == photo_id
+
+    server = CaptureWebServer(tmp_path / "capture-ws", host="127.0.0.1", port=0, live_session=session)
+    server.start()
+    try:
+        sid = server.live_session_id
+        with urllib.request.urlopen(f"http://127.0.0.1:{server.port}/api/sessions/{sid}/status", timeout=5) as resp:
+            phone = json.loads(resp.read().decode("utf-8"))
+    finally:
+        server.stop()
+        wiz.close()
+
+    for key in ("photo_id", "total_detected", "confirmed_count", "missing_info_count", "site_exit_banner"):
+        assert phone[key] == desktop[key], key
+    assert "(2/4 Ready)" in desktop["site_exit_banner"]
+    assert wiz.site_exit_banner.text() == phone["site_exit_banner"]
+
+
+def test_callout_cards_do_not_cover_other_cards_or_device_boxes(tmp_path: Path) -> None:
+    """Placement avoids other cards and boxes when there is room, for any box layout."""
+    from PySide6.QtCore import QRectF
+    from panelcad.reconstruct.feedback import place_callout_card
+
+    _app()
+    boxes = [QRectF(100 + i * 130, 200, 120, 160) for i in range(5)]
+    labels: list[QRectF] = []
+    for b in boxes:
+        card = place_callout_card(
+            b, 160, 40, min_y=0, max_y=800, max_x=1000, boxes=boxes, labels=labels
+        )
+        assert not any(card.intersects(o) for o in labels)
+        assert not any(card.intersects(o) for o in boxes)
+        labels.append(card)
+
+
+def test_photo_feedback_dialog_banner_once_and_rows_wrap(tmp_path: Path) -> None:
+    _app()
+    session, photo_id = _build_mixed_reconstruct_session(tmp_path)
+    dlg = PhotoFeedbackDialog(session, photo_id=photo_id)
+    banner = dlg.site_exit_banner_label.text()
+    assert banner and banner not in dlg.summary_label.text()
+    for lst in (dlg.device_list, dlg.shot_list_widget):
+        assert lst.wordWrap()
+        assert lst.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    wiz = ReconstructWizard(session)
+    assert wiz.shot_list.wordWrap()
+    dlg.close()
+    wiz.close()

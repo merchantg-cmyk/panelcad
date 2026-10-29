@@ -29,7 +29,9 @@ from typing import Any
 
 from panelcad.api.session import Session
 from panelcad.reconstruct.feedback import (
-    build_photo_feedback_report,
+    CAPTURE_PRIMARY_ROLES,
+    capture_site_exit_readiness,
+    default_capture_photo_id,
     render_annotated_cabinet_photo,
 )
 from panelcad.reconstruct.models import ensure_reconstruction, public_item, public_photo
@@ -254,10 +256,7 @@ class CaptureWorkspace:
         store = ensure_reconstruction(sess.project)
         meta = self._read_meta(session_id)
         unboxed_map = meta.get("unboxed_callouts") or {}
-        primary_photos = [
-            p for p in store.photos if p.role in {"backpanel", "overview", "door", "other"}
-        ] or list(store.photos)
-        active_pid = primary_photos[0].id if primary_photos else (store.photos[0].id if store.photos else "")
+        active_pid = default_capture_photo_id(store)
         safe = False
         status = "needs_analysis"
         banner = "⚠ CAPTURE NOT ANALYZED YET — Add a Cabinet Photo"
@@ -266,7 +265,7 @@ class CaptureWorkspace:
         missing_count = 0
         if active_pid:
             try:
-                rep = build_photo_feedback_report(
+                rep = capture_site_exit_readiness(
                     sess,
                     photo_id=active_pid,
                     unboxed_callouts=unboxed_map.get(active_pid) or [],
@@ -398,16 +397,11 @@ class CaptureWorkspace:
                     "items": items,
                 }
 
-            chosen_pid = str(photo_id or "").strip()
-            if not chosen_pid:
-                primary = [
-                    p for p in store.photos if p.role in {"backpanel", "overview", "door", "other"}
-                ]
-                chosen_pid = primary[0].id if primary else store.photos[0].id
+            chosen_pid = str(photo_id or "").strip() or default_capture_photo_id(store)
 
             callouts = self.get_unboxed_callouts(sid, chosen_pid)
             mode = filter_mode if filter_mode in {"all", "missing_only", "confirmed_only"} else "all"
-            report = build_photo_feedback_report(
+            report = capture_site_exit_readiness(
                 sess,
                 photo_id=chosen_pid,
                 filter_mode=mode,  # type: ignore[arg-type]
@@ -457,10 +451,12 @@ class CaptureWorkspace:
             dest = uploads_dir / f"{len(list(uploads_dir.iterdir())) + 1:02d}_{safe_name}"
             dest.write_bytes(image_bytes)
 
+            # Older phone pages sent "overview"/"door"; map them onto real photo roles.
+            role = {"overview": "other", "door": "door_inside"}.get(role, role)
             valid_roles = {
-                "overview",
                 "backpanel",
-                "door",
+                "door_inside",
+                "door_outside",
                 "terminal_strip",
                 "nameplate",
                 "part_label",
@@ -472,7 +468,7 @@ class CaptureWorkspace:
             added_photos = added.get("added") or []
             new_pid = str(added_photos[0]["id"]) if added_photos else ""
 
-            if analyze and new_pid and role_val in {"backpanel", "overview", "door"}:
+            if analyze and new_pid and role_val in CAPTURE_PRIMARY_ROLES:
                 try:
                     sess.reconstruct_site_exit_check(photo_id=new_pid)
                 except Exception:
@@ -673,12 +669,7 @@ class CaptureWorkspace:
             sid = _slugify(session_id)
             sess = self.get_session(sid)
             store = ensure_reconstruction(sess.project)
-            chosen_pid = str(photo_id or "").strip()
-            if not chosen_pid and store.photos:
-                primary = [
-                    p for p in store.photos if p.role in {"backpanel", "overview", "door", "other"}
-                ]
-                chosen_pid = primary[0].id if primary else store.photos[0].id
+            chosen_pid = str(photo_id or "").strip() or default_capture_photo_id(store)
             callouts = self.get_unboxed_callouts(sid, chosen_pid) if chosen_pid else []
             mode = filter_mode if filter_mode in {"all", "missing_only", "confirmed_only"} else "all"
             qimg = render_annotated_cabinet_photo(
@@ -1403,13 +1394,26 @@ MOBILE_CAPTURE_HTML = """<!DOCTYPE html>
   }
   .shot-card-top {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 6px;
     font-weight: 700;
     font-size: 13px;
     margin-bottom: 4px;
   }
+  /* Long device names wrap onto more lines instead of being cut off. */
+  .shot-card-top > span:first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .shot-card-top > .pill {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .shot-card-reasons { overflow-wrap: anywhere; }
   .shot-card-reasons {
     font-size: 12px;
     color: #fde68a;
@@ -1567,8 +1571,8 @@ MOBILE_CAPTURE_HTML = """<!DOCTYPE html>
   <input type="file" id="galleryCabinetInput" accept="image/*" style="display:none" onchange="uploadCabinetPhoto(this.files)">
   <select id="photoRoleSelect" class="select-pill" style="max-width:145px;">
     <option value="backpanel">Role: Backpanel</option>
-    <option value="overview">Role: Overview</option>
-    <option value="door">Role: Door Inner</option>
+    <option value="other">Role: Overview</option>
+    <option value="door_inside">Role: Door Inner</option>
     <option value="terminal_strip">Role: Terminals</option>
     <option value="nameplate">Role: Nameplate</option>
   </select>
@@ -1861,7 +1865,7 @@ function renderBanner(st) {
 
 function renderPhotoTabs(st) {
   const tabsEl = document.getElementById("photoTabs");
-  const photos = (st.photos || []).filter(p => ["backpanel", "overview", "door", "other"].includes(p.role));
+  const photos = (st.photos || []).filter(p => ["backpanel", "door_inside", "door_outside", "other"].includes(p.role));
   const list = photos.length > 0 ? photos : (st.photos || []);
   tabsEl.innerHTML = "";
   for (const p of list) {

@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListView,
     QListWidget,
     QListWidgetItem,
     QPushButton,
@@ -369,6 +370,15 @@ class PhotoPeekDock(QWidget):
             self.view.set_photo(path, payload.get("region") or item.get("region"))
 
 
+def _wrap_list_rows(widget: QListWidget) -> None:
+    """Wrap long rows to the list width instead of clipping them or adding a side scrollbar."""
+    widget.setWordWrap(True)
+    widget.setTextElideMode(Qt.TextElideMode.ElideNone)
+    widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    widget.setResizeMode(QListView.ResizeMode.Adjust)
+    widget.setUniformItemSizes(False)
+
+
 class PhotoFeedbackDialog(QDialog):
     """Interactive Cabinet Photo Feedback Overlay.
 
@@ -467,10 +477,12 @@ class PhotoFeedbackDialog(QDialog):
         right_layout.addWidget(QLabel("Before You Leave Site — Required Close-Ups & Context:"))
         self.shot_list_widget = QListWidget()
         self.shot_list_widget.setMaximumHeight(110)
+        _wrap_list_rows(self.shot_list_widget)
         right_layout.addWidget(self.shot_list_widget)
 
         right_layout.addWidget(QLabel("Boxed Devices on This Photo (click a box or row):"))
         self.device_list = QListWidget()
+        _wrap_list_rows(self.device_list)
         self.device_list.currentRowChanged.connect(self._on_device_row_changed)
         right_layout.addWidget(self.device_list, 1)
 
@@ -583,12 +595,15 @@ class PhotoFeedbackDialog(QDialog):
         st = self.session.reconstruct_status()
         photos = st.get("photos") or []
         selected_idx = 0
+        from panelcad.reconstruct.feedback import default_capture_photo_id
+
+        want = self._photo_id or (default_capture_photo_id(self.session) if photos else "")
         for idx, p in enumerate(photos):
             pid = str(p.get("id") or "")
             name = str(p.get("original_name") or pid)
             role = str(p.get("role") or "")
             self.photo_combo.addItem(f"{pid} · {name} ({role})", pid)
-            if self._photo_id and pid == self._photo_id:
+            if want and pid == want:
                 selected_idx = idx
         if photos:
             self.photo_combo.setCurrentIndex(selected_idx)
@@ -618,7 +633,9 @@ class PhotoFeedbackDialog(QDialog):
             return {}
 
         if not self._photo_id:
-            self._photo_id = str(photos[0].get("id") or "")
+            from panelcad.reconstruct.feedback import default_capture_photo_id
+
+            self._photo_id = default_capture_photo_id(self.session) or str(photos[0].get("id") or "")
 
         mode = self.current_filter_mode()
         report = self.session.reconstruct_photo_feedback(
@@ -638,7 +655,8 @@ class PhotoFeedbackDialog(QDialog):
             self.site_exit_banner_label.setStyleSheet(
                 "font-weight: 700; font-size: 13px; padding: 7px 12px; border-radius: 4px; background: #7f1d1d; color: #fffbeb;"
             )
-        self.summary_label.setText(str(report.get("summary_text") or ""))
+        # The banner label above already shows the site-exit sentence; show only the detail here.
+        self.summary_label.setText(str(report.get("detail_text") or report.get("summary_text") or ""))
 
         self.shot_list_widget.clear()
         shots = report.get("on_site_shot_list") or []
