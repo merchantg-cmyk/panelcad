@@ -1,5 +1,18 @@
 """As-built reconstruction from real panel photos."""
 
+from panelcad.reconstruct.feedback import (
+    DeviceFeedbackBox,
+    PhotoFeedbackReport,
+    add_missed_device_on_photo,
+    build_photo_feedback_model,
+    build_photo_feedback_report,
+    export_photo_feedback,
+    link_closeup_to_device,
+    refine_device_box_on_photo,
+    render_annotated_cabinet_photo,
+    snap_drawn_box_to_device_edges,
+    update_device_box_on_photo,
+)
 from panelcad.reconstruct.models import (
     DIN_RAIL_HEIGHT_MM,
     PERSPECTIVE_SCALE_FRACTION,
@@ -16,8 +29,19 @@ from panelcad.reconstruct.service import (
 from panelcad.reconstruct.vision import FakeVision, StubVision, get_backend
 
 __all__ = [
+    "DeviceFeedbackBox",
+    "PhotoFeedbackReport",
+    "add_missed_device_on_photo",
     "apply_to_print",
+    "build_photo_feedback_model",
+    "build_photo_feedback_report",
+    "export_photo_feedback",
+    "link_closeup_to_device",
     "record_wire_landing",
+    "refine_device_box_on_photo",
+    "render_annotated_cabinet_photo",
+    "snap_drawn_box_to_device_edges",
+    "update_device_box_on_photo",
     "synthesize_reconstruct_schematic",
     "DIN_RAIL_HEIGHT_MM",
     "PERSPECTIVE_SCALE_FRACTION",

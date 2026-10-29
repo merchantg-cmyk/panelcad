@@ -1232,6 +1232,30 @@ class MainWindow(QMainWindow):
             self._status(result.summary)
         self._check_runner.schedule()
 
+    def open_photo_feedback_overlay(self) -> None:
+        from panelcad.gui.photo_viewer import PhotoFeedbackDialog
+
+        if self._on_start_page():
+            self.new_project()
+        dlg = PhotoFeedbackDialog(self.session, parent=self)
+        dlg.exec()
+        self._refresh_from_session(fit=False)
+        self._check_runner.schedule()
+
+    def open_mobile_capture_server(self) -> None:
+        from panelcad.gui.photo_viewer import MobileCaptureServerDialog
+
+        if self._on_start_page():
+            self.new_project()
+        dlg = MobileCaptureServerDialog(
+            self.session,
+            on_session_updated=lambda: self._refresh_from_session(fit=False),
+            parent=self,
+        )
+        dlg.exec()
+        self._refresh_from_session(fit=False)
+        self._check_runner.schedule()
+
     def _peek_reconstruct_photo(self) -> None:
         peek = getattr(self, "photo_peek", None)
         if peek is None:
@@ -1557,6 +1581,8 @@ class MainWindow(QMainWindow):
         tools.addAction(self._act("&Motor sizing", None, self.show_motor_sizing))
         panel_menu.addAction(self._act("Cutout &drawings…", None, self.cutout_drawings))
         tools.addAction(self._act("Reconstruct from &photos…", None, self.reconstruct_from_photos))
+        tools.addAction(self._act("Cabinet Photo &Feedback Overlay…", None, self.open_photo_feedback_overlay))
+        tools.addAction(self._act("&Mobile Field Capture Server (Phone QR)…", None, self.open_mobile_capture_server))
         tools.addAction(self._act("Build layout from sc&hematic", None, self.pack_from_schematic))
         tools.addAction(self._act("Convert drawing standard...", None, self.convert_drawing_standard))
 

@@ -210,11 +210,16 @@ class ReconstructWizard(QDialog):
         self._sync_nav()
 
     def _photos_page(self) -> QWidget:
+        from panelcad.gui.photo_viewer import PhotoView
+
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.addWidget(QLabel("Panel photos"))
+        layout.addWidget(QLabel("Panel photos (Capture Phase — check site-exit readiness before leaving cabinet)"))
         self.photo_list = QListWidget()
-        layout.addWidget(self.photo_list, 1)
+        self.photo_list.setMaximumHeight(115)
+        self.photo_list.currentRowChanged.connect(lambda *_a: self.refresh_capture_feedback())
+        layout.addWidget(self.photo_list)
+
         row = QHBoxLayout()
         add = QPushButton("Add photos…")
         add.clicked.connect(self._add_photos)
@@ -225,11 +230,56 @@ class ReconstructWizard(QDialog):
         tag.clicked.connect(self._tag_selected)
         print_btn = QPushButton("Old drawing (optional)…")
         print_btn.clicked.connect(self._attach_print)
+        self.capture_check_btn = QPushButton("Check Site-Exit Readiness (Analyze Capture)")
+        self.capture_check_btn.clicked.connect(self.run_capture_site_exit_check)
+        self.phone_capture_btn = QPushButton("📱 Phone Capture Feed…")
+        self.phone_capture_btn.clicked.connect(self.open_mobile_capture_server_dialog)
         row.addWidget(add)
         row.addWidget(self.role)
         row.addWidget(tag)
         row.addWidget(print_btn)
+        row.addWidget(self.capture_check_btn)
+        row.addWidget(self.phone_capture_btn)
         layout.addLayout(row)
+
+        self.site_exit_banner = QLabel("Add a cabinet photo and click 'Check Site-Exit Readiness' before leaving the site.")
+        self.site_exit_banner.setWordWrap(True)
+        self.site_exit_banner.setStyleSheet(
+            "font-weight: 700; font-size: 12px; padding: 6px 10px; border-radius: 4px; background: #1e293b; color: #f8fafc;"
+        )
+        layout.addWidget(self.site_exit_banner)
+
+        cap_split = QHBoxLayout()
+        self.capture_feedback_view = PhotoView()
+        self.capture_feedback_view.setMinimumSize(420, 260)
+        self.capture_feedback_view.region_drawn.connect(self._on_capture_region_drawn)
+        cap_split.addWidget(self.capture_feedback_view, 3)
+
+        right_col = QVBoxLayout()
+        right_col.addWidget(QLabel("Before You Leave Site — Required Close-Ups & Context:"))
+        self.shot_list = QListWidget()
+        right_col.addWidget(self.shot_list, 1)
+
+        cap_btns = QHBoxLayout()
+        self.capture_draw_missed_btn = QPushButton("＋ Draw Box on Missed Device")
+        self.capture_draw_missed_btn.setCheckable(True)
+        self.capture_draw_missed_btn.toggled.connect(
+            lambda checked: self.capture_feedback_view.set_draw_missed_box_mode(bool(checked))
+        )
+        self.capture_snap_boxes_btn = QPushButton("✨ Auto-Snap Boxes")
+        self.capture_snap_boxes_btn.clicked.connect(self._on_capture_snap_all_boxes)
+        self.capture_link_closeup_btn = QPushButton("Attach Close-Up…")
+        self.capture_link_closeup_btn.clicked.connect(self._on_capture_attach_closeup)
+        self.capture_overlay_btn = QPushButton("Open Full Feedback Overlay…")
+        self.capture_overlay_btn.clicked.connect(lambda: self.open_photo_feedback_overlay())
+        cap_btns.addWidget(self.capture_draw_missed_btn)
+        cap_btns.addWidget(self.capture_snap_boxes_btn)
+        cap_btns.addWidget(self.capture_link_closeup_btn)
+        cap_btns.addWidget(self.capture_overlay_btn)
+        right_col.addLayout(cap_btns)
+
+        cap_split.addLayout(right_col, 2)
+        layout.addLayout(cap_split, 1)
         return page
 
     def _scale_page(self) -> QWidget:
@@ -371,6 +421,14 @@ class ReconstructWizard(QDialog):
         row.addWidget(env)
         row.addWidget(place)
         layout.addLayout(row)
+        feedback_row = QHBoxLayout()
+        self.photo_feedback_btn = QPushButton("Photo Feedback Overlay / Add Missed Device…")
+        self.export_feedback_btn = QPushButton("Export Annotated Photo…")
+        self.photo_feedback_btn.clicked.connect(lambda: self.open_photo_feedback_overlay())
+        self.export_feedback_btn.clicked.connect(self._export_photo_feedback_dialog)
+        feedback_row.addWidget(self.photo_feedback_btn)
+        feedback_row.addWidget(self.export_feedback_btn)
+        layout.addLayout(feedback_row)
         self.place_note = QLabel(
             "Place confirmed writes layout-ready parts. "
             "Each skipped part is listed here with the reason."
@@ -558,6 +616,68 @@ class ReconstructWizard(QDialog):
         item = self.item_list.currentItem()
         return str(item.data(Qt.ItemDataRole.UserRole) or "") if item else ""
 
+    def open_photo_feedback_overlay(
+        self,
+        photo_id: str | None = None,
+        *,
+        selected_item_id: str | None = None,
+        modal: bool = True,
+    ) -> Any:
+        from panelcad.gui.photo_viewer import PhotoFeedbackDialog
+
+        chosen_item_id = selected_item_id or self._selected_item_id() or None
+        dlg = PhotoFeedbackDialog(
+            self.session,
+            photo_id=photo_id,
+            selected_item_id=chosen_item_id,
+            parent=self,
+        )
+        if modal:
+            dlg.exec()
+            self._refresh_items()
+            self._refresh_steps()
+            self._refresh_review()
+            self.refresh_capture_feedback()
+        return dlg
+
+    def open_mobile_capture_server_dialog(self, *, modal: bool = True) -> Any:
+        from panelcad.gui.photo_viewer import MobileCaptureServerDialog
+
+        dlg = MobileCaptureServerDialog(
+            self.session,
+            on_session_updated=self._on_mobile_session_synced,
+            parent=self,
+        )
+        if modal:
+            dlg.exec()
+            self._on_mobile_session_synced()
+        return dlg
+
+    def _on_mobile_session_synced(self) -> None:
+        self._refresh_photos()
+        self._refresh_items()
+        self._refresh_steps()
+        self._refresh_review()
+        self.refresh_capture_feedback()
+
+    def _export_photo_feedback_dialog(self) -> None:
+        chosen, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Annotated Cabinet Photo Feedback",
+            "cabinet-photo-feedback.png",
+            "PNG Images (*.png)",
+        )
+        if not chosen:
+            return
+        try:
+            res = self.session.reconstruct_export_photo_feedback(
+                output_path=chosen,
+                selected_item_id=self._selected_item_id() or None,
+            )
+            self.place_note.setText(f"Exported annotated photo feedback to {res['output_path']}")
+        except (KeyError, ValueError, OSError) as exc:
+            QMessageBox.warning(self, "Export Photo Feedback", str(exc))
+
     def _confirm_catalog(self) -> None:
         item_id = self._selected_item_id()
         if not item_id:
@@ -640,7 +760,150 @@ class ReconstructWizard(QDialog):
             self.photo_list.addItem(row)
             self.scale_photo.addItem(name, photo.get("id"))
         self.scale_photo.blockSignals(False)
+        if self.photo_list.count() > 0 and self.photo_list.currentRow() < 0:
+            self.photo_list.setCurrentRow(0)
         self._show_scale_photo()
+        self.refresh_capture_feedback()
+
+    def _selected_capture_photo_id(self) -> str | None:
+        cur = self.photo_list.currentItem()
+        if cur is not None:
+            pid = str(cur.data(Qt.ItemDataRole.UserRole) or "")
+            if pid:
+                return pid
+        photos = self.session.reconstruct_list_photos().get("photos") or []
+        for p_entry in photos:
+            if p_entry.get("role") == "backpanel":
+                return str(p_entry.get("id") or "")
+        return str(photos[0].get("id") or "") if photos else None
+
+    def run_capture_site_exit_check(self) -> dict[str, Any]:
+        """Run label/device detection if needed and refresh Step 1 Site-Exit Readiness."""
+        pid = self._selected_capture_photo_id()
+        if not pid:
+            return {}
+        store_items = self.session.reconstruct_status().get("items") or []
+        if not any(i.get("photo_id") == pid for i in store_items):
+            try:
+                kwargs: dict[str, Any] = {"photo_id": pid}
+                if self.vision is not None:
+                    kwargs["vision"] = self.vision
+                self.session.reconstruct_identify(**kwargs)
+            except Exception:
+                pass
+        return self.refresh_capture_feedback(photo_id=pid)
+
+    def refresh_capture_feedback(self, photo_id: str | None = None) -> dict[str, Any]:
+        from panelcad.reconstruct.feedback import build_photo_feedback_report, render_annotated_cabinet_photo
+
+        pid = photo_id or self._selected_capture_photo_id()
+        if not hasattr(self, "site_exit_banner"):
+            return {}
+        if not pid:
+            self.site_exit_banner.setText(
+                "Add a cabinet photo and click 'Check Site-Exit Readiness' before leaving the site."
+            )
+            self.site_exit_banner.setStyleSheet(
+                "font-weight: 700; font-size: 12px; padding: 6px 10px; border-radius: 4px; background: #1e293b; color: #f8fafc;"
+            )
+            self.shot_list.clear()
+            return {}
+        try:
+            report = build_photo_feedback_report(self.session, photo_id=pid)
+        except Exception:
+            return {}
+
+        banner = str(report.get("site_exit_banner") or "")
+        safe = bool(report.get("safe_to_leave_site"))
+        self.site_exit_banner.setText(banner)
+        if safe:
+            self.site_exit_banner.setStyleSheet(
+                "font-weight: 700; font-size: 12px; padding: 6px 10px; border-radius: 4px; background: #064e3b; color: #ecfdf5;"
+            )
+        else:
+            self.site_exit_banner.setStyleSheet(
+                "font-weight: 700; font-size: 12px; padding: 6px 10px; border-radius: 4px; background: #7f1d1d; color: #fffbeb;"
+            )
+
+        self.shot_list.clear()
+        shots = report.get("on_site_shot_list") or []
+        if shots:
+            for s in shots:
+                item = QListWidgetItem(f"⚠ {s}")
+                item.setForeground(QColor("#fde047"))
+                self.shot_list.addItem(item)
+        else:
+            item = QListWidgetItem("✓ All detected devices have legible context — safe to leave site.")
+            item.setForeground(QColor("#86efac"))
+            self.shot_list.addItem(item)
+
+        img = render_annotated_cabinet_photo(self.session, photo_id=pid, include_banner=True)
+        pw = int(report.get("width_px") or img.width())
+        ui_scale = max(1.0, min(3.2, pw / 1280.0))
+        top_off = int(round(58 * ui_scale))
+        self.capture_feedback_view.set_annotated_feedback(
+            img,
+            source_width=pw,
+            source_height=int(report.get("height_px") or max(1, img.height() - top_off)),
+            boxes=report.get("boxes") or [],
+            banner_top_offset=top_off,
+        )
+        return report
+
+    def _on_capture_region_drawn(self, region: dict[str, float]) -> None:
+        pid = self._selected_capture_photo_id()
+        if not pid:
+            return
+        self.capture_draw_missed_btn.setChecked(False)
+        self.session.reconstruct_add_missed_device(
+            pid,
+            region,
+            note="Missed device boxed during site capture",
+            snap_to_edges=True,
+        )
+        self._refresh_items()
+        self.refresh_capture_feedback(photo_id=pid)
+
+    def _on_capture_snap_all_boxes(self) -> None:
+        pid = self._selected_capture_photo_id()
+        if not pid:
+            return
+        items = self.session.reconstruct_status().get("items") or []
+        for it in items:
+            if it.get("photo_id") == pid and it.get("role") == "part":
+                try:
+                    self.session.reconstruct_update_device_box(str(it.get("id") or ""), snap_to_edges=True)
+                except Exception:
+                    pass
+        self._refresh_items()
+        self.refresh_capture_feedback(photo_id=pid)
+
+    def _on_capture_attach_closeup(self) -> None:
+        from panelcad.reconstruct.feedback import build_photo_feedback_report
+
+        pid = self._selected_capture_photo_id()
+        target_item_id: str | None = None
+        if pid:
+            try:
+                rep = build_photo_feedback_report(self.session, photo_id=pid)
+                boxes = rep.get("boxes") or []
+                missing_boxes = [b for b in boxes if b.get("status_category") == "missing_info"]
+                if missing_boxes:
+                    target_item_id = str(missing_boxes[0].get("item_id") or "") or None
+                elif boxes:
+                    target_item_id = str(boxes[0].get("item_id") or "") or None
+            except Exception:
+                target_item_id = None
+        dlg = self.open_photo_feedback_overlay(
+            photo_id=pid,
+            selected_item_id=target_item_id,
+            modal=False,
+        )
+        dlg._on_attach_closeup_clicked()
+        self._refresh_items()
+        self._refresh_steps()
+        self._refresh_review()
+        self.refresh_capture_feedback(photo_id=pid)
 
     def _show_scale_photo(self) -> None:
         photo_id = str(self.scale_photo.currentData() or "")

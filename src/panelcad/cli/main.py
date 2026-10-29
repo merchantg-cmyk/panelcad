@@ -3987,6 +3987,55 @@ def reconstruct_unconfirmed_cmd(project: Path) -> None:
     typer.echo(json.dumps(_recon_session(project).reconstruct_unconfirmed(), indent=2))
 
 
+@app.command("capture-server")
+def capture_server_cmd(
+    host: str = typer.Option("0.0.0.0", "--host", help="Bind host (default 0.0.0.0 for LAN/VPN phone access)"),
+    port: int = typer.Option(8788, "--port", help="HTTP port (default 8788)"),
+    workspace: Path = typer.Option(
+        Path("./panelcad-captures"),
+        "--workspace",
+        "-w",
+        help="Directory where mobile capture sessions (.panelcad + uploaded photos) are stored",
+    ),
+    project: Optional[Path] = typer.Option(
+        None,
+        "--project",
+        "-p",
+        help="Optional existing .panelcad file to attach as a live session",
+    ),
+    webhook_url: str = typer.Option(
+        "",
+        "--webhook-url",
+        help="Optional webhook URL notified when the user taps Notify / Sync on their phone",
+    ),
+    access_token: str = typer.Option(
+        "",
+        "--access-token",
+        help="Optional access token required on phone URLs (?token=...)",
+    ),
+) -> None:
+    """Start the PanelCAD Mobile Field Capture web server for phones and tablets."""
+    from panelcad.reconstruct.capture_web import CaptureWebServer
+
+    live_sess = Session.open(project) if project and project.exists() else None
+    srv = CaptureWebServer(
+        workspace,
+        host=host,
+        port=port,
+        webhook_url=webhook_url,
+        access_token=access_token,
+        live_session=live_sess,
+    )
+    typer.echo(f"PanelCAD Mobile Field Capture Server listening on {host}:{port}")
+    typer.echo(f"Workspace: {Path(workspace).resolve()}")
+    for item in srv.reachable_urls():
+        typer.echo(f"  • {item['label']}: {item['url']}")
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        srv.stop()
+
+
 def main() -> None:
     _configure_stdio()
     app()

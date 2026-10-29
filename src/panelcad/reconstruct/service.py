@@ -1865,6 +1865,16 @@ def record_wire_landing(
 
     synthesize_reconstruct_schematic(session)
     rebuild_checklist(store)
+    for step in store.checklist:
+        if step.kind == "trace_wire" and step.status == "open":
+            if (wire_no and step.wire_number == wire_no) or (
+                step.from_ref and step.from_ref.replace(":", ".").upper() == frm.upper()
+            ):
+                step.to_ref = to
+                step.wire_id = wire.id
+                step.status = "confirmed" if not is_inferred else "answered"
+                step.confirmed = not is_inferred
+                step.inferred = is_inferred
     return {
         "wire_id": wire.id,
         "number": str(wire.number or ""),

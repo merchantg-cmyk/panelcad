@@ -162,6 +162,7 @@ class ObservedItem(BaseModel):
     rail_id: str = ""
     confidence: float = 0.0
     unreadable: bool = False
+    closeup_photo_id: str = ""
 
 
 class ChecklistItem(BaseModel):

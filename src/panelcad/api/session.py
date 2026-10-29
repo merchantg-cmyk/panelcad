@@ -7839,6 +7839,179 @@ class Session:
 
         return apply_to_print(self, sheet_id=sheet_id)
 
+    def reconstruct_photo_feedback(
+        self,
+        photo_id: str | None = None,
+        *,
+        filter_mode: str = "all",
+        include_terminals: bool = False,
+        unboxed_callouts: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        from panelcad.reconstruct.feedback import build_photo_feedback_report
+
+        return build_photo_feedback_report(
+            self,
+            photo_id=photo_id,
+            filter_mode=filter_mode,  # type: ignore[arg-type]
+            include_terminals=include_terminals,
+            unboxed_callouts=unboxed_callouts,
+        )
+
+    def reconstruct_site_exit_check(
+        self,
+        photo_id: str | None = None,
+        *,
+        unboxed_callouts: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Capture-phase check: may the tech close the cabinet and leave site?"""
+        from panelcad.reconstruct.feedback import build_photo_feedback_report
+
+        report = build_photo_feedback_report(self, photo_id=photo_id, unboxed_callouts=unboxed_callouts)
+        keys = (
+            "photo_id",
+            "safe_to_leave_site",
+            "site_exit_status",
+            "site_exit_banner",
+            "on_site_shot_list",
+            "total_detected",
+            "confirmed_count",
+            "missing_info_count",
+            "closeup_needed_count",
+            "unboxed_count",
+        )
+        return {k: report[k] for k in keys}
+
+    def reconstruct_link_closeup(
+        self,
+        item_id: str,
+        *,
+        closeup_photo_path: Path | str | None = None,
+        closeup_photo_id: str = "",
+        closeup_role: str = "nameplate",
+        tag: str = "",
+        part_number: str = "",
+        brand: str = "",
+        envelope_w_mm: float | None = None,
+        envelope_h_mm: float | None = None,
+        envelope_d_mm: float | None = None,
+        mount: str = "",
+        library_id: str = "",
+    ) -> dict[str, Any]:
+        from panelcad.reconstruct.feedback import link_closeup_to_device
+
+        return link_closeup_to_device(
+            self,
+            item_id,
+            closeup_photo_path=closeup_photo_path,
+            closeup_photo_id=closeup_photo_id,
+            closeup_role=closeup_role,
+            tag=tag,
+            part_number=part_number,
+            brand=brand,
+            envelope_w_mm=envelope_w_mm,
+            envelope_h_mm=envelope_h_mm,
+            envelope_d_mm=envelope_d_mm,
+            mount=mount,
+            library_id=library_id,
+        )
+
+    def reconstruct_add_missed_device(
+        self,
+        photo_id: str,
+        region: dict[str, Any] | tuple[float, float, float, float] | list[float],
+        *,
+        tag: str = "",
+        part_number: str = "",
+        brand: str = "",
+        label_text: str = "",
+        envelope_w_mm: float | None = None,
+        envelope_h_mm: float | None = None,
+        envelope_d_mm: float | None = None,
+        mount: str = "",
+        library_id: str = "",
+        note: str = "",
+        closeup_photo_id: str = "",
+        snap_to_edges: bool = False,
+    ) -> dict[str, Any]:
+        from panelcad.reconstruct.feedback import add_missed_device_on_photo
+
+        return add_missed_device_on_photo(
+            self,
+            photo_id=photo_id,
+            region=region,
+            tag=tag,
+            part_number=part_number,
+            brand=brand,
+            label_text=label_text,
+            envelope_w_mm=envelope_w_mm,
+            envelope_h_mm=envelope_h_mm,
+            envelope_d_mm=envelope_d_mm,
+            mount=mount,
+            library_id=library_id,
+            note=note,
+            closeup_photo_id=closeup_photo_id,
+            snap_to_edges=snap_to_edges,
+        )
+
+    def reconstruct_update_device_box(
+        self,
+        item_id: str,
+        *,
+        box: dict[str, Any] | tuple[float, float, float, float] | list[float] | None = None,
+        snap_to_edges: bool = False,
+        search_margin_ratio: float = 0.12,
+    ) -> dict[str, Any]:
+        from panelcad.reconstruct.feedback import update_device_box_on_photo
+
+        return update_device_box_on_photo(
+            self,
+            item_id,
+            box=box,
+            snap_to_edges=snap_to_edges,
+            search_margin_ratio=search_margin_ratio,
+        )
+
+    def reconstruct_refine_device_box(
+        self,
+        photo_id: str,
+        box: dict[str, Any] | tuple[float, float, float, float] | list[float],
+        *,
+        search_margin_ratio: float = 0.12,
+    ) -> dict[str, float]:
+        from panelcad.reconstruct.feedback import refine_device_box_on_photo
+        from panelcad.reconstruct.models import ensure_reconstruction
+        from panelcad.reconstruct.store import resolve_path
+
+        store = ensure_reconstruction(self.project)
+        photo = store.photo(photo_id)
+        resolved = resolve_path(photo.path, getattr(self, "path", None))
+        if not resolved.is_file() and photo.source_path and Path(photo.source_path).is_file():
+            resolved = Path(photo.source_path)
+        rx, ry, rw, rh = refine_device_box_on_photo(resolved, box, search_margin_ratio=search_margin_ratio)
+        return {"x": float(rx), "y": float(ry), "w": float(rw), "h": float(rh)}
+
+    def reconstruct_export_photo_feedback(
+        self,
+        output_path: Path | str,
+        photo_id: str | None = None,
+        *,
+        filter_mode: str = "all",
+        selected_item_id: str | None = None,
+        unboxed_callouts: list[dict[str, Any]] | None = None,
+        include_banner: bool = True,
+    ) -> dict[str, Any]:
+        from panelcad.reconstruct.feedback import export_photo_feedback
+
+        return export_photo_feedback(
+            self,
+            output_path=output_path,
+            photo_id=photo_id,
+            filter_mode=filter_mode,  # type: ignore[arg-type]
+            selected_item_id=selected_item_id,
+            unboxed_callouts=unboxed_callouts,
+            include_banner=include_banner,
+        )
+
     def describe(self, sheet_id: str | None = None) -> dict[str, Any]:
         """Full structured snapshot for an AI to read without the GUI."""
         target = [self.sheet(sheet_id)] if sheet_id else list(self.project.sheets)
@@ -8398,6 +8571,9 @@ _ACTIVITY_METHODS: dict[str, Any] = {
     "reconstruct_clear_scale": lambda s, r, a, k: f"clear photo scale {r.get('photo') or (a[0] if a else '')}",
     "reconstruct_identify": lambda s, r, a, k: f"identify photos {len(r.get('items') or [])}",
     "reconstruct_confirm_item": lambda s, r, a, k: f"confirm {r.get('id')} {r.get('status')}",
+    "reconstruct_add_missed_device": lambda s, r, a, k: f"missed device {(r.get('item') or {}).get('id')}",
+    "reconstruct_update_device_box": lambda s, r, a, k: f"update box {(r.get('item') or {}).get('id')}",
+    "reconstruct_link_closeup": lambda s, r, a, k: f"close-up {(r.get('item') or {}).get('id')} {r.get('closeup_photo_id') or ''}".rstrip(),
     "reconstruct_place_confirmed": lambda s, r, a, k: f"place confirmed {len(r.get('placed') or [])}",
     "reconstruct_place_needs_info": lambda s, r, a, k: f"place needs-info {len(r.get('placed') or [])}",
     "reconstruct_answer": lambda s, r, a, k: f"answer {r.get('id')}",
