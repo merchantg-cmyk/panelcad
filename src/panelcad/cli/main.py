@@ -279,9 +279,16 @@ def bom_export(
     project: Path,
     out: Path = typer.Option(..., "--out", "-o"),
     grouped: bool = typer.Option(False, "--grouped", help="One row per unique part, qty + concatenated refs"),
+    json_out: bool = typer.Option(False, "--json", help="Print the result as JSON"),
 ) -> None:
-    s = Session.open(project)
-    s.export_bom(out, grouped=grouped)
+    try:
+        s = Session.open(project)
+        s.export_bom(out, grouped=grouped)
+    except (OSError, ValueError) as exc:
+        _cli_fail(str(exc), json_out=json_out)
+    if json_out:
+        typer.echo(json.dumps({"ok": True, "path": str(out), "grouped": grouped}, indent=2))
+        return
     typer.echo(f"bom {out}")
 
 
@@ -344,21 +351,44 @@ def package_cmd(
         "--sections",
         help="Comma list: cover,index,revisions,drawings,bom,wires,terminals,checks",
     ),
+    sheets: Optional[str] = typer.Option(
+        None,
+        "--sheets",
+        help="Comma-separated drawing sheet ids to include. Omit to include every sheet.",
+    ),
+    json_out: bool = typer.Option(False, "--json", help="Print the result as JSON"),
 ) -> None:
     """One-click print package. Default writes a PDF next to the project."""
-    s = Session.open(project)
-    parts = [part.strip() for part in (sections or "").split(",") if part.strip()] or None
-    if out is not None:
-        report = s.export_package_report(out, pdf=True, paper=paper, sections=parts)
-        typer.echo(f"package {report['path']}")
-        for warning in report["warnings"]:
-            typer.echo(f"WARNING: {warning}", err=True)
-    dest_pdf = pdf
-    if dest_pdf is None and out is None:
-        dest_pdf = Path(f"{project.stem}_package.pdf")
-    if dest_pdf is not None:
-        result = s.print_package(dest_pdf, paper=paper, sections=parts)
-        typer.echo(f"pdf {result['path']}  pages={result['pages']}")
+    parts = _comma_list(sections)
+    sheet_ids = _comma_list(sheets)
+    payload: dict[str, Any] = {"ok": True, "sheets": sheet_ids}
+    try:
+        s = Session.open(project)
+        if out is not None:
+            report = s.export_package_report(
+                out, pdf=True, paper=paper, sections=parts, sheet_ids=sheet_ids
+            )
+            payload["package"] = str(report["path"])
+            payload["warnings"] = list(report.get("warnings") or [])
+            if not json_out:
+                typer.echo(f"package {report['path']}")
+                for warning in payload["warnings"]:
+                    typer.echo(f"WARNING: {warning}", err=True)
+        dest_pdf = pdf
+        if dest_pdf is None and out is None:
+            dest_pdf = Path(f"{project.stem}_package.pdf")
+        if dest_pdf is not None:
+            result = s.print_package(dest_pdf, paper=paper, sections=parts, sheet_ids=sheet_ids)
+            payload["pdf"] = str(result["path"])
+            payload["pages"] = result["pages"]
+            payload["sheets"] = result.get("sheet_ids")
+            payload["sections"] = result.get("sections")
+            if not json_out:
+                typer.echo(f"pdf {result['path']}  pages={result['pages']}")
+    except (OSError, ValueError, KeyError) as exc:
+        _cli_fail(str(exc), json_out=json_out)
+    if json_out:
+        typer.echo(json.dumps(payload, indent=2, default=str))
 
 
 @app.command(
@@ -948,6 +978,22 @@ def json_result(result: dict) -> str:
     import json as _json
 
     return _json.dumps(result, default=str)
+
+
+def _cli_fail(message: str, *, json_out: bool = False) -> NoReturn:
+    text = str(message).splitlines()[0] if str(message).strip() else "failed"
+    if json_out:
+        typer.echo(json.dumps({"ok": False, "error": text}), err=True)
+    else:
+        typer.echo(text, err=True)
+    raise typer.Exit(code=1)
+
+
+def _comma_list(text: str | None) -> list[str] | None:
+    if text is None:
+        return None
+    items = [part.strip() for part in text.split(",") if part.strip()]
+    return items or None
 
 
 lib_app = typer.Typer(help="Component library")
@@ -1944,11 +1990,19 @@ def electrical_set_wire(
 def electrical_wire_list(
     project: Path,
     out: Path = typer.Option(..., "--out", "-o"),
+    json_out: bool = typer.Option(False, "--json", help="Print the result as JSON"),
 ) -> None:
     """Legacy from/to wire list: device, terminal, number, color, gauge."""
-    s = Session.open(project)
-    s.export_wire_list(out)
-    typer.echo(f"wires {out}  {len(s.wire_list_rows())} rows")
+    try:
+        s = Session.open(project)
+        s.export_wire_list(out)
+        rows = len(s.wire_list_rows())
+    except (OSError, ValueError) as exc:
+        _cli_fail(str(exc), json_out=json_out)
+    if json_out:
+        typer.echo(json.dumps({"ok": True, "path": str(out), "rows": rows}, indent=2))
+        return
+    typer.echo(f"wires {out}  {rows} rows")
 
 
 @elec.command("from-to")
@@ -2336,12 +2390,20 @@ def electrical_terminals(
     out: Path = typer.Option(..., "--out", "-o"),
     strip: Optional[str] = typer.Option(None, "--strip", help="Resequence this strip before export"),
     rename: bool = typer.Option(False, "--rename", help="Rename levels to STRIP-n"),
+    json_out: bool = typer.Option(False, "--json", help="Print the result as JSON"),
 ) -> None:
-    s = Session.open(project)
-    if strip:
-        s.sequence_terminal_strip(strip, rename=rename)
-        _save(s, project)
-    s.export_terminal_strips(out)
+    try:
+        s = Session.open(project)
+        if strip:
+            s.sequence_terminal_strip(strip, rename=rename)
+            _save(s, project)
+        s.export_terminal_strips(out)
+        rows = len(s.terminal_strip_rows())
+    except (OSError, ValueError, KeyError) as exc:
+        _cli_fail(str(exc), json_out=json_out)
+    if json_out:
+        typer.echo(json.dumps({"ok": True, "path": str(out), "rows": rows}, indent=2))
+        return
     typer.echo(f"terminals {out}")
 
 
@@ -3781,16 +3843,42 @@ def _recon_session(project: Path) -> Session:
     return Session.open(project)
 
 
+def _expand_photo_paths(paths: list[Path]) -> list[Path]:
+    """Files stay as given. A directory contributes its photo files, one level deep."""
+
+    from panelcad.reconstruct.store import is_photo_file
+
+    files: list[Path] = []
+    for raw in paths:
+        if raw.is_dir():
+            found = [item for item in sorted(raw.iterdir()) if item.is_file() and is_photo_file(item)]
+            if not found:
+                raise ValueError(f"no panel photos in {raw}")
+            files.extend(found)
+        else:
+            files.append(raw)
+    return files
+
+
 @recon_app.command("add")
 def reconstruct_add_cmd(
     project: Path,
-    photos: list[Path] = typer.Argument(..., help="Phone photos of the physical panel"),
+    photos: list[Path] = typer.Argument(..., help="Phone photos, or a folder of them"),
     role: str = typer.Option("other", "--role", help="backpanel, door_inside, door_outside, nameplate, part_label, terminal_strip, wire_numbers, other"),
     note: str = typer.Option("", "--note"),
+    json_out: bool = typer.Option(False, "--json", help="Print the result as JSON"),
 ) -> None:
-    session = _recon_session(project)
-    result = session.reconstruct_add_photos(photos, role=role, note=note)
-    session.save(project)
+    """Add panel photos. A folder is read one level deep (png, jpg, tiff, bmp, webp)."""
+
+    try:
+        session = _recon_session(project)
+        result = session.reconstruct_add_photos(_expand_photo_paths(photos), role=role, note=note)
+        session.save(project)
+    except (OSError, ValueError, KeyError) as exc:
+        _cli_fail(str(exc), json_out=json_out)
+    if json_out:
+        typer.echo(json.dumps({"ok": True, **result}, indent=2, default=str))
+        return
     typer.echo(f"photos {result['count']}")
 
 
@@ -3985,6 +4073,63 @@ def reconstruct_unconfirmed_cmd(project: Path) -> None:
     import json
 
     typer.echo(json.dumps(_recon_session(project).reconstruct_unconfirmed(), indent=2))
+
+
+@recon_app.command("feedback")
+def reconstruct_feedback_cmd(
+    project: Path,
+    out: Path = typer.Option(..., "--out", "-o", help="Folder for one annotated PNG per photo and missing.json"),
+    photo: Optional[str] = typer.Option(None, "--photo", help="One photo id. Default: every photo"),
+    filter_mode: str = typer.Option("all", "--filter", help="all, missing_only, or confirmed_only"),
+    json_out: bool = typer.Option(False, "--json", help="Print paths and the missing-info list as JSON"),
+) -> None:
+    """Annotated cabinet PNGs plus missing.json, the devices that still need info."""
+
+    if filter_mode not in {"all", "missing_only", "confirmed_only"}:
+        _cli_fail("filter must be all, missing_only, or confirmed_only", json_out=json_out)
+    try:
+        session = _recon_session(project)
+        listed = session.reconstruct_list_photos().get("photos") or []
+        ids = [str(row.get("id") or "") for row in listed if row.get("id")]
+        if photo:
+            if photo not in ids:
+                _cli_fail(f"no reconstruct photo '{photo}'", json_out=json_out)
+            ids = [photo]
+        if not ids:
+            _cli_fail("no panel photos", json_out=json_out)
+        if out.exists() and not out.is_dir():
+            _cli_fail(f"{out} is a file", json_out=json_out)
+        out.mkdir(parents=True, exist_ok=True)
+        pngs: list[str] = []
+        missing: list[dict[str, Any]] = []
+        for photo_id in ids:
+            png = out / f"{photo_id}.png"
+            session.reconstruct_export_photo_feedback(png, photo_id, filter_mode=filter_mode)
+            report = session.reconstruct_photo_feedback(photo_id, filter_mode="missing_only")
+            missing.extend(list(report.get("boxes") or []))
+            pngs.append(str(png))
+        missing_path = out / "missing.json"
+        missing_path.write_text(json.dumps(missing, indent=2, default=str) + "\n", encoding="utf-8")
+    except (OSError, ValueError, KeyError) as exc:
+        _cli_fail(str(exc), json_out=json_out)
+    if json_out:
+        typer.echo(
+            json.dumps(
+                {
+                    "ok": True,
+                    "out": str(out),
+                    "pngs": pngs,
+                    "missing_json": str(missing_path),
+                    "photos": len(pngs),
+                    "missing": len(missing),
+                    "missing_items": missing,
+                },
+                indent=2,
+                default=str,
+            )
+        )
+        return
+    typer.echo(f"feedback {len(pngs)} png  missing {len(missing)}  {out}")
 
 
 @app.command("capture-server")

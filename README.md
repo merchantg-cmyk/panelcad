@@ -9,11 +9,11 @@ It is meant to feel like KiCad, but for control-panel work rather than PCBs.
 - **YAML + CLI + Python API + JSONL agent** for AI and scripts
 - **Multi-page** print sets with title blocks
 - **Import/export package** (project, library, BOM, wires, SVG, PDF, DXF)
-- **Print package** — one vector PDF: cover, drawing index, revisions, every sheet at its real size, then BOM / wire list / terminals / design checks (`File → Print Package…` or `panelcad package --pdf`)
+- **Print package** — one vector PDF: cover, drawing index, revisions, every sheet at its real size, then BOM / wire list / terminals / design checks (`File → Print Package…` or `panelcad package --pdf`). `--sheets` limits the drawings.
 - **Electrical reports** — wire numbers, live coil/contact cross-reference (NEMA line numbers, IEC contact mirror), terminal strips, PLC I/O, schematic/panel audit, live design checks. Vendor strip files: Weidmüller WMC CSV (documented import), Phoenix / WAGO CSV fallback, plus interchange XML. See `docs/VENDOR_STRIP_EXPORT.md` and `docs/AUTODESK_ELECTRICAL.md`.
 - **Troubleshoot** — Tools → Troubleshoot walks a fault from the tags, wire numbers, and cross-references already on the drawing. The same walk is `panelcad electrical troubleshoot guide` and JSONL `troubleshoot_guide`. Explain uses the account in Settings > AI. See `docs/TROUBLESHOOT.md`.
 - **Manufacturer catalog parts** — assign a verified SKU (Allen-Bradley, Siemens, Eaton, Schneider) onto a generic symbol. Format: `docs/PARTS.md`.
-- **Reconstruct from photos** — phone shots of a **physical** panel (perspective, glare, clutter) become a starting layout and a floor checklist to rebuild missing or wrong prints. Old drawings / scans are a secondary cross-check in the same project (print-import pipeline when present). Tools → Reconstruct from photos…, `panelcad reconstruct`, JSONL `reconstruct_*`.
+- **Reconstruct from photos** — phone shots of a **physical** panel (perspective, glare, clutter) become a starting layout and a floor checklist to rebuild missing or wrong prints. Old drawings / scans are a secondary cross-check in the same project (print-import pipeline when present). Tools → Reconstruct from photos…, `panelcad reconstruct add` (files or one folder), `panelcad reconstruct feedback` for the annotated PNGs and `missing.json`, JSONL `reconstruct_*`.
 - **IEC-to-NEMA conversion** — convert IEC 60617 schematics (or imported IEC PDFs and scans) into NEMA ICS 19 / ANSI Y32.2 / IEEE 315 ladder drawings with a wire-by-wire From-To connection gate (`from-to-check/1`), role-based tag and pin mapping (`-X1:3` → `TB1-3`), multi-page control consolidation, side-by-side visual and From-To comparison, per-item decision review, and an optional AI advisor. Tools → Convert drawing standard…, `panelcad convert`, JSONL `convert_standard*`. See `docs/AI_INTERFACE.md`.
 - **Bug reports** — Help → Report a bug, Edit → Settings → Bug reports, `panelcad bug-report`, and `Session.report_bug`. Logs live in the per-user PanelCAD folder (`panelcad logs --path`). Sending stays off until you save a webhook or bot token. A public build does not include one. A shop build can embed a bot that is pinned to the channel chosen at build time. Autosave interval (seconds, `0` off) is in that Settings page, `panelcad settings`, and JSONL `settings`.
 
@@ -126,6 +126,22 @@ panelcad import scan.png --vision-backend ollama --vision-model qwen3-vl:8b-inst
 PanelCAD is free software under the GNU Affero General Public License, version 3, or any later version published by the Free Software Foundation. The copyright and that grant are in `NOTICE`. The full license text is `LICENSE`. Other people's code, fonts, and icons are listed in `THIRD_PARTY_NOTICES.md`.
 
 If you run a modified PanelCAD as a network service, the AGPL requires you to offer the corresponding source to the people who use that service.
+
+## Headless commands
+
+Same code as the menus. Each command takes the project file. `--json` prints a short machine-readable result. A failure exits nonzero.
+
+| Action | Command |
+| --- | --- |
+| Reconstruct from a folder of photos | `panelcad reconstruct add PROJECT photos/` |
+| Photo feedback (annotated PNGs and the missing-info list) | `panelcad reconstruct feedback PROJECT --out DIR` |
+| Print package, chosen sheets | `panelcad package PROJECT --pdf OUT.pdf --sheets power,control` |
+| Terminal strip report | `panelcad electrical terminals PROJECT --out strips.csv` |
+| BOM | `panelcad bom export PROJECT --out bom.csv` |
+| Wire list | `panelcad electrical wire-list PROJECT --out wires.csv` |
+| Project check (structural errors and Problems) | `panelcad check PROJECT --json` |
+
+`panelcad electrical strip-export` writes one vendor strip file. `panelcad print PROJECT --pdf OUT.pdf --sheet SHEET` writes one drawing, including a terminal-strip sheet. `panelcad electrical checks` writes the design-check CSV.
 
 ## What to open
 
