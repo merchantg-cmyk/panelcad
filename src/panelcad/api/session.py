@@ -7893,6 +7893,30 @@ class Session:
 
         return apply_to_print(self, sheet_id=sheet_id)
 
+    def reconstruct_photos_to_drawings(
+        self,
+        *,
+        vision: Any = None,
+        recordings: dict[str, Any] | None = None,
+        unboxed_callouts: Any = None,
+        extra_flags: list[dict[str, Any]] | None = None,
+        accepted_ids: list[str] | None = None,
+        dismissed_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Run imported photos through to drawings, stopping only for flagged items."""
+
+        from panelcad.reconstruct.guided import run_photos_to_drawings
+
+        return run_photos_to_drawings(
+            self,
+            vision=vision,
+            recordings=recordings,
+            unboxed_callouts=unboxed_callouts,
+            extra_flags=extra_flags,
+            accepted_ids=accepted_ids,
+            dismissed_ids=dismissed_ids,
+        )
+
     def reconstruct_photo_feedback(
         self,
         photo_id: str | None = None,
@@ -8632,6 +8656,9 @@ _ACTIVITY_METHODS: dict[str, Any] = {
     "reconstruct_update_device_box": lambda s, r, a, k: f"update box {(r.get('item') or {}).get('id')}",
     "reconstruct_link_closeup": lambda s, r, a, k: f"close-up {(r.get('item') or {}).get('id')} {r.get('closeup_photo_id') or ''}".rstrip(),
     "reconstruct_place_confirmed": lambda s, r, a, k: f"place confirmed {len(r.get('placed') or [])}",
+    "reconstruct_photos_to_drawings": lambda s, r, a, k: (
+        f"photos to drawings {'stopped' if r.get('stopped') else 'drew'} {len(r.get('queue') or [])}"
+    ),
     "reconstruct_place_needs_info": lambda s, r, a, k: f"place needs-info {len(r.get('placed') or [])}",
     "reconstruct_answer": lambda s, r, a, k: f"answer {r.get('id')}",
     "reconstruct_confirm_connection": lambda s, r, a, k: f"confirm wire {r.get('wire_id') or r.get('id')}",

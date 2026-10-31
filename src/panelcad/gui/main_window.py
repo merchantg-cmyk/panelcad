@@ -1214,6 +1214,24 @@ class MainWindow(QMainWindow):
         self.problems_wrap.setWindowTitle(f"Problems ({n})" if n else "Problems")
         self._refresh_status_widgets()
 
+    def photos_to_drawings(self) -> None:
+        from panelcad.gui.photos_to_drawings import PhotosToDrawingsDialog
+
+        if self._on_start_page():
+            self.new_project()
+        dialog = PhotosToDrawingsDialog(self.session, self)
+        dialog.exec()
+        result = dialog.result_info
+        if result is not None and result.sheet_id and (result.drawings_generated or result.placed):
+            try:
+                self.session.set_active_sheet(result.sheet_id)
+            except KeyError:
+                pass
+        self._refresh_from_session(fit=False)
+        if result is not None and result.summary:
+            self._status(result.summary)
+        self._check_runner.schedule()
+
     def reconstruct_from_photos(self) -> None:
         from panelcad.gui.reconstruct_wizard import ReconstructWizard
 
@@ -1458,6 +1476,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self._act("Import…", None, self.import_any))
         file_menu.addAction(self._act("Import &print…", None, self.import_print))
         file_menu.addAction(self._act("Reconstruct from &photos…", None, self.reconstruct_from_photos))
+        file_menu.addAction(self._act("Photos → &drawings…", None, self.photos_to_drawings))
         file_menu.addAction(self._act("Import BOM…", None, self.import_csv))
         file_menu.addAction(self._act("Import wires…", None, self.import_wires))
         file_menu.addAction(self._act("Import library…", None, self.import_library))
@@ -1581,6 +1600,7 @@ class MainWindow(QMainWindow):
         tools.addAction(self._act("&Motor sizing", None, self.show_motor_sizing))
         panel_menu.addAction(self._act("Cutout &drawings…", None, self.cutout_drawings))
         tools.addAction(self._act("Reconstruct from &photos…", None, self.reconstruct_from_photos))
+        tools.addAction(self._act("Photos → &drawings…", None, self.photos_to_drawings))
         tools.addAction(self._act("Cabinet Photo &Feedback Overlay…", None, self.open_photo_feedback_overlay))
         tools.addAction(self._act("&Mobile Field Capture Server (Phone QR)…", None, self.open_mobile_capture_server))
         tools.addAction(self._act("Build layout from sc&hematic", None, self.pack_from_schematic))

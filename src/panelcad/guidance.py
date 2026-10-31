@@ -241,6 +241,10 @@ ACTION_TIPS: dict[str, tuple[str, str]] = {
         "Build a drawing from photos of a physical panel. A manual path stays available.",
         "reconstruct",
     ),
+    "Photos → drawings…": (
+        "Read imported photos and write the drawings. The run stops only for flagged items.",
+        "reconstruct",
+    ),
     "Import BOM…": ("Import a vendor parts list (CSV).", "parts"),
     "Import wires…": ("Import a From/To wire list (CSV).", "wires"),
     "Import library…": ("Load a symbol library YAML file.", "import"),

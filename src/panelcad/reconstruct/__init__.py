@@ -21,6 +21,8 @@ from panelcad.reconstruct.models import (
     ensure_reconstruction,
     item_is_layout_ready,
 )
+from panelcad.reconstruct.guided import run_photos_to_drawings
+from panelcad.reconstruct.review_queue import FlaggedItem, ReviewQueue
 from panelcad.reconstruct.service import (
     apply_to_print,
     record_wire_landing,
@@ -32,7 +34,10 @@ __all__ = [
     "DeviceFeedbackBox",
     "PhotoFeedbackReport",
     "add_missed_device_on_photo",
+    "FlaggedItem",
+    "ReviewQueue",
     "apply_to_print",
+    "run_photos_to_drawings",
     "build_photo_feedback_model",
     "build_photo_feedback_report",
     "export_photo_feedback",

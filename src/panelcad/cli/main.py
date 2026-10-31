@@ -4068,6 +4068,43 @@ def reconstruct_compare_cmd(
     typer.echo(json.dumps(result, indent=2))
 
 
+@recon_app.command("photos-to-drawings")
+def reconstruct_photos_to_drawings_cmd(
+    project: Path,
+    accept: Optional[list[str]] = typer.Option(
+        None,
+        "--accept",
+        help="Flag or item id to pass through. Repeat to clear more than one.",
+    ),
+    dismiss: Optional[list[str]] = typer.Option(
+        None,
+        "--dismiss",
+        help="Flag id to drop from the queue. Repeat to drop more than one.",
+    ),
+) -> None:
+    """Read imported photos and write drawings, stopping only for flagged items."""
+
+    import json
+
+    session = _recon_session(project)
+    result = session.reconstruct_photos_to_drawings(
+        accepted_ids=list(accept or []),
+        dismissed_ids=list(dismiss or []),
+    )
+    session.save(project)
+    typer.echo(
+        json.dumps(
+            {
+                "stopped": result["stopped"],
+                "drawings_generated": result["drawings_generated"],
+                "summary": result["summary"],
+                "queue": result["queue"],
+            },
+            indent=2,
+        )
+    )
+
+
 @recon_app.command("unconfirmed")
 def reconstruct_unconfirmed_cmd(project: Path) -> None:
     import json

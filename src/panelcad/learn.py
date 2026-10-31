@@ -137,10 +137,14 @@ EXTRA_TOPICS: dict[str, dict[str, str]] = {
     },
     "reconstruct": {
         "title": "Reconstruct from photos",
-        "keywords": "reconstruct photos phone panel camera scale nameplate",
+        "keywords": "reconstruct photos phone panel camera scale nameplate drawings flagged",
         "body": (
             "File → Reconstruct from photos… builds a drawing from photos of a "
             "real panel: the backplate, the door, nameplates, and terminal strips.\n\n"
+            "File → Photos → drawings… is the same job in one run. It reads the "
+            "imported photos and writes the drawings. It stops only for flagged "
+            "items: missing info, low confidence, or a possible missed device. "
+            "Everything else passes through. The step-by-step command stays available.\n\n"
             "Type the 4 corners of a part whose size you know (for example the PLC), "
             "and its width and height. Then type the part number from each label. "
             "Parts with no size yet stay off the BOM and quote until you pick a "
