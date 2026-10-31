@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from panelcad.api.session import Session
+from panelcad.gui.missing_info_editor import MissingInfoInlineEditor
 from panelcad.reconstruct.geometry import mm_per_px
 from panelcad.reconstruct.layout import target_sheet_kind
 from panelcad.reconstruct.models import PHOTO_ROLES, ObservedItem, item_is_layout_ready
@@ -250,10 +251,20 @@ class ReconstructWizard(QDialog):
         )
         layout.addWidget(self.site_exit_banner)
 
+        self._retired_capture_badges: list[QWidget] = []
+        self.capture_badge_host = QWidget()
+        self.capture_badge_layout = QHBoxLayout(self.capture_badge_host)
+        self.capture_badge_layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.capture_badge_host)
+        self.capture_inline_editor = MissingInfoInlineEditor(self.session)
+        self.capture_inline_editor.saved.connect(self._on_capture_missing_saved)
+        layout.addWidget(self.capture_inline_editor)
+
         cap_split = QHBoxLayout()
         self.capture_feedback_view = PhotoView()
         self.capture_feedback_view.setMinimumSize(420, 260)
         self.capture_feedback_view.region_drawn.connect(self._on_capture_region_drawn)
+        self.capture_feedback_view.badge_clicked.connect(self._on_capture_badge_clicked)
         cap_split.addWidget(self.capture_feedback_view, 3)
 
         right_col = QVBoxLayout()
@@ -850,18 +861,74 @@ class ReconstructWizard(QDialog):
             item.setForeground(QColor("#86efac"))
             self.shot_list.addItem(item)
 
-        img = render_annotated_cabinet_photo(self.session, photo_id=pid, include_banner=True)
+        badge_hits: list[dict[str, Any]] = []
+        img = render_annotated_cabinet_photo(
+            self.session,
+            photo_id=pid,
+            include_banner=True,
+            badge_hits=badge_hits,
+        )
         pw = int(report.get("width_px") or img.width())
         ui_scale = max(1.0, min(3.2, pw / 1280.0))
         top_off = int(round(58 * ui_scale))
+        self._capture_report = report
         self.capture_feedback_view.set_annotated_feedback(
             img,
             source_width=pw,
             source_height=int(report.get("height_px") or max(1, img.height() - top_off)),
             boxes=report.get("boxes") or [],
             banner_top_offset=top_off,
+            badge_hits=badge_hits,
         )
+        self._rebuild_capture_badges(report.get("boxes") or [])
         return report
+
+    def _clear_capture_badges(self) -> None:
+        while self.capture_badge_layout.count():
+            item = self.capture_badge_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.hide()
+                widget.setParent(None)
+                self._retired_capture_badges.append(widget)
+
+    def _rebuild_capture_badges(self, boxes: list[dict[str, Any]]) -> None:
+        if not hasattr(self, "capture_badge_layout"):
+            return
+        self._clear_capture_badges()
+        for box in boxes:
+            if box.get("status_category") != "missing_info":
+                continue
+            item_id = str(box.get("item_id") or "")
+            tag = str(box.get("tag") or item_id)
+            for badge in box.get("badges") or []:
+                field = str(badge.get("field") or "")
+                if not field:
+                    continue
+                button = QPushButton(f"{tag} {badge.get('label') or field}")
+                button.setObjectName(f"badge-{item_id}-{field}")
+                button.setToolTip(str(badge.get("reason") or badge.get("prompt") or ""))
+                button.setStyleSheet(
+                    "QPushButton { background: #78350f; color: #fef3c7; border: 1px solid #fbbf24; "
+                    "border-radius: 8px; padding: 3px 8px; font-weight: 700; }"
+                )
+                button.clicked.connect(
+                    lambda _checked=False, iid=item_id, name=field: self._on_capture_badge_clicked(iid, name)
+                )
+                self.capture_badge_layout.addWidget(button)
+        self.capture_badge_layout.addStretch()
+
+    def _on_capture_badge_clicked(self, item_id: str, field: str) -> None:
+        report = getattr(self, "_capture_report", None) or {}
+        box = next((b for b in report.get("boxes") or [] if str(b.get("item_id") or "") == item_id), None)
+        if box is None:
+            return
+        self.capture_inline_editor.open_for(box, field)
+
+    def _on_capture_missing_saved(self, result: dict[str, Any]) -> None:
+        self.capture_inline_editor.hide()
+        self.refresh_capture_feedback(self._selected_capture_photo_id())
+        _ = result
 
     def _on_capture_region_drawn(self, region: dict[str, float]) -> None:
         pid = self._selected_capture_photo_id()

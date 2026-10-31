@@ -6,6 +6,7 @@ field technicians on Android / iOS phones can:
 - Immediately check Capture-Phase Site-Exit Readiness (`⚠ DO NOT LEAVE SITE YET` vs `✓ SITE CAPTURE READY`)
 - Inspect the annotated cabinet photo with green (confirmed) and red/amber (missing-info) bounding boxes
 - Finger-drag a bounding box right on the phone screen over any device the bot/software missed (`reconstruct_add_missed_device`)
+- Tap a missing-info badge (part number, dimensions, ratings, terminals/wires) on the photo or the shot list to type the value or pick a published library part (`reconstruct_apply_missing_info`)
 - Tap any flagged device in the photo or in the "Before You Leave Site" shot list to snap/attach a close-up nameplate photo (`reconstruct_link_closeup`) and confirm its Tag, Brand, Part #, W×H×D (mm), and Mounting
 - Download the `.panelcad` session bundle or send a notification webhook (`PANELCAD_CAPTURE_WEBHOOK_URL`).
 """
@@ -393,6 +394,7 @@ class CaptureWorkspace:
                     ],
                     "boxes": [],
                     "unboxed_callouts": [],
+                    "badge_hits": [],
                     "photos": photos,
                     "items": items,
                 }
@@ -420,6 +422,19 @@ class CaptureWorkspace:
             report["photos"] = photos
             report["items"] = items
             report["unboxed_callouts"] = callouts
+            badge_hits: list[dict[str, Any]] = []
+            try:
+                render_annotated_cabinet_photo(
+                    sess,
+                    photo_id=chosen_pid,
+                    filter_mode=mode,  # type: ignore[arg-type]
+                    unboxed_callouts=callouts,
+                    include_banner=True,
+                    badge_hits=badge_hits,
+                )
+            except Exception:
+                badge_hits = []
+            report["badge_hits"] = badge_hits
             report["overlay_geometry"] = {
                 "photo_width_px": int(report.get("width_px") or 0),
                 "photo_height_px": int(report.get("height_px") or 0),
@@ -655,6 +670,58 @@ class CaptureWorkspace:
                 search_margin_ratio=search_margin_ratio,
             )
             return {"ok": True, "photo_id": photo_id, "box": refined, "region": refined}
+
+    def library_choices(self, session_id: str, query: str = "", *, limit: int = 8) -> dict[str, Any]:
+        with self._lock:
+            from panelcad.reconstruct.feedback import library_choices
+
+            sid = _slugify(session_id)
+            sess = self.get_session(sid)
+            return {"matches": library_choices(sess, query, limit=limit)}
+
+    def apply_missing_info(
+        self,
+        session_id: str,
+        item_id: str,
+        field: str,
+        *,
+        value: str = "",
+        catalog: str = "",
+        manufacturer: str = "",
+        library_id: str = "",
+        width_mm: float | None = None,
+        height_mm: float | None = None,
+        depth_mm: float | None = None,
+        mount: str = "",
+        terminal: str = "",
+        wire_number: str = "",
+        to_ref: str = "",
+    ) -> dict[str, Any]:
+        with self._lock:
+            sid = _slugify(session_id)
+            sess = self.get_session(sid)
+            res = sess.reconstruct_apply_missing_info(
+                item_id,
+                field,
+                value=value,
+                catalog=catalog,
+                manufacturer=manufacturer,
+                library_id=library_id,
+                width_mm=width_mm,
+                height_mm=height_mm,
+                depth_mm=depth_mm,
+                mount=mount,
+                terminal=terminal,
+                wire_number=wire_number,
+                to_ref=to_ref,
+            )
+            self.save_session(sid)
+            item_obj = res.get("item") or {}
+            pid = str(item_obj.get("photo_id") or "")
+            status = self.get_status(sid, photo_id=pid or None)
+            status["updated_item"] = item_obj
+            status["applied_field"] = res.get("field") or ""
+            return status
 
     def render_annotated_png(
         self,
@@ -1428,6 +1495,60 @@ MOBILE_CAPTURE_HTML = """<!DOCTYPE html>
     gap: 6px;
     flex-wrap: wrap;
   }
+  .shot-card-badges {
+    margin-top: 6px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .badge-btn {
+    border: 1px solid #f59e0b;
+    background: #78350f;
+    color: #fef3c7;
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: left;
+    max-width: 100%;
+  }
+  .inline-editor {
+    margin: 8px 12px 0;
+    padding: 10px;
+    border: 1px solid #f59e0b;
+    border-radius: 8px;
+    background: #1c1917;
+  }
+  .inline-editor[hidden] { display: none !important; }
+  .inline-editor label {
+    display: block;
+    margin-top: 6px;
+    font-size: 11px;
+    color: #fde68a;
+  }
+  .inline-editor input, .inline-editor select {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 2px;
+    background: #0c0a09;
+    color: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 8px;
+  }
+  .inline-error { color: #fecaca; font-size: 12px; min-height: 1em; margin: 6px 0; }
+  .lib-hit {
+    display: block;
+    width: 100%;
+    text-align: left;
+    margin-top: 4px;
+    background: #0b0f17;
+    color: #f8fafc;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
 
   /* Slide-up Drawer / Modal for Device Close-Up, Missed Device & Server Setup */
   .drawer-backdrop {
@@ -1594,7 +1715,7 @@ MOBILE_CAPTURE_HTML = """<!DOCTYPE html>
   <!-- Left/Top: Interactive Annotated Cabinet Photo -->
   <div class="card">
     <div class="card-header">
-      <span id="photoCardTitle">Annotated Cabinet Photo (Tap any box to inspect/confirm)</span>
+      <span id="photoCardTitle">Annotated Cabinet Photo (Tap a missing-info badge to fill it in)</span>
       <span style="font-size:11px;color:var(--muted);">Green = Ready · Red = Needs Info · Cyan = Unboxed</span>
     </div>
     <div id="drawModeHint" class="mode-hint">
@@ -1619,6 +1740,17 @@ MOBILE_CAPTURE_HTML = """<!DOCTYPE html>
     <div class="card-header">
       <span>Before You Leave Site — Device Checklist</span>
       <span id="shotCountBadge" class="pill pill-amber">0 items</span>
+    </div>
+    <div id="inlineEditor" class="inline-editor" hidden>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <b id="inlineTitle">Missing info</b>
+        <button type="button" class="btn" onclick="closeInlineEditor()">✕</button>
+      </div>
+      <p id="inlinePrompt" style="font-size:12px;color:#fde68a;margin:6px 0;"></p>
+      <div id="inlineFields"></div>
+      <div id="inlineLibrary"></div>
+      <div id="inlineError" class="inline-error"></div>
+      <button type="button" class="btn btn-primary" onclick="saveInlineEditor()">Save to project</button>
     </div>
     <div class="shot-list" id="deviceShotList"></div>
   </div>
@@ -1859,7 +1991,7 @@ function renderBanner(st) {
     <span class="pill pill-green">✓ ${st.confirmed_count || 0} Confirmed</span>
     <span class="pill pill-amber">⚠ ${st.missing_info_count || 0} Missing Info</span>
     ${unboxedLen > 0 ? `<span class="pill pill-cyan">? ${unboxedLen} Unboxed Gap(s)</span>` : ""}
-    <span style="color:var(--muted);font-weight:500;">Tap any device box on photo or card below to attach close-up / confirm</span>
+      <span style="color:var(--muted);font-weight:500;">Tap a missing-info badge to type the value or pick a library part</span>
   `;
 }
 
@@ -1909,6 +2041,179 @@ window.addEventListener("resize", () => {
   onAnnotatedImageLoaded();
 });
 
+function escapeHtml(value) {
+  return String(value || "").replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[ch]));
+}
+
+let inlineItemId = "";
+let inlineField = "";
+let inlinePick = null;
+
+function closeInlineEditor() {
+  const editor = document.getElementById("inlineEditor");
+  if (editor) editor.hidden = true;
+  inlinePick = null;
+}
+
+function hitBadge(pt) {
+  const hits = (currentStatus && currentStatus.badge_hits) || [];
+  for (let i = hits.length - 1; i >= 0; i--) {
+    const hit = hits[i];
+    const x = Number(hit.x || 0), y = Number(hit.y || 0);
+    const w = Number(hit.w || 0), h = Number(hit.h || 0);
+    if (pt.x >= x && pt.x <= x + w && pt.y >= y && pt.y <= y + h) return hit;
+  }
+  return null;
+}
+
+function openInlineEditor(box, field, ev) {
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  const badge = (box.badges || []).find(b => b.field === field) || {};
+  inlineItemId = box.item_id;
+  inlineField = field;
+  inlinePick = null;
+  document.getElementById("inlineTitle").textContent = `${box.tag || box.item_id} — ${badge.label || field}`;
+  document.getElementById("inlinePrompt").textContent = badge.prompt || "";
+  document.getElementById("inlineError").textContent = "";
+  const host = document.getElementById("inlineFields");
+  const lib = document.getElementById("inlineLibrary");
+  lib.innerHTML = "";
+  if (field === "part_number") {
+    host.innerHTML = `<label>Part number</label><input id="inlinePart" type="text" value="${escapeHtml(box.part_number || "")}" placeholder="Catalog number from the device">`;
+    document.getElementById("inlinePart").addEventListener("input", (e) => {
+      inlinePick = null;
+      searchInlineLibrary(e.target.value, "part_number");
+    });
+  } else if (field === "dimensions") {
+    host.innerHTML = `
+      <label>Width mm</label><input id="inlineW" type="number" min="1" step="0.1" value="${box.envelope_w_mm || ""}">
+      <label>Height mm</label><input id="inlineH" type="number" min="1" step="0.1" value="${box.envelope_h_mm || ""}">
+      <label>Depth mm</label><input id="inlineD" type="number" min="1" step="0.1" value="${box.envelope_d_mm || ""}">
+      <label>Mounting</label>
+      <select id="inlineMount">
+        <option value="">Choose mounting</option>
+        <option value="din_rail">DIN rail</option>
+        <option value="backplate">Backplate</option>
+        <option value="door">Door</option>
+        <option value="field">Field</option>
+      </select>
+      <label>Library search</label><input id="inlineLibQuery" type="text" placeholder="Manufacturer or catalog number">`;
+    if (box.mount) document.getElementById("inlineMount").value = box.mount;
+    document.getElementById("inlineLibQuery").addEventListener("input", (e) => searchInlineLibrary(e.target.value, "dimensions"));
+    ["inlineW", "inlineH", "inlineD"].forEach((id) => {
+      document.getElementById(id).addEventListener("input", () => { inlinePick = null; });
+    });
+  } else if (field === "ratings") {
+    host.innerHTML = `
+      <label>Rating</label><input id="inlineRating" type="text" value="${escapeHtml(box.ratings || "")}" placeholder="Rating printed on the device">
+      <label>Library search</label><input id="inlineLibQuery" type="text" placeholder="Find a published part">`;
+    document.getElementById("inlineLibQuery").addEventListener("input", (e) => searchInlineLibrary(e.target.value, "ratings"));
+  } else {
+    host.innerHTML = `
+      <label>Terminal</label><input id="inlineTerminal" type="text" value="${escapeHtml(box.terminal || "")}" placeholder="Terminal on this device">
+      <label>Wire number</label><input id="inlineWire" type="text" value="${escapeHtml(box.wire_number || "")}" placeholder="Wire number">
+      <label>Other end</label><input id="inlineLands" type="text" placeholder="Only if you can see it, such as PLC1:O0">`;
+  }
+  const editor = document.getElementById("inlineEditor");
+  editor.hidden = false;
+  editor.scrollIntoView({ block: "nearest" });
+}
+
+async function searchInlineLibrary(query, mode) {
+  const lib = document.getElementById("inlineLibrary");
+  lib.innerHTML = "";
+  if (!query || query.trim().length < 2 || !currentSessionId) return;
+  const res = await fetch(`/api/sessions/${encodeURIComponent(currentSessionId)}/library?q=${encodeURIComponent(query.trim())}`, {
+    headers: apiHeaders()
+  });
+  if (!res.ok) return;
+  const data = await res.json();
+  const matches = data.matches || [];
+  if (!matches.length) {
+    lib.textContent = "No published parts match. A typed value is saved as read, without a made-up size or rating.";
+    return;
+  }
+  for (const match of matches) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "lib-hit";
+    const size = (match.width_mm && match.height_mm && match.depth_mm)
+      ? ` ${match.width_mm}×${match.height_mm}×${match.depth_mm} mm` : "";
+    const rating = match.ratings ? ` ${match.ratings}` : "";
+    btn.textContent = `${match.manufacturer} ${match.catalog}${rating}${size}`;
+    btn.onclick = () => chooseLibraryPart(match, mode);
+    lib.appendChild(btn);
+  }
+}
+
+function chooseLibraryPart(match, mode) {
+  const err = document.getElementById("inlineError");
+  err.textContent = "";
+  if (mode === "ratings") {
+    if (!match.ratings) {
+      inlinePick = null;
+      err.textContent = "That library part has no published rating.";
+      return;
+    }
+    document.getElementById("inlineRating").value = match.ratings;
+    inlinePick = null;
+    return;
+  }
+  if (mode === "dimensions") {
+    if (!(match.width_mm && match.height_mm && match.depth_mm)) {
+      inlinePick = null;
+      err.textContent = "That library part has no published width, height, and depth.";
+      return;
+    }
+    inlinePick = match;
+    err.textContent = `Save will use the published part ${match.manufacturer} ${match.catalog}.`;
+    return;
+  }
+  inlinePick = match;
+  const input = document.getElementById("inlinePart");
+  if (input) input.value = match.catalog || "";
+}
+
+async function saveInlineEditor() {
+  const err = document.getElementById("inlineError");
+  err.textContent = "";
+  const body = { field: inlineField };
+  if (inlinePick && (inlineField === "part_number" || inlineField === "dimensions")) {
+    body.field = "part_number";
+    body.catalog = inlinePick.catalog || "";
+    body.manufacturer = inlinePick.manufacturer || "";
+    body.library_id = inlinePick.library_id || "";
+  } else if (inlineField === "part_number") {
+    body.value = document.getElementById("inlinePart").value;
+  } else if (inlineField === "dimensions") {
+    body.width_mm = document.getElementById("inlineW").value;
+    body.height_mm = document.getElementById("inlineH").value;
+    body.depth_mm = document.getElementById("inlineD").value;
+    body.mount = document.getElementById("inlineMount").value;
+  } else if (inlineField === "ratings") {
+    body.value = document.getElementById("inlineRating").value;
+  } else {
+    body.terminal = document.getElementById("inlineTerminal").value;
+    body.wire_number = document.getElementById("inlineWire").value;
+    body.to_ref = document.getElementById("inlineLands").value;
+  }
+  const res = await fetch(`/api/sessions/${encodeURIComponent(currentSessionId)}/items/${encodeURIComponent(inlineItemId)}/missing-info`, {
+    method: "POST",
+    headers: apiHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    err.textContent = data.error || "Could not save";
+    return;
+  }
+  closeInlineEditor();
+  showToast(`Saved. ${data.confirmed_count || 0} ready, ${data.missing_info_count || 0} missing info.`);
+  await loadSessions(currentSessionId);
+}
+
 function renderShotList(st) {
   const container = document.getElementById("deviceShotList");
   const badge = document.getElementById("shotCountBadge");
@@ -1957,14 +2262,22 @@ function renderShotList(st) {
     const reasonsHtml = isOk
       ? `✓ Confirmed (${b.dimensions_label || "layout ready"})${b.closeup_photo_id ? " · Close-Up Linked: " + b.closeup_photo_id : ""}`
       : (b.missing_reasons || []).map(r => `• ${r}`).join("<br>");
+    const badges = (!isOk && b.badges) ? b.badges : [];
+    const badgeHtml = badges.map(badge =>
+      `<button type="button" class="badge-btn" data-field="${escapeHtml(badge.field)}">${escapeHtml(badge.label)}</button>`
+    ).join("");
     card.innerHTML = `
       <div class="shot-card-top">
         <span>${b.header_label}</span>
         <span class="pill ${isOk ? "pill-green" : "pill-amber"}">${isOk ? "✓ Ready" : (b.needs_closeup ? "📷 Close-Up Needed" : "⚠ Needs Info")}</span>
       </div>
       <div class="shot-card-reasons">${reasonsHtml}</div>
+      ${badgeHtml ? `<div class="shot-card-badges">${badgeHtml}</div>` : ""}
       ${!isOk ? `<div class="shot-card-action"><button class="btn btn-amber" style="font-size:12px;padding:5px 9px;">📷 Attach Close-Up / Confirm Specs</button></div>` : ""}
     `;
+    card.querySelectorAll(".badge-btn").forEach(btn => {
+      btn.onclick = (ev) => openInlineEditor(b, btn.dataset.field, ev);
+    });
     card.onclick = () => openDeviceDrawer(b);
     container.appendChild(card);
   }
@@ -2136,6 +2449,14 @@ function setupTouchCanvas() {
     for (const u of (currentStatus.unboxed_callouts || [])) {
       if (pt.x >= u.x && pt.x <= u.x + u.w && pt.y >= u.y && pt.y <= u.y + u.h) {
         openMissedDeviceDrawer({ x: u.x, y: u.y, w: u.w, h: u.h }, u.label || "");
+        return;
+      }
+    }
+    const badgeHit = hitBadge(pt);
+    if (badgeHit) {
+      const box = (currentStatus.boxes || []).find(b => b.item_id === badgeHit.item_id);
+      if (box) {
+        openInlineEditor(box, badgeHit.field);
         return;
       }
     }
@@ -2624,6 +2945,16 @@ class _CaptureHTTPHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"sessions": self.workspace.list_sessions()})
             return
 
+        m_library = re.match(r"^/api/sessions/([^/]+)/library$", path)
+        if m_library:
+            sid = urllib.parse.unquote(m_library.group(1))
+            query_text = (query.get("q") or [""])[0]
+            try:
+                self._send_json(200, self.workspace.library_choices(sid, query_text))
+            except KeyError as exc:
+                self._send_json(404, {"error": str(exc)})
+            return
+
         m_status = re.match(r"^/api/sessions/([^/]+)/status$", path)
         if m_status:
             sid = urllib.parse.unquote(m_status.group(1))
@@ -2766,6 +3097,32 @@ class _CaptureHTTPHandler(BaseHTTPRequestHandler):
                     closeup_bytes=closeup_bytes,
                     closeup_filename=closeup_name,
                     snap_to_edges=str(fields.get("snap_to_edges", "")).lower() in {"1", "true", "yes"},
+                )
+                self._send_json(200, st)
+            except (KeyError, ValueError) as exc:
+                self._send_json(400, {"error": str(exc)})
+            return
+
+        m_missing = re.match(r"^/api/sessions/([^/]+)/items/([^/]+)/missing-info$", path)
+        if m_missing:
+            sid = urllib.parse.unquote(m_missing.group(1))
+            iid = urllib.parse.unquote(m_missing.group(2))
+            try:
+                st = self.workspace.apply_missing_info(
+                    sid,
+                    iid,
+                    str(fields.get("field") or ""),
+                    value=str(fields.get("value") or ""),
+                    catalog=str(fields.get("catalog") or ""),
+                    manufacturer=str(fields.get("manufacturer") or ""),
+                    library_id=str(fields.get("library_id") or ""),
+                    width_mm=_opt_float(fields.get("width_mm")),
+                    height_mm=_opt_float(fields.get("height_mm")),
+                    depth_mm=_opt_float(fields.get("depth_mm")),
+                    mount=str(fields.get("mount") or ""),
+                    terminal=str(fields.get("terminal") or ""),
+                    wire_number=str(fields.get("wire_number") or ""),
+                    to_ref=str(fields.get("to_ref") or ""),
                 )
                 self._send_json(200, st)
             except (KeyError, ValueError) as exc:

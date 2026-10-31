@@ -147,6 +147,8 @@ class ObservedItem(BaseModel):
     tag: str = ""
     terminal: str = ""
     wire_number: str = ""
+    # Rating text the tech read off the device, or a published library rating.
+    ratings: str = ""
     matches: list[CatalogMatch] = Field(default_factory=list)
     status: ItemStatus = "unconfirmed"
     envelope_w_mm: float | None = None

@@ -7704,6 +7704,51 @@ class Session:
 
         return identify(self, photo_id, vision=vision, recordings=recordings)
 
+    def reconstruct_library_choices(self, query: str = "", *, limit: int = 8) -> list[dict[str, Any]]:
+        """Published parts for the missing-info editor. Does not change the project."""
+
+        from panelcad.reconstruct.feedback import library_choices
+
+        return library_choices(self, query, limit=limit)
+
+    def reconstruct_apply_missing_info(
+        self,
+        item_id: str,
+        field: str,
+        *,
+        value: str = "",
+        catalog: str = "",
+        manufacturer: str = "",
+        library_id: str = "",
+        width_mm: float | None = None,
+        height_mm: float | None = None,
+        depth_mm: float | None = None,
+        mount: str = "",
+        terminal: str = "",
+        wire_number: str = "",
+        to_ref: str = "",
+    ) -> dict[str, Any]:
+        """Save one missing-info badge onto the project. Refuses placeholder text."""
+
+        from panelcad.reconstruct.feedback import apply_missing_info
+
+        return apply_missing_info(
+            self,
+            item_id,
+            field,
+            value=value,
+            catalog=catalog,
+            manufacturer=manufacturer,
+            library_id=library_id,
+            width_mm=width_mm,
+            height_mm=height_mm,
+            depth_mm=depth_mm,
+            mount=mount,
+            terminal=terminal,
+            wire_number=wire_number,
+            to_ref=to_ref,
+        )
+
     def reconstruct_confirm_item(
         self,
         item_id: str,
@@ -8580,6 +8625,9 @@ _ACTIVITY_METHODS: dict[str, Any] = {
     "reconstruct_clear_scale": lambda s, r, a, k: f"clear photo scale {r.get('photo') or (a[0] if a else '')}",
     "reconstruct_identify": lambda s, r, a, k: f"identify photos {len(r.get('items') or [])}",
     "reconstruct_confirm_item": lambda s, r, a, k: f"confirm {r.get('id')} {r.get('status')}",
+    "reconstruct_apply_missing_info": lambda s, r, a, k: (
+        f"missing info {k.get('field') or (a[1] if len(a) > 1 else '')} {(r.get('item') or {}).get('id', '')}"
+    ).strip(),
     "reconstruct_add_missed_device": lambda s, r, a, k: f"missed device {(r.get('item') or {}).get('id')}",
     "reconstruct_update_device_box": lambda s, r, a, k: f"update box {(r.get('item') or {}).get('id')}",
     "reconstruct_link_closeup": lambda s, r, a, k: f"close-up {(r.get('item') or {}).get('id')} {r.get('closeup_photo_id') or ''}".rstrip(),

@@ -864,3 +864,311 @@ def test_photo_feedback_dialog_banner_once_and_rows_wrap(tmp_path: Path) -> None
     assert wiz.shot_list.wordWrap()
     dlg.close()
     wiz.close()
+
+
+def _part_item(session: Session, tag: str):
+    store = ensure_reconstruction(session.project)
+    return next(item for item in store.items if item.tag == tag and item.role == "part")
+
+
+def test_apply_missing_info_rejects_placeholders_and_updates_counts(tmp_path: Path) -> None:
+    """Saving a badge writes the project, refuses placeholders, and refreshes readiness counts."""
+    session, photo_id = _build_mixed_reconstruct_session(tmp_path)
+    psu = _part_item(session, "PSU1")
+    k1 = _part_item(session, "K1")
+    before = session.reconstruct_site_exit_check(photo_id=photo_id)
+    assert before["missing_info_count"] == 2
+    assert before["confirmed_count"] == 2
+    assert before["safe_to_leave_site"] is False
+
+    report = session.reconstruct_photo_feedback(photo_id=photo_id)
+    by_tag = {box["tag"]: box for box in report["boxes"]}
+    assert [badge["field"] for badge in by_tag["PSU1"]["badges"]] == [
+        "part_number",
+        "dimensions",
+        "ratings",
+        "terminals_wires",
+    ]
+    assert by_tag["CB1"]["badges"] == []
+    assert by_tag["PLC1"]["badges"] == []
+
+    for bogus in ("TBD", "N/A", "placeholder", "INFO NEEDED", "generic", "unknown"):
+        for field in ("part_number", "ratings", "terminals_wires"):
+            kwargs = {"value": bogus} if field != "terminals_wires" else {"terminal": bogus}
+            try:
+                session.reconstruct_apply_missing_info(psu.id, field, **kwargs)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError(f"{field} accepted placeholder {bogus}")
+    unchanged = session.reconstruct_site_exit_check(photo_id=photo_id)
+    assert unchanged["missing_info_count"] == 2
+    assert unchanged["confirmed_count"] == 2
+    assert _part_item(session, "PSU1").part_number == ""
+    assert _part_item(session, "PSU1").ratings == ""
+
+    typed = session.reconstruct_apply_missing_info(psu.id, "part_number", value="NAMEPLATE-9F2K")
+    assert typed["missing_info_count"] == 2
+    assert _part_item(session, "PSU1").part_number == "NAMEPLATE-9F2K"
+    assert _part_item(session, "PSU1").status != "catalog"
+    assert _part_item(session, "PSU1").envelope_w_mm in (None, 0)
+
+    rated = session.reconstruct_apply_missing_info(psu.id, "ratings", value="24VDC 5A")
+    assert rated["missing_info_count"] == 2
+    assert rated["confirmed_count"] == 2
+    assert _part_item(session, "PSU1").ratings == "24VDC 5A"
+    session.undo()
+    assert _part_item(session, "PSU1").ratings == ""
+    session.redo()
+    assert _part_item(session, "PSU1").ratings == "24VDC 5A"
+    psu_box = next(box for box in rated["feedback"]["boxes"] if box["tag"] == "PSU1")
+    assert all(badge["field"] != "ratings" for badge in psu_box["badges"])
+
+    session.save(tmp_path / "cabinet.pcad.yaml")
+    reloaded = Session.open(tmp_path / "cabinet.pcad.yaml")
+    assert _part_item(reloaded, "PSU1").ratings == "24VDC 5A"
+    assert _part_item(reloaded, "PSU1").part_number == "NAMEPLATE-9F2K"
+    session = reloaded
+    psu = _part_item(session, "PSU1")
+    k1 = _part_item(session, "K1")
+
+    sized = session.reconstruct_apply_missing_info(
+        psu.id,
+        "dimensions",
+        width_mm=40.0,
+        height_mm=125.2,
+        depth_mm=113.5,
+        mount="din_rail",
+    )
+    assert sized["confirmed_count"] == 3
+    assert sized["missing_info_count"] == 1
+    assert sized["safe_to_leave_site"] is False
+    assert "DO NOT LEAVE SITE YET" in sized["site_exit_banner"]
+    assert "1 missing" in sized["site_exit_banner"] or sized["missing_info_count"] == 1
+
+    k1_sized = session.reconstruct_apply_missing_info(
+        k1.id,
+        "dimensions",
+        width_mm=45.0,
+        height_mm=85.0,
+        depth_mm=92.0,
+        mount="din_rail",
+    )
+    assert k1_sized["missing_info_count"] == 1
+    assert k1_sized["safe_to_leave_site"] is False
+
+    landed = session.reconstruct_apply_missing_info(
+        k1.id,
+        "terminals_wires",
+        terminal="A1",
+        wire_number="14",
+        to_ref="PLC1:O0",
+    )
+    assert landed["missing_info_count"] == 0
+    assert landed["confirmed_count"] == 4
+    assert landed["safe_to_leave_site"] is True
+    assert landed["site_exit_status"] == "ready"
+    assert "SITE CAPTURE READY" in landed["site_exit_banner"]
+    assert _part_item(session, "K1").terminal == "A1"
+    assert _part_item(session, "K1").wire_number == "14"
+
+
+def test_apply_missing_info_library_pick_uses_published_part(tmp_path: Path) -> None:
+    session, photo_id = _build_mixed_reconstruct_session(tmp_path)
+    from panelcad.reconstruct.feedback import library_choices
+
+    choices = library_choices(session, "1489-M1C010")
+    pick = next(row for row in choices if row["catalog"] == "1489-M1C010")
+    assert pick["width_mm"] and pick["height_mm"] and pick["depth_mm"]
+    assert pick["ratings"]
+    psu = _part_item(session, "PSU1")
+    saved = session.reconstruct_apply_missing_info(
+        psu.id,
+        "part_number",
+        catalog=pick["catalog"],
+        manufacturer=pick["manufacturer"],
+        library_id=pick["library_id"],
+    )
+    item = _part_item(session, "PSU1")
+    assert item.status == "catalog"
+    assert item.part_number == "1489-M1C010"
+    assert item.matches[0].width_mm == pick["width_mm"]
+    assert item.matches[0].height_mm == pick["height_mm"]
+    assert item.matches[0].depth_mm == pick["depth_mm"]
+    assert item.envelope_confirmed is False
+    assert item.ratings == pick["ratings"]
+    assert saved["confirmed_count"] == 3
+    assert saved["missing_info_count"] == 1
+    assert saved["feedback_box"]["status_category"] == "confirmed"
+    check = session.reconstruct_site_exit_check(photo_id=photo_id)
+    assert check["confirmed_count"] == saved["confirmed_count"]
+    assert check["missing_info_count"] == saved["missing_info_count"]
+    assert check["safe_to_leave_site"] is False
+
+
+def test_gui_badge_inline_editor_saves_and_refreshes_counts(tmp_path: Path) -> None:
+    from PySide6.QtWidgets import QPushButton
+
+    _app()
+    session, photo_id = _build_mixed_reconstruct_session(tmp_path)
+    dlg = PhotoFeedbackDialog(session, photo_id=photo_id)
+    dlg.resize(1180, 780)
+    dlg.show()
+    _app().processEvents()
+
+    hits = [hit for hit in dlg.view.badge_hits() if hit["field"] == "dimensions"]
+    assert hits
+    hit = hits[0]
+    dlg.view.simulate_click_photo_px(hit["x"] + 4, hit["y"] + 4)
+    _app().processEvents()
+    assert dlg.inline_editor.isVisible()
+    assert dlg.inline_editor.field == "dimensions"
+
+    button = dlg.findChild(QPushButton, f"badge-{dlg.inline_editor.item_id}-ratings")
+    assert button is not None
+    button.click()
+    _app().processEvents()
+    assert dlg.inline_editor.field == "ratings"
+    dlg.inline_editor.value_edit.setText("TBD")
+    dlg.inline_editor.save_btn.click()
+    _app().processEvents()
+    assert "placeholder" in dlg.inline_editor.error_label.text().lower()
+    assert "2 missing info" in dlg.summary_label.text()
+
+    dlg.inline_editor.value_edit.setText("24VDC 5A")
+    dlg.inline_editor.save_btn.click()
+    _app().processEvents()
+    assert not dlg.inline_editor.isVisible()
+    assert "2 missing info" in dlg.summary_label.text()
+    assert "DO NOT LEAVE SITE YET" in dlg.site_exit_banner_label.text()
+    assert _part_item(session, "PSU1").ratings == "24VDC 5A"
+
+    psu_id = _part_item(session, "PSU1").id
+    dim_btn = dlg.findChild(QPushButton, f"badge-{psu_id}-dimensions")
+    assert dim_btn is not None
+    dim_btn.click()
+    _app().processEvents()
+    dlg.inline_editor.w_spin.setValue(40.0)
+    dlg.inline_editor.h_spin.setValue(125.2)
+    dlg.inline_editor.d_spin.setValue(113.5)
+    dlg.inline_editor.mount_combo.setCurrentIndex(dlg.inline_editor.mount_combo.findData("din_rail"))
+    dlg.inline_editor.save_btn.click()
+    _app().processEvents()
+    assert "3 confirmed" in dlg.summary_label.text() or "1 missing info" in dlg.summary_label.text()
+    assert "1 missing info" in dlg.summary_label.text()
+    check = session.reconstruct_site_exit_check(photo_id=photo_id)
+    assert check["confirmed_count"] == 3
+    assert check["missing_info_count"] == 1
+    assert "DO NOT LEAVE SITE YET" in dlg.site_exit_banner_label.text()
+    dlg.close()
+
+
+def test_wizard_step1_badge_editor_updates_site_exit(tmp_path: Path) -> None:
+    from PySide6.QtWidgets import QPushButton
+
+    _app()
+    session, photo_id = _build_mixed_reconstruct_session(tmp_path)
+    wiz = ReconstructWizard(session)
+    wiz.resize(1180, 820)
+    wiz.show()
+    _app().processEvents()
+    report = wiz.run_capture_site_exit_check()
+    assert report["missing_info_count"] == 2
+    psu = next(box for box in report["boxes"] if box["tag"] == "PSU1")
+    button = wiz.findChild(QPushButton, f"badge-{psu['item_id']}-ratings")
+    assert button is not None
+    button.click()
+    _app().processEvents()
+    assert wiz.capture_inline_editor.isVisible()
+    assert wiz.capture_inline_editor.field == "ratings"
+    wiz.capture_inline_editor.value_edit.setText("24VDC 5A")
+    wiz.capture_inline_editor.save_btn.click()
+    _app().processEvents()
+    assert "DO NOT LEAVE SITE YET" in wiz.site_exit_banner.text()
+    assert _part_item(session, "PSU1").ratings == "24VDC 5A"
+    assert session.reconstruct_site_exit_check(photo_id=photo_id)["missing_info_count"] == 2
+    wiz.close()
+
+
+def test_mobile_missing_info_badge_save_updates_counts(tmp_path: Path) -> None:
+    import json
+    import urllib.error
+    import urllib.request
+    from panelcad.gui.photo_viewer import MobileCaptureServerDialog
+
+    _app()
+    session, photo_id = _build_mixed_reconstruct_session(tmp_path)
+    dlg = MobileCaptureServerDialog(session)
+    dlg.port_spin.setValue(0)
+    dlg.start_server()
+    port = dlg.server.port
+    base = f"http://127.0.0.1:{port}"
+    sid = dlg.server.live_session_id
+    try:
+        with urllib.request.urlopen(f"{base}/", timeout=5) as resp:
+            html = resp.read().decode("utf-8")
+        assert 'id="inlineEditor"' in html
+        assert "openInlineEditor" in html
+        assert "missing-info" in html
+
+        with urllib.request.urlopen(f"{base}/api/sessions/{sid}/status", timeout=5) as resp:
+            status = json.loads(resp.read().decode("utf-8"))
+        desktop = session.reconstruct_photo_feedback(photo_id=photo_id)
+        phone_fields = {
+            box["tag"]: [badge["field"] for badge in box.get("badges") or []]
+            for box in status["boxes"]
+        }
+        desktop_fields = {
+            box["tag"]: [badge["field"] for badge in box.get("badges") or []]
+            for box in desktop["boxes"]
+        }
+        assert phone_fields == desktop_fields
+        assert status["badge_hits"]
+        assert status["missing_info_count"] == 2
+
+        with urllib.request.urlopen(
+            f"{base}/api/sessions/{sid}/library?q=1489-M1C010", timeout=5
+        ) as resp:
+            library = json.loads(resp.read().decode("utf-8"))
+        pick = next(row for row in library["matches"] if row["catalog"] == "1489-M1C010")
+        psu = next(box for box in status["boxes"] if box["tag"] == "PSU1")
+
+        bogus = json.dumps({"field": "ratings", "value": "placeholder"}).encode("utf-8")
+        bad_req = urllib.request.Request(
+            f"{base}/api/sessions/{sid}/items/{psu['item_id']}/missing-info",
+            data=bogus,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            urllib.request.urlopen(bad_req, timeout=5)
+            raise AssertionError("placeholder rating was accepted")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 400
+
+        payload = json.dumps(
+            {
+                "field": "part_number",
+                "catalog": pick["catalog"],
+                "manufacturer": pick["manufacturer"],
+                "library_id": pick["library_id"],
+            }
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            f"{base}/api/sessions/{sid}/items/{psu['item_id']}/missing-info",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            after = json.loads(resp.read().decode("utf-8"))
+        assert after["confirmed_count"] == 3
+        assert after["missing_info_count"] == 1
+        assert after["safe_to_leave_site"] is False
+        assert "DO NOT LEAVE SITE YET" in after["site_exit_banner"]
+        assert _part_item(session, "PSU1").part_number == "1489-M1C010"
+        assert _part_item(session, "PSU1").ratings == pick["ratings"]
+        assert _part_item(session, "PSU1").envelope_confirmed is False
+    finally:
+        dlg.stop_server()
+        dlg.close()

@@ -489,7 +489,23 @@ def place_confirmed(session: Any, sheet_id: str | None = None) -> dict[str, Any]
                 pass
             comp = sheet.component(ref)
             keep = {k: v for k, v in props.items() if str(k).startswith("photo") or str(k).startswith("reconstruct")}
-            keep.update({k: v for k, v in props.items() if k in {"width_mm", "height_mm", "depth_mm", "dim_source", "envelope_confirmed", "mount"}})
+            keep.update(
+                {
+                    k: v
+                    for k, v in props.items()
+                    if k in {
+                        "width_mm",
+                        "height_mm",
+                        "depth_mm",
+                        "dim_source",
+                        "envelope_confirmed",
+                        "mount",
+                        "ratings",
+                        "terminal",
+                        "wire_number",
+                    }
+                }
+            )
             comp.properties.update(keep)
         item.placed_ref = ref
         item.sheet = sheet.id

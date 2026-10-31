@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from panelcad.api.session import Session
+from panelcad.gui.missing_info_editor import MissingInfoInlineEditor
 
 
 def _photo_caption(photo: dict, item: dict) -> str:
@@ -41,6 +42,7 @@ class PhotoView(QLabel):
     """Photo display widget supporting single-region highlight, full feedback overlay, click-to-select, and drag-box for missed devices."""
 
     box_clicked = Signal(str)
+    badge_clicked = Signal(str, str)
     region_drawn = Signal(dict)
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -50,6 +52,7 @@ class PhotoView(QLabel):
         self._banner_top_offset: int = 0
         self._region: tuple[float, float, float, float] | None = None
         self._feedback_boxes: list[dict[str, Any]] = []
+        self._badge_hits: list[dict[str, Any]] = []
         self._selected_item_id: str | None = None
         self._draw_missed_mode: bool = False
         self._drag_start_px: QPointF | None = None
@@ -66,6 +69,7 @@ class PhotoView(QLabel):
         self._source_size = (self._pix.width(), self._pix.height())
         self._banner_top_offset = 0
         self._feedback_boxes = []
+        self._badge_hits = []
         if region and float(region.get("w") or 0) > 0:
             self._region = (
                 float(region.get("x") or 0),
@@ -86,14 +90,19 @@ class PhotoView(QLabel):
         boxes: list[dict[str, Any]],
         selected_item_id: str | None = None,
         banner_top_offset: int = 54,
+        badge_hits: list[dict[str, Any]] | None = None,
     ) -> None:
         self._pix = QPixmap.fromImage(image)
         self._source_size = (max(1, int(source_width)), max(1, int(source_height)))
         self._banner_top_offset = max(0, int(banner_top_offset))
         self._region = None
         self._feedback_boxes = list(boxes)
+        self._badge_hits = list(badge_hits or [])
         self._selected_item_id = selected_item_id
         self.update()
+
+    def badge_hits(self) -> list[dict[str, Any]]:
+        return [dict(hit) for hit in self._badge_hits]
 
     def set_draw_missed_box_mode(self, enabled: bool) -> None:
         self._draw_missed_mode = bool(enabled)
@@ -140,6 +149,12 @@ class PhotoView(QLabel):
 
     def simulate_click_photo_px(self, px: float, py: float) -> str | None:
         """Programmatic click helper at photo pixel coordinates (px, py) for tests and automation."""
+        badge = self._hit_test_badge(px, py)
+        if badge:
+            self._selected_item_id = badge[0]
+            self.badge_clicked.emit(badge[0], badge[1])
+            self.update()
+            return badge[0]
         hit = self._hit_test_box(px, py)
         if hit:
             self._selected_item_id = hit
@@ -171,6 +186,19 @@ class PhotoView(QLabel):
         self.update()
         return region
 
+    def _hit_test_badge(self, px: float, py: float) -> tuple[str, str] | None:
+        for hit in reversed(self._badge_hits):
+            bx = float(hit.get("x") or 0.0)
+            by = float(hit.get("y") or 0.0)
+            bw = float(hit.get("w") or 0.0)
+            bh = float(hit.get("h") or 0.0)
+            if bx <= px <= bx + bw and by <= py <= by + bh:
+                item_id = str(hit.get("item_id") or "")
+                field = str(hit.get("field") or "")
+                if item_id and field:
+                    return item_id, field
+        return None
+
     def _hit_test_box(self, px: float, py: float) -> str | None:
         for b in reversed(self._feedback_boxes):
             reg = b.get("region") or {}
@@ -189,6 +217,12 @@ class PhotoView(QLabel):
                 if self._draw_missed_mode:
                     self._drag_start_px = QPointF(pt[0], pt[1])
                     self._drag_current_px = QPointF(pt[0], pt[1])
+                    self.update()
+                    return
+                badge = self._hit_test_badge(pt[0], pt[1])
+                if badge:
+                    self._selected_item_id = badge[0]
+                    self.badge_clicked.emit(badge[0], badge[1])
                     self.update()
                     return
                 hit = self._hit_test_box(pt[0], pt[1])
@@ -405,6 +439,7 @@ class PhotoFeedbackDialog(QDialog):
         self._selected_item_id = selected_item_id
         self._last_report: dict[str, Any] = {}
         self._last_exported_path: Path | None = None
+        self._retired_badges: list[QWidget] = []
 
         self.setWindowTitle("Cabinet Photo Feedback Overlay — Missing Info & Missed Device Check")
         self.resize(1180, 780)
@@ -467,6 +502,7 @@ class PhotoFeedbackDialog(QDialog):
         self.view = PhotoView()
         self.view.setMinimumSize(560, 460)
         self.view.box_clicked.connect(self._on_photo_box_clicked)
+        self.view.badge_clicked.connect(self._on_badge_clicked)
         self.view.region_drawn.connect(self._on_photo_region_drawn)
         splitter.addWidget(self.view)
 
@@ -492,6 +528,14 @@ class PhotoFeedbackDialog(QDialog):
         self.missing_details_label = QLabel("Select a boxed device on the photo to see what is missing.")
         self.missing_details_label.setWordWrap(True)
         inspect_v.addWidget(self.missing_details_label)
+
+        self.badge_host = QWidget()
+        self.badge_layout = QHBoxLayout(self.badge_host)
+        self.badge_layout.setContentsMargins(0, 0, 0, 0)
+        inspect_v.addWidget(self.badge_host)
+        self.inline_editor = MissingInfoInlineEditor(self.session)
+        self.inline_editor.saved.connect(self._on_inline_saved)
+        inspect_v.addWidget(self.inline_editor)
 
         form = QFormLayout()
         self.tag_edit = QLineEdit()
@@ -670,12 +714,14 @@ class PhotoFeedbackDialog(QDialog):
             it.setForeground(QColor("#86efac"))
             self.shot_list_widget.addItem(it)
 
+        badge_hits: list[dict[str, Any]] = []
         img = render_annotated_cabinet_photo(
             self.session,
             photo_id=self._photo_id,
             filter_mode=mode,  # type: ignore[arg-type]
             selected_item_id=self._selected_item_id,
             include_banner=True,
+            badge_hits=badge_hits,
         )
         pw = int(report.get("width_px") or img.width())
         ui_scale = max(1.0, min(3.2, pw / 1280.0))
@@ -687,6 +733,7 @@ class PhotoFeedbackDialog(QDialog):
             boxes=report.get("boxes") or [],
             selected_item_id=self._selected_item_id,
             banner_top_offset=top_off,
+            badge_hits=badge_hits,
         )
 
         self.device_list.blockSignals(True)
@@ -743,6 +790,7 @@ class PhotoFeedbackDialog(QDialog):
                 f"Device {b.get('item_id')} ({b.get('tag')}) is confirmed:\n"
                 + "\n".join(f"• {line}" for line in info)
             )
+        self._rebuild_badge_buttons(b)
         self.tag_edit.setText(str(b.get("tag") or ""))
         self.part_edit.setText(str(b.get("part_number") or ""))
         self.brand_edit.setText(str(b.get("brand") or ""))
@@ -822,6 +870,67 @@ class PhotoFeedbackDialog(QDialog):
         except (KeyError, ValueError) as exc:
             self.status_note.setText(str(exc))
 
+    def _clear_badge_buttons(self) -> None:
+        while self.badge_layout.count():
+            item = self.badge_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.hide()
+                widget.setParent(None)
+                self._retired_badges.append(widget)
+
+    def _rebuild_badge_buttons(self, box: dict[str, Any]) -> None:
+        self._clear_badge_buttons()
+        item_id = str(box.get("item_id") or "")
+        for badge in box.get("badges") or []:
+            field = str(badge.get("field") or "")
+            if not field:
+                continue
+            button = QPushButton(str(badge.get("label") or field))
+            button.setObjectName(f"badge-{item_id}-{field}")
+            button.setToolTip(str(badge.get("reason") or badge.get("prompt") or ""))
+            button.setStyleSheet(
+                "QPushButton { background: #78350f; color: #fef3c7; border: 1px solid #fbbf24; "
+                "border-radius: 8px; padding: 3px 8px; font-weight: 700; }"
+            )
+            button.clicked.connect(lambda _checked=False, iid=item_id, name=field: self._open_inline(iid, name))
+            self.badge_layout.addWidget(button)
+        self.badge_layout.addStretch()
+
+    def _box_by_id(self, item_id: str) -> dict[str, Any] | None:
+        for box in self._last_report.get("boxes") or []:
+            if str(box.get("item_id") or "") == item_id:
+                return box
+        return None
+
+    def _open_inline(self, item_id: str, field: str) -> None:
+        box = self._box_by_id(item_id)
+        if box is None:
+            return
+        self._selected_item_id = item_id
+        for row in range(self.device_list.count()):
+            listed = self.device_list.item(row)
+            data = (listed.data(Qt.ItemDataRole.UserRole) or {}) if listed else {}
+            if str(data.get("item_id") or "") == item_id:
+                self.device_list.setCurrentRow(row)
+                self._populate_inspector_from_row(row)
+                break
+        self.inline_editor.open_for(box, field)
+        self.status_note.setText(f"Editing {field.replace('_', ' ')} on {item_id}.")
+
+    def _on_badge_clicked(self, item_id: str, field: str) -> None:
+        self._open_inline(item_id, field)
+
+    def _on_inline_saved(self, result: dict[str, Any]) -> None:
+        self.inline_editor.hide()
+        self.refresh_feedback()
+        confirmed = result.get("confirmed_count")
+        missing = result.get("missing_info_count")
+        banner = str(result.get("site_exit_banner") or "")
+        self.status_note.setText(
+            f"Saved. {confirmed} ready, {missing} missing info. {banner}"
+        )
+
     def _on_photo_box_clicked(self, item_id: str) -> None:
         self._selected_item_id = item_id
         for row in range(self.device_list.count()):
@@ -869,12 +978,14 @@ class PhotoFeedbackDialog(QDialog):
 
         if self._photo_id:
             mode = self.current_filter_mode()
+            badge_hits: list[dict[str, Any]] = []
             img = render_annotated_cabinet_photo(
                 self.session,
                 photo_id=self._photo_id,
                 filter_mode=mode,  # type: ignore[arg-type]
                 selected_item_id=self._selected_item_id,
                 include_banner=True,
+                badge_hits=badge_hits,
             )
             pw = int(self._last_report.get("width_px") or img.width())
             ui_scale = max(1.0, min(3.2, pw / 1280.0))
@@ -886,6 +997,7 @@ class PhotoFeedbackDialog(QDialog):
                 boxes=self._last_report.get("boxes") or [],
                 selected_item_id=self._selected_item_id,
                 banner_top_offset=top_off,
+                badge_hits=badge_hits,
             )
 
     def _on_save_selected_device(self) -> None:

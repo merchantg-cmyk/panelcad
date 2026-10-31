@@ -189,6 +189,12 @@ def placement_properties(item: ObservedItem) -> dict[str, Any]:
     props = strip_other_status_keys(props, item.status)
     if item.status == "envelope" and item.envelope_confirmed:
         props.update(label_identity(item))
+    if str(item.ratings or "").strip():
+        props["ratings"] = item.ratings.strip()
+    if str(item.terminal or "").strip():
+        props["terminal"] = item.terminal.strip()
+    if str(item.wire_number or "").strip():
+        props["wire_number"] = item.wire_number.strip()
     return props
 
 

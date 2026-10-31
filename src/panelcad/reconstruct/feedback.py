@@ -17,6 +17,10 @@ Highlights every detected device directly on the real cabinet photo:
   first.
 - Supports adding a missed device directly from a bounding box drawn on the
   photo (`add_missed_device_on_photo`).
+- A missing-info badge (part number, dimensions, ratings, terminals/wires)
+  is filled in place (`apply_missing_info`). Desktop and the phone page call
+  that one function. Typed placeholders are refused. A library pick copies
+  only a published part.
 """
 
 from __future__ import annotations
@@ -49,8 +53,82 @@ SiteExitStatus = Literal["ready", "do_not_leave", "needs_analysis"]
 
 MISSED_DEVICE_PROMPT = (
     "Any physical cabinet component without a box was missed by detection — "
-    "drag a box on the photo to add a missed device, or click a red/amber box to supply missing info."
+    "drag a box on the photo to add a missed device, or click a red/amber box to supply missing info. "
+    "Click a missing-info badge (part number, dimensions, ratings, terminals/wires) "
+    "to type the value or pick a published library part."
 )
+
+MissingInfoField = Literal["part_number", "dimensions", "ratings", "terminals_wires"]
+MISSING_INFO_FIELDS: tuple[str, ...] = ("part_number", "dimensions", "ratings", "terminals_wires")
+
+_BADGE_LABEL: dict[str, str] = {
+    "part_number": "Part #",
+    "dimensions": "W×H×D",
+    "ratings": "Ratings",
+    "terminals_wires": "Terminals / wires",
+}
+_BADGE_PROMPT: dict[str, str] = {
+    "part_number": "Type the catalog number from the device, or pick a published library part.",
+    "dimensions": "Enter the measured width, height, and depth in millimetres and the mounting, or pick a published library part.",
+    "ratings": "Type the rating printed on the device, or pick a library part to use its published rating.",
+    "terminals_wires": "Enter the terminal and wire number from the device. Add the other end only if you can see it.",
+}
+
+# Whole values only. A real catalog number that merely contains one of these words is kept.
+_PLACEHOLDER_VALUES = frozenset(
+    {
+        "tbd",
+        "tba",
+        "n/a",
+        "na",
+        "n.a.",
+        "n.a",
+        "unknown",
+        "unk",
+        "placeholder",
+        "placeholders",
+        "info needed",
+        "needs info",
+        "missing",
+        "none",
+        "generic",
+        "todo",
+        "wip",
+        "temp",
+        "temporary",
+        "xxx",
+        "xxxx",
+        "asdf",
+        "part",
+        "device",
+        "sku",
+        "part #",
+        "part#",
+        "catalog",
+        "see photo",
+        "see nameplate",
+        "not available",
+        "not specified",
+        "?",
+        "-",
+        "--",
+        "---",
+        "...",
+        "…",
+        "reconstruct.needs_info",
+        "needs_info",
+    }
+)
+
+
+class MissingInfoBadge(BaseModel):
+    """One clickable gap on a device. Desktop and the phone page share this list."""
+
+    field: MissingInfoField
+    label: str
+    prompt: str
+    reason: str = ""
+    current: str = ""
 
 
 class DeviceFeedbackBox(BaseModel):
@@ -67,8 +145,12 @@ class DeviceFeedbackBox(BaseModel):
     region: dict[str, float] = Field(default_factory=lambda: {"x": 0.0, "y": 0.0, "w": 0.0, "h": 0.0})
     missing_fields: list[str] = Field(default_factory=list)
     missing_reasons: list[str] = Field(default_factory=list)
+    badges: list[MissingInfoBadge] = Field(default_factory=list)
     header_label: str = ""
     badge_lines: list[str] = Field(default_factory=list)
+    ratings: str = ""
+    terminal: str = ""
+    wire_number: str = ""
     needs_closeup: bool = False
     closeup_photo_id: str = ""
     placed_ref: str = ""
@@ -273,6 +355,145 @@ def _device_missing_analysis(
     return dedup_tokens, reasons, needs_closeup
 
 
+def is_placeholder_value(value: str) -> bool:
+    """True when the text is empty or a generic stand-in, not a value from the device."""
+
+    text = " ".join(str(value or "").split())
+    if not text:
+        return True
+    folded = text.casefold().strip(" .")
+    compact = "".join(ch for ch in folded if ch.isalnum())
+    if folded in _PLACEHOLDER_VALUES:
+        return True
+    banned = {"".join(ch for ch in item if ch.isalnum()) for item in _PLACEHOLDER_VALUES}
+    if compact and compact in banned:
+        return True
+    return not any(ch.isalnum() for ch in text)
+
+
+def reject_placeholder(value: str, *, what: str) -> str:
+    text = " ".join(str(value or "").split())
+    if not text:
+        raise ValueError(f"{what} is empty")
+    if is_placeholder_value(text):
+        raise ValueError(
+            f"'{text}' is a placeholder. Type the value from the device, or pick a published library part."
+        )
+    return text
+
+
+def canonical_missing_field(field: str) -> MissingInfoField:
+    key = str(field or "").strip().casefold().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "part": "part_number",
+        "part_number": "part_number",
+        "catalog": "part_number",
+        "sku": "part_number",
+        "dimensions": "dimensions",
+        "dimension": "dimensions",
+        "envelope": "dimensions",
+        "size": "dimensions",
+        "ratings": "ratings",
+        "rating": "ratings",
+        "terminals": "terminals_wires",
+        "wires": "terminals_wires",
+        "terminals_wires": "terminals_wires",
+        "terminal": "terminals_wires",
+        "wire": "terminals_wires",
+        "wire_landing": "terminals_wires",
+    }
+    canonical = aliases.get(key, "")
+    if canonical not in MISSING_INFO_FIELDS:
+        raise ValueError(
+            "field must be part_number, dimensions, ratings, or terminals_wires"
+        )
+    return canonical  # type: ignore[return-value]
+
+
+def _field_for_reason(reason: str) -> str:
+    text = str(reason or "").casefold()
+    if "close-up" in text or "unreadable" in text:
+        return ""
+    if "rating" in text:
+        return "ratings"
+    if "wire" in text or "terminal" in text or "landing" in text:
+        return "terminals_wires"
+    if "dimension" in text or "footprint" in text or "mounting" in text or "w×h×d" in text:
+        return "dimensions"
+    if "part" in text or "catalog" in text or "sku" in text:
+        return "part_number"
+    return ""
+
+
+def _first_reason(reasons: list[str], field: str) -> str:
+    for reason in reasons:
+        if _field_for_reason(reason) == field:
+            return reason
+    return ""
+
+
+def _badge(field: str, reason: str, current: str = "") -> MissingInfoBadge:
+    text = reason or f"MISSING: {_BADGE_LABEL[field]}"
+    return MissingInfoBadge(
+        field=field,  # type: ignore[arg-type]
+        label=_BADGE_LABEL[field],
+        prompt=_BADGE_PROMPT[field],
+        reason=text,
+        current=current,
+    )
+
+
+def missing_info_badges(
+    item: ObservedItem,
+    tokens: list[str],
+    reasons: list[str],
+) -> list[MissingInfoBadge]:
+    """The editable gaps on one device. Same list for the desktop overlay and the phone page."""
+
+    token_set = set(tokens)
+    badges: list[MissingInfoBadge] = []
+    part_tokens = {"part_number", "catalog_match", "confirm_catalog", "manufacturer", "identify_part", "needs_info"}
+    if part_tokens & token_set or _first_reason(reasons, "part_number"):
+        badges.append(_badge("part_number", _first_reason(reasons, "part_number"), item.part_number))
+    dim_tokens = {"width_mm", "height_mm", "depth_mm", "mount"}
+    if dim_tokens & token_set or _first_reason(reasons, "dimensions"):
+        badges.append(_badge("dimensions", _first_reason(reasons, "dimensions"), _item_dimensions_label(item)))
+    if not str(item.ratings or "").strip():
+        badges.append(
+            _badge(
+                "ratings",
+                _first_reason(reasons, "ratings") or "MISSING: Ratings (voltage, amps, or the rating printed on the device)",
+                "",
+            )
+        )
+    wire_tokens = {"terminals", "wires", "wire_landing"}
+    if wire_tokens & token_set or _first_reason(reasons, "terminals_wires"):
+        current = " ".join(bit for bit in (item.terminal, item.wire_number) if bit)
+        badges.append(_badge("terminals_wires", _first_reason(reasons, "terminals_wires"), current))
+    return badges
+
+
+def overlay_callout_lines(
+    badges: list[MissingInfoBadge],
+    reasons: list[str],
+) -> list[tuple[str, str]]:
+    """Callout text and the field a click on that line edits. An empty field is not editable."""
+
+    lines: list[tuple[str, str]] = []
+    owned = {badge.field for badge in badges}
+    for badge in badges:
+        lines.append((badge.reason or f"MISSING: {badge.label}", badge.field))
+    for reason in reasons:
+        field = _field_for_reason(reason)
+        if field and field in owned:
+            continue
+        if reason:
+            lines.append((reason, ""))
+    if not lines:
+        lines.append(("MISSING: Part # or Verified W×H×D", "part_number"))
+    return lines
+
+
 def build_device_feedback_box(
     store: Reconstruction,
     photo: Photo,
@@ -293,6 +514,7 @@ def build_device_feedback_box(
         if lbl and lbl.lower() not in part_desc.lower():
             part_desc = f"{part_desc} · {lbl}" if part_desc else lbl
 
+    badges = [] if is_confirmed else missing_info_badges(item, tokens, reasons)
     if is_confirmed:
         header = f"✓ {ident_tag}"
         if part_desc:
@@ -310,7 +532,7 @@ def build_device_feedback_box(
             header += f" · {part_desc}"
         else:
             header += " · INFO NEEDED"
-        badge_lines = list(reasons) if reasons else ["MISSING: Part # or Verified W×H×D"]
+        badge_lines = [text for text, _field in overlay_callout_lines(badges, reasons)]
 
     return DeviceFeedbackBox(
         item_id=item.id,
@@ -331,8 +553,12 @@ def build_device_feedback_box(
         },
         missing_fields=tokens if not is_confirmed else [],
         missing_reasons=reasons if not is_confirmed else [],
+        badges=badges,
         header_label=header,
         badge_lines=badge_lines,
+        ratings=str(item.ratings or ""),
+        terminal=str(item.terminal or ""),
+        wire_number=str(item.wire_number or ""),
         needs_closeup=needs_closeup if not is_confirmed else False,
         closeup_photo_id=closeup_id,
         placed_ref=item.placed_ref,
@@ -539,6 +765,258 @@ def capture_site_exit_readiness(
         filter_mode=filter_mode,
         unboxed_callouts=unboxed_callouts,
     )
+
+
+def library_choices(target: Any, query: str = "", *, limit: int = 8) -> list[dict[str, Any]]:
+    """Published parts matching ``query``. Empty until the query is at least two characters.
+
+    Dimensions and ratings are copied from the library row. Nothing is invented when a
+    field was not published.
+    """
+
+    text = " ".join(str(query or "").split())
+    if len(text) < 2:
+        return []
+    session, _project, _base = _extract_project_and_session(target)
+    parts = getattr(session, "parts", None) if session is not None else None
+    if parts is None:
+        from panelcad.library.parts import default_parts_catalog
+
+        parts = default_parts_catalog()
+    cap = max(1, min(int(limit or 8), 20))
+    rows: list[dict[str, Any]] = []
+    for part in parts.search(text)[:cap]:
+        ratings = str(part.ratings_text() or "").strip()
+        width = float(part.width_mm) if part.width_mm else None
+        height = float(part.height_mm) if part.height_mm else None
+        depth = float(part.depth_mm) if part.depth_mm else None
+        rows.append(
+            {
+                "manufacturer": part.manufacturer,
+                "catalog": part.catalog,
+                "library_id": part.library_id,
+                "description": part.description,
+                "width_mm": width,
+                "height_mm": height,
+                "depth_mm": depth,
+                "ratings": ratings,
+                "mounting": str(part.mounting or ""),
+            }
+        )
+    return rows
+
+
+def _published_ratings(session: Any, catalog: str, manufacturer: str = "") -> str:
+    parts = getattr(session, "parts", None)
+    if parts is None or not str(catalog or "").strip():
+        return ""
+    try:
+        part = parts.get(catalog, manufacturer or None)
+    except KeyError:
+        try:
+            part = parts.get(catalog)
+        except KeyError:
+            return ""
+    return str(part.ratings_text() or "").strip()
+
+
+def _stamp_placed_component(session: Any, item: ObservedItem) -> None:
+    """Copy the values just saved onto an already placed component."""
+
+    ref = str(item.placed_ref or "").strip()
+    if not ref:
+        return
+    for sheet in getattr(session.project, "sheets", []) or []:
+        try:
+            comp = sheet.component(ref)
+        except KeyError:
+            continue
+        props = comp.properties
+        if str(item.part_number or "").strip():
+            props["part_number"] = item.part_number
+            props["catalog"] = item.part_number
+        if str(item.brand or "").strip():
+            props["manufacturer"] = item.brand
+        if str(item.ratings or "").strip():
+            props["ratings"] = item.ratings
+        if str(item.terminal or "").strip():
+            props["terminal"] = item.terminal
+        if str(item.wire_number or "").strip():
+            props["wire_number"] = item.wire_number
+        return
+
+
+def _feedback_save_payload(session: Any, item: ObservedItem, field: str) -> dict[str, Any]:
+    photo_id = item.photo_id
+    report = build_photo_feedback_report(session, photo_id=photo_id)
+    box = next((entry for entry in report["boxes"] if entry.get("item_id") == item.id), {})
+    return {
+        "item": public_item(item),
+        "field": field,
+        "feedback_box": box,
+        "feedback": report,
+        "confirmed_count": report["confirmed_count"],
+        "missing_info_count": report["missing_info_count"],
+        "safe_to_leave_site": report["safe_to_leave_site"],
+        "site_exit_status": report["site_exit_status"],
+        "site_exit_banner": report["site_exit_banner"],
+    }
+
+
+def apply_missing_info(
+    target: Any,
+    item_id: str,
+    field: str,
+    *,
+    value: str = "",
+    catalog: str = "",
+    manufacturer: str = "",
+    library_id: str = "",
+    width_mm: float | None = None,
+    height_mm: float | None = None,
+    depth_mm: float | None = None,
+    mount: str = "",
+    terminal: str = "",
+    wire_number: str = "",
+    to_ref: str = "",
+) -> dict[str, Any]:
+    """Write one missing-info field onto the project and return the updated readiness counts.
+
+    A library pick uses the published part only. A typed value is stored as read.
+    Generic placeholders are refused and nothing is filled in for the caller.
+    """
+
+    from panelcad.reconstruct.service import confirm_item
+
+    kind = canonical_missing_field(field)
+    session, project, _base = _extract_project_and_session(target)
+    if session is None or project is None:
+        raise ValueError("missing-info edits need a project session")
+    store, _session, _path = _resolve_store(session)
+    item = store.item(str(item_id))
+    picked_catalog = str(catalog or "").strip()
+    picked_maker = str(manufacturer or "").strip()
+    picked_library = str(library_id or "").strip()
+    if picked_library.startswith("reconstruct."):
+        raise ValueError("pick a published library part, not a placeholder symbol")
+    if picked_catalog:
+        picked_catalog = reject_placeholder(picked_catalog, what="Part number")
+    if picked_maker:
+        picked_maker = reject_placeholder(picked_maker, what="Manufacturer")
+
+    use_library = bool(picked_catalog or picked_library)
+    if kind == "dimensions" and use_library:
+        kind = "part_number"
+
+    if kind == "part_number":
+        typed = str(value or "").strip()
+        if typed and not picked_catalog:
+            typed = reject_placeholder(typed, what="Part number")
+            picked_catalog = typed
+        if not picked_catalog and not picked_library:
+            raise ValueError("type a part number or pick a published library part")
+        hits = match_catalog(
+            session.parts,
+            part_number=picked_catalog,
+            brand=picked_maker,
+            query=picked_library,
+            devices=getattr(session, "catalog", None),
+        )
+        if picked_library and not hits:
+            hits = match_catalog(
+                session.parts,
+                part_number=picked_catalog,
+                brand=picked_maker,
+                devices=getattr(session, "catalog", None),
+            )
+        if picked_catalog:
+            exact = [hit for hit in hits if hit.catalog.casefold() == picked_catalog.casefold()]
+            if picked_maker:
+                branded = [hit for hit in exact if hit.manufacturer.casefold() == picked_maker.casefold()]
+                exact = branded or exact
+            hits = exact
+        elif picked_library:
+            exact = [hit for hit in hits if hit.library_id == picked_library]
+            if len(exact) > 1:
+                raise ValueError("that library id matches more than one part; pick the catalog number")
+            hits = exact
+        if hits:
+            chosen = hits[0]
+            confirm_item(
+                session,
+                item.id,
+                catalog=chosen.catalog,
+                manufacturer=chosen.manufacturer,
+                library_id=chosen.library_id or picked_library,
+                tag=item.tag,
+            )
+            published = _published_ratings(session, item.part_number, item.brand)
+            if published and not str(item.ratings or "").strip():
+                item.ratings = published
+        else:
+            if picked_library and not picked_catalog:
+                raise ValueError("that library id has no published catalog part")
+            item.part_number = picked_catalog
+            item.label_part_number = picked_catalog
+            if picked_maker:
+                item.brand = picked_maker
+                item.label_brand = picked_maker
+            item.matches = []
+            if item.status == "catalog":
+                item.status = "needs_info"
+    elif kind == "dimensions":
+        confirm_item(
+            session,
+            item.id,
+            envelope_w_mm=width_mm,
+            envelope_h_mm=height_mm,
+            envelope_d_mm=depth_mm,
+            mount=mount,
+            tag=item.tag,
+        )
+    elif kind == "ratings":
+        if use_library:
+            published = _published_ratings(session, picked_catalog, picked_maker)
+            if not published:
+                raise ValueError("that library part has no published rating")
+            item.ratings = published
+        else:
+            item.ratings = reject_placeholder(value, what="Rating")
+    else:
+        term = str(terminal or "").strip()
+        wire = str(wire_number or "").strip()
+        other = str(to_ref or "").strip()
+        if term:
+            term = reject_placeholder(term, what="Terminal")
+        if wire:
+            wire = reject_placeholder(wire, what="Wire number")
+        if other:
+            other = reject_placeholder(other, what="Wire landing")
+        if not term and not wire and not other:
+            raise ValueError("enter the terminal, the wire number, or where the wire lands")
+        if term:
+            item.terminal = term
+        if wire:
+            item.wire_number = wire
+        if other:
+            tag = str(item.tag or "").strip()
+            pin = term or str(item.terminal or "").strip()
+            if not tag:
+                raise ValueError("set a device tag before recording where the wire lands")
+            if not pin:
+                raise ValueError("enter the terminal the wire leaves from")
+            from panelcad.reconstruct.service import record_wire_landing
+
+            record_wire_landing(
+                session,
+                wire_number=wire or str(item.wire_number or ""),
+                from_ref=f"{tag}:{pin}",
+                to_ref=other,
+                confirmed=True,
+            )
+
+    _stamp_placed_component(session, item)
+    return _feedback_save_payload(session, item, kind)
 
 
 def _parse_region(
@@ -831,12 +1309,15 @@ def render_annotated_cabinet_photo(
     unboxed_callouts: list[dict[str, Any]] | None = None,
     include_banner: bool = True,
     output_path: Path | str | None = None,
+    badge_hits: list[dict[str, Any]] | None = None,
 ) -> Any:
     """Render the cabinet photo with color-coded device boxes, missing-info badges, and Site-Exit Readiness status."""
     _ensure_qt_gui_app()
     from PySide6.QtCore import QPointF, QRectF, Qt
     from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QPainter, QPainterPath, QPen
 
+    if badge_hits is not None:
+        badge_hits.clear()
     report = build_photo_feedback_model(
         target,
         photo_id=photo_id,
@@ -1009,11 +1490,17 @@ def render_annotated_cabinet_photo(
         painter.drawLine(QPointF(bx + bw, by + bh), QPointF(bx + bw - bracket, by + bh))
         painter.drawLine(QPointF(bx + bw, by + bh), QPointF(bx + bw, by + bh - bracket))
 
+        if box_entry.status_category == "missing_info":
+            pairs = overlay_callout_lines(box_entry.badges, box_entry.missing_reasons)
+        else:
+            pairs = [(line, "") for line in box_entry.badge_lines]
         pending_cards.append(
             dict(
                 box_rect=rect,
                 header_text=box_entry.header_label,
-                lines=box_entry.badge_lines,
+                lines=[text for text, _field in pairs],
+                line_fields=[field_name for _text, field_name in pairs],
+                item_id=box_entry.item_id,
                 header_bg=header_bg,
                 header_fg=header_fg,
                 border_color=accent_color if box_entry.status_category == "missing_info" else stroke_color,
@@ -1055,6 +1542,8 @@ def render_annotated_cabinet_photo(
             occupied=box_rects,
             placed_labels=label_rects,
             ui_scale=ui_scale,
+            badge_hits=badge_hits,
+            top_banner_h=float(top_banner_h),
         )
 
     # Bottom guidance + Before-You-Leave-Site shot list banner
@@ -1224,6 +1713,10 @@ def _draw_device_callout_card(
     occupied: list[Any],
     placed_labels: list[Any] | None = None,
     ui_scale: float = 1.0,
+    item_id: str = "",
+    line_fields: list[str] | None = None,
+    badge_hits: list[dict[str, Any]] | None = None,
+    top_banner_h: float = 0.0,
 ) -> Any:
     from PySide6.QtCore import QPointF, QRectF, Qt
     from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainterPath, QPen
@@ -1238,7 +1731,8 @@ def _draw_device_callout_card(
     fm_head = QFontMetrics(head_font)
     fm_body = QFontMetrics(body_font)
 
-    shown_lines = lines[:4]
+    shown_lines = lines[:6]
+    shown_fields = list(line_fields or [])[: len(shown_lines)]
     pad_x = 7.0 * ui_scale
     line_h = 15.0 * ui_scale
     head_line_h = 15.0 * ui_scale
@@ -1313,11 +1807,24 @@ def _draw_device_callout_card(
             else:
                 painter.setPen(QColor("#a7f3d0"))
             elided = fm_body.elidedText(line, Qt.TextElideMode.ElideRight, int(inner_w))
+            line_rect = QRectF(chosen.left() + pad_x, ly, inner_w, line_h)
             painter.drawText(
-                QRectF(chosen.left() + pad_x, ly, inner_w, line_h),
+                line_rect,
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                 elided,
             )
+            field_name = shown_fields[idx] if idx < len(shown_fields) else ""
+            if badge_hits is not None and field_name and item_id:
+                badge_hits.append(
+                    {
+                        "item_id": item_id,
+                        "field": field_name,
+                        "x": float(chosen.left()),
+                        "y": float(ly - top_banner_h),
+                        "w": float(chosen.width()),
+                        "h": float(line_h),
+                    }
+                )
     return chosen
 
 
