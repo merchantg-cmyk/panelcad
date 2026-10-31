@@ -4,6 +4,32 @@ CAD for **industrial control panels**: power distribution, PLCs, HMIs, relays, c
 
 It is meant to feel like KiCad, but for control-panel work rather than PCBs.
 
+## Screenshots
+
+![Main window with the power schematic](docs/assets/schematic.png)
+
+Main window on the bundled DOL starter, power schematic.
+
+![Enclosure panel layout](docs/assets/panel-layout.png)
+
+Enclosure sheet with DIN rail, wire duct, and devices on the backplate.
+
+![Physical terminal strip sheet](docs/assets/terminal-strip.png)
+
+Physical terminal strip sheet for strip X1, from the vendor strip sample.
+
+![Cabinet photo overlay with device boxes and missing-info badges](docs/assets/cabinet-photo.png)
+
+Cabinet photo overlay: device boxes, confirmed parts, and missing-info badges.
+
+![Photos to drawings review queue](docs/assets/photos-to-drawings.png)
+
+Photos to drawings, stopped on the review queue.
+
+![Command-line sheet list](docs/assets/cli-sheets.png)
+
+Sheet list from `panelcad sheets` on the bundled DOL starter.
+
 - **Windows and Linux**
 - **GUI** for people (Qt / PySide6)
 - **YAML + CLI + Python API + JSONL agent** for AI and scripts
