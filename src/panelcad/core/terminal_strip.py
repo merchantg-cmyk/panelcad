@@ -1,8 +1,11 @@
-"""Graphical terminal strip: one schematic record, drawn to catalog scale.
+"""Graphical terminal strip: one schematic record, measured at catalog width.
 
 Schematic reading order (sheet, then top to bottom, then left to right) is the
-terminal order. The strip is drawn in that order at catalog block width. A long
+terminal order. This layout records that order at catalog block width. A long
 strip continues on the next row, then on the next sheet. It is never scaled down.
+The sheet picture is drawn by ``panelcad.render.terminal_strip`` from these
+records (uniform blocks, one labeled group per strip). Panel packing still uses
+catalog footprints, not the picture's block size.
 
 Reordering on the strip moves those symbols into the new order, writes levels
 1..n, and retags to ``STRIP-n``. ``sequence_terminal_strip`` reads the schematic
@@ -486,6 +489,9 @@ def _sync_pages(session: Any, name: str) -> int:
     primary.strip_part = 1
     layout = layout_terminal_strip(session.project, session.catalog, name)
     parts = max([1, *[int(item["part"]) for item in layout["items"]]])
+    from panelcad.render.terminal_strip import readable_page_count
+
+    parts = max(parts, readable_page_count(session.project, session.catalog, primary))
     existing = {int(sheet.strip_part or 1): sheet for sheet in _strip_pages(session.project, name)}
     for part in range(2, parts + 1):
         sheet = existing.get(part)

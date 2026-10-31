@@ -3903,29 +3903,26 @@ class SchematicView(QGraphicsView):
         self.status.emit(f"place {library_id} — drag from library or click empty sheet (not on a part)")
 
     def _draw_terminal_strip(self, sheet) -> None:
-        from panelcad.core.terminal_strip import layout_terminal_strip
-        from panelcad.gui.strip_canvas import StripBlockItem, StripChromeItem, StripJumperItem
+        from panelcad.gui.strip_canvas import StripBlockItem, StripJumperItem, StripSceneItem
+        from panelcad.render.terminal_strip import physical_scene_for_sheet, terminal_strip_caption
 
+        scene = physical_scene_for_sheet(self.session.project, self.session.catalog, sheet)
+        self._add(StripSceneItem(scene))
+        for block in scene.get("blocks") or []:
+            self._add(StripBlockItem(block))
+        for jumper in scene.get("jumpers") or []:
+            self._add(StripJumperItem(jumper))
         name = str(sheet.strip or "").strip()
+        if not name:
+            names = [str(group.get("strip") or "") for group in scene.get("groups") or []]
+            name = ", ".join(names) if names else ""
+        n = sum(1 for block in scene.get("blocks") or [] if block.get("kind") == "terminal")
         if not name:
             self._strip_caption = "no strip assigned — Insert → Terminal strip…"
             return
-        layout = layout_terminal_strip(self.session.project, self.session.catalog, name)
-        part = int(getattr(sheet, "strip_part", 1) or 1)
-        layout = {
-            **layout,
-            "part": part,
-            "items": [item for item in layout["items"] if int(item.get("part") or 1) == part],
-            "jumpers": [jumper for jumper in layout["jumpers"] if int(jumper.get("part") or 1) == part],
-        }
-        self._add(StripChromeItem(layout))
-        for block in layout["items"]:
-            self._add(StripBlockItem(block))
-        for jumper in layout["jumpers"]:
-            self._add(StripJumperItem(jumper))
-        n = sum(1 for block in layout["items"] if block["kind"] == "terminal")
-        continued = f"  ·  sheet {part}" if int(layout.get("parts") or 1) > 1 else ""
-        self._strip_caption = f"terminal strip {name}  ·  {n} terminals  ·  catalog scale{continued}"
+        page = int(scene.get("page_index") or getattr(sheet, "strip_part", 1) or 1)
+        pages = int(scene.get("page_count") or 1)
+        self._strip_caption = terminal_strip_caption(name, n, page, pages)
 
     def select_ref(self, ref: str) -> None:
         self.scene.clearSelection()

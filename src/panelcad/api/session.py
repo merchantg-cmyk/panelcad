@@ -869,6 +869,9 @@ class Session:
         from panelcad.needs_info import install_resolved_devices
 
         install_resolved_devices(session)
+        from panelcad.render.terminal_strip import ensure_terminal_pages
+
+        ensure_terminal_pages(session.project, session.catalog)
         session._prepare_share()
         _log_io("open", p)
         _bind_primary(session)
@@ -904,6 +907,9 @@ class Session:
         from panelcad.needs_info import install_resolved_devices
 
         install_resolved_devices(session)
+        from panelcad.render.terminal_strip import ensure_terminal_pages
+
+        ensure_terminal_pages(session.project, session.catalog)
         session.recovered = True
         session._prepare_share()
         _log_io("recover", recovery)
@@ -3205,6 +3211,9 @@ class Session:
         from panelcad.render.pdf import project_to_pdf
 
         _ensure_qt_app()
+        from panelcad.render.terminal_strip import ensure_terminal_pages
+
+        ensure_terminal_pages(self.project, self.catalog)
         dest = Path(path)
         dest.parent.mkdir(parents=True, exist_ok=True)
         sheets = [self.sheet(sheet_id)] if sheet_id else list(self.project.sheets)

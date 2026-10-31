@@ -672,6 +672,9 @@ def _plan_print_package(
     paper = normalize_paper(paper)
     enabled = normalize_sections(sections)
     project: Project = session.project
+    from panelcad.render.terminal_strip import ensure_terminal_pages
+
+    ensure_terminal_pages(project, session.catalog)
     from panelcad.core.panels import package_sheet_order, package_sheet_title
     tb = project.title_block
     rev = current_revision(tb)
