@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.5.21 — 2026-10-31
+
+- Physical terminal strip sheet.
+- Terminal strips from photos with accept and block count.
+- Fix flagged info in place.
+- One-pass Photos to drawings with a review queue.
+- CLI gap fills.
+
 ## 0.5.20 — 2026-10-28
 
 - **Cabinet photo feedback overlay and Capture-Phase Site-Exit Check (`panelcad.reconstruct.feedback`)** — Highlights every detected device on the real cabinet photo: devices missing information get an amber/red box with a callout listing what is missing (part number, verified W×H×D envelope, mounting, unreadable label or close-up needed, wire landing, print mismatch), and layout-ready devices get a green box with a checkmark so any physical device with no box stands out as missed. A missed device can be added straight from a box drawn on the photo (`add_missed_device_on_photo`). The site-exit check (`safe_to_leave_site`, `site_exit_banner`, `on_site_shot_list`, `link_closeup_to_device`) runs during Add Photos so a technician knows before closing the cabinet which close-ups or device details are still needed.
