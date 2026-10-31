@@ -21,6 +21,9 @@ Highlights every detected device directly on the real cabinet photo:
   is filled in place (`apply_missing_info`). Desktop and the phone page call
   that one function. Typed placeholders are refused. A library pick copies
   only a published part.
+- Terminal strips detected on the same photo are boxed the same way: the strip,
+  each block, unreadable markers, and an ask for a close-up. A drawn box or
+  Accept adds a strip the scan missed. Accept does not ask for millimetres.
 """
 
 from __future__ import annotations
@@ -53,7 +56,8 @@ SiteExitStatus = Literal["ready", "do_not_leave", "needs_analysis"]
 
 MISSED_DEVICE_PROMPT = (
     "Any physical cabinet component without a box was missed by detection — "
-    "drag a box on the photo to add a missed device, or click a red/amber box to supply missing info. "
+    "drag a box on the photo to add a missed device or a missed terminal strip, "
+    "or click a red/amber box to supply missing info. "
     "Click a missing-info badge (part number, dimensions, ratings, terminals/wires) "
     "to type the value or pick a published library part."
 )
@@ -162,6 +166,8 @@ class DeviceFeedbackBox(BaseModel):
     mount: str = ""
     confirmed_summary: list[str] = Field(default_factory=list)
     checklist_prompts: list[str] = Field(default_factory=list)
+    # Block ticks on a strip. Drawn as a light outline, not a callout or an issue.
+    outline_only: bool = False
 
 
 class PhotoFeedbackReport(BaseModel):
@@ -223,7 +229,19 @@ def default_capture_photo_id(target: Any) -> str:
 
 
 def ready_device_count(boxes: list[DeviceFeedbackBox]) -> int:
-    return sum(1 for b in boxes if b.status_category == "confirmed")
+    return sum(1 for b in boxes if b.status_category == "confirmed" and not b.outline_only)
+
+
+def _open_context_issue(box: DeviceFeedbackBox) -> bool:
+    """One issue per device or per strip. Block outlines and a linked close-up do not count."""
+
+    if box.outline_only:
+        return False
+    if box.status_category != "missing_info":
+        return False
+    if box.closeup_photo_id and str(box.label_text or "").startswith("terminal strip"):
+        return False
+    return True
 
 
 def _pick_photo(store: Reconstruction, photo_id: str | None = None) -> Photo:
@@ -494,11 +512,154 @@ def overlay_callout_lines(
     return lines
 
 
+def _strip_caption(item: ObservedItem) -> str:
+    read = str(item.terminal or "").strip()
+    key = str(item.tag or "").strip()
+    if read and read not in {"?", ""}:
+        if not key or key == read:
+            return read
+        return f"{read} ({key})"
+    return key or item.id
+
+
+def _build_strip_feedback_box(
+    store: Reconstruction,
+    photo: Photo,
+    item: ObservedItem,
+) -> DeviceFeedbackBox:
+    """Strip and block boxes. Missing data is '?' — never a guessed tag or size."""
+
+    from panelcad.reconstruct.terminal_photo import BLOCK_LABEL, FIELD_SIDE, PANEL_SIDE, is_block_box, is_strip_box
+
+    closeup_id = str(getattr(item, "closeup_photo_id", "") or "").strip()
+    tokens: list[str] = []
+    reasons: list[str] = []
+    if is_strip_box(item):
+        blocks = [other for other in store.items if other.rail_id == item.id and other.label_text == BLOCK_LABEL]
+        wires = [
+            other
+            for other in store.items
+            if other.rail_id == item.id and other.label_text in {PANEL_SIDE, FIELD_SIDE}
+        ]
+        caption = _strip_caption(item)
+        uncertain = "uncertain" in str(item.label_text or "") or not blocks
+        if uncertain:
+            tokens.append("block_count")
+            reasons.append("MISSING: Certain terminal block count")
+        read_name = str(item.terminal or "").strip()
+        if read_name in {"", "?"}:
+            tokens.append("tag")
+            reasons.append("MISSING: Strip marker unreadable ('?')")
+        unread_markers = [block for block in blocks if str(block.terminal or "").strip() in {"", "?"}]
+        if unread_markers:
+            tokens.append("marker")
+            reasons.append(f"MISSING: {len(unread_markers)} block marker(s) unreadable ('?')")
+        unread_wires = [wire for wire in wires if wire.unreadable or not str(wire.wire_number or "").strip()]
+        if unread_wires:
+            tokens.append("wire_number")
+            reasons.append(f"MISSING: {len(unread_wires)} wire number(s) unreadable ('?')")
+        # A box the person accepted asks for one close-up only when a tag is
+        # still '?'. Unread wire numbers are not a second close-up.
+        accepted = float(item.confidence or 0) >= 0.99
+        tags_unreadable = read_name in {"", "?"} or bool(unread_markers)
+        if accepted:
+            needs_closeup = tags_unreadable and not closeup_id
+        else:
+            needs_closeup = bool(reasons) and not closeup_id
+        badge = [f"Blocks: {len(blocks)}"] if blocks else ["Blocks: unknown"]
+        # Green only after a person accepts the strip and nothing is still '?'.
+        is_confirmed = accepted and not reasons
+        outline_only = False
+    elif is_block_box(item):
+        caption = f"{item.tag} {item.terminal or '?'}".strip()
+        wires = [
+            other
+            for other in store.items
+            if other.rail_id == item.rail_id
+            and other.label_text in {PANEL_SIDE, FIELD_SIDE}
+            and _region_overlaps_x(other.region, item.region)
+        ]
+        if str(item.terminal or "").strip() in {"", "?"}:
+            tokens.append("marker")
+            reasons.append("MISSING: Block marker unreadable ('?')")
+        panel = next((wire for wire in wires if wire.label_text == PANEL_SIDE), None)
+        field = next((wire for wire in wires if wire.label_text == FIELD_SIDE), None)
+        if panel is None or panel.unreadable or not str(panel.wire_number or "").strip():
+            tokens.append("wire_number")
+            reasons.append("MISSING: Panel-side wire number unreadable ('?')")
+        if field is None or field.unreadable or not str(field.wire_number or "").strip():
+            tokens.append("wire_number")
+            reasons.append("MISSING: Field-side wire number unreadable ('?')")
+        needs_closeup = False
+        badge = []
+        is_confirmed = False
+        outline_only = True
+    else:
+        caption = item.tag or item.id
+        needs_closeup = False
+        badge = []
+        is_confirmed = False
+        outline_only = False
+
+    if outline_only:
+        is_confirmed = False
+    if is_confirmed:
+        header = f"✓ {caption}"
+        lines = list(badge)
+        if closeup_id:
+            lines.append(f"Close-Up Linked: {closeup_id}")
+    else:
+        header = f"⚠ {caption}"
+        lines = list(reasons)
+
+    return DeviceFeedbackBox(
+        item_id=item.id,
+        photo_id=photo.id,
+        tag=item.tag,
+        role=item.role,
+        status=item.status,
+        status_category="confirmed" if is_confirmed else "missing_info",
+        layout_ready=False,
+        part_number="",
+        brand="",
+        label_text=item.label_text,
+        region={
+            "x": float(item.region.x or 0.0),
+            "y": float(item.region.y or 0.0),
+            "w": float(item.region.w or 0.0),
+            "h": float(item.region.h or 0.0),
+        },
+        missing_fields=[] if is_confirmed else tokens,
+        missing_reasons=[] if is_confirmed else reasons,
+        header_label=header,
+        badge_lines=lines,
+        needs_closeup=needs_closeup,
+        closeup_photo_id=closeup_id,
+        placed_ref=item.placed_ref,
+        confidence=float(item.confidence or 0.0),
+        checklist_prompts=[
+            step.prompt
+            for step in store.checklist
+            if step.status == "open" and step.item_id == item.id and step.prompt
+        ],
+        outline_only=outline_only,
+    )
+
+
+def _region_overlaps_x(wire: PhotoRegion, block: PhotoRegion) -> bool:
+    center = float(wire.x) + float(wire.w) / 2.0
+    return float(block.x) - 4.0 <= center <= float(block.x) + float(block.w) + 4.0
+
+
 def build_device_feedback_box(
     store: Reconstruction,
     photo: Photo,
     item: ObservedItem,
 ) -> DeviceFeedbackBox:
+    from panelcad.reconstruct.terminal_photo import is_strip_feedback_item
+
+    if is_strip_feedback_item(item):
+        return _build_strip_feedback_box(store, photo, item)
     ready = item_is_layout_ready(item)
     tokens, reasons, needs_closeup = _device_missing_analysis(store, photo, item)
     closeup_id = str(getattr(item, "closeup_photo_id", "") or "").strip()
@@ -610,7 +771,21 @@ def _build_on_site_shot_list(
         )
 
     for b in all_boxes:
-        if b.status_category != "missing_info":
+        if not _open_context_issue(b):
+            continue
+        if str(b.label_text or "").startswith("terminal strip"):
+            ident = b.tag or b.item_id
+            actions: list[str] = []
+            if b.needs_closeup:
+                actions.append("take a close-up photo of this terminal strip")
+            if "tag" in b.missing_fields or "marker" in b.missing_fields:
+                actions.append("read the strip and block markers (unreadable stays '?')")
+            if "wire_number" in b.missing_fields:
+                actions.append("read the panel-side and field-side wire numbers (unreadable stays '?')")
+            if "block_count" in b.missing_fields:
+                actions.append("confirm how many blocks are on the strip")
+            action_str = ", ".join(actions) if actions else "; ".join(b.missing_reasons)
+            shot_list.append(f"[{ident} · terminal strip] Before leaving site: {action_str}")
             continue
         ident = b.tag or b.placed_ref or b.item_id
         desc = " ".join(x for x in (b.brand, b.part_number) if x).strip() or b.label_text or "device"
@@ -634,12 +809,21 @@ def _build_on_site_shot_list(
         dtl = str(callout.get("detail") or "Drag a box on photo & capture close-up")
         shot_list.append(f"[UNBOXED GAP · {lbl}] {dtl}")
 
-    issue_count = sum(1 for b in all_boxes if b.status_category == "missing_info") + len(unboxed)
+    issue_count = sum(1 for b in all_boxes if _open_context_issue(b)) + len(unboxed)
     if issue_count > 0:
         banner = (
             f"⚠ DO NOT LEAVE SITE YET — {issue_count} Device Close-Up(s) / Context Item(s) Needed "
             f"({ready_device_count(all_boxes)}/{len(all_boxes)} Ready)"
         )
+        strip_closeups = sum(
+            1
+            for b in all_boxes
+            if _open_context_issue(b)
+            and b.needs_closeup
+            and str(b.label_text or "").startswith("terminal strip")
+        )
+        if strip_closeups:
+            banner += f" — {strip_closeups} terminal strip(s) need a close-up"
         return False, "do_not_leave", banner, shot_list
 
     banner = (
@@ -666,19 +850,24 @@ def build_photo_feedback_model(
     if not resolved.is_file() and photo.source_path and Path(photo.source_path).is_file():
         resolved = Path(photo.source_path)
 
+    from panelcad.reconstruct.terminal_photo import is_strip_feedback_item
+
     allowed_roles = {"part", "terminal"} if include_terminals else {"part"}
     all_boxes: list[DeviceFeedbackBox] = []
     for item in store.items:
-        if item.photo_id != photo.id or item.role not in allowed_roles:
+        if item.photo_id != photo.id:
             continue
         if float(item.region.w or 0) <= 0 or float(item.region.h or 0) <= 0:
             continue
+        if not is_strip_feedback_item(item) and item.role not in allowed_roles:
+            continue
         all_boxes.append(build_device_feedback_box(store, photo, item))
 
-    confirmed_count = ready_device_count(all_boxes)
-    missing_count = sum(1 for b in all_boxes if b.status_category == "missing_info")
-    closeup_needed_count = sum(1 for b in all_boxes if b.needs_closeup)
-    total_detected = len(all_boxes)
+    counted = [box for box in all_boxes if not box.outline_only]
+    confirmed_count = ready_device_count(counted)
+    missing_count = sum(1 for box in counted if _open_context_issue(box))
+    closeup_needed_count = sum(1 for box in counted if box.needs_closeup and _open_context_issue(box))
+    total_detected = len(counted)
     unboxed_list = list(unboxed_callouts or [])
 
     safe_to_leave, exit_status, exit_banner, shot_list = _build_on_site_shot_list(
@@ -686,9 +875,9 @@ def build_photo_feedback_model(
     )
 
     if filter_mode == "missing_only":
-        filtered = [b for b in all_boxes if b.status_category == "missing_info"]
+        filtered = [b for b in counted if _open_context_issue(b)]
     elif filter_mode == "confirmed_only":
-        filtered = [b for b in all_boxes if b.status_category == "confirmed"]
+        filtered = [b for b in counted if b.status_category == "confirmed"]
     else:
         filtered = all_boxes
 
@@ -1181,6 +1370,84 @@ def add_missed_device_on_photo(
     }
 
 
+def add_missed_strip_on_photo(
+    session: Any,
+    photo_id: str,
+    region: dict[str, Any] | tuple[float, float, float, float] | list[float],
+    *,
+    tag: str = "",
+    snap_to_edges: bool = False,
+    block_count: int | None = None,
+) -> dict[str, Any]:
+    """Register a terminal strip the scan missed, using the same drawn box as a device."""
+
+    from panelcad.reconstruct.terminal_photo import install_user_box, is_block_box, is_strip_box
+
+    store = ensure_reconstruction(session.project)
+    photo = store.photo(photo_id)
+    box = _parse_region(region, photo.width_px, photo.height_px)
+    if snap_to_edges:
+        box = _snap_region(session, photo, box)
+    created = install_user_box(
+        session,
+        store,
+        photo,
+        box,
+        tag=str(tag or "").strip(),
+        block_count=block_count,
+    )
+    rebuild_checklist(store)
+    strip = next(item for item in created if is_strip_box(item))
+    feedback_box = build_device_feedback_box(store, photo, strip)
+    return {
+        "item": public_item(strip),
+        "blocks": [public_item(item) for item in created if is_block_box(item)],
+        "feedback_box": feedback_box.model_dump(mode="json"),
+        "photo": public_photo(photo),
+        "feedback": build_photo_feedback_report(session, photo_id=photo.id),
+    }
+
+
+def accept_terminal_strip_on_photo(
+    session: Any,
+    item_id: str,
+    *,
+    tag: str = "",
+    block_count: int | None = None,
+) -> dict[str, Any]:
+    """Accept a suggested strip. Creates the strip sheet and does not ask for a size."""
+
+    from panelcad.reconstruct.terminal_photo import accept_terminal_strip, is_block_box, is_strip_box
+
+    store = ensure_reconstruction(session.project)
+    created = accept_terminal_strip(session, item_id, tag=tag, block_count=block_count)
+    rebuild_checklist(store)
+    strip = next(item for item in created if is_strip_box(item))
+    feedback_box = build_device_feedback_box(store, store.photo(strip.photo_id), strip)
+    return {
+        "item": public_item(strip),
+        "blocks": [public_item(item) for item in created if is_block_box(item)],
+        "feedback_box": feedback_box.model_dump(mode="json"),
+        "photo": public_photo(store.photo(strip.photo_id)),
+        "feedback": build_photo_feedback_report(session, photo_id=strip.photo_id),
+    }
+
+
+def _snap_region(session: Any, photo: Photo, box: PhotoRegion, *, search_margin_ratio: float = 0.12) -> PhotoRegion:
+    base_path = getattr(session, "path", None)
+    resolved = resolve_path(photo.path, base_path)
+    if not resolved.is_file() and photo.source_path and Path(photo.source_path).is_file():
+        resolved = Path(photo.source_path)
+    if not resolved.is_file():
+        return box
+    rx, ry, rw, rh = refine_device_box_on_photo(
+        resolved,
+        (box.x, box.y, box.w, box.h),
+        search_margin_ratio=search_margin_ratio,
+    )
+    return _parse_region((rx, ry, rw, rh), photo.width_px, photo.height_px)
+
+
 def link_closeup_to_device(
     session: Any,
     item_id: str,
@@ -1456,6 +1723,12 @@ def render_annotated_cabinet_photo(
         bh = max(float(r["h"]), 8.0)
         rect = QRectF(bx, by, bw, bh)
         is_selected = bool(selected_item_id and box_entry.item_id == selected_item_id)
+
+        if box_entry.outline_only:
+            painter.setPen(QPen(QColor("#fbbf24"), max(1.25, 1.5 * ui_scale)))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(rect)
+            continue
 
         if box_entry.status_category == "confirmed":
             stroke_color = QColor("#10b981")
@@ -2010,8 +2283,18 @@ def update_device_box_on_photo(
     search_margin_ratio: float = 0.12,
 ) -> dict[str, Any]:
     """Update or edge-snap an existing device bounding box on a cabinet photo."""
+    from panelcad.reconstruct.terminal_photo import is_strip_box
+
     store = ensure_reconstruction(session.project)
     item = store.item(item_id)
+    if is_strip_box(item):
+        return _update_strip_box_on_photo(
+            session,
+            item,
+            box=box,
+            snap_to_edges=snap_to_edges,
+            search_margin_ratio=search_margin_ratio,
+        )
     photo = store.photo(item.photo_id)
     base_path = getattr(session, "path", None)
     resolved = resolve_path(photo.path, base_path)
@@ -2042,6 +2325,51 @@ def update_device_box_on_photo(
     return {
         "item": public_item(item),
         "region": {"x": parsed.x, "y": parsed.y, "w": parsed.w, "h": parsed.h},
+        "snapped": bool(snap_to_edges),
+        "feedback_box": feedback_box.model_dump(mode="json"),
+        "feedback": build_photo_feedback_report(session, photo_id=photo.id),
+    }
+
+
+def _update_strip_box_on_photo(
+    session: Any,
+    item: ObservedItem,
+    *,
+    box: dict[str, Any] | tuple[float, float, float, float] | list[float] | None,
+    snap_to_edges: bool,
+    search_margin_ratio: float,
+) -> dict[str, Any]:
+    """Adjust a strip box the same way a device box adjusts, then detect inside it again."""
+
+    from panelcad.reconstruct.terminal_photo import is_strip_box, revise_terminal_strip
+
+    store = ensure_reconstruction(session.project)
+    photo = store.photo(item.photo_id)
+    if box is not None:
+        parsed = _parse_region(box, photo.width_px, photo.height_px)
+    else:
+        parsed = PhotoRegion(
+            x=float(item.region.x or 0.0),
+            y=float(item.region.y or 0.0),
+            w=float(item.region.w or 0.0),
+            h=float(item.region.h or 0.0),
+        )
+    if snap_to_edges:
+        parsed = _snap_region(session, photo, parsed, search_margin_ratio=search_margin_ratio)
+    created = revise_terminal_strip(session, item.id, parsed)
+    strip = next((row for row in created if is_strip_box(row)), None)
+    if strip is None:
+        raise ValueError("strip box could not be updated")
+    rebuild_checklist(store)
+    feedback_box = build_device_feedback_box(store, photo, strip)
+    return {
+        "item": public_item(strip),
+        "region": {
+            "x": float(strip.region.x),
+            "y": float(strip.region.y),
+            "w": float(strip.region.w),
+            "h": float(strip.region.h),
+        },
         "snapped": bool(snap_to_edges),
         "feedback_box": feedback_box.model_dump(mode="json"),
         "feedback": build_photo_feedback_report(session, photo_id=photo.id),

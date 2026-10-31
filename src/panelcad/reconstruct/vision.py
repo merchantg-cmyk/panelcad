@@ -30,8 +30,13 @@ Read only what is printed on hardware: nameplates, part labels, device tags,
 terminal numbers, and wire numbers. Do not invent a part number, tag, or size.
 If glare, blur, or a wire bundle hides a field, mark it unreadable.
 Return JSON: devices[{tag, brand, part_number, label_text, nx, ny, nw, nh,
-confidence, unreadable}], rails, ducts, strips[{tag, terminals[{id,nx,ny}],
-wire_numbers[{number,nx,ny}]}], texts, unreadable.
+confidence, unreadable}], rails, ducts, strips[{tag, nx, ny, nw, nh,
+terminals[{id, nx, ny, nw, nh, pe, marker, panel_wire, field_wire, unreadable}],
+end_plate_left, end_plate_right, jumpers[{from, to}],
+wire_numbers[{number, side, nx, ny, terminal}]}], texts, unreadable.
+panel_wire is the panel/PLC side marker. field_wire is the field side marker.
+Use "?" when a marker or wire number cannot be read. Do not guess a block
+count, a part number, or a millimetre size.
 nx/ny/nw/nh are fractions of the image (0..1).
 """.strip()
 

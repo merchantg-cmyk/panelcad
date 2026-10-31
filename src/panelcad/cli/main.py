@@ -3976,6 +3976,61 @@ def reconstruct_identify_cmd(project: Path, photo_id: Optional[str] = typer.Opti
     typer.echo(json.dumps(result, indent=2))
 
 
+@recon_app.command("missed-strip")
+def reconstruct_missed_strip_cmd(
+    project: Path,
+    photo_id: str,
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+    tag: str = typer.Option("", "--tag"),
+    blocks: Optional[int] = typer.Option(
+        None,
+        "--blocks",
+        help="How many blocks, when the photo pitch cannot be counted",
+    ),
+) -> None:
+    """Box a terminal strip on a photo. Asks how many blocks when the pitch is not visible."""
+
+    session = _recon_session(project)
+    try:
+        result = session.reconstruct_add_missed_strip(
+            photo_id,
+            {"x": x, "y": y, "w": w, "h": h},
+            tag=tag,
+            block_count=blocks,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    session.save(project)
+    item = result.get("item") or {}
+    typer.echo(f"{item.get('id')} {item.get('tag') or item.get('terminal') or '?'} blocks {len(result.get('blocks') or [])}")
+
+
+@recon_app.command("accept-strip")
+def reconstruct_accept_strip_cmd(
+    project: Path,
+    item_id: str,
+    tag: str = typer.Option("", "--tag"),
+    blocks: Optional[int] = typer.Option(
+        None,
+        "--blocks",
+        help="How many blocks, when the photo pitch cannot be counted",
+    ),
+) -> None:
+    """Accept a suggested strip and write its terminal sheet. Does not ask for millimetres."""
+
+    session = _recon_session(project)
+    try:
+        result = session.reconstruct_accept_terminal_strip(item_id, tag=tag, block_count=blocks)
+    except (KeyError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    session.save(project)
+    item = result.get("item") or {}
+    typer.echo(f"{item.get('id')} {item.get('tag') or item.get('terminal') or '?'} blocks {len(result.get('blocks') or [])}")
+
+
 @recon_app.command("confirm")
 def reconstruct_confirm_cmd(
     project: Path,

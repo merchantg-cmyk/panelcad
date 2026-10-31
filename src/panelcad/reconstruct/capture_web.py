@@ -18,6 +18,7 @@ import datetime
 import email.parser
 import email.policy
 import json
+import math
 import os
 import re
 import shutil
@@ -101,6 +102,79 @@ def _parse_multipart_form(content_type: str, body: bytes) -> tuple[dict[str, str
             charset = part.get_content_charset() or "utf-8"
             fields[str(name)] = payload.decode(charset, errors="replace")
     return fields, files
+
+
+_MAX_BOX_PX = 20000.0
+
+
+def _box_number(value: Any) -> float:
+    if isinstance(value, bool) or value is None:
+        raise ValueError("box x, y, w, and h must be numbers")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("box x, y, w, and h must be numbers") from exc
+    if not math.isfinite(number):
+        raise ValueError("box x, y, w, and h must be finite numbers")
+    return number
+
+
+def _require_box(fields: dict[str, Any]) -> tuple[float, float, float, float]:
+    """Photo box from a missed-device or missed-strip POST. Raises ValueError when it is not a box."""
+
+    if "region" in fields and fields.get("region") is not None and not isinstance(fields.get("region"), dict):
+        raise ValueError("region must be an object with x, y, w, and h")
+    region_obj = fields.get("region") if isinstance(fields.get("region"), dict) else {}
+    raw = []
+    for key in ("x", "y", "w", "h"):
+        if key in region_obj:
+            raw.append(region_obj.get(key))
+        else:
+            raw.append(fields.get(key, 0.0))
+    rx, ry, rw, rh = (_box_number(value) for value in raw)
+    if rw <= 0 or rh <= 0:
+        raise ValueError("box width and height must be positive")
+    if max(abs(rx), abs(ry), rw, rh) > _MAX_BOX_PX:
+        raise ValueError("box is outside the photo")
+    return rx, ry, rw, rh
+
+
+def _reject_off_image(rx: float, ry: float, rw: float, rh: float, width: int, height: int) -> None:
+    if width <= 0 or height <= 0:
+        return
+    if rx < 0 or ry < 0 or rx + rw > float(width) + 1.0 or ry + rh > float(height) + 1.0:
+        raise ValueError("box is outside the photo")
+
+
+def _optional_block_count(fields: dict[str, Any]) -> int | None:
+    """Typed block count from a missed-strip POST. Empty means count from the photo."""
+
+    from panelcad.reconstruct.terminal_photo import _parse_block_count
+
+    if "block_count" in fields and fields.get("block_count") not in (None, ""):
+        return _parse_block_count(fields.get("block_count"))
+    if "blocks" in fields and fields.get("blocks") not in (None, ""):
+        return _parse_block_count(fields.get("blocks"))
+    return None
+
+
+def _resolve_missed_box(
+    workspace: Any,
+    session_id: str,
+    fields: dict[str, Any],
+) -> tuple[str, float, float, float, float]:
+    """Box plus the photo it sits on. KeyError and ValueError are the caller's 400."""
+
+    rx, ry, rw, rh = _require_box(fields)
+    pid = str(fields.get("photo_id") or "").strip()
+    if not pid:
+        st_cur = workspace.get_status(session_id)
+        pid = str(st_cur.get("photo_id") or "")
+    if not pid:
+        raise ValueError("photo_id is required")
+    width, height = workspace.photo_size(session_id, pid)
+    _reject_off_image(rx, ry, rw, rh, width, height)
+    return pid, rx, ry, rw, rh
 
 
 def _opt_float(val: Any) -> float | None:
@@ -338,6 +412,13 @@ class CaptureWorkspace:
                 raise KeyError(f"Unknown capture session: {session_id}")
             return self._sessions[sid]
 
+    def photo_size(self, session_id: str, photo_id: str) -> tuple[int, int]:
+        with self._lock:
+            sess = self.get_session(session_id)
+            store = ensure_reconstruction(sess.project)
+            photo = store.photo(photo_id)
+            return int(photo.width_px or 0), int(photo.height_px or 0)
+
     def save_session(self, session_id: str) -> None:
         with self._lock:
             sid = _slugify(session_id)
@@ -491,6 +572,29 @@ class CaptureWorkspace:
 
             self.save_session(sid)
             return self.get_status(sid, photo_id=new_pid or None)
+
+    def add_missed_strip(
+        self,
+        session_id: str,
+        *,
+        photo_id: str,
+        region: dict[str, float],
+        tag: str = "",
+        snap_to_edges: bool = False,
+        block_count: int | None = None,
+    ) -> dict[str, Any]:
+        with self._lock:
+            sid = _slugify(session_id)
+            sess = self.get_session(sid)
+            sess.reconstruct_add_missed_strip(
+                photo_id,
+                region,
+                tag=tag,
+                snap_to_edges=snap_to_edges,
+                block_count=block_count,
+            )
+            self.save_session(sid)
+            return self.get_status(sid, photo_id=photo_id)
 
     def add_missed_device(
         self,
@@ -1795,6 +1899,10 @@ MOBILE_CAPTURE_HTML = """<!DOCTYPE html>
         <input type="text" id="devTag" placeholder="e.g. PSU1">
       </div>
       <div class="form-field">
+        <label>How many blocks? (terminal strip)</label>
+        <input type="number" id="devBlocks" min="1" max="400" step="1" placeholder="Leave blank to count from the photo">
+      </div>
+      <div class="form-field">
         <label>Brand / Manufacturer</label>
         <input type="text" id="devBrand" placeholder="e.g. Eaton, Keyence, Dold">
       </div>
@@ -1827,6 +1935,7 @@ MOBILE_CAPTURE_HTML = """<!DOCTYPE html>
 
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
       <button class="btn" onclick="closeDeviceDrawer()">Cancel</button>
+      <button class="btn" id="saveStripBtn" onclick="saveMissedStrip()">＋ This Box Is a Terminal Strip</button>
       <button class="btn btn-success" id="saveDeviceBtn" onclick="saveDeviceDrawer()">✓ Save &amp; Confirm Device</button>
     </div>
   </div>
@@ -2610,6 +2719,8 @@ function openDeviceDrawer(box) {
   }
   setDrawerBoxInputs(box.region || box);
   document.getElementById("devTag").value = box.tag || box.placed_ref || "";
+  const blocksEl = document.getElementById("devBlocks");
+  if (blocksEl) blocksEl.value = "";
   document.getElementById("devBrand").value = box.brand || "";
   document.getElementById("devPart").value = box.part_number || "";
   document.getElementById("devW").value = box.envelope_w_mm || "";
@@ -2634,6 +2745,8 @@ function openMissedDeviceDrawer(region, hintLabel = "") {
     : `Box drawn at (${region.x}, ${region.y}) [${region.w}×${region.h} px]. Snap a close-up or enter Tag/Part/Size so you don't leave the site without context.`;
   setDrawerBoxInputs(region);
   document.getElementById("devTag").value = "";
+  const blocksEl = document.getElementById("devBlocks");
+  if (blocksEl) blocksEl.value = "";
   document.getElementById("devBrand").value = "";
   document.getElementById("devPart").value = "";
   document.getElementById("devW").value = "";
@@ -2653,6 +2766,50 @@ function onCloseupFilePicked(files) {
   const st = document.getElementById("closeupPickedStatus");
   st.style.display = "block";
   st.textContent = `✓ Close-up photo ready: ${pendingCloseupFile.name}`;
+}
+
+async function saveMissedStrip() {
+  const editedBox = getDrawerBoxInputs();
+  const tag = document.getElementById("devTag").value.trim();
+  let blocks = (document.getElementById("devBlocks").value || "").trim();
+  const url = `/api/sessions/${encodeURIComponent(currentSessionId)}/missed-strip`;
+  const body = () => {
+    const fd = new FormData();
+    fd.append("photo_id", currentPhotoId);
+    fd.append("tag", tag);
+    fd.append("x", String(editedBox.x));
+    fd.append("y", String(editedBox.y));
+    fd.append("w", String(editedBox.w));
+    fd.append("h", String(editedBox.h));
+    if (blocks) fd.append("block_count", blocks);
+    return fd;
+  };
+  let res = await fetch(url, { method: "POST", headers: apiHeaders(), body: body() });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const message = err.error || "Could not add the terminal strip";
+    if (!blocks && /how many blocks/i.test(message)) {
+      const typed = window.prompt("How many blocks?");
+      if (!typed) {
+        showToast("How many blocks?");
+        return;
+      }
+      blocks = String(typed).trim();
+      document.getElementById("devBlocks").value = blocks;
+      res = await fetch(url, { method: "POST", headers: apiHeaders(), body: body() });
+      if (!res.ok) {
+        const again = await res.json().catch(() => ({}));
+        showToast(again.error || "Could not add the terminal strip");
+        return;
+      }
+    } else {
+      showToast(message);
+      return;
+    }
+  }
+  closeDeviceDrawer();
+  showToast("✓ Terminal strip boxed");
+  await loadSessions(currentSessionId);
 }
 
 async function saveDeviceDrawer() {
@@ -3067,18 +3224,32 @@ class _CaptureHTTPHandler(BaseHTTPRequestHandler):
                 self._send_json(400, {"error": str(exc)})
             return
 
+        m_strip = re.match(r"^/api/sessions/([^/]+)/missed-strip$", path)
+        if m_strip:
+            sid = urllib.parse.unquote(m_strip.group(1))
+            try:
+                pid, rx, ry, rw, rh = _resolve_missed_box(self.workspace, sid, fields)
+                st = self.workspace.add_missed_strip(
+                    sid,
+                    photo_id=pid,
+                    region={"x": rx, "y": ry, "w": rw, "h": rh},
+                    tag=str(fields.get("tag") or ""),
+                    snap_to_edges=str(fields.get("snap_to_edges", "")).lower() in {"1", "true", "yes"},
+                    block_count=_optional_block_count(fields),
+                )
+                self._send_json(200, st)
+            except (KeyError, ValueError) as exc:
+                self._send_json(400, {"error": str(exc)})
+            return
+
         m_missed = re.match(r"^/api/sessions/([^/]+)/missed-device$", path)
         if m_missed:
             sid = urllib.parse.unquote(m_missed.group(1))
-            region_obj = fields.get("region") if isinstance(fields.get("region"), dict) else {}
-            rx = float(region_obj.get("x", fields.get("x", 0.0)))
-            ry = float(region_obj.get("y", fields.get("y", 0.0)))
-            rw = float(region_obj.get("w", fields.get("w", 0.0)))
-            rh = float(region_obj.get("h", fields.get("h", 0.0)))
-            pid = str(fields.get("photo_id") or "").strip()
-            if not pid:
-                st_cur = self.workspace.get_status(sid)
-                pid = str(st_cur.get("photo_id") or "")
+            try:
+                pid, rx, ry, rw, rh = _resolve_missed_box(self.workspace, sid, fields)
+            except (KeyError, ValueError) as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
             closeup_bytes = files[0]["data"] if files else None
             closeup_name = files[0]["filename"] if files else ""
             try:

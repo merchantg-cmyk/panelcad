@@ -126,7 +126,8 @@ def test_empty_identify_explains_and_does_not_close(tmp_path: Path, monkeypatch)
     assert int(dialog.result()) != int(QDialog.DialogCode.Accepted)
 
     dialog._identify()
-    assert dialog.item_list.count() == 0
+    # Stub vision adds no devices. A terminal row on the photo can still be measured.
+    assert [item.role for item in session.project.reconstruct.items if item.role == "part"] == []
     assert dialog.identify_note.isVisible()
     note = dialog.identify_note.text()
     assert "No AI connected" in note
@@ -150,7 +151,17 @@ def test_empty_identify_explains_and_does_not_close(tmp_path: Path, monkeypatch)
     assert "Nothing was applied" in summary
     assert "No AI connected" in summary
     assert "add parts by hand" in summary
-    assert [(sheet.id, sheet.kind, len(sheet.components)) for sheet in session.project.sheets] == before
+    photo_sheets = {
+        sheet.id
+        for sheet in session.project.sheets
+        if str((sheet.properties or {}).get("photo_terminal_sheet") or "") == "yes"
+    }
+    kept = [
+        (sheet.id, sheet.kind, len(sheet.components))
+        for sheet in session.project.sheets
+        if sheet.id not in photo_sheets
+    ]
+    assert kept == before
 
     dialog.next.click()
     assert int(dialog.result()) == int(QDialog.DialogCode.Accepted)
@@ -158,7 +169,12 @@ def test_empty_identify_explains_and_does_not_close(tmp_path: Path, monkeypatch)
     assert dialog.apply_result.applied is False
     assert dialog.apply_result.sheet_id == ""
     assert "Nothing was applied" in dialog.apply_result.summary
-    assert [(sheet.id, sheet.kind, len(sheet.components)) for sheet in session.project.sheets] == before
+    kept = [
+        (sheet.id, sheet.kind, len(sheet.components))
+        for sheet in session.project.sheets
+        if str((sheet.properties or {}).get("photo_terminal_sheet") or "") != "yes"
+    ]
+    assert kept == before
     dialog.close()
 
 

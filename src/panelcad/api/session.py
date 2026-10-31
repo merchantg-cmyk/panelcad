@@ -8031,6 +8031,39 @@ class Session:
             snap_to_edges=snap_to_edges,
         )
 
+    def reconstruct_add_missed_strip(
+        self,
+        photo_id: str,
+        region: dict[str, Any] | tuple[float, float, float, float] | list[float],
+        *,
+        tag: str = "",
+        snap_to_edges: bool = False,
+        block_count: int | None = None,
+    ) -> dict[str, Any]:
+        from panelcad.reconstruct.feedback import add_missed_strip_on_photo
+
+        return add_missed_strip_on_photo(
+            self,
+            photo_id,
+            region,
+            tag=tag,
+            snap_to_edges=snap_to_edges,
+            block_count=block_count,
+        )
+
+    def reconstruct_accept_terminal_strip(
+        self,
+        item_id: str,
+        *,
+        tag: str = "",
+        block_count: int | None = None,
+    ) -> dict[str, Any]:
+        """Accept a suggested terminal strip. Does not require width, height, or depth."""
+
+        from panelcad.reconstruct.feedback import accept_terminal_strip_on_photo
+
+        return accept_terminal_strip_on_photo(self, item_id, tag=tag, block_count=block_count)
+
     def reconstruct_update_device_box(
         self,
         item_id: str,
@@ -8653,6 +8686,7 @@ _ACTIVITY_METHODS: dict[str, Any] = {
         f"missing info {k.get('field') or (a[1] if len(a) > 1 else '')} {(r.get('item') or {}).get('id', '')}"
     ).strip(),
     "reconstruct_add_missed_device": lambda s, r, a, k: f"missed device {(r.get('item') or {}).get('id')}",
+    "reconstruct_add_missed_strip": lambda s, r, a, k: f"missed strip {(r.get('item') or {}).get('tag') or (r.get('item') or {}).get('id')}",
     "reconstruct_update_device_box": lambda s, r, a, k: f"update box {(r.get('item') or {}).get('id')}",
     "reconstruct_link_closeup": lambda s, r, a, k: f"close-up {(r.get('item') or {}).get('id')} {r.get('closeup_photo_id') or ''}".rstrip(),
     "reconstruct_place_confirmed": lambda s, r, a, k: f"place confirmed {len(r.get('placed') or [])}",

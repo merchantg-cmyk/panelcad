@@ -313,11 +313,34 @@ def jumper_runs(project: Project, catalog: Catalog, strip: str | None = None) ->
     return runs
 
 
+def _unread_photo_comb(project: Project, catalog: Catalog, run: dict[str, Any]) -> bool:
+    refs = {str(ref) for ref in run.get("refs") or []}
+    if len(refs) < 2:
+        return False
+    found: list[Component] = []
+    for _sheet, comp in strip_terminals(project, catalog, str(run.get("strip") or "")):
+        if comp.id in refs:
+            found.append(comp)
+    if len(found) != len(refs):
+        return False
+    for comp in found:
+        props = comp.properties or {}
+        if str(props.get("photo_terminal") or "") != "yes":
+            return False
+        if str(props.get("pitch_mm") or "").strip() or str(props.get("jumper_family") or "").strip():
+            return False
+    return True
+
+
 def jumper_bom_rows(project: Project, catalog: Catalog, strip: str | None = None) -> list[dict[str, str]]:
     """Instance-style BOM rows derived from jumper properties."""
 
     rows: list[dict[str, str]] = []
     for run in jumper_runs(project, catalog, strip=strip):
+        if _unread_photo_comb(project, catalog, run):
+            # The comb was seen on a cabinet photo. Pitch and article were not,
+            # so it stays on the strip drawing and off the quote.
+            continue
         span = "–".join((run["refs"][0], run["refs"][-1])) if run["refs"] else run["id"]
         for line in run.get("lines") or [run]:
             device = None

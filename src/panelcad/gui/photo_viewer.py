@@ -15,12 +15,14 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListView,
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSpinBox,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -591,8 +593,17 @@ class PhotoFeedbackDialog(QDialog):
         missed_form.addRow("Photo Box (x,y,w,h):", self.missed_region_edit)
 
         self.missed_tag_edit = QLineEdit()
-        self.missed_tag_edit.setPlaceholderText("Optional Tag (e.g. CR3, FU2)")
+        self.missed_tag_edit.setPlaceholderText("Strip tag (XT9, TB1). A relay part number is not a strip.")
         missed_form.addRow("Tag:", self.missed_tag_edit)
+
+        self.block_count_spin = QSpinBox()
+        self.block_count_spin.setRange(0, 400)
+        self.block_count_spin.setSpecialValueText("count from photo")
+        self.block_count_spin.setToolTip(
+            "Leave at 'count from photo' when the blocks are visible. "
+            "If the pitch cannot be read, enter how many blocks."
+        )
+        missed_form.addRow("How many blocks?", self.block_count_spin)
 
         self.missed_part_edit = QLineEdit()
         self.missed_part_edit.setPlaceholderText("Optional Part # (leave blank if needs info)")
@@ -611,8 +622,22 @@ class PhotoFeedbackDialog(QDialog):
         self.snap_missed_btn.clicked.connect(self._on_snap_missed_box)
         self.add_missed_btn = QPushButton("＋ Add Missed Device Box to Photo")
         self.add_missed_btn.clicked.connect(self._on_add_missed_device)
+        self.add_missed_strip_btn = QPushButton("＋ Add Missed Terminal Strip")
+        self.add_missed_strip_btn.setToolTip(
+            "Draw a box around a DIN-rail terminal strip the scan missed. "
+            "Unreadable markers and wire numbers stay '?'."
+        )
+        self.add_missed_strip_btn.clicked.connect(self._on_add_missed_strip)
+        self.accept_strip_btn = QPushButton("Accept terminal strip")
+        self.accept_strip_btn.setToolTip(
+            "Create the strip and its terminal sheet from the selected suggestion "
+            "or the box you drew. A part size is not required."
+        )
+        self.accept_strip_btn.clicked.connect(self._on_accept_terminal_strip)
         missed_btn_row.addWidget(self.snap_missed_btn)
         missed_btn_row.addWidget(self.add_missed_btn)
+        missed_btn_row.addWidget(self.add_missed_strip_btn)
+        missed_btn_row.addWidget(self.accept_strip_btn)
         missed_form.addRow(missed_btn_row)
         right_layout.addWidget(self.missed_group)
 
@@ -1003,6 +1028,14 @@ class PhotoFeedbackDialog(QDialog):
     def _on_save_selected_device(self) -> None:
         if not self._selected_item_id:
             return
+        from panelcad.reconstruct.models import ensure_reconstruction
+        from panelcad.reconstruct.terminal_photo import is_strip_feedback_item
+
+        store = ensure_reconstruction(self.session.project)
+        selected = store.item(self._selected_item_id)
+        if is_strip_feedback_item(selected):
+            self._on_accept_terminal_strip()
+            return
         part = self.part_edit.text().strip()
         brand = self.brand_edit.text().strip()
         tag = self.tag_edit.text().strip()
@@ -1086,17 +1119,125 @@ class PhotoFeedbackDialog(QDialog):
             brand=self.missed_brand_edit.text().strip(),
             note=self.missed_note_edit.text().strip(),
         )
+        self._finish_missed_add(res, "Missed device")
+
+    def _on_add_missed_strip(self) -> None:
+        if not self._photo_id:
+            return
+        try:
+            region = self._parse_missed_region()
+        except ValueError as exc:
+            self.status_note.setText(str(exc))
+            return
+        res = self._add_missed_strip(region, self.missed_tag_edit.text().strip())
+        if res is None:
+            return
+        self._finish_missed_add(res, "Terminal strip")
+
+    def _typed_block_count(self) -> int | None:
+        count = int(self.block_count_spin.value())
+        return count if count >= 1 else None
+
+    def _ask_block_count(self) -> int | None:
+        typed = self._typed_block_count()
+        if typed is not None:
+            return typed
+        count, ok = QInputDialog.getInt(
+            self,
+            "Terminal strip",
+            "How many blocks?",
+            8,
+            1,
+            400,
+            1,
+        )
+        if not ok:
+            return None
+        self.block_count_spin.setValue(int(count))
+        return int(count)
+
+    def _add_missed_strip(self, region: dict[str, float], tag: str) -> dict[str, Any] | None:
+        count = self._typed_block_count()
+        try:
+            return self.session.reconstruct_add_missed_strip(
+                self._photo_id,
+                region,
+                tag=tag,
+                block_count=count,
+            )
+        except ValueError as exc:
+            if "how many blocks" not in str(exc).lower():
+                self.status_note.setText(str(exc))
+                return None
+        count = self._ask_block_count()
+        if count is None:
+            self.status_note.setText("How many blocks?")
+            return None
+        try:
+            return self.session.reconstruct_add_missed_strip(
+                self._photo_id,
+                region,
+                tag=tag,
+                block_count=count,
+            )
+        except (KeyError, ValueError) as exc:
+            self.status_note.setText(str(exc))
+            return None
+
+    def _on_accept_terminal_strip(self) -> None:
+        """Accept a suggestion, or the box just drawn. Neither path asks for millimetres."""
+
+        if not self._photo_id:
+            return
+        if self.missed_region_edit.text().strip() or self.view.pending_missed_region():
+            self._on_add_missed_strip()
+            return
+        if not self._selected_item_id:
+            self.status_note.setText("Select a suggested strip, or draw a box around one.")
+            return
+        tag = self.missed_tag_edit.text().strip() or self.tag_edit.text().strip()
+        count = self._typed_block_count()
+        try:
+            res = self.session.reconstruct_accept_terminal_strip(
+                self._selected_item_id,
+                tag=tag,
+                block_count=count,
+            )
+        except ValueError as exc:
+            if "how many blocks" not in str(exc).lower():
+                self.status_note.setText(str(exc))
+                return
+            count = self._ask_block_count()
+            if count is None:
+                self.status_note.setText("How many blocks?")
+                return
+            try:
+                res = self.session.reconstruct_accept_terminal_strip(
+                    self._selected_item_id,
+                    tag=tag,
+                    block_count=count,
+                )
+            except (KeyError, ValueError) as again:
+                self.status_note.setText(str(again))
+                return
+        except KeyError as exc:
+            self.status_note.setText(str(exc))
+            return
+        self._finish_missed_add(res, "Terminal strip")
+
+    def _finish_missed_add(self, res: dict, kind: str) -> None:
         new_item = res.get("item") or {}
         self._selected_item_id = str(new_item.get("id") or "") or None
         self.view.clear_pending_missed_region()
         self.draw_missed_btn.setChecked(False)
         self.missed_region_edit.clear()
         self.missed_tag_edit.clear()
+        self.block_count_spin.setValue(0)
         self.missed_part_edit.clear()
         self.missed_brand_edit.clear()
         self.missed_note_edit.clear()
         self.status_note.setText(
-            f"Added missed device {self._selected_item_id} to {self._photo_id}."
+            f"Added {kind.lower()} {self._selected_item_id} to {self._photo_id}."
         )
         self.refresh_feedback()
 

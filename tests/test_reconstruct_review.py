@@ -269,7 +269,9 @@ def test_review_14_vision_unreadable_and_dedupe(tmp_path: Path):
     session, _job, meta = _photo_session(tmp_path)
     empty = FakeVision({"p1": {"hello": "world", "unreadable": True, "devices": [{"confidence": "n/a"}]}})
     result = session.reconstruct_identify(vision=empty)
-    assert result["items"] == []
+    # A bad vision payload adds no devices. A terminal row drawn on the photo
+    # may still be measured; that path does not invent part numbers.
+    assert [item for item in result["items"] if item["role"] == "part"] == []
     photo = session.project.reconstruct.photos[0]
     assert photo.unreadable is True
     findings = run_checks(session.project, session.catalog)

@@ -325,6 +325,8 @@ OPS = {
     "reconstruct_clear_scale",
     "reconstruct_identify",
     "reconstruct_confirm_item",
+    "reconstruct_add_missed_strip",
+    "reconstruct_accept_terminal_strip",
     "reconstruct_place_confirmed",
     "reconstruct_place_needs_info",
     "reconstruct_checklist",
@@ -619,6 +621,8 @@ OP_HELP: dict[str, dict[str, str]] = {
     "reconstruct_clear_scale": "Clear face and length scale marks on a photo. Args: photo_id",
     "reconstruct_identify": "Read labels on panel photos via the local vision backend (stub/fake/ollama; print-import plugs in later). Args: photo_id?",
     "reconstruct_confirm_item": "Catalog match or tech-confirmed envelope (W, H, D, mount). Converts a needs-info placeholder in place. Args: item_id, catalog?, manufacturer?, envelope_w_mm?, envelope_h_mm?, envelope_d_mm?, mount?, tag?, library_id?",
+    "reconstruct_add_missed_strip": "Box a terminal strip the scan missed. Args: photo_id, x, y, w, h (or region), tag?, block_count? or blocks?. block_count is how many blocks when the pitch cannot be read. A relay part number is not a strip tag. Does not ask for millimetres.",
+    "reconstruct_accept_terminal_strip": "Accept a suggested strip and write its terminal sheet. Args: item_id, tag?, block_count? or blocks?. Does not ask for millimetres. Without a readable pitch, block_count is required.",
     "reconstruct_place_needs_info": "Place reconstruct-only INFO NEEDED markers at measured photo positions. Not generic parts. Args: photo_id?",
     "reconstruct_place_confirmed": "Place layout-ready parts at measured millimetres. Unconfirmed items stay in Problems. Args: sheet?",
     "reconstruct_checklist": "Floor checklist (trace wires, confirm parts, compare an old print).",
@@ -2906,6 +2910,37 @@ class Agent:
 
     def op_reconstruct_identify(self, msg: dict[str, Any]) -> dict[str, Any]:
         return self._need().reconstruct_identify(msg.get("photo_id"))
+
+    def op_reconstruct_add_missed_strip(self, msg: dict[str, Any]) -> dict[str, Any]:
+        photo_id = str(msg.get("photo_id") or "").strip()
+        if not photo_id:
+            raise ValueError("reconstruct_add_missed_strip needs photo_id")
+        region = msg.get("region")
+        if not isinstance(region, dict):
+            region = {
+                "x": msg.get("x"),
+                "y": msg.get("y"),
+                "w": msg.get("w"),
+                "h": msg.get("h"),
+            }
+        count = msg.get("block_count", msg.get("blocks"))
+        return self._need().reconstruct_add_missed_strip(
+            photo_id,
+            region,
+            tag=str(msg.get("tag") or ""),
+            block_count=None if count in (None, "") else count,
+        )
+
+    def op_reconstruct_accept_terminal_strip(self, msg: dict[str, Any]) -> dict[str, Any]:
+        item_id = str(msg.get("item_id") or "").strip()
+        if not item_id:
+            raise ValueError("reconstruct_accept_terminal_strip needs item_id")
+        count = msg.get("block_count", msg.get("blocks"))
+        return self._need().reconstruct_accept_terminal_strip(
+            item_id,
+            tag=str(msg.get("tag") or ""),
+            block_count=None if count in (None, "") else count,
+        )
 
     def op_reconstruct_confirm_item(self, msg: dict[str, Any]) -> dict[str, Any]:
         item_id = str(msg.get("item_id") or "").strip()

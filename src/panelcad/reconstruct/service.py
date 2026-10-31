@@ -320,6 +320,9 @@ def identify(
         extract = normalize_photo_extract(backend.extract(work))
         found = _items_from_extract(session, store, photo, extract)
         created.extend(found)
+        from panelcad.reconstruct.terminal_photo import absorb_terminal_strips
+
+        created.extend(absorb_terminal_strips(session, store, photo, extract))
         rejected = any(
             isinstance(row, dict)
             and (

@@ -168,7 +168,8 @@ def test_item_04_malformed_nx_and_confidence_create_no_items(tmp_path: Path):
         }
     )
     result = session.reconstruct_identify(vision=bad_nx)
-    assert result["items"] == []
+    assert [item for item in result["items"] if item["role"] == "part"] == []
+    assert all(item.get("part_number") in {"", None} for item in result["items"])
     bad_conf = FakeVision(
         {
             "p1": {
@@ -187,7 +188,7 @@ def test_item_04_malformed_nx_and_confidence_create_no_items(tmp_path: Path):
         }
     )
     result = session.reconstruct_identify(vision=bad_conf)
-    assert result["items"] == []
+    assert [item for item in result["items"] if item["role"] == "part"] == []
     findings = run_checks(session.project, session.catalog)
     assert any(row.check == "reconstruct_unreadable" for row in findings)
 
