@@ -8,10 +8,89 @@ from typing import Any, NoReturn, Optional
 
 import typer
 
-from panelcad.api.session import Session, prepare_qt_fonts
-
-prepare_qt_fonts()
 from panelcad.version import __version__
+
+
+def _wants_json() -> bool:
+    """True when this command was started with ``--json``.
+
+    Typer keeps its own Click context. The public ``click`` package does not
+    see it. ``sys.argv`` covers a process that did not go through Typer.
+    """
+
+    from typer._click.globals import get_current_context
+
+    ctx = get_current_context(silent=True)
+    while ctx is not None:
+        params = ctx.params or {}
+        if params.get("json_out") or params.get("as_json"):
+            return True
+        ctx = ctx.parent
+    return "--json" in sys.argv[1:]
+
+
+def _raise_user(message: str, *, code: int = 1) -> NoReturn:
+    """Print one line and exit. ``typer.Exit`` keeps the traceback off the console."""
+
+    text = (message or "failed").strip().splitlines()[0]
+    if _wants_json():
+        typer.echo(json.dumps({"ok": False, "error": text}), err=True)
+    else:
+        typer.echo(text, err=True)
+    raise typer.Exit(code=code)
+
+
+def _session_cls():
+    from panelcad.api.session import Session as _Session
+
+    return _Session
+
+
+class _SessionFacade:
+    """``open`` reports a missing or damaged file in one line. The class loads on first use."""
+
+    def open(self, path: Path | str, *args: Any, **kwargs: Any) -> Any:
+        import yaml
+        from pydantic import ValidationError
+
+        from panelcad.io.yaml_format import describe_open_error
+
+        target = Path(path)
+        try:
+            if target.exists() and not target.is_file():
+                _raise_user(f"{target} is a folder, not a project file.")
+            if not target.exists():
+                _raise_user(f"Can't find {target}.")
+            return _session_cls().open(target, *args, **kwargs)
+        except typer.Exit:
+            raise
+        except (OSError, ValueError, ValidationError, yaml.YAMLError) as exc:
+            _raise_user(describe_open_error(exc, target))
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(_session_cls(), name)
+
+
+Session = _SessionFacade()
+
+
+def _command_error(exc: BaseException) -> NoReturn:
+    if isinstance(exc, typer.Exit):
+        raise exc
+    if isinstance(exc, KeyError):
+        import ast
+
+        raw = str(exc)
+        try:
+            value = ast.literal_eval(raw)
+        except (ValueError, SyntaxError):
+            value = raw
+        text = str(value)
+        if text.startswith("no sheet "):
+            text = "unknown sheet " + text[len("no sheet ") :]
+        _raise_user(text)
+    line = str(exc).strip().splitlines()
+    _raise_user(line[0] if line else "failed")
 
 
 class _Cli(typer.Typer):
@@ -26,7 +105,22 @@ class _Cli(typer.Typer):
         return super().__call__(*args, **kwargs)
 
 
-app = _Cli(add_completion=False, no_args_is_help=True, help="PanelCAD — industrial control panel CAD")
+app = _Cli(
+    add_completion=False,
+    no_args_is_help=True,
+    help=(
+        "PanelCAD — industrial control panel CAD.\n\n"
+        "Exit codes: 0 the command finished, 1 it failed or a check found an error, "
+        "2 the arguments are wrong.\n\n"
+        "Examples:\n"
+        "  panelcad new \"Pump 1\" --out pump.pcad.yaml\n"
+        "  panelcad check pump.pcad.yaml --json\n"
+        "  panelcad print pump.pcad.yaml --pdf pump.pdf\n"
+        "  panelcad package pump.pcad.yaml --pdf pump_package.pdf\n"
+        "  panelcad electrical terminals pump.pcad.yaml --out strips.csv\n"
+        "  panelcad reconstruct photos-to-drawings pump.pcad.yaml"
+    ),
+)
 
 
 @app.callback()
@@ -37,7 +131,19 @@ def _root() -> None:
 
 
 @app.command()
-def version() -> None:
+def version(
+    json_out: bool = typer.Option(False, "--json", help="Print the result as JSON"),
+) -> None:
+    """Print the PanelCAD version.
+
+    Examples:
+      panelcad version
+      panelcad version --json
+    """
+
+    if json_out:
+        typer.echo(json.dumps({"ok": True, "version": __version__}, indent=2))
+        return
     typer.echo(__version__)
 
 
@@ -183,9 +289,22 @@ def settings_set(
 def new_project(
     name: str = typer.Argument(..., help="Project name"),
     out: Path = typer.Option(..., "--out", "-o", help="Path to .pcad.yaml"),
+    json_out: bool = typer.Option(False, "--json", help="Print the result as JSON"),
 ) -> None:
-    s = Session.create(name)
-    s.save(out)
+    """Create an empty project.
+
+    Examples:
+      panelcad new "Pump 1" --out pump.pcad.yaml
+    """
+
+    try:
+        s = Session.create(name)
+        s.save(out)
+    except OSError as exc:
+        _command_error(exc)
+    if json_out:
+        typer.echo(json.dumps({"ok": True, "path": str(out)}, indent=2))
+        return
     typer.echo(f"wrote {out}")
 
 
@@ -239,35 +358,65 @@ def print_cmd(
     bom: Optional[Path] = typer.Option(None, "--bom"),
     wires: Optional[Path] = typer.Option(None, "--wires"),
     sheet: Optional[str] = typer.Option(None, "--sheet", help="One sheet id; omit PDF to print the whole set"),
+    json_out: bool = typer.Option(False, "--json", help="Print the result as JSON"),
 ) -> None:
+    """Write a drawing sheet as SVG, PDF, or DXF, and the BOM or wire list.
+
+    Examples:
+      panelcad print pump.pcad.yaml --pdf pump.pdf
+      panelcad print pump.pcad.yaml --pdf power.pdf --sheet power
+      panelcad print pump.pcad.yaml --svg power.svg --dxf power.dxf --sheet power
+    """
+
     s = Session.open(project)
     errors = s.validate()
     if errors:
-        for e in errors:
-            typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(code=1)
-    if svg:
-        s.export_svg(svg, sheet_id=sheet)
-        typer.echo(f"svg {svg}")
-    if pdf:
-        s.export_pdf(pdf, sheet_id=sheet)
-        typer.echo(f"pdf {pdf}")
-    if dxf:
-        if sheet:
-            path = s.export_dxf(dxf, sheet_id=sheet)
-            typer.echo(f"dxf {path}")
+        if json_out:
+            typer.echo(json.dumps({"ok": False, "errors": errors}, indent=2))
         else:
-            paths = s.export_dxfs(dxf)
-            for path in paths:
-                typer.echo(f"dxf {path}")
-    if bom:
-        s.export_bom(bom)
-        typer.echo(f"bom {bom}")
-    if wires:
-        s.export_wire_list(wires)
-        typer.echo(f"wires {wires}")
+            for e in errors:
+                typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(code=1)
     if not any([svg, pdf, dxf, bom, wires]):
-        typer.echo("pass --svg, --pdf, --dxf, --bom, and/or --wires")
+        _raise_user("Pass --svg, --pdf, --dxf, --bom, and/or --wires.")
+    payload: dict[str, Any] = {"ok": True, "sheet": sheet}
+    try:
+        if svg:
+            s.export_svg(svg, sheet_id=sheet)
+            payload["svg"] = str(svg)
+            if not json_out:
+                typer.echo(f"svg {svg}")
+        if pdf:
+            s.export_pdf(pdf, sheet_id=sheet)
+            payload["pdf"] = str(pdf)
+            if not json_out:
+                typer.echo(f"pdf {pdf}")
+        if dxf:
+            if sheet:
+                path = s.export_dxf(dxf, sheet_id=sheet)
+                payload["dxf"] = [str(path)]
+                if not json_out:
+                    typer.echo(f"dxf {path}")
+            else:
+                paths = s.export_dxfs(dxf)
+                payload["dxf"] = [str(path) for path in paths]
+                if not json_out:
+                    for path in paths:
+                        typer.echo(f"dxf {path}")
+        if bom:
+            s.export_bom(bom)
+            payload["bom"] = str(bom)
+            if not json_out:
+                typer.echo(f"bom {bom}")
+        if wires:
+            s.export_wire_list(wires)
+            payload["wires"] = str(wires)
+            if not json_out:
+                typer.echo(f"wires {wires}")
+    except (OSError, ValueError, KeyError) as exc:
+        _command_error(exc)
+    if json_out:
+        typer.echo(json.dumps(payload, indent=2))
 
 
 bom_app = typer.Typer(help="Bill of materials import/export")
@@ -281,6 +430,12 @@ def bom_export(
     grouped: bool = typer.Option(False, "--grouped", help="One row per unique part, qty + concatenated refs"),
     json_out: bool = typer.Option(False, "--json", help="Print the result as JSON"),
 ) -> None:
+    """Write the bill of materials.
+
+    Examples:
+      panelcad bom export pump.pcad.yaml --out bom.csv
+      panelcad bom export pump.pcad.yaml --out bom.csv --grouped --json
+    """
     try:
         s = Session.open(project)
         s.export_bom(out, grouped=grouped)
@@ -358,7 +513,12 @@ def package_cmd(
     ),
     json_out: bool = typer.Option(False, "--json", help="Print the result as JSON"),
 ) -> None:
-    """One-click print package. Default writes a PDF next to the project."""
+    """One-click print package. Default writes a PDF next to the project.
+
+    Examples:
+      panelcad package pump.pcad.yaml --pdf pump_package.pdf
+      panelcad package pump.pcad.yaml --pdf power.pdf --sheets power --json
+    """
     parts = _comma_list(sections)
     sheet_ids = _comma_list(sheets)
     payload: dict[str, Any] = {"ok": True, "sheets": sheet_ids}
@@ -1500,29 +1660,45 @@ def gui(project: Optional[Path] = typer.Argument(None)) -> None:
 def validate(
     project: Path,
     design: bool = typer.Option(False, "--design", help="Also print live design checks (warnings/info)"),
+    json_out: bool = typer.Option(False, "--json", help="Print the result as JSON"),
 ) -> None:
+    """Structural check. Exit 1 when the project cannot be read as a drawing.
+
+    Examples:
+      panelcad validate pump.pcad.yaml
+      panelcad validate pump.pcad.yaml --design --json
+    """
+
     s = Session.open(project)
     errors = s.validate()
-    if errors:
-        for e in errors:
-            typer.echo(e)
-        raise typer.Exit(code=1)
+    design_rows: list[dict[str, Any]] = []
     if design:
         from panelcad.core.checks import STRUCTURAL_CHECKS
 
-        leftover = [
+        design_rows = [
             row
             for row in s.design_checks()
             if not (row["severity"] == "error" and row["check"] in STRUCTURAL_CHECKS)
         ]
-        if leftover:
-            for row in leftover:
+    failed = bool(errors) or any(row["severity"] == "error" for row in design_rows)
+    if json_out:
+        payload: dict[str, Any] = {"ok": not failed, "errors": errors}
+        if design:
+            payload["design"] = design_rows
+        typer.echo(json.dumps(payload, indent=2, default=str))
+    else:
+        if errors:
+            for e in errors:
+                typer.echo(e)
+        elif design_rows:
+            for row in design_rows:
                 typer.echo(f"{row['severity']:7} {row['check']:28} {row['message']}")
-            if any(row["severity"] == "error" for row in leftover):
-                raise typer.Exit(code=1)
-            typer.echo(f"ok  ({len(leftover)} design note(s))")
-            return
-    typer.echo("ok")
+            if not failed:
+                typer.echo(f"ok  ({len(design_rows)} design note(s))")
+        else:
+            typer.echo("ok")
+    if failed:
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -1594,7 +1770,15 @@ def check_cmd(
     json_out: bool = typer.Option(False, "--json", help="Problems and structural errors as JSON"),
     include_suppressed: bool = typer.Option(False, "--include-suppressed"),
 ) -> None:
-    """Design Problems plus structural errors. Same findings as the Problems dock."""
+    """Design Problems plus structural errors. Same findings as the Problems dock.
+
+    Exit 1 when a structural error or an error-severity Problem is present.
+    Warnings stay in the list and the command still exits 0.
+
+    Examples:
+      panelcad check pump.pcad.yaml
+      panelcad check pump.pcad.yaml --json
+    """
 
     from panelcad.importer.agent_questions import questions_for
 
@@ -1625,9 +1809,23 @@ def check_cmd(
 
 
 @app.command("sheets")
-def sheets_cmd(project: Path) -> None:
+def sheets_cmd(
+    project: Path,
+    json_out: bool = typer.Option(False, "--json", help="Print the result as JSON"),
+) -> None:
+    """List drawing sheets.
+
+    Examples:
+      panelcad sheets pump.pcad.yaml
+      panelcad sheets pump.pcad.yaml --json
+    """
+
     s = Session.open(project)
-    for row in s.list_sheets():
+    rows = s.list_sheets()
+    if json_out:
+        typer.echo(json.dumps({"ok": True, "sheets": rows}, indent=2, default=str))
+        return
+    for row in rows:
         mark = "*" if row["active"] else " "
         typer.echo(f"{mark} {row['index']}/{row['count']}  {row['id']:16}  {row['title']}  ({row['kind']})  {row['components']} devices")
 
@@ -2392,6 +2590,12 @@ def electrical_terminals(
     rename: bool = typer.Option(False, "--rename", help="Rename levels to STRIP-n"),
     json_out: bool = typer.Option(False, "--json", help="Print the result as JSON"),
 ) -> None:
+    """Write the terminal-strip table.
+
+    Examples:
+      panelcad electrical terminals pump.pcad.yaml --out strips.csv
+      panelcad electrical terminals pump.pcad.yaml --out strips.csv --strip X1 --json
+    """
     try:
         s = Session.open(project)
         if strip:
@@ -2412,10 +2616,22 @@ def _refs(text: str) -> list[str]:
 
 
 @elec.command("strip-list")
-def electrical_strip_list(project: Path) -> None:
-    """List terminal strips, how many levels each has, and the drawing sheet."""
+def electrical_strip_list(
+    project: Path,
+    json_out: bool = typer.Option(False, "--json", help="Print the result as JSON"),
+) -> None:
+    """List terminal strips, how many levels each has, and the drawing sheet.
+
+    Examples:
+      panelcad electrical strip-list pump.pcad.yaml
+      panelcad electrical strip-list pump.pcad.yaml --json
+    """
+
     s = Session.open(project)
     rows = s.list_terminal_strips()
+    if json_out:
+        typer.echo(json.dumps({"ok": True, "strips": rows}, indent=2, default=str))
+        return
     if not rows:
         typer.echo("no terminal strips")
         return
@@ -2661,20 +2877,37 @@ def electrical_checks(
     project: Path,
     out: Optional[Path] = typer.Option(None, "--out", "-o"),
     include_suppressed: bool = typer.Option(False, "--include-suppressed"),
+    json_out: bool = typer.Option(False, "--json", help="Print the result as JSON"),
 ) -> None:
-    """Live design checks: the same findings as the GUI problems panel."""
-    s = Session.open(project)
-    rows = s.design_checks(include_suppressed=include_suppressed)
-    if out:
-        s.export_checks(out, include_suppressed=include_suppressed)
-        typer.echo(f"checks {out}")
-    for row in rows:
-        typer.echo(f"{row['severity']:7} {row['check']:28} {row['message']}")
+    """Live design checks: the same findings as the GUI problems panel.
+
+    Examples:
+      panelcad electrical checks pump.pcad.yaml --json
+      panelcad electrical checks pump.pcad.yaml --out checks.csv
+    """
+
+    try:
+        s = Session.open(project)
+        rows = s.design_checks(include_suppressed=include_suppressed)
+        if out:
+            s.export_checks(out, include_suppressed=include_suppressed)
+    except (OSError, ValueError, KeyError) as exc:
+        _command_error(exc)
     errors = [row for row in rows if row["severity"] == "error" and row.get("suppressed") != "yes"]
+    if json_out:
+        payload: dict[str, Any] = {"ok": not errors, "problems": rows}
+        if out:
+            payload["path"] = str(out)
+        typer.echo(json.dumps(payload, indent=2, default=str))
+    else:
+        if out:
+            typer.echo(f"checks {out}")
+        for row in rows:
+            typer.echo(f"{row['severity']:7} {row['check']:28} {row['message']}")
+        if not rows:
+            typer.echo("ok")
     if errors:
         raise typer.Exit(code=1)
-    if not rows:
-        typer.echo("ok")
 
 
 @elec.command("thermal")
@@ -4137,15 +4370,28 @@ def reconstruct_photos_to_drawings_cmd(
         help="Flag id to drop from the queue. Repeat to drop more than one.",
     ),
 ) -> None:
-    """Read imported photos and write drawings, stopping only for flagged items."""
+    """Read imported photos and write drawings, stopping only for flagged items.
+
+    --accept clears a low-confidence read, the same as Accept read in the window.
+    --dismiss clears a possible missed device, the same as Not a missed device.
+    A missing-info flag stays in the queue.
+
+    Examples:
+      panelcad reconstruct photos-to-drawings pump.pcad.yaml
+      panelcad reconstruct photos-to-drawings pump.pcad.yaml --accept item-3
+      panelcad reconstruct photos-to-drawings pump.pcad.yaml --dismiss missed:gap-1
+    """
 
     import json
 
     session = _recon_session(project)
-    result = session.reconstruct_photos_to_drawings(
-        accepted_ids=list(accept or []),
-        dismissed_ids=list(dismiss or []),
-    )
+    try:
+        result = session.reconstruct_photos_to_drawings(
+            accepted_ids=list(accept or []),
+            dismissed_ids=list(dismiss or []),
+        )
+    except ValueError as exc:
+        _cli_fail(str(exc))
     session.save(project)
     typer.echo(
         json.dumps(
@@ -4251,18 +4497,29 @@ def capture_server_cmd(
         help="Optional access token required on phone URLs (?token=...)",
     ),
 ) -> None:
-    """Start the PanelCAD Mobile Field Capture web server for phones and tablets."""
+    """Start the PanelCAD Mobile Field Capture web server for phones and tablets.
+
+    Examples:
+      panelcad capture-server --workspace ./panelcad-captures
+      panelcad capture-server --host 127.0.0.1 --port 8788 --project pump.pcad.yaml
+    """
+
     from panelcad.reconstruct.capture_web import CaptureWebServer
 
-    live_sess = Session.open(project) if project and project.exists() else None
-    srv = CaptureWebServer(
-        workspace,
-        host=host,
-        port=port,
-        webhook_url=webhook_url,
-        access_token=access_token,
-        live_session=live_sess,
-    )
+    live_sess = None
+    if project is not None:
+        live_sess = Session.open(project)
+    try:
+        srv = CaptureWebServer(
+            workspace,
+            host=host,
+            port=port,
+            webhook_url=webhook_url,
+            access_token=access_token,
+            live_session=live_sess,
+        )
+    except OSError as exc:
+        _command_error(exc)
     typer.echo(f"PanelCAD Mobile Field Capture Server listening on {host}:{port}")
     typer.echo(f"Workspace: {Path(workspace).resolve()}")
     for item in srv.reachable_urls():
@@ -4271,6 +4528,8 @@ def capture_server_cmd(
         srv.serve_forever()
     except KeyboardInterrupt:
         srv.stop()
+    except OSError as exc:
+        _command_error(exc)
 
 
 def main() -> None:

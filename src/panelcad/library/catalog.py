@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -378,9 +379,71 @@ def device_to_raw(device: Device) -> dict[str, Any]:
     return raw
 
 
+_CATALOG_CACHE: dict[tuple, Catalog] = {}
+_CATALOG_CACHE_MAX = 4
+
+
+def _catalog_source_key(project_dir: Path | None) -> tuple:
+    """Search path plus file mtimes. A saved library edit or a new overlay misses."""
+
+    from panelcad.library.paths import library_search_paths
+
+    env = os.environ.get("PANELCAD_LIBRARY_PATH", "")
+    root = "" if project_dir is None else str(Path(project_dir).resolve())
+    files: list[tuple[str, int, int]] = []
+    for directory in library_search_paths(project_dir):
+        try:
+            folder = directory.stat()
+        except OSError:
+            files.append((str(directory), 0, 0))
+            continue
+        resolved_dir = directory.resolve()
+        files.append((str(resolved_dir), int(folder.st_mtime_ns), 0))
+        names = sorted(directory.glob("*.yaml")) + sorted(directory.glob("*.yml"))
+        for path in names:
+            try:
+                stat = path.stat()
+            except OSError:
+                files.append((str(path), 0, 0))
+            else:
+                files.append((str(resolved_dir / path.name), int(stat.st_mtime_ns), int(stat.st_size)))
+    return (env, root, tuple(files))
+
+
+def _clone_row(value: Any) -> Any:
+    copy = getattr(value, "model_copy", None)
+    if copy is None:
+        return value
+    return value.model_copy(deep=True)
+
+
+def _detach_catalog(source: Catalog) -> Catalog:
+    """A new device dict. Editing one session does not change the next."""
+
+    copy = Catalog()
+    copy.devices = {key: _clone_row(device) for key, device in source.devices.items()}
+    copy._loaded_files = list(source._loaded_files)
+    copy._device_files = dict(source._device_files)
+    copy.ref_prefix_maps = {key: dict(value) for key, value in source.ref_prefix_maps.items()}
+    copy.io_modules = {key: _clone_row(module) for key, module in source.io_modules.items()}
+    return copy
+
+
 def default_catalog(project_dir: Path | None = None) -> Catalog:
-    cat = Catalog()
-    cat.load_defaults(project_dir)
-    return cat
+    """Builtin symbol library, plus user, project, and PANELCAD_LIBRARY_PATH overlays.
+
+    Parsed files stay cached while the search path and those mtimes stay put.
+    Each call gets its own device dict.
+    """
+
+    key = _catalog_source_key(project_dir)
+    found = _CATALOG_CACHE.get(key)
+    if found is None:
+        found = Catalog()
+        found.load_defaults(project_dir)
+        _CATALOG_CACHE[key] = found
+        while len(_CATALOG_CACHE) > _CATALOG_CACHE_MAX:
+            _CATALOG_CACHE.pop(next(iter(_CATALOG_CACHE)))
+    return _detach_catalog(found)
 
 Library = Catalog

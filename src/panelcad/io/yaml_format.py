@@ -7,6 +7,7 @@ import yaml
 
 from panelcad.core.models import Project
 from panelcad.io.share import atomic_write_text
+from panelcad.library.yaml_load import safe_load as _yaml_load
 
 
 def describe_open_error(exc: BaseException, path: Path | str) -> str:
@@ -48,7 +49,7 @@ def load_project(path: Path | str) -> Project:
     from panelcad.io.winpath import io_path
 
     raw = Path(io_path(path)).read_text(encoding="utf-8")
-    data = yaml.safe_load(raw)
+    data = _yaml_load(raw)
     if not isinstance(data, dict):
         raise ValueError(f"{path} is not a YAML mapping")
     return Project.model_validate(data)

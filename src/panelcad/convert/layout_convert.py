@@ -11,6 +11,7 @@ from typing import Any
 
 from panelcad.convert.table import nema_alias_for, rail_pair_for, target_standard
 from panelcad.core.circuit_builder import _Part
+from panelcad.core.power_sheet import is_power_sheet
 from panelcad.core.refs import sheet_drawing_standard
 
 _AC_HOT = {"L1", "X1", "H1", "120", "120V", "120VAC"}
@@ -31,58 +32,6 @@ _RET_WORDS = {
     "L2": ("L2",),
 }
 _IO_TITLES = ("i/o", "plc i")
-
-
-_POWER_LIB_TOKENS = (
-    "motors.",
-    "loads.motor",
-    "breakers.mcb_3p",
-    "breakers.mccb",
-    "contactors.ac3",
-    "contactors.three_pole",
-    "contactors.power",
-    "protection.overload_3p",
-    "protection.overload_9a",
-    "protection.overload",
-    "protection.thermal_ol",
-    "drives.",
-    "starters.",
-    "disconnect",
-)
-_POWER_ROLES = frozenset(
-    {
-        "motor",
-        "contactor",
-        "overload",
-        "breaker",
-        "drive",
-        "softstarter",
-        "star",
-        "delta",
-        "main_contactor",
-        "fwd",
-        "rev",
-        "bypass",
-    }
-)
-
-
-def is_power_sheet(sheet: Any, parts: list[_Part] | None = None) -> bool:
-    """True when a schematic sheet contains 3-phase power feeder components."""
-
-    roles = {part.role for part in (parts or []) if getattr(part, "role", None)}
-    if roles & _POWER_ROLES:
-        return True
-    for comp in getattr(sheet, "components", []) or []:
-        role = str(comp.properties.get("role") or "").strip().lower()
-        if role in _POWER_ROLES:
-            return True
-        lid = str(getattr(comp, "library_id", "") or "").lower()
-        if lid.endswith((".ol_contact", ".aux_no", ".aux_nc", ".coil")):
-            continue
-        if any(tok in lid for tok in _POWER_LIB_TOKENS):
-            return True
-    return False
 
 
 def needs_column_or_ladder(sheet: Any, parts: list[_Part] | None = None) -> bool:

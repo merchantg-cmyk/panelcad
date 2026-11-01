@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.5.22 — 2026-11-01
+
+- Faster one-step CLI commands. Commands that do not draw skip Qt, the print importer, and OCR.
+- Symbol-library YAML is cached by file mtime. Project files use the libyaml loader.
+- CLI help lists exit codes and examples. --json on the one-step commands. A missing or damaged file exits 1 with one line.
+- Photos to drawings Accept only clears a low-confidence read. Dismiss only clears a possible missed device.
+- Benchmark script at tools/bench_cli.py.
+- Accept proof for a synthetic MC-9 nameplate in the GUI and the CLI.
+
 ## 0.5.21 — 2026-10-31
 
 - Physical terminal strip sheet.

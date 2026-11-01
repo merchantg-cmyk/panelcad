@@ -698,25 +698,26 @@ def test_cli_accept_and_dismiss_clear_a_stopped_run(
     assert stopped.exit_code == 0, stopped.output
     payload = json.loads(stopped.output)
     assert payload["stopped"] is True
-    photo_flags = [row["id"] for row in payload["queue"] if row["kind"] == "photo"]
+    photo_flags = [row for row in payload["queue"] if row["kind"] == "photo"]
     assert photo_flags
-    cleared = runner.invoke(
+    assert photo_flags[0]["reason"] == "missing_info"
+    # The window only dismisses a possible missed device. A stub photo is missing info.
+    refused = runner.invoke(
         app,
-        ["reconstruct", "photos-to-drawings", project, "--dismiss", photo_flags[0]],
+        ["reconstruct", "photos-to-drawings", project, "--dismiss", photo_flags[0]["id"]],
     )
-    assert cleared.exit_code == 0, cleared.output
-    # The first photo may still be unread without a vision backend, so dismiss every photo flag.
-    again = json.loads(cleared.output)
-    remaining = [row["id"] for row in again["queue"] if row["kind"] == "photo"]
-    if remaining:
-        args = ["reconstruct", "photos-to-drawings", project]
-        for flag_id in photo_flags:
-            args.extend(["--dismiss", flag_id])
-        cleared = runner.invoke(app, args)
-        assert cleared.exit_code == 0, cleared.output
-        again = json.loads(cleared.output)
-    assert again["stopped"] is False
-    assert again["drawings_generated"] is True
+    refused_text = (refused.output or "") + (getattr(refused, "stderr", None) or "")
+    assert refused.exit_code != 0
+    assert "Dismiss applies only to a possible missed device" in refused_text
+    assert "Traceback" not in refused_text
+    accepted_info = runner.invoke(
+        app,
+        ["reconstruct", "photos-to-drawings", project, "--accept", photo_flags[0]["id"]],
+    )
+    accepted_text = (accepted_info.output or "") + (getattr(accepted_info, "stderr", None) or "")
+    assert accepted_info.exit_code != 0
+    assert "Accept applies only to a low-confidence read" in accepted_text
+    assert "Traceback" not in accepted_text
 
     fuzzy = _photo_session(tmp_path / "fuzzy")
     fuzzy_session, fuzzy_photo, fuzzy_meta = fuzzy

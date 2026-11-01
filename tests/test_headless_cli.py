@@ -179,4 +179,5 @@ def test_bom_wires_terminals_and_check_json(tmp_path: Path) -> None:
         ["bom", "export", str(tmp_path / "missing.pcad.yaml"), "--out", str(tmp_path / "no.csv"), "--json"],
     )
     assert missing.exit_code != 0
-    assert "ok" in _combined(missing) or "No such file" in _combined(missing) or "not found" in _combined(missing).lower()
+    assert "Can't find" in _combined(missing)
+    assert "Traceback" not in _combined(missing)

@@ -57,7 +57,21 @@ def run_photos_to_drawings(
     dismissed = {str(item) for item in (dismissed_ids or []) if str(item).strip()}
     offline = _offline(identified)
     created_ids = {str(row.get("id") or "") for row in (identified.get("items") or [])}
-    _auto_confirm(session, accepted, created_ids)
+    # Sure catalog matches pass on their own. A human accept is applied only
+    # after it is checked against the same flags the review window enables.
+    _auto_confirm(session, set(), created_ids)
+    if accepted or dismissed:
+        _require_review_actions(
+            session,
+            accepted=accepted,
+            dismissed=dismissed,
+            offline=offline,
+            created_ids=created_ids,
+            unboxed_callouts=unboxed_callouts,
+            extra_flags=extra_flags,
+        )
+        if accepted:
+            _auto_confirm(session, accepted, created_ids)
     queue = _collect(
         session,
         accepted=accepted,
@@ -104,6 +118,85 @@ def run_photos_to_drawings(
             "count": len(identified.get("items") or []),
         },
     }
+
+
+def _require_review_actions(
+    session: Any,
+    *,
+    accepted: set[str],
+    dismissed: set[str],
+    offline: bool,
+    created_ids: set[str],
+    unboxed_callouts: Any,
+    extra_flags: list[dict[str, Any]] | None,
+) -> None:
+    """Same buttons as Photos → drawings: Accept on a low-confidence read, Dismiss on a possible miss.
+
+    Anything else stays in the queue. The CLI cannot clear a missing-info flag
+    by passing its id.
+    """
+
+    preview = _collect(
+        session,
+        accepted=set(),
+        dismissed=set(),
+        offline=offline,
+        created_ids=created_ids,
+        unboxed_callouts=unboxed_callouts,
+        extra_flags=extra_flags,
+    )
+    # A low-confidence read stays acceptable on the next pass. Identify does not
+    # list an item that is already on the photo, and that used to relabel the
+    # same read as missing info. Accept still requires the low-confidence rule.
+    store = ensure_reconstruction(session.project)
+    seen = created_ids | {item.id for item in store.items}
+    accept_preview = _collect(
+        session,
+        accepted=set(),
+        dismissed=set(),
+        offline=offline,
+        created_ids=seen,
+        unboxed_callouts=unboxed_callouts,
+        extra_flags=extra_flags,
+    )
+    known: set[str] = set()
+    accept_ok: set[str] = set()
+    dismiss_ok: set[str] = set()
+    for row in preview.items:
+        known.add(row.id)
+        if row.source_id:
+            known.add(row.source_id)
+        if row.reason == "possible_missed_device":
+            dismiss_ok.add(row.id)
+            if row.source_id:
+                dismiss_ok.add(row.source_id)
+    for row in accept_preview.items:
+        known.add(row.id)
+        if row.source_id:
+            known.add(row.source_id)
+        if row.reason == "low_confidence":
+            accept_ok.add(row.id)
+            if row.source_id:
+                accept_ok.add(row.source_id)
+    problems: list[str] = []
+    for token in sorted(accepted):
+        if token in accept_ok:
+            continue
+        if token not in known:
+            problems.append(f"cannot accept {token}: no flagged item with that id")
+        else:
+            problems.append(f"cannot accept {token}: Accept applies only to a low-confidence read")
+    for token in sorted(dismissed):
+        if token in dismiss_ok:
+            continue
+        if token not in known:
+            problems.append(f"cannot dismiss {token}: no flagged item with that id")
+        else:
+            problems.append(
+                f"cannot dismiss {token}: Dismiss applies only to a possible missed device"
+            )
+    if problems:
+        raise ValueError("; ".join(problems))
 
 
 def _offline(identified: dict[str, Any]) -> bool:

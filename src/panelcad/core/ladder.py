@@ -52,7 +52,7 @@ def is_three_phase_power_sheet(sheet: Sheet) -> bool:
 
     if getattr(sheet, "kind", "") != "schematic":
         return False
-    from panelcad.convert.layout_convert import is_power_sheet
+    from panelcad.core.power_sheet import is_power_sheet
 
     return is_power_sheet(sheet)
 

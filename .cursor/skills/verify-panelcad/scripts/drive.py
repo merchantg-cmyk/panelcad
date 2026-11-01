@@ -601,10 +601,248 @@ def feature_panel_wiring(app, win) -> None:
     dlg.close()
     app.processEvents()
 
+def feature_dol_photos_pdf(app, win) -> None:
+    """Open the DOL sample, add a synthetic photo, and Accept a low-confidence read.
+
+    The photo is ``write_backpanel_photo`` (a synthetic backpanel, not a customer
+    shot). The read is the existing partial-label fixture: the nameplate says
+    MC-9, and the catalog matcher scores LS MC-9b at about 0.59, below the
+    sure-match line. That is a low-confidence row. A blank second photo stays
+    missing info, and Accept stays off for that row.
+    """
+
+    from PySide6.QtCore import Qt, QTimer
+    from PySide6.QtGui import QColor, QImage
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QFileDialog, QPushButton
+
+    from panelcad.reconstruct import service as recon_service
+    from panelcad.reconstruct import vision as recon_vision
+    from panelcad.reconstruct.fixtures import write_backpanel_photo
+    from panelcad.reconstruct.vision import FakeVision
+
+    nameplate = SCRATCH / "work" / "nameplate.png"
+    blank = SCRATCH / "work" / "blank.png"
+    meta = write_backpanel_photo(nameplate, seed=7)
+    image = QImage(64, 48, QImage.Format.Format_RGB32)
+    image.fill(QColor("#6a6a6a"))
+    image.save(str(blank))
+    region = meta["part_region"]
+    width = float(meta["width_px"])
+    height = float(meta["height_px"])
+    device = {
+        "tag": "K1",
+        "brand": "LS Electric",
+        "part_number": "MC-9",
+        "label_text": "MC-9",
+        "nx": region["x"] / width,
+        "ny": region["y"] / height,
+        "nw": region["w"] / width,
+        "nh": region["h"] / height,
+        "confidence": 0.91,
+        "unreadable": False,
+    }
+    # First photo added on this empty DOL project is p1. A later blank photo
+    # has no recording, so the reader leaves it unreadable.
+    recording = {
+        "devices": [device],
+        "strips": [],
+        "rails": [],
+        "ducts": [],
+        "texts": [],
+        "unreadable": False,
+    }
+    reader = FakeVision({"p1": recording, nameplate.stem: recording})
+
+    def _backend(*_args, **_kwargs):
+        return reader
+
+    recon_service.get_backend = _backend
+    recon_vision.get_backend = _backend
+
+    def _rows(dlg) -> list[dict]:
+        rows = []
+        for i in range(dlg.queue.count()):
+            data = dlg.queue.item(i).data(Qt.ItemDataRole.UserRole)
+            if isinstance(data, dict):
+                rows.append(data)
+        return rows
+
+    def _click_row(dlg, index: int) -> None:
+        item = dlg.queue.item(index)
+        rect = dlg.queue.visualItemRect(item)
+        QTest.mouseClick(dlg.queue.viewport(), Qt.MouseButton.LeftButton, pos=rect.center())
+        app.processEvents()
+
+    def _pick(dlg, path, button_word: str) -> None:
+        from PySide6.QtWidgets import QLineEdit
+
+        edit = dlg.findChild(QLineEdit, "fileNameEdit")
+        dlg.setDirectory(str(path.parent))
+        if edit is not None:
+            edit.setText(path.name)
+        dlg.selectFile(str(path))
+        button = next((b for b in dlg.findChildren(QPushButton) if button_word in b.text()), None)
+        if button is not None and button.isEnabled():
+            QTest.mouseClick(button, Qt.MouseButton.LeftButton)
+        else:
+            dlg.accept()
+
+    def _close(dlg) -> None:
+        close = next(b for b in dlg.findChildren(QPushButton) if b.text() == "Close")
+        QTest.mouseClick(close, Qt.MouseButton.LeftButton)
+
+    def file_nameplate(dlg):
+        check("nameplate file dialog", isinstance(dlg, QFileDialog), dlg.windowTitle())
+        shot(dlg, "nameplate-file-dialog")
+        if isinstance(dlg, QFileDialog):
+            _pick(dlg, nameplate, "Open")
+
+    def file_blank(dlg):
+        check("blank file dialog", isinstance(dlg, QFileDialog), dlg.windowTitle())
+        shot(dlg, "blank-file-dialog")
+        if isinstance(dlg, QFileDialog):
+            _pick(dlg, blank, "Open")
+
+    def photos_low(dlg):
+        check(
+            "dialog is Photos → drawings",
+            type(dlg).__name__ == "PhotosToDrawingsDialog",
+            dlg.windowTitle(),
+        )
+        shot(dlg, "photos-before-nameplate")
+
+        def go() -> None:
+            add = dlg.findChild(QPushButton, "photosToDrawingsAdd")
+            QTest.mouseClick(add, Qt.MouseButton.LeftButton)
+            app.processEvents()
+            check("nameplate photo added", dlg.photo_list.count() == 1, str(dlg.photo_list.count()))
+            photo = win.session.project.reconstruct.photos[-1]
+            # The synthetic fixture records the enclosure face. Scale is what
+            # lets the accepted part land on a sheet.
+            win.session.reconstruct_set_corners(photo.id, meta["corners"])
+            win.session.reconstruct_set_scale(
+                photo.id,
+                "face",
+                meta["corners"][0],
+                meta["corners"][1],
+                known_mm=meta.get("enclosure_width_mm") or 400,
+                known_height_mm=meta.get("enclosure_height_mm") or 500,
+            )
+            QTest.mouseClick(dlg.findChild(QPushButton, "photosToDrawingsRun"), Qt.MouseButton.LeftButton)
+            app.processEvents()
+            rows = _rows(dlg)
+            log("low-confidence queue: " + str([
+                {"id": row.get("id"), "reason": row.get("reason"), "title": row.get("title"), "confidence": row.get("confidence")}
+                for row in rows
+            ]))
+            shot(dlg, "photos-low-confidence-queue")
+            low = next((i for i, row in enumerate(rows) if row.get("reason") == "low_confidence"), None)
+            check("a low-confidence row is listed", low is not None, str([row.get("reason") for row in rows]))
+            if low is None:
+                _close(dlg)
+                return
+            _click_row(dlg, low)
+            check("Accept is enabled for the low-confidence row", dlg.accept_btn.isEnabled(), dlg.accept_btn.text())
+            shot(dlg, "photos-accept-enabled")
+            accepted_id = rows[low].get("id")
+            QTest.mouseClick(dlg.accept_btn, Qt.MouseButton.LeftButton)
+            app.processEvents()
+            after = _rows(dlg)
+            shot(dlg, "photos-after-accept")
+            check(
+                "low-confidence row cleared",
+                all(row.get("id") != accepted_id for row in after),
+                str([row.get("id") for row in after]),
+            )
+            info = dlg.result_info
+            check(
+                "drawing proceeds",
+                info is not None and info.drawings_generated and "Drawings generated" in dlg.status.text(),
+                dlg.status.text(),
+            )
+            log(f"status after accept: {dlg.status.text()}")
+            _close(dlg)
+
+        QTimer.singleShot(0, go)
+
+    def photos_missing(dlg):
+        shot(dlg, "photos-before-blank")
+
+        def go() -> None:
+            add = dlg.findChild(QPushButton, "photosToDrawingsAdd")
+            QTest.mouseClick(add, Qt.MouseButton.LeftButton)
+            app.processEvents()
+            QTest.mouseClick(dlg.findChild(QPushButton, "photosToDrawingsRun"), Qt.MouseButton.LeftButton)
+            app.processEvents()
+            rows = _rows(dlg)
+            log("missing-info queue: " + str([
+                {"id": row.get("id"), "reason": row.get("reason"), "kind": row.get("kind")}
+                for row in rows
+            ]))
+            shot(dlg, "photos-missing-info-queue")
+            missing = next(
+                (i for i, row in enumerate(rows) if row.get("reason") == "missing_info"),
+                None,
+            )
+            check("a missing-info row is listed", missing is not None, str([row.get("reason") for row in rows]))
+            if missing is not None:
+                _click_row(dlg, missing)
+                check(
+                    "Accept stays disabled on a missing-info row",
+                    not dlg.accept_btn.isEnabled(),
+                    dlg.accept_btn.text(),
+                )
+            _close(dlg)
+
+        QTimer.singleShot(0, go)
+
+    def save_pdf(dlg):
+        out_pdf = SCRATCH / "work" / "dol-sheets.pdf"
+        check("PDF save dialog", isinstance(dlg, QFileDialog), dlg.windowTitle())
+        shot(dlg, "export-pdf-dialog")
+        if isinstance(dlg, QFileDialog):
+            _pick(dlg, out_pdf, "Save")
+
+    pump = ModalPump(app, [photos_low, file_nameplate, photos_missing, file_blank, save_pdf])
+    shot(win, "dol-main-before")
+    act = menu_action(win, "File", "Photos → drawings…")
+    log(f"triggering File → {act.text()}")
+    act.trigger()
+    app.processEvents()
+    act2 = menu_action(win, "File", "Photos → drawings…")
+    log(f"triggering File → {act2.text()} for the blank photo")
+    act2.trigger()
+    app.processEvents()
+    export = menu_action(win, "File", "Export PDF…")
+    log(f"triggering File → {export.text()}")
+    export.trigger()
+    out_pdf = SCRATCH / "work" / "dol-sheets.pdf"
+    for _ in range(30):
+        app.processEvents()
+        QTest.qWait(50)
+        if out_pdf.is_file():
+            break
+    pump.timer.stop()
+    shot(win, "dol-main-after")
+    check(
+        "sheet PDF written",
+        out_pdf.is_file() and out_pdf.stat().st_size > 1000,
+        f"{out_pdf.stat().st_size if out_pdf.is_file() else 0} bytes",
+    )
+    if out_pdf.is_file():
+        shutil.copy2(out_pdf, EVIDENCE / out_pdf.name)
+        from pypdf import PdfReader
+
+        pages = len(PdfReader(str(out_pdf)).pages)
+        (EVIDENCE / "pdfinfo.txt").write_text(f"Pages: {pages}\n", encoding="utf-8")
+        check("sheet PDF has pages", pages >= 1, f"pages={pages}")
+
 FEATURES = {
     "print-package": ("sample_catalog.pcad.yaml", feature_print_package),
     "iec-to-nema-convert": ("xref_iec_mirror.pcad.yaml", feature_iec_to_nema_convert),
     "panel-wiring": ("dol_starter.pcad.yaml", feature_panel_wiring),
+    "dol-photos-pdf": ("dol_starter.pcad.yaml", feature_dol_photos_pdf),
 }
 
 
@@ -621,9 +859,13 @@ def main() -> int:
     sample, fn = FEATURES[feature]
     project = SCRATCH / "work" / sample
     shutil.copy2(REPO / "examples" / sample, project)  # never edit the repo sample
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+
+    # Offscreen has no native file dialog. Set this before launch_gui creates QApplication.
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, True)
     from panelcad.gui.app import launch_gui
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication
 
     app = launch_gui(project)  # same entry `panelcad gui <project>` uses
     win = next(w for w in QApplication.topLevelWidgets() if type(w).__name__ == "MainWindow")

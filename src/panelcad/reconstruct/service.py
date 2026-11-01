@@ -1960,7 +1960,7 @@ def _layout_control_ladder_sheet(session: Any, store: Reconstruction, sheet: Any
             _ensure_named_pin_and_override(session, comp, pin, is_power=False, pin_role=role)
 
     if has_rail_ref or sheet.wires or sheet.components:
-        from panelcad.convert.layout_convert import is_power_sheet
+        from panelcad.core.power_sheet import is_power_sheet
 
         if not is_power_sheet(sheet):
             sheet.drawing_style = "ladder"
