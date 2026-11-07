@@ -31,8 +31,12 @@ from panelcad.importer.vision import (
     NeedsSubmit,
     VisionFallback,
     backend_for,
+    SHORT_TILE_PROMPT,
+    TILE_PROMPT,
     detections_to_facts,
+    drop_unsupported_vision,
     filter_vision_detections,
+    prompt_example_tags,
     reset_vision_trace,
     set_vision_trace,
 )
@@ -1194,6 +1198,12 @@ class ImportJob:
                     pixel_devices,
                     standard=standards[page["id"]],
                 )
+                if "ocr_tokens" in pixel and not pixel.get("ocr_skipped"):
+                    detections = drop_unsupported_vision(
+                        detections,
+                        list(pixel.get("ocr_tokens") or []),
+                        examples=prompt_example_tags(TILE_PROMPT, SHORT_TILE_PROMPT),
+                    )
                 if self.diagnostics is not None:
                     self.diagnostics.ingest_tile(
                         page_id=str(page.get("id") or ""),

@@ -249,7 +249,7 @@ def backend_for(
 # Each detection the model returns. bbox is millimetres on the crop.
 DETECTION_KEYS = ("tag", "wire_number", "symbol_class", "bbox", "confidence")
 # Bump this when the prompt wording or the tool schema changes. Every tile trace records it.
-PROMPT_VERSION = "2026-10-16.1"
+PROMPT_VERSION = "2026-11-06.1"
 
 # Part types the prompt names. A stuffed pin is recovered only when its class is one of these.
 SYMBOL_CLASSES = (
@@ -290,11 +290,10 @@ symbol_class is one of breaker, mpcb, contactor, overload, motor, terminal,
 pushbutton, estop, pilot, plc, hmi, power_supply, drive, relay, coil, contact,
 fuse, disconnect.
 Put a device tag only in tag. A tag is letter-first (letters, then digits) or number-first (digits, then letters, with an optional hyphen suffix).
-Free-form NEMA/JIC tags are tags too: FU1-7, FU-1A, FU1A1, CR410, DRIVE1, MOT1, DISC1, S-204, LS-300, TB2-24, PLT001, PBLT001, and the bare names PWS and HMI.
-A PLC address such as I0.0, I17.3, Q0.1, or Q40.2L is a tag. A NEMA line reference such as (410) or 6-410 is not a device. Put a bare line number such as 410 in wire_number.
+A free-form NEMA/JIC tag is the same kind of token: letters, digits, and optional hyphens, including a pole suffix or a bare family name printed on the page. A PLC address is digits and dots with an optional letter tail. A NEMA line reference in parentheses, or digits, a hyphen, and digits, is not a device. Put a bare line number in wire_number.
 Put a wire number only in wire_number. A wire number is digits, or digits, the letter T, and a lead digit.
 Put a bus label only in bus. A bus is digits, the letter B, more digits, and one column letter.
-A bracketed sheet cross-reference such as [9B34] is not a wire, not a bus, and not a device. Omit it.
+A bracketed sheet cross-reference is not a wire, not a bus, and not a device. Omit it.
 Border grid numbers and letters are not wire numbers.
 A conductor names both ends: from_tag, from_pin, to_tag, to_pin.
 A pin is at most 12 characters and has no spaces.
@@ -315,10 +314,10 @@ The object has devices, conductors, wire_numbers, and buses.
 tag is required on every device row, with symbol_class and bbox. Do not return a row that is only a bbox.
 Do not put a tag or a part type in to_pin. A pin is at most 12 characters and has no spaces.
 Each row needs bbox as four numbers [x, y, w, h] in millimetres from the top-left of this crop.
-Put a device tag only in tag. Free-form NEMA tags (FU1-7, CR410, DRIVE1, S-204, LS-300, TB2-24, I0.0, Q40.2L, PWS, HMI) belong in tag. A line reference such as 6-410 is not a device.
+Put a device tag only in tag. A free-form NEMA tag and a PLC address belong in tag. A line reference of digits, a hyphen, and digits is not a device.
 Put a wire number only in wire_number. Put a bus label only in bus.
 A wire number in tag, or a device tag in wire_number, is the wrong field.
-A bus is digits, the letter B, digits, and one column letter. A bracketed cross-reference such as [9B34] is not a wire and not a bus.
+A bus is digits, the letter B, digits, and one column letter. A bracketed cross-reference is not a wire and not a bus.
 A conductor fills from_tag, from_pin, to_tag, and to_pin. to_tag is the device at the other end.
 Contactor pins are L1 L2 L3 and T1 T2 T3. Overload line pins are T1 T2 T3 and load pins are 2 4 6. Motor pins are T1 T2 T3.
 Do not invent a tag. Do not copy the crop rectangle as a bbox.
@@ -393,7 +392,7 @@ DETECTION_SCHEMA: dict[str, Any] = {
                     "tag": {
                         "type": "string",
                         "minLength": 1,
-                        "description": "Device tag only. Letter-first, number-first, or free-form NEMA (FU1-7, CR410, DRIVE1, S-204, I0.0, Q40.2L). Never a wire number or a bus.",
+                        "description": "Device tag only. Letter-first, number-first, a free-form NEMA token, or a PLC address. Never a wire number or a bus. Never a tag that is not printed on this crop.",
                     },
                     "symbol_class": {
                         "type": "string",
@@ -1333,6 +1332,123 @@ _TERMINAL_TAG = re.compile(r"^X[1-5]$|^Y[1-2]$")
 _POWER_TAGS = {"L1", "L2", "L3", "N", "PE"}
 _TERMINAL_NEAR_MM = 30.0
 _TERMINAL_FLAG_CONFIDENCE = 0.55
+# A token shaped like a device tag. Used only to find samples the prompt itself printed.
+_EXAMPLE_TAG = re.compile(r"\b[A-Z]{1,6}-?\d{1,4}(?:-[A-Z0-9]+)?\b|\b\d{1,4}[A-Z]{1,6}(?:-[A-Z0-9]+)?\b")
+_READ_FIELDS = ("tag", "wire_number", "from_tag", "to_tag", "bus", "text", "line_ref")
+
+
+def prompt_example_tags(*blobs: str) -> frozenset[str]:
+    """Tag-shaped tokens written in the prompt or the tool schema.
+
+    A model copies those samples onto sheets that never printed them. Pin names
+    and rail names stay out of this set: they are field instructions, and the
+    page filter still requires the characters to be on the scan.
+    """
+
+    found: set[str] = set()
+    for blob in blobs:
+        for match in _EXAMPLE_TAG.findall(str(blob or "").upper()):
+            if match in _POWER_TAGS or match in {"L1", "L2", "L3", "T1", "T2", "T3"}:
+                continue
+            found.add(match)
+    return frozenset(found)
+
+
+def ocr_support(tokens: list[dict[str, Any]] | list[str] | None) -> tuple[set[str], set[str]]:
+    """Exact OCR strings, and the same strings plus a short join of neighbors.
+
+    Neighbors are joined only when they sit on the same line. A tag the model
+    invented is not assembled out of letters from somewhere else on the sheet.
+    """
+
+    rows: list[tuple[float, float, str]] = []
+    for item in tokens or []:
+        if isinstance(item, str):
+            text = item
+            y = 0.0
+        else:
+            text = str(item.get("text") or "")
+            try:
+                y = float(item.get("y") or 0)
+            except (TypeError, ValueError):
+                y = 0.0
+        compact = re.sub(r"[^A-Z0-9\-]", "", text.upper())
+        if compact:
+            try:
+                x = float(item.get("x") or 0) if isinstance(item, dict) else 0.0
+            except (TypeError, ValueError):
+                x = 0.0
+            rows.append((y, x, compact))
+    rows.sort()
+    exact = {text for _y, _x, text in rows}
+    joined = set(exact)
+    line: list[str] = []
+    line_y: float | None = None
+    for y, _x, text in rows:
+        if line_y is None or abs(y - line_y) > 2.5:
+            _join_line(line, joined)
+            line = [text]
+            line_y = y
+        else:
+            line.append(text)
+    _join_line(line, joined)
+    return exact, joined
+
+
+def _join_line(parts: list[str], supported: set[str]) -> None:
+    for index, first in enumerate(parts):
+        blob = first
+        for extra in parts[index + 1 : index + 3]:
+            blob += extra
+            if len(blob) <= 16:
+                supported.add(blob)
+
+
+def _page_has(value: str, exact: set[str], joined: set[str], examples: frozenset[str]) -> bool:
+    token = re.sub(r"[^A-Z0-9\-]", "", str(value or "").upper())
+    if not token or token == "?":
+        return True
+    # A sample written in the prompt is kept only when OCR read that exact string.
+    if token in examples:
+        return token in exact
+    return token in joined
+
+
+def drop_unsupported_vision(
+    detections: list[dict[str, Any]],
+    ocr_tokens: list[dict[str, Any]] | list[str] | None,
+    *,
+    examples: frozenset[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Drop a vision tag or text the page OCR cannot find.
+
+    Unreadable wire numbers stay ``?``. A tag that is not on the page is not
+    given a nearby guess. Prompt samples are dropped unless OCR read that
+    exact string.
+    """
+
+    exact, joined = ocr_support(ocr_tokens)
+    known = examples if examples is not None else prompt_example_tags(TILE_PROMPT, SHORT_TILE_PROMPT)
+    kept: list[dict[str, Any]] = []
+    for row in detections:
+        item = dict(row)
+        for key in _READ_FIELDS:
+            value = str(item.get(key) or "").strip()
+            if not value or _page_has(value, exact, joined, known):
+                continue
+            if key == "wire_number":
+                item[key] = "?"
+                item["unreadable"] = True
+            else:
+                item[key] = ""
+                item["reject_rule"] = "not_on_page"
+                item["unreadable"] = True
+        tag = str(item.get("tag") or "").strip()
+        number = str(item.get("wire_number") or "").strip()
+        bus = str(item.get("bus") or "").strip()
+        if tag or number or bus or item.get("line_ref"):
+            kept.append(item)
+    return kept
 
 
 def filter_vision_detections(

@@ -11,6 +11,8 @@ from panelcad.render.wire_labels import MARK_SIZE, boxes_overlap, mark_box, plac
 from panelcad.render.wiring import route_sheet_wires
 from panelcad.render.xref import annotation_box, place_xref_labels
 
+# Auxiliary contact tags sit under the symbol, smaller than the device tag.
+CONTACT_TAG_MM = 2.6
 # Half the schematic stroke, so clearance is measured to the ink of the conductor.
 CONDUCTOR_HALF = 0.23
 BODY_PAD = 0.4
@@ -252,7 +254,7 @@ def _place_device_tags(
                 comp.x + float(device.schematic_width) * scale * 0.5,
                 comp.y + float(device.schematic_height) * scale + 3.2 * scale,
                 "middle",
-                2.6,
+                CONTACT_TAG_MM,
             )
             continue
         layout = device_ref_layout(device, comp, ref_align=align)

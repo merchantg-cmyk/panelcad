@@ -4109,7 +4109,9 @@ def test_import_diagnostics_trace_redacts_keys_and_labels_tag_re(tmp_path: Path,
     assert "number-first" in TILE_PROMPT
     assert "Put a device tag only in tag" in TILE_PROMPT
     assert "not tags printed on this crop" in TILE_PROMPT
-    assert "[9B34]" in TILE_PROMPT
+    assert "A bracketed sheet cross-reference is not a wire" in TILE_PROMPT
+    for leak in ("CR410", "FU1-7", "MOT1", "DRIVE1", "DISC1", "[9B34]"):
+        assert leak not in TILE_PROMPT
     assert "Omit empty fields" not in TILE_PROMPT
     assert "tag is required on every device row" in TILE_PROMPT
     assert "wire_number" in TILE_PROMPT and "from_tag" in TILE_PROMPT and "to_pin" in TILE_PROMPT
@@ -4466,12 +4468,15 @@ def test_sheet_9c_starters_from_a_mocked_vision_reply(tmp_path: Path, monkeypatc
     assert trace["prompt_version"] == report["prompt_version"]
     assert trace["schema_version"] == report["prompt_version"]
     assert int(trace["rotation"]) == 180
-    assert abs(float(trace["dpi"]) - 100) < 1.0
+    # A 100 dpi scan is enlarged to 200 before denoise. The sheet stays 11×17.
+    assert abs(float(trace["dpi"]) - 200) < 1.0
     assert trace["backend"] == "custom"
     assert trace["model"] == "mock-vision"
     assert {"x", "y", "w", "h"} <= set(trace["bbox"])
     assert "number-first" in trace["request"]["prompt"]
-    assert "[9B34]" in trace["request"]["prompt"]
+    assert "A bracketed sheet cross-reference is not a wire" in trace["request"]["prompt"]
+    assert "CR410" not in trace["request"]["prompt"]
+    assert "FU1-7" not in trace["request"]["prompt"]
     assert "1CR" not in trace["request"]["prompt"]
     assert "2OL" not in trace["request"]["prompt"]
     assert isinstance(trace["latency_s"], (int, float))

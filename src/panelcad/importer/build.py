@@ -1101,6 +1101,22 @@ def _anchor_needs_info_ends(
             wire[tag_key] = comp.id
 
 
+def _strip_mark(device: dict[str, Any]) -> dict[str, str]:
+    """Ground and the wire numbers read above and below a terminal block.
+
+    An unreadable number is ``?``. It is not replaced with a nearby value.
+    """
+
+    marks: dict[str, str] = {}
+    if device.get("ground"):
+        marks["ground"] = "yes"
+    for key in ("wire_top", "wire_bottom"):
+        value = str(device.get(key) or "")
+        if value:
+            marks[key] = value
+    return marks
+
+
 def _place_needs_info_anchor(
     session: Session,
     sheet_id: str,
@@ -1134,6 +1150,7 @@ def _place_needs_info_anchor(
                 "print_import_anchor": "yes",
                 "print_import_needs_info": "yes",
                 "print_tag": tag,
+                **_strip_mark(device),
             },
             snap=False,
             allow_needs_info=True,

@@ -12,7 +12,7 @@ def prepare_scan(
     image: Image.Image,
     *,
     rectify: bool = True,
-    normalize_lighting: bool = False,
+    normalize_lighting: bool = True,
 ):
     """EXIF orientation, 90-degree auto-rotate, 4-corner perspective dewarp, deskew, then denoise.
 
@@ -38,6 +38,7 @@ def prepare_scan(
             dpi_tuple = None
 
     image = ImageOps_exif(image)
+    image, dpi_tuple = _raise_coarse_scan(image, dpi_tuple)
     turned, quarter = auto_rotate(image)
 
     work_img = turned
@@ -50,6 +51,10 @@ def prepare_scan(
             work_img = rect_img
 
     fixed, skew = (work_img.convert("RGB"), 0.0) if rectified else deskew(work_img)
+    crop_dpi = dpi_tuple
+    if quarter % 2 == 1 and crop_dpi is not None:
+        crop_dpi = (crop_dpi[1], crop_dpi[0])
+    fixed = _crop_scanner_bed(fixed, crop_dpi)
     illum_applied = False
     if normalize_lighting:
         rgb = np.asarray(fixed.convert("RGB"), dtype=np.uint8)
@@ -62,6 +67,9 @@ def prepare_scan(
     eff_dpi, src_dpi, norm_dpi = normalize_camera_dpi(clean.width, clean.height, dpi_tuple)
     if norm_dpi and eff_dpi is not None and dpi_tuple is not None:
         clean.info["dpi"] = eff_dpi
+    elif dpi_tuple is not None:
+        # A coarse scan was enlarged. The new dpi keeps the sheet millimetres.
+        clean.info["dpi"] = dpi_tuple
 
     return PreparedScan(
         image=clean,
@@ -83,6 +91,100 @@ def ImageOps_exif(image: Image.Image) -> Image.Image:
         return ImageOps.exif_transpose(image)
     except Exception:  # noqa: BLE001
         return image
+
+
+def _raise_coarse_scan(
+    image: Image.Image,
+    dpi: tuple[float, float] | None,
+) -> tuple[Image.Image, tuple[float, float] | None]:
+    """Enlarge a scan stored under about 140 dpi before the median filter.
+
+    A 3-pixel median on a 100 dpi line drawing erases the tags. The pixel
+    count goes up and the dpi tag goes up with it, so the sheet millimetres
+    stay the same. A phone photo is already large and is not enlarged.
+    """
+
+    if dpi is None or max(image.size) > 2400:
+        return image, dpi
+    xdpi, ydpi = float(dpi[0]), float(dpi[1])
+    if xdpi < 72 or xdpi >= 140 or ydpi < 72:
+        return image, dpi
+    scale = min(3.0, 200.0 / xdpi)
+    if scale < 1.08:
+        return image, dpi
+    enlarged = image.resize(
+        (max(1, int(round(image.width * scale))), max(1, int(round(image.height * scale)))),
+        Image.Resampling.LANCZOS,
+    )
+    new_dpi = (xdpi * scale, ydpi * scale)
+    enlarged.info["dpi"] = new_dpi
+    return enlarged, new_dpi
+
+
+def _crop_scanner_bed(
+    image: Image.Image,
+    dpi: tuple[float, float] | None = None,
+) -> Image.Image:
+    """Drop padding around a rotated sheet so the page stays a standard size.
+
+    Deskew fills the new corners white. The drawing border is the ink. A scan
+    that already runs to the edge is left alone. A page that is already a named
+    sheet is left alone too, so the crop does not eat a real paper margin.
+    """
+
+    import numpy as np
+
+    if _named_sheet(image, dpi):
+        return image
+    gray = np.asarray(image.convert("L"))
+    height, width = gray.shape
+    if height < 40 or width < 40:
+        return image
+    ink = gray < 200
+    if not (0.002 < float(ink.mean()) < 0.35):
+        return image
+    ys, xs = np.where(ink)
+    if len(xs) < 200:
+        return image
+    x0, x1 = int(xs.min()), int(xs.max())
+    y0, y1 = int(ys.min()), int(ys.max())
+    margin = min(x0, y0, width - 1 - x1, height - 1 - y1)
+    # The border sits one sheet margin (8 mm) in from the paper. Put that
+    # margin back so a rotated page is the paper, not the ink. The file's DPI
+    # makes the pad the same millimetres on a letter sheet and on ANSI D.
+    pad = int(round(0.019 * max(width, height)))
+    dpi = image.info.get("dpi")
+    if isinstance(dpi, tuple) and dpi and float(dpi[0] or 0) >= 72:
+        pad = max(4, int(round(8.0 * float(dpi[0]) / 25.4)))
+    if margin < max(8, pad // 2):
+        return image
+    box = (
+        max(0, x0 - pad),
+        max(0, y0 - pad),
+        min(width, x1 + 1 + pad),
+        min(height, y1 + 1 + pad),
+    )
+    if box[0] < 4 and box[1] < 4 and box[2] > width - 5 and box[3] > height - 5:
+        return image
+    return image.crop(box)
+
+
+def _named_sheet(image: Image.Image, dpi: tuple[float, float] | None) -> bool:
+    """True when these pixels at this DPI already match a named sheet within 8 mm."""
+
+    if dpi is None:
+        return False
+    try:
+        xdpi, ydpi = float(dpi[0]), float(dpi[1])
+    except (TypeError, ValueError):
+        return False
+    if xdpi < 72 or ydpi < 72:
+        return False
+    from panelcad.core.geometry import match_page_size
+
+    width_mm = image.width / xdpi * 25.4
+    height_mm = image.height / ydpi * 25.4
+    return match_page_size(width_mm, height_mm)[0] != "custom"
 
 
 def denoise(image: Image.Image) -> Image.Image:

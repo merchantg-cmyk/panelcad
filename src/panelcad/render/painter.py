@@ -161,6 +161,10 @@ def notes_box(component: Component, scale: float = 1.0) -> tuple[float, float]:
     return (width, h)
 
 
+# Coil lettering is the device tag drawn inside the circle or square.
+COIL_TAG_MM = 3.2
+
+
 def is_control_coil(device: Device, library_id: str = "") -> bool:
     cat = (device.category or "").lower()
     token = f"{getattr(device, 'id', '')} {library_id}".lower()
@@ -200,7 +204,7 @@ def draw_control_coil(
         painter.circle(cx, cy, half)
     painter.set_layer("TEXT")
     painter.set_fill("#111111")
-    painter.text(cx, cy + 1.1 * s, component.id, 3.2, align="middle")
+    painter.text(cx, cy + 1.1 * s, component.id, COIL_TAG_MM, align="middle")
     painter.set_fill(None)
     painter.line(component.x, cy, cx - half, cy)
     painter.line(cx + half, cy, component.x + w, cy)

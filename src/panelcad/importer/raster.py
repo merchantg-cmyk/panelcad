@@ -92,6 +92,98 @@ def prepare_opencv(image: Image.Image) -> tuple[Image.Image, dict[str, float]]:
     return Image.fromarray(den), {"deskew_deg": float(angle)}
 
 
+def _upscale_low_res(image: Image.Image, width_mm: float, height_mm: float) -> Image.Image:
+    """Enlarge a coarse scan so tags are large enough to read.
+
+    The sheet stays the same millimetres. Only the working pixels change.
+    A page that is already about 140 dpi or finer is left alone.
+    """
+
+    if width_mm <= 1 or height_mm <= 1:
+        return image
+    ppm = image.width / width_mm
+    floor = 140.0 / 25.4
+    if ppm >= floor or ppm <= 0:
+        return image
+    target = 200.0 / 25.4
+    scale = min(3.0, target / ppm)
+    if scale < 1.08:
+        return image
+    width = max(1, int(round(image.width * scale)))
+    height = max(1, int(round(image.height * scale)))
+    if width * height > 18_000_000:
+        return image
+    return image.resize((width, height), Image.Resampling.LANCZOS)
+
+
+def _strip_number_wires(devices: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Join blocks that show the same read number on the same side.
+
+    ``?`` is not a number, so an unreadable side does not invent a net.
+    """
+
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for device in devices:
+        for side, pin in (("wire_top", "A"), ("wire_bottom", "B")):
+            number = str(device.get(side) or "")
+            if not number.isdigit():
+                continue
+            groups.setdefault((side, number), []).append(device)
+    wires: list[dict[str, Any]] = []
+    for (side, number), group in groups.items():
+        if len(group) < 2:
+            continue
+        pin = "A" if side == "wire_top" else "B"
+        ordered = sorted(group, key=lambda item: float(item.get("x") or 0))
+        for left, right in zip(ordered, ordered[1:]):
+            wires.append(
+                {
+                    "number": number,
+                    "from_tag": left["tag"],
+                    "from_pin": pin,
+                    "to_tag": right["tag"],
+                    "to_pin": pin,
+                    "confidence": 0.6,
+                    "unreadable": False,
+                    "ambiguous": False,
+                    "source": "ocr",
+                }
+            )
+    return wires
+
+
+def _fill_unread_numbers(wires: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A ``?`` conductor that meets a numbered one at the same pin keeps that number.
+
+    The digits were read on the node. They are not a new guess, and they do
+    not cross the device onto the other pin.
+    """
+
+    known: dict[tuple[str, str], str] = {}
+    for wire in wires:
+        number = str(wire.get("number") or "")
+        if not number or number == "?" or wire.get("ambiguous"):
+            continue
+        for tag, pin in (
+            (wire.get("from_tag"), wire.get("from_pin")),
+            (wire.get("to_tag"), wire.get("to_pin")),
+        ):
+            if tag and pin:
+                known.setdefault((str(tag), str(pin)), number)
+    for wire in wires:
+        if str(wire.get("number") or "") != "?" or wire.get("ambiguous"):
+            continue
+        for tag, pin in (
+            (wire.get("from_tag"), wire.get("from_pin")),
+            (wire.get("to_tag"), wire.get("to_pin")),
+        ):
+            number = known.get((str(tag or ""), str(pin or "")))
+            if number:
+                wire["number"] = number
+                break
+    return wires
+
+
 def read_pixels(
     image: Image.Image,
     width_mm: float,
@@ -103,6 +195,7 @@ def read_pixels(
 ) -> dict[str, Any]:
     """Devices, wires, and title-block fields from one prepared page image."""
 
+    image = _upscale_low_res(image, width_mm, height_mm)
     rgb = np.asarray(image.convert("RGB"))
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     ppm = rgb.shape[1] / width_mm if width_mm else 1.0
@@ -125,12 +218,23 @@ def read_pixels(
         _match_symbol(tok, match_ink, ppm, rgb.shape, catalog, standard, height_mm=height_mm)
         for tok in labeled["tags"]
     ]
+    devices.extend(_coils_from_ink(gray, binary, devices, ppm, catalog, standard))
+    _land_body_symbols(binary, devices, ppm, catalog, standard)
     _mark_caption_tags(devices, tokens)
     # Rotation first, so the trace sees line pins on the bus side. Spread after
     # the trace so a moved origin does not leave the ink.
     orient_ladder_devices(devices, catalog, spread=False)
     wires = _trace_wires(labeled["wires"], binary, rgb, devices, catalog, ppm, width_mm, height_mm)
     orient_ladder_devices(devices, catalog, spread=True, page_width=width_mm)
+    from panelcad.importer.strip_scan import read_terminal_strip
+
+    strip_devices = read_terminal_strip(gray, rgb, ppm)
+    known = {str(device.get("tag") or "") for device in devices}
+    for device in strip_devices:
+        if device["tag"] not in known:
+            devices.append(device)
+            known.add(device["tag"])
+    wires.extend(_strip_number_wires(strip_devices))
     title = read_title_block(tokens, height_mm)
     if not ocr_skipped and not str(title.get("sheet_number") or "").strip() and not title.get("sheet_number_needs_info"):
         # Ruled cells miss a free-form line and a low-resolution photo. Read the
@@ -150,6 +254,11 @@ def read_pixels(
         "kind": kind,
         "confidence": title_confidence,
         "ocr_skipped": ocr_skipped,
+        "ocr_tokens": [
+            {"text": str(tok.get("text") or ""), "x": tok.get("x"), "y": tok.get("y")}
+            for tok in tokens
+            if str(tok.get("text") or "").strip()
+        ],
         "frame_insets": list(insets) if insets else None,
     }
 
@@ -1458,6 +1567,15 @@ def _match_symbol(
         row["review_note"] = "the reader did not confirm a symbol"
         return row
     score, device, ox, oy = best
+    # A reading whose letters are not this symbol's prefix is not a tag we will
+    # publish. P81 on a PB symbol stays unreadable. A contact suffix is the
+    # parent tag, not the aux prefix, so it is kept.
+    from panelcad.importer.read import contact_tag_parts
+
+    ref = str(getattr(device, "ref_prefix", "") or "").upper()
+    prefix = tag_prefix(tag)
+    contact = contact_tag_parts(tag) is not None and "aux" in str(device.library_id).lower()
+    prefix_differs = bool(ref and prefix and prefix != ref and not contact)
     same = [item for item in scores if shape_class(item[1]) == shape_class(device)]
     other = [item[0] for item in scores if shape_class(item[1]) != shape_class(device)]
     margin = score - (max(other) if other else 0.0)
@@ -1480,6 +1598,12 @@ def _match_symbol(
             "source": "symbol",
         }
     )
+    if prefix_differs:
+        # The letters stay what OCR read. The symbol is what the ink matched,
+        # so a wire can land on the pin. The tag is not renamed.
+        row["guess"] = True
+        row["needs_review"] = True
+        row["review_note"] = "the letters do not match the symbol prefix"
     return row
 
 
@@ -1525,6 +1649,24 @@ def _candidates(catalog: Any, prefix: str, standard: str, tag: str = "") -> list
             found = overloads
     if std == "NEMA/ANSI":
         found = [device for device in found if str(device.library_id).startswith("nema.")]
+    # M1-13 is an aux contact. Its prefix is the parent (M, CR, K), which is a
+    # coil or relay, not the contact graphic. Search the contact symbols too.
+    from panelcad.importer.read import contact_tag_parts
+
+    if contact_tag_parts(upper):
+        seen = {device.library_id for device in found}
+        stem = "nema." if std == "NEMA/ANSI" else "iec." if std == "IEC" else ""
+        for device in catalog.devices.values():
+            lib = str(device.library_id)
+            if lib in seen:
+                continue
+            low = lib.lower()
+            if "aux_no" not in low and "aux_nc" not in low:
+                continue
+            if stem and not low.startswith(stem):
+                continue
+            found.append(device)
+            seen.add(lib)
     found.sort(key=lambda device: (0 if not std or device.standard in {std, ""} else 1, len(device.pins), device.library_id))
     return found
 
@@ -1541,7 +1683,40 @@ def _search_template(
     y_span: tuple[float, float] = (-6.0, 18.0),
     cover_origin: bool = False,
 ) -> tuple[float, float, float]:
-    tmpl = _render_template(device, ppm)
+    # A caption sits above the body or under it. The default window is the OCR
+    # tag, which is not the symbol origin. Open it by the body size so the
+    # peak at the real origin is inside the window. Callers that pass their
+    # own span (a vision box) keep that span.
+    if not cover_origin and x_span == (-8.0, 14.0) and y_span == (-6.0, 18.0):
+        body_w = float(getattr(device, "schematic_width", 0) or 0)
+        body_h = float(getattr(device, "schematic_height", 0) or 0)
+        x_span = (-(body_w * 0.55 + 6.0), 14.0)
+        y_span = (-(body_h + 10.0), 16.0)
+    templates = [_render_template(device, ppm)]
+    from panelcad.render.painter import is_control_coil
+
+    if is_control_coil(device, str(getattr(device, "library_id", "") or "")):
+        templates.append(_render_drawn_symbol(device, ppm, "square"))
+    best_score = 0.0
+    best_xy = (left, base_y)
+    for tmpl in templates:
+        score, ox, oy = _score_template(binary, tmpl, ppm, left, base_y, x_span, y_span, cover_origin)
+        if score > best_score:
+            best_score = score
+            best_xy = (ox, oy)
+    return best_score, best_xy[0], best_xy[1]
+
+
+def _score_template(
+    binary: np.ndarray,
+    tmpl: np.ndarray | None,
+    ppm: float,
+    left: float,
+    base_y: float,
+    x_span: tuple[float, float],
+    y_span: tuple[float, float],
+    cover_origin: bool,
+) -> tuple[float, float, float]:
     if tmpl is None:
         return 0.0, left, base_y
     th, tw = tmpl.shape
@@ -1572,6 +1747,73 @@ def _search_template(
 
 
 def _render_template(device: Any, ppm: float) -> np.ndarray | None:
+    from panelcad.render.painter import is_control_coil
+
+    # A coil is drawn as a circle or square, not as the library primitives.
+    # The primitive sketch does not land on that ink.
+    if is_control_coil(device, str(getattr(device, "library_id", "") or "")):
+        return _render_drawn_symbol(device, ppm, "circle")
+    return _render_primitive_template(device, ppm)
+
+
+def _render_drawn_symbol(device: Any, ppm: float, coil_style: str) -> np.ndarray | None:
+    """Ink of the symbol as the sheet draws it, without the tag letters."""
+
+    from panelcad.core.models import Component
+    from panelcad.render.painter import Painter, draw_device
+
+    class _Ink(Painter):
+        def __init__(self) -> None:
+            self.ppm = ppm
+            self.width = 0.35
+            width = max(4, int(float(device.schematic_width) * ppm) + 2)
+            height = max(4, int(float(device.schematic_height) * ppm) + 2)
+            self.image = np.zeros((height, width), np.uint8)
+
+        def set_stroke(self, color: str, width: float) -> None:
+            self.width = float(width)
+
+        def set_fill(self, color: str | None) -> None:
+            return
+
+        def _thick(self) -> int:
+            return max(1, int(round(self.width * self.ppm)))
+
+        def _pt(self, x: float, y: float) -> tuple[int, int]:
+            return int(round(x * self.ppm)), int(round(y * self.ppm))
+
+        def line(self, x1: float, y1: float, x2: float, y2: float) -> None:
+            cv2.line(self.image, self._pt(x1, y1), self._pt(x2, y2), 1, self._thick())
+
+        def rect(self, x: float, y: float, w: float, h: float) -> None:
+            cv2.rectangle(self.image, self._pt(x, y), self._pt(x + w, y + h), 1, self._thick())
+
+        def circle(self, x: float, y: float, r: float) -> None:
+            cv2.circle(self.image, self._pt(x, y), max(1, int(round(r * self.ppm))), 1, self._thick())
+
+        def polyline(self, points: list[tuple[float, float]]) -> None:
+            if len(points) < 2:
+                return
+            pts = np.array([self._pt(x, y) for x, y in points], np.int32)
+            cv2.polylines(self.image, [pts], False, 1, self._thick())
+
+        def text(self, x: float, y: float, text: str, size: float, align: str = "middle", rotate: float = 0) -> None:
+            return
+
+    ink = _Ink()
+    draw_device(
+        ink,
+        device,
+        Component(id="T", library_id=str(device.library_id), x=0.0, y=0.0),
+        coil_style=coil_style,
+        captions=False,
+    )
+    if int(ink.image.sum()) < 8:
+        return None
+    return ink.image
+
+
+def _render_primitive_template(device: Any, ppm: float) -> np.ndarray | None:
     width = max(4, int(float(device.schematic_width) * ppm) + 2)
     height = max(4, int(float(device.schematic_height) * ppm) + 2)
     if width > 800 or height > 800:
@@ -1598,6 +1840,228 @@ def _render_template(device: Any, ppm: float) -> np.ndarray | None:
     return image
 
 
+def _land_body_symbols(
+    binary: np.ndarray,
+    devices: list[dict[str, Any]],
+    ppm: float,
+    catalog: Any,
+    standard: str,
+) -> None:
+    """Put a pushbutton or overload contact on the ink when the caption is nearby.
+
+    The tag stays the text OCR already returned. A pushbutton read as P81 is
+    not renamed. A peak with no caption is left alone.
+    """
+
+    from panelcad.importer.symbols import tag_prefix
+
+    parts = []
+    token = str(standard or "").upper()
+    for device in catalog.devices.values():
+        lib = str(device.library_id)
+        if not lib.endswith(("pb_no", "pb_nc", "ol_contact")):
+            continue
+        if "NEMA" in token or "ANSI" in token or "JIC" in token:
+            if not lib.startswith("nema."):
+                continue
+        elif token == "IEC" and not lib.startswith("iec."):
+            continue
+        parts.append(device)
+    peaks: list[tuple[float, float, float, Any]] = []
+    for part in parts:
+        tmpl = _render_primitive_template(part, ppm)
+        if tmpl is None:
+            continue
+        total = int((tmpl > 0).sum())
+        if total < 8 or binary.shape[0] <= tmpl.shape[0] or binary.shape[1] <= tmpl.shape[1]:
+            continue
+        response = cv2.matchTemplate(binary, tmpl, cv2.TM_CCORR)
+        work = response.copy()
+        th, tw = tmpl.shape
+        for _ in range(6):
+            index = int(np.argmax(work))
+            iy, ix = divmod(index, work.shape[1])
+            score = float(work[iy, ix]) / total
+            if score < MATCH_MIN:
+                break
+            y0, y1 = max(0, iy - max(th // 2, 1)), min(work.shape[0], iy + max(th // 2, 1))
+            x0, x1 = max(0, ix - max(tw // 2, 1)), min(work.shape[1], ix + max(tw // 2, 1))
+            work[y0:y1, x0:x1] = 0
+            peaks.append((score, ix / ppm, iy / ppm, part))
+    peaks.sort(key=lambda item: item[0], reverse=True)
+    used: set[int] = set()
+    for score, ox, oy, part in peaks:
+        if any(
+            device.get("library_id")
+            and abs(ox - float(device.get("x") or 0)) < 10
+            and abs(oy - float(device.get("y") or 0)) < 10
+            for device in devices
+        ):
+            continue
+        nearest = None
+        nearest_d = 22.0
+        nearest_i = -1
+        for index, device in enumerate(devices):
+            if index in used or device.get("library_id") or device.get("unreadable"):
+                continue
+            tag = str(device.get("tag") or "")
+            if not tag or tag == "?":
+                continue
+            dist = math.hypot(ox - float(device.get("x") or 0), oy - float(device.get("y") or 0))
+            if dist < nearest_d:
+                nearest = device
+                nearest_d = dist
+                nearest_i = index
+        if nearest is None:
+            continue
+        nearest["library_id"] = part.library_id
+        nearest["x"] = round(ox, 2)
+        nearest["y"] = round(oy, 2)
+        nearest["type"] = shape_class(part)
+        nearest["symbol"] = shape_class(part)
+        nearest["pin_frame"] = "schematic"
+        nearest["source"] = "symbol"
+        nearest["unconfirmed"] = False
+        nearest["confidence"] = round(min(0.9, score), 2)
+        prefix = tag_prefix(str(nearest.get("tag") or ""))
+        ref = str(getattr(part, "ref_prefix", "") or "").upper()
+        if ref and prefix and prefix != ref:
+            nearest["guess"] = True
+            nearest["needs_review"] = True
+            nearest["review_note"] = "the letters do not match the symbol prefix"
+        used.add(nearest_i)
+
+
+def _coils_from_ink(
+    gray: np.ndarray,
+    binary: np.ndarray,
+    devices: list[dict[str, Any]],
+    ppm: float,
+    catalog: Any,
+    standard: str,
+) -> list[dict[str, Any]]:
+    """Coils whose tag sits inside the circle. The stroke is wiped, then read.
+
+    A tag the wipe cannot read is not invented. Peaks that are not a coil stay
+    unmatched. One peak is one coil.
+    """
+
+    from panelcad.importer.read import is_device_tag
+    from panelcad.importer.symbols import tag_prefix
+    from panelcad.render.painter import is_control_coil
+
+    coils = [
+        device
+        for device in catalog.devices.values()
+        if is_control_coil(device, str(device.library_id))
+    ]
+    token = str(standard or "").upper()
+    if "NEMA" in token or "ANSI" in token or "JIC" in token or "NFPA" in token:
+        coils = [device for device in coils if str(device.library_id).startswith("nema.")]
+    elif token == "IEC":
+        coils = [device for device in coils if str(device.library_id).startswith("iec.")]
+    if not coils:
+        return []
+    claimed = [
+        (float(device.get("x") or 0), float(device.get("y") or 0))
+        for device in devices
+        if device.get("library_id")
+    ]
+    taken = {str(device.get("tag") or "") for device in devices}
+    found: list[dict[str, Any]] = []
+    for device in coils:
+        for style in ("circle", "square"):
+            tmpl = _render_drawn_symbol(device, ppm, style)
+            if tmpl is None:
+                continue
+            total = int((tmpl > 0).sum())
+            if total < 8 or binary.shape[0] <= tmpl.shape[0] or binary.shape[1] <= tmpl.shape[1]:
+                continue
+            response = cv2.matchTemplate(binary, tmpl, cv2.TM_CCORR)
+            work = response.copy()
+            th, tw = tmpl.shape
+            for _ in range(12):
+                index = int(np.argmax(work))
+                iy, ix = divmod(index, work.shape[1])
+                score = float(work[iy, ix]) / total
+                if score < MATCH_MIN:
+                    break
+                y0, y1 = max(0, iy - max(th // 2, 1)), min(work.shape[0], iy + max(th // 2, 1))
+                x0, x1 = max(0, ix - max(tw // 2, 1)), min(work.shape[1], ix + max(tw // 2, 1))
+                work[y0:y1, x0:x1] = 0
+                work[iy, ix] = 0
+                ox, oy = ix / ppm, iy / ppm
+                if any(abs(ox - x) < 8.0 and abs(oy - y) < 8.0 for x, y in claimed):
+                    continue
+                tag = _read_coil_tag(gray, ox, oy, device, ppm)
+                if not tag or not is_device_tag(tag) or tag in taken:
+                    continue
+                if tag_prefix(tag) == "K" and not str(device.library_id).startswith("iec."):
+                    continue
+                if tag_prefix(tag) != "K" and str(device.library_id).startswith("iec.") and any(
+                    str(other.library_id).startswith("nema.") for other in coils
+                ):
+                    continue
+                found.append(
+                    {
+                        "tag": tag,
+                        "type": "coil",
+                        "symbol": "coil",
+                        "pins": [],
+                        "x": round(ox, 2),
+                        "y": round(oy, 2),
+                        "confidence": round(min(0.9, score), 2),
+                        "unreadable": False,
+                        "guess": False,
+                        "library_id": device.library_id,
+                        "pin_frame": "schematic",
+                        "scale": 1.0,
+                        "source": "symbol",
+                    }
+                )
+                claimed.append((ox, oy))
+                taken.add(tag)
+    return found
+
+
+def _read_coil_tag(
+    gray: np.ndarray,
+    ox: float,
+    oy: float,
+    device: Any,
+    ppm: float,
+) -> str:
+    """Letters inside a coil after the circle or square stroke is painted out."""
+
+    import pytesseract
+
+    if not configure_tesseract():
+        return ""
+    x0 = max(0, int(round(ox * ppm)))
+    y0 = max(0, int(round(oy * ppm)))
+    x1 = min(gray.shape[1], int(round((ox + float(device.schematic_width)) * ppm)))
+    y1 = min(gray.shape[0], int(round((oy + float(device.schematic_height)) * ppm)))
+    if x1 - x0 < 8 or y1 - y0 < 8:
+        return ""
+    crop = gray[y0:y1, x0:x1].copy()
+    height, width = crop.shape
+    yy, xx = np.ogrid[:height, :width]
+    cy, cx = height / 2.0, width / 2.0
+    radius = np.hypot(yy - cy, xx - cx)
+    ring = (radius > min(height, width) * 0.22) & (radius < min(height, width) * 0.42)
+    crop[ring] = 255
+    up = cv2.resize(crop, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+    try:
+        heard = pytesseract.image_to_string(
+            up,
+            config="--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+        )
+    except Exception as exc:  # noqa: BLE001
+        _reraise_tesseract(exc)
+        return ""
+    return _fix_token(str(heard or "").strip())
+
+
 def _trace_wires(
     numbers: list[dict[str, Any]],
     binary: np.ndarray,
@@ -1620,16 +2084,25 @@ def _trace_wires(
     for pin_a, pin_b, point_a, point_b in _pin_links(pins, mask, ppm):
         number, nindex = _nearest_number([point_a, point_b], numbers, used_numbers)
         if number is None:
-            continue
-        used_numbers.add(nindex)
-        labeled.append(_wire_item(number, pin_a, pin_b, False))
+            number = {"text": "?", "x": point_a[0], "y": point_a[1], "confidence": 0.4}
+            nindex = -1
+        else:
+            used_numbers.add(nindex)
+        labeled.append(_wire_item(_zone_digit(number), pin_a, pin_b, False))
     for chain in chains:
         ends = _snap_ends(chain, pins, dots)
-        number, nindex = _nearest_number(chain, numbers, used_numbers)
-        if number is None or ends is None:
+        if ends is None:
             continue
-        used_numbers.add(nindex)
+        number, nindex = _nearest_number(chain, numbers, used_numbers)
+        if number is None:
+            number = {"text": "?", "x": chain[0][0], "y": chain[0][1], "confidence": 0.4}
+            nindex = -1
+        else:
+            used_numbers.add(nindex)
         a, b, ambiguous = ends
+        number = _zone_digit(number)
+        if number["text"] == "?" and ambiguous:
+            continue
         labeled.append(_wire_item(number, a, b, ambiguous))
     for index, number in enumerate(numbers):
         if index in used_numbers:
@@ -1649,7 +2122,12 @@ def _trace_wires(
                 "source": "ocr",
             }
         )
-    return collapse_wire_numbers(labeled)
+    filled = _fill_unread_numbers(labeled)
+    for wire in filled:
+        number = str(wire.get("number") or "")
+        if number.isdigit() and len(number) == 1:
+            wire["number"] = "?"
+    return collapse_wire_numbers(filled)
 
 
 def collapse_wire_numbers(wires: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -2812,6 +3290,15 @@ def _union_wire_ends(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
     return base
 
 
+def _zone_digit(number: dict[str, Any]) -> dict[str, Any]:
+    """A single digit is a zone mark, not a wire number. Leave it unread."""
+
+    text = str(number.get("text") or "")
+    if text.isdigit() and len(text) == 1:
+        return {"text": "?", "x": number.get("x"), "y": number.get("y"), "confidence": 0.4}
+    return number
+
+
 def _wire_item(number: dict[str, Any], a: tuple[str, str], b: tuple[str, str], ambiguous: bool) -> dict[str, Any]:
     conf = float(number.get("confidence") or 0.7)
     if ambiguous:
@@ -3210,15 +3697,50 @@ def _snap_ends(
         best = ranked[0]
         dist = math.hypot(best[2] - target[0], best[3] - target[1])
         if dist > PIN_SNAP_MM:
-            return None
-        second = ranked[1]
-        second_d = math.hypot(second[2] - target[0], second[3] - target[1])
-        if second_d < dist + AMBIGUOUS_MM and (second[0], second[1]) != (best[0], best[1]):
-            ambiguous = True
+            along = _pin_along_chain(point, chain[0] if point is chain[-1] else chain[-1], pins)
+            if along is None:
+                return None
+            best = along
+        else:
+            second = ranked[1]
+            second_d = math.hypot(second[2] - target[0], second[3] - target[1])
+            if second_d < dist + AMBIGUOUS_MM and (second[0], second[1]) != (best[0], best[1]):
+                ambiguous = True
         snapped.append((best[0], best[1]))
     if snapped[0] == snapped[1]:
         return None
     return snapped[0], snapped[1], ambiguous
+
+
+def _pin_along_chain(
+    point: tuple[float, float],
+    other: tuple[float, float],
+    pins: list[tuple[str, str, float, float]],
+) -> tuple[str, str, float, float] | None:
+    """A pin the Hough line stopped short of, still on the same conductor.
+
+    Symbol ink is masked out, so the detected line ends a few millimetres
+    before the pin. The gap has to lie along the line, not beside it.
+    """
+
+    dx = other[0] - point[0]
+    dy = other[1] - point[1]
+    length = math.hypot(dx, dy)
+    if length < 1.0:
+        return None
+    ux, uy = dx / length, dy / length
+    best = None
+    best_along = 1e9
+    for pin in pins:
+        vx, vy = pin[2] - point[0], pin[3] - point[1]
+        along = vx * ux + vy * uy
+        across = abs(vx * -uy + vy * ux)
+        if along < -12.0 or along > 12.0 or across > 2.2:
+            continue
+        if abs(along) < best_along:
+            best = pin
+            best_along = abs(along)
+    return best
 
 
 def _nearest_number(

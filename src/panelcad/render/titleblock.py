@@ -32,6 +32,15 @@ CELL = "#fbfaf3"
 HEADER = "#ece8dc"
 LOGO_W = 34.0
 LOGO_PAD = 1.8
+# Sheet chrome weights and lettering, millimetres. These are the sizes the
+# frame, rails, zone grid, and rung numbers are drawn at.
+BORDER_STROKE = 0.45
+ZONE_FRAME_STROKE = 0.2
+ZONE_TICK_STROKE = 0.18
+RAIL_STROKE = 1.35
+RAIL_LABEL_MM = 3.2
+ZONE_LABEL_MM = 2.2
+RUNG_NUMBER_MM = 2.0
 
 
 def sheet_scale_label(sheet: Sheet, tb: TitleBlock) -> str:
@@ -132,11 +141,11 @@ def draw_sheet_chrome(
     """Border and zone ticks only — sits behind devices."""
     pw, ph = sheet.page.dimensions()
     painter.set_layer("OUTLINE")
-    painter.set_stroke(INK, 0.45)
+    painter.set_stroke(INK, BORDER_STROKE)
     painter.set_fill(None)
     painter.rect(MARGIN, MARGIN, pw - 2 * MARGIN, ph - 2 * MARGIN)
     wx, wy, ww, wh = working_rect(sheet)
-    painter.set_stroke("#888888", 0.2)
+    painter.set_stroke("#888888", ZONE_FRAME_STROKE)
     painter.rect(wx, wy, ww, wh)
     nema_lines = False
     if project is not None and sheet.kind in {"schematic", "io"}:
@@ -173,13 +182,13 @@ def draw_ladder_rails(painter: Painter, sheet: Sheet, project: Project | None = 
     right = wx + ww - RAIL_INSET
     top, bot = ladder_rail_ys(sheet, project)
     hot, ret = rail_names(sheet, project)
-    painter.set_stroke(INK, 1.35)
+    painter.set_stroke(INK, RAIL_STROKE)
     painter.set_fill(None)
     painter.line(left, top, left, bot)
     painter.line(right, top, right, bot)
     painter.set_fill(INK)
-    painter.text(left, top - 1.6, hot, 3.2, align="middle")
-    painter.text(right, top - 1.6, ret, 3.2, align="middle")
+    painter.text(left, top - 1.6, hot, RAIL_LABEL_MM, align="middle")
+    painter.text(right, top - 1.6, ret, RAIL_LABEL_MM, align="middle")
     painter.set_fill(None)
 
 
@@ -196,13 +205,13 @@ def draw_iec_rails(painter: Painter, sheet: Sheet, project: Project | None = Non
     right = wx + ww - RAIL_INSET
     top, bot = iec_rail_ys(sheet)
     hot, ret = rail_names(sheet, project)
-    painter.set_stroke(INK, 1.35)
+    painter.set_stroke(INK, RAIL_STROKE)
     painter.set_fill(None)
     painter.line(left, top, right, top)
     painter.line(left, bot, right, bot)
     painter.set_fill(INK)
-    painter.text(left + 1.2, top - 1.2, hot, 3.2, align="start")
-    painter.text(left + 1.2, bot + 3.4, ret, 3.2, align="start")
+    painter.text(left + 1.2, top - 1.2, hot, RAIL_LABEL_MM, align="start")
+    painter.text(left + 1.2, bot + 3.4, ret, RAIL_LABEL_MM, align="start")
     painter.set_fill(None)
 
 
@@ -261,7 +270,7 @@ def _draw_zones(
 
     cols, rows, cw, rh = zone_axes(ww, wh)
     painter.set_layer("OUTLINE")
-    painter.set_stroke("#b5b09f", 0.18)
+    painter.set_stroke("#b5b09f", ZONE_TICK_STROKE)
     painter.set_fill(None)
     for i in range(1, cols):
         x = wx + i * cw
@@ -276,13 +285,13 @@ def _draw_zones(
     for i in range(cols):
         label = str(i + 1)
         cx = wx + (i + 0.5) * cw
-        painter.text(cx, wy - 2.2, label, 2.2, align="middle")
-        painter.text(cx, wy + wh + 4.8, label, 2.2, align="middle")
+        painter.text(cx, wy - 2.2, label, ZONE_LABEL_MM, align="middle")
+        painter.text(cx, wy + wh + 4.8, label, ZONE_LABEL_MM, align="middle")
     for j in range(rows):
         letter = chr(ord("A") + j)
         cy = wy + (j + 0.5) * rh + 1.0
-        painter.text(wx - ZONE / 2, cy, letter, 2.2, align="middle")
-        painter.text(wx + ww + ZONE / 2, cy, letter, 2.2, align="middle")
+        painter.text(wx - ZONE / 2, cy, letter, ZONE_LABEL_MM, align="middle")
+        painter.text(wx + ww + ZONE / 2, cy, letter, ZONE_LABEL_MM, align="middle")
 
 
 def _io_sheet_rung_ys(sheet: Sheet) -> list[float] | None:
@@ -328,7 +337,7 @@ def draw_nema_rung_numbers(
         painter.set_fill(INK)
         for index, yy in enumerate(io_ys, start=1):
             line = sheet_no * 100 + index
-            painter.text(left - 2.1, yy + 0.7, str(line), 2.0, align="end")
+            painter.text(left - 2.1, yy + 0.7, str(line), RUNG_NUMBER_MM, align="end")
         painter.set_fill(None)
         return
     if str(getattr(settings, "rung_numbers", "used")) == "all":
@@ -340,7 +349,7 @@ def draw_nema_rung_numbers(
     for index in indexes:
         line = nema_line_from_index(sheet_no, index)
         yy = rung_y(sheet, index, pitch=pitch)
-        painter.text(left - 2.1, yy + 0.7, str(line), 2.0, align="end")
+        painter.text(left - 2.1, yy + 0.7, str(line), RUNG_NUMBER_MM, align="end")
     painter.set_fill(None)
 
 
@@ -366,9 +375,7 @@ def _draw_title_block(
     painter.set_fill(FILL)
     painter.rect(x, y, w, h)
 
-    company_w = 92.0
-    meta_w = 168.0
-    center_w = w - company_w - meta_w
+    company_w, center_w, meta_w = _title_columns(w)
     _company_box(painter, x, y, company_w, h, tb, sheet, base_dir, _nameplate_lines(project, catalog))
     _center_box(painter, x + company_w, y, center_w, h, project, sheet, tb)
     _meta_box(painter, x + company_w + center_w, y, meta_w, h, sheet, tb, sheet_index, sheet_count)
@@ -465,8 +472,12 @@ def _center_box(
     _info_row(painter, x, y + 1 * row, w, row, "TITLE", sheet.title or sheet.id)
     _info_row(painter, x, y + 2 * row, w, row, "DESCRIPTION", sheet.description)
     half = w / 2.0
-    _info_row(painter, x, y + 3 * row, half, row, "DWG No.", tb.drawing_number)
-    _info_row(painter, x + half, y + 3 * row, half, row, "STANDARD", tb.standard)
+    # The standard name is kept whole. A narrow sheet gives that cell the room,
+    # and the letters shrink instead of being cut to an ellipsis.
+    standard_w = max(half, _value_width(tb.standard or "NEMA/ANSI", 2.35) + 3.2)
+    standard_w = min(standard_w, max(half, w - 24.0))
+    _info_row(painter, x, y + 3 * row, w - standard_w, row, "DWG No.", tb.drawing_number)
+    _info_row(painter, x + (w - standard_w), y + 3 * row, standard_w, row, "STANDARD", tb.standard, keep=True)
     _info_row(painter, x, y + 4 * row, half, row, "CUSTOMER", tb.customer)
     _info_row(painter, x + half, y + 4 * row, half, row, "LOCATION", tb.location)
 
@@ -523,6 +534,35 @@ def _revision_table(painter: Painter, x: float, y: float, w: float, h: float, tb
         _row_cells(painter, x, y + (i + 1) * row_h, widths, row_h, values, header=False)
 
 
+def _value_width(text: str, size_mm: float) -> float:
+    """Approximate advance of one title-block value, millimetres."""
+
+    return len((text or "").replace("\n", " ").strip()) * max(size_mm, 1.0) * 0.52
+
+
+def _title_columns(inner_w: float) -> tuple[float, float, float]:
+    """Company, center, and revision widths. The center can always show NEMA/ANSI."""
+
+    company_pref, meta_pref = 92.0, 168.0
+    min_standard = _value_width("NEMA/ANSI", 2.35) + 3.2
+    min_center = max(56.0, min_standard * 2.0)
+    if inner_w >= company_pref + meta_pref + min_center:
+        return company_pref, inner_w - company_pref - meta_pref, meta_pref
+    meta = max(72.0, min(meta_pref, inner_w * 0.42))
+    company = max(40.0, min(company_pref, inner_w * 0.28))
+    center = inner_w - company - meta
+    if center < min_standard:
+        short = min_standard - center
+        meta = max(48.0, meta - short)
+        center = inner_w - company - meta
+    if center < 16.0:
+        center = max(16.0, inner_w * 0.34)
+        remain = max(0.0, inner_w - center)
+        company = remain * 0.35
+        meta = remain - company
+    return company, center, meta
+
+
 def _ellipsize(text: str, width_mm: float, size_mm: float) -> str:
     """Keep title-block copy inside its cell (approx. Arial advance)."""
     raw = (text or "").replace("\n", " ").strip()
@@ -551,12 +591,36 @@ def _row_cells(
         cx += w
 
 
-def _info_row(painter: Painter, x: float, y: float, w: float, h: float, label: str, value: str) -> None:
+def _fitted_value(text: str, width_mm: float) -> tuple[str, float]:
+    """The whole string, at a smaller size when the cell is narrow."""
+
+    raw = (text or "").replace("\n", " ").strip()
+    size = 2.35
+    while raw and size > 1.15 and _value_width(raw, size) > max(1.0, width_mm - 3.2):
+        size = round(size - 0.05, 2)
+    return raw, size
+
+
+def _info_row(
+    painter: Painter,
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+    label: str,
+    value: str,
+    *,
+    keep: bool = False,
+) -> None:
     _outline(painter, x, y, w, h, CELL)
     # Label near the top of the cell; value near the bottom. Keep a clear gap so
     # AutoCAD TEXT (grows +Y from the baseline) does not sit on the next label.
     painter.text(x + 1.6, y + 2.2, label, 1.55, align="start")
-    painter.text(x + 1.6, y + h - 1.15, _ellipsize(value or "", w - 3.2, 2.35), 2.35, align="start")
+    if keep:
+        shown, size = _fitted_value(value or "", w)
+    else:
+        shown, size = _ellipsize(value or "", w - 3.2, 2.35), 2.35
+    painter.text(x + 1.6, y + h - 1.15, shown, size, align="start")
 
 
 def _outline(painter: Painter, x: float, y: float, w: float, h: float, fill: str) -> None:

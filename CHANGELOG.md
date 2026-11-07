@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.5.23 — 2026-11-07
+
+- Elementary sheets are drawn by the ladder engine from device and wire facts. A scan does not place the symbols.
+- Coils, overloads, and pilot lights sit next to L2. Contacts stay on the left.
+- Field terminals sit on a rung with a straight tie. A looping jumper, a terminal in the gap between rungs, or a coil left mid-sheet fails the layout check.
+- Demo Controls scan ladder and ANSI drafting checks for the issued sheet.
+
 ## 0.5.22 — 2026-11-01
 
 - Faster one-step CLI commands. Commands that do not draw skip Qt, the print importer, and OCR.

@@ -428,6 +428,12 @@ def normalize_illumination(
     p98 = float(np.percentile(bg, 98))
     p5 = float(np.percentile(bg, 5))
     bg_spread = p98 - p5
+    # A clean line drawing is already white. Rewriting it softens the tags.
+    # A photo or a faded sheet has a lower median or a large dark region.
+    median = float(np.median(gray))
+    dark = float(np.mean(gray < 200))
+    if not force and median >= 248.0 and dark < 0.08:
+        return gray, False
     if not force and bg_spread < 12.0 and p5 >= 238.0:
         return gray, False
 

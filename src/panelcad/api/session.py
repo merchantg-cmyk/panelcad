@@ -3211,8 +3211,10 @@ class Session:
         from panelcad.render.pdf import project_to_pdf
 
         _ensure_qt_app()
+        from panelcad.core.elementary_layout import issue_project
         from panelcad.render.terminal_strip import ensure_terminal_pages
 
+        issue_project(self)
         ensure_terminal_pages(self.project, self.catalog)
         dest = Path(path)
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -5485,9 +5487,11 @@ class Session:
         """One PDF: cover, index, revisions, drawings, and paginated reports."""
 
         from panelcad.core.checks import require_layout_ready_for_build
+        from panelcad.core.elementary_layout import issue_project
 
         # INFO NEEDED markers may print, stamped NOT FOR BUILD. A real generic
         # or other unconfirmed part still blocks the package.
+        issue_project(self)
         require_layout_ready_for_build(
             self.project, self.catalog, allow_needs_info_placeholders=True
         )

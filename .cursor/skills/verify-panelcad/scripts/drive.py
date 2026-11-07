@@ -838,11 +838,72 @@ def feature_dol_photos_pdf(app, win) -> None:
         (EVIDENCE / "pdfinfo.txt").write_text(f"Pages: {pages}\n", encoding="utf-8")
         check("sheet PDF has pages", pages >= 1, f"pages={pages}")
 
+def feature_elementary_print(app, win) -> None:
+    """File → Print Package on the engine-drawn Demo Controls ladder."""
+
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QDialogButtonBox, QMessageBox
+
+    out_pdf = SCRATCH / "work" / "elementary_package.pdf"
+
+    def options_dialog(dlg):
+        check("dialog is PrintPackageDialog", type(dlg).__name__ == "PrintPackageDialog", dlg.windowTitle())
+        lst = dlg.sheet_list
+        ids = [lst.item(i).data(Qt.ItemDataRole.UserRole) for i in range(lst.count())]
+        check("elementary is listed", "elementary" in ids, str(ids))
+        shot(dlg, "elementary-print-dialog")
+        dlg.path.selectAll()
+        QTest.keyClicks(dlg.path, str(out_pdf))
+        check("PDF path typed", dlg.path.text() == str(out_pdf), dlg.path.text())
+        ok = dlg.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Ok)
+        QTest.mouseClick(ok, Qt.MouseButton.LeftButton)
+
+    def written_box(box):
+        check(
+            "success box shown",
+            isinstance(box, QMessageBox) and box.windowTitle() == "Print package written",
+            box.windowTitle(),
+        )
+        shot(box, "elementary-print-written")
+        box.accept()
+
+    pump = ModalPump(app, [options_dialog, written_box])
+    shot(win, "elementary-main-before")
+    act = menu_action(win, "File", "Print Package…")
+    log(f"triggering File → {act.text()}")
+    act.trigger()
+    for _ in range(40):
+        app.processEvents()
+        QTest.qWait(50)
+        if len(pump.seen) >= 2:
+            break
+    pump.timer.stop()
+    shot(win, "elementary-main-after")
+    check(
+        "PDF written",
+        out_pdf.is_file() and out_pdf.stat().st_size > 1000,
+        f"{out_pdf.stat().st_size if out_pdf.is_file() else 0} bytes",
+    )
+    if not out_pdf.is_file():
+        return
+    shutil.copy2(out_pdf, EVIDENCE / out_pdf.name)
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(out_pdf))
+    text = "\f".join((page.extract_text() or "") for page in reader.pages)
+    (EVIDENCE / "elementary_package.txt").write_text(text, encoding="utf-8")
+    check("package has pages", len(reader.pages) >= 3, f"pages={len(reader.pages)}")
+    check("title block reached the PDF", "NEMA/ANSI" in text, "NEMA/ANSI missing")
+    check("elementary title reached the PDF", "Elementary" in text, "Elementary missing")
+
+
 FEATURES = {
     "print-package": ("sample_catalog.pcad.yaml", feature_print_package),
     "iec-to-nema-convert": ("xref_iec_mirror.pcad.yaml", feature_iec_to_nema_convert),
     "panel-wiring": ("dol_starter.pcad.yaml", feature_panel_wiring),
     "dol-photos-pdf": ("dol_starter.pcad.yaml", feature_dol_photos_pdf),
+    "elementary-print": ("scan_ladder_demo.pcad.yaml", feature_elementary_print),
 }
 
 

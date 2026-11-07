@@ -207,6 +207,9 @@ def device_ref_layout(
     if "timer" in cat and int(component.rotation or 0) in {90, 270}:
         return None
     s = component.visual_scale()
+    if "terminal" in token and str(component.properties.get("ref_side") or "") == "left":
+        # Upper-left of the block, clear of the pin line and of the rung above.
+        return (component.x - 1.4, component.y + 1.6 * s, "end", TAG_SIZE)
     if int(component.rotation or 0):
         from panelcad.core.route import component_aabb
 

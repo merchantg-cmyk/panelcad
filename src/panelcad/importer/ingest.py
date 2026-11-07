@@ -404,9 +404,14 @@ def _ingest_image(
     image = Image.open(path)
     source_dpi = _image_dpi(image)
     corrected, angles = prepare_scan(image)
-    quarters = int(angles["quarter_turns"]) % 4
-    if quarters % 2 == 1 and source_dpi is not None:
-        source_dpi = (source_dpi[1], source_dpi[0])
+    prepared_dpi = _image_dpi(corrected)
+    if prepared_dpi is not None:
+        # prepare_scan tags the upright image. Swapping again would stretch one axis.
+        source_dpi = prepared_dpi
+    else:
+        quarters = int(angles["quarter_turns"]) % 4
+        if quarters % 2 == 1 and source_dpi is not None:
+            source_dpi = (source_dpi[1], source_dpi[0])
     dpi_note = ""
     if sheet_mm:
         width_mm, height_mm = float(sheet_mm[0]), float(sheet_mm[1])

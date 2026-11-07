@@ -461,7 +461,8 @@ def wire_number_conflicts(project: Project, catalog: Any | None = None) -> list[
     for index, items in enumerate(wire_networks(project, catalog)):
         for _sheet, wire in items:
             number = str(wire.number or "").strip()
-            if not number:
+            # "?" is an unreadable mark, not an identity shared by those nets.
+            if not number or number.startswith("?"):
                 continue
             owners.setdefault(number, set()).add(index)
     errors: list[str] = []

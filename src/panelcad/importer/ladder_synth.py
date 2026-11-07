@@ -1998,10 +1998,13 @@ def synthesize_imported_ladder(
             if prev_owner is None:
                 used_net_numbers[num] = net_idx
             elif prev_owner != net_idx:
-                suffix = 2
-                while f"{num}_{suffix}" in used_net_numbers:
-                    suffix += 1
-                new_num = f"{num}_{suffix}"
+                if num.startswith("?"):
+                    continue
+                taken = set(used_net_numbers)
+                fresh = 100
+                while str(fresh) in taken:
+                    fresh += 1
+                new_num = str(fresh)
                 used_net_numbers[new_num] = net_idx
                 for _sh, w in items:
                     if str(w.number or "").strip() == num:
@@ -2019,6 +2022,18 @@ def synthesize_imported_ladder(
         if sheet.kind == "schematic" and sheet.drawing_style == "ladder":
             route_rail_captions(session, sheet.id)
             _clear_routed_text(session, sheet.id)
+    from panelcad.core.elementary_layout import issue_elementary
+
+    for sheet in session.project.sheets:
+        if sheet.kind == "schematic" and sheet.drawing_style == "ladder":
+            issue_elementary(session, sheet, force=True)
+    from panelcad.core.elementary_layout import scrub_illegal_wire_numbers
+
+    scrub_illegal_wire_numbers(session)
+    style = str(getattr(session.project.title_block, "drawing_style", "") or "")
+    standard = str(getattr(session.project.title_block, "standard", "") or "")
+    if standard == "NEMA/ANSI" and style not in {"ladder", "schematic", "freeform"}:
+        session.project.title_block.drawing_style = "ladder"
 
     pi = session.project.properties.setdefault("print_import", {})
     pi["layout_mode"] = "ladder"

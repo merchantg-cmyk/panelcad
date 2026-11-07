@@ -1,0 +1,629 @@
+format: panelcad
+version: '0.1'
+name: Demo motor control
+properties: {}
+title_block:
+  company: Demo Controls
+  address: ''
+  logo: ''
+  customer: ''
+  location: Demo MCC
+  drawing_number: E-100
+  drawn_by: Demo
+  checked_by: ''
+  approved_by: ''
+  scale: NTS
+  standard: NEMA/ANSI
+  drawing_style: ladder
+  coil_style: circle
+  rail_hot: L1
+  rail_return: L2
+  revisions:
+  - rev: A
+    date: ''
+    description: ''
+    drawn: Demo
+    checked: ''
+    approved: ''
+sheets:
+- id: elementary
+  title: Elementary
+  description: Primary fuses and control transformer, then the 120 V seal-in
+  kind: schematic
+  page:
+    size: TABLOID
+    orientation: landscape
+  components:
+  - id: FU1
+    library_id: nema.protection.fuse_10a
+    x: 59.0
+    y: 24.0
+    rotation: 0
+    mirror: false
+    properties:
+      manufacturer: AutomationDirect
+      part_number: EHCC3DIU
+      catalog: EHCC3DIU
+      description: Edison modular Class CC fuse holder, indicator, 30 A, 600 V, 3-pole
+      catalog_verified: partial
+      catalog_source: https://cdn.automationdirect.com/static/specs/cutsheet/EHCC3DIU_cutsheet.pdf
+      catalog_key: AutomationDirect|ehcc3diu
+      amps: 30.0
+      In: 30A
+      poles: 3
+      sccr: 200kA
+      width_mm: 52.5
+      height_mm: 73.9
+      depth_mm: 52.8
+      dim_source: catalog
+      mounting: din
+      mount: din_rail
+      din_rail: true
+  - id: T1
+    library_id: nema.power.control_transformer
+    x: 101.0
+    y: 19.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: FU2
+    library_id: nema.protection.fuse_10a
+    x: 59.0
+    y: 62.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: ES1
+    library_id: nema.operators.estop
+    x: 41.0
+    y: 104.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: PB2
+    library_id: nema.operators.pb_nc
+    x: 81.0
+    y: 106.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: PB1
+    library_id: nema.operators.pb_no
+    x: 117.0
+    y: 106.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: M1
+    library_id: nema.contactors.coil
+    x: 328.8
+    y: 116.0
+    rotation: 0
+    mirror: false
+    properties:
+      manufacturer: AutomationDirect
+      part_number: GH15BN-3-10A
+      catalog: GH15BN-3-10A
+      description: GH15 IEC contactor, AC-3 9 A at 440 V, 3 poles, 1 NO aux, 110-120
+        VAC coil, 45 mm frame
+      catalog_verified: full
+      catalog_source: https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf
+      catalog_key: AutomationDirect|gh15bn-3-10a
+      amps: 9.0
+      Ie: 9A
+      poles: 3
+      coil_voltage: 110-120VAC
+      coil: 110-120VAC
+      contact_config: 1NO
+      ka: 5.0
+      Icu: 5kA
+      sccr: 5kA
+      width_mm: 45.0
+      height_mm: 80.0
+      depth_mm: 85.0
+      dim_source: catalog
+      mounting: din
+      mount: din_rail
+      din_rail: true
+  - id: OL1
+    library_id: nema.protection.ol_contact
+    x: 366.8
+    y: 114.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: M1-13
+    library_id: nema.contactors.aux_no
+    x: 117.0
+    y: 142.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: M1-23
+    library_id: nema.contactors.aux_no
+    x: 41.0
+    y: 166.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: CR1
+    library_id: nema.contactors.coil
+    x: 366.8
+    y: 162.0
+    rotation: 0
+    mirror: false
+    properties:
+      manufacturer: AutomationDirect
+      part_number: GH15BN-3-10A
+      catalog: GH15BN-3-10A
+      description: GH15 IEC contactor, AC-3 9 A at 440 V, 3 poles, 1 NO aux, 110-120
+        VAC coil, 45 mm frame
+      catalog_verified: full
+      catalog_source: https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf
+      catalog_key: AutomationDirect|gh15bn-3-10a
+      amps: 9.0
+      Ie: 9A
+      poles: 3
+      coil_voltage: 110-120VAC
+      coil: 110-120VAC
+      contact_config: 1NO
+      ka: 5.0
+      Icu: 5kA
+      sccr: 5kA
+      width_mm: 45.0
+      height_mm: 80.0
+      depth_mm: 85.0
+      dim_source: catalog
+      mounting: din
+      mount: din_rail
+      din_rail: true
+  - id: CR1-13
+    library_id: nema.contactors.aux_no
+    x: 41.0
+    y: 196.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: PL1
+    library_id: nema.operators.pilot_light
+    x: 370.8
+    y: 194.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: M1-33
+    library_id: nema.contactors.aux_no
+    x: 41.0
+    y: 84.0
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: X1-1
+    library_id: iec.terminals.phoenix_ut_2p5
+    x: 294.8
+    y: 82.0
+    rotation: 0
+    mirror: false
+    properties:
+      ref_side: left
+  - id: X1-2
+    library_id: iec.terminals.phoenix_ut_2p5
+    x: 324.8
+    y: 82.0
+    rotation: 0
+    mirror: false
+    properties:
+      ref_side: left
+  - id: X1-3
+    library_id: iec.terminals.phoenix_ut_2p5
+    x: 354.8
+    y: 82.0
+    rotation: 0
+    mirror: false
+    properties:
+      ref_side: left
+  - id: X1-4
+    library_id: iec.terminals.phoenix_ut_2p5
+    x: 384.8
+    y: 82.0
+    rotation: 0
+    mirror: false
+    properties:
+      type: PE
+      ref_side: left
+  wires:
+  - id: w1
+    from: L1
+    to: FU1.1
+    number: '102'
+    points:
+    - x: 59.0
+      y: 77.0
+    - x: 23.0
+      y: 77.0
+  - id: w2
+    from: FU1.2
+    to: T1.H1
+    number: '103'
+    points: []
+  - id: w3
+    from: T1.H4
+    to: FU2.1
+    number: '101'
+    points: []
+  - id: w4
+    from: FU2.2
+    to: L2
+    number: '104'
+    points:
+    - x: 87.0
+      y: 77.0
+    - x: 408.8
+      y: 77.0
+  - id: w5
+    from: L1
+    to: ES1.1
+    number: '102'
+    points: []
+  - id: w6
+    from: ES1.2
+    to: PB2.1
+    number: '105'
+    points: []
+  - id: w7
+    from: PB2.2
+    to: PB1.3
+    number: '106'
+    points: []
+  - id: w8
+    from: PB1.4
+    to: M1.A1
+    number: '107'
+    points: []
+  - id: w9
+    from: M1.A2
+    to: OL1.95
+    number: '108'
+    points: []
+  - id: w10
+    from: OL1.96
+    to: L2
+    number: '104'
+    points: []
+  - id: w11
+    from: PB2.2
+    to: M1-13.3
+    number: '106'
+    points: []
+  - id: w12
+    from: M1-13.4
+    to: PB1.4
+    number: '107'
+    points: []
+  - id: w13
+    from: L1
+    to: M1-23.3
+    number: '102'
+    points: []
+  - id: w14
+    from: M1-23.4
+    to: CR1.A1
+    number: '109'
+    points: []
+  - id: w15
+    from: CR1.A2
+    to: L2
+    number: '104'
+    points: []
+  - id: w16
+    from: L1
+    to: CR1-13.3
+    number: '102'
+    points: []
+  - id: w17
+    from: CR1-13.4
+    to: PL1.X1
+    number: '110'
+    points: []
+  - id: w18
+    from: PL1.X2
+    to: L2
+    number: '104'
+    points: []
+  - id: w19
+    from: L1
+    to: M1-33.3
+    number: '102'
+    points: []
+  - id: w20
+    from: M1-33.4
+    to: X1-1.A
+    number: '201'
+    number_locked: true
+    points: []
+  - id: w21
+    from: X1-1.B
+    to: L2
+    number: '301'
+    number_locked: true
+    points: []
+  - id: w22
+    from: X1-2.A
+    to: X1-3.A
+    number: '202'
+    number_locked: true
+    points: []
+  - id: w23
+    from: X1-2.B
+    to: L2
+    number: '302'
+    number_locked: true
+    points: []
+  - id: w24
+    from: X1-3.B
+    to: L2
+    number: '303'
+    number_locked: true
+    points: []
+  - id: w25
+    from: X1-4.A
+    to: X1-2.A
+    number: '104'
+    points: []
+  - id: w26
+    from: X1-4.B
+    to: L2
+    number: '304'
+    number_locked: true
+    points: []
+  rail_hot: L1
+  rail_return: L2
+  drawing_style: ladder
+- id: backplate
+  title: Backplate
+  description: ''
+  kind: panel_layout
+  page:
+    size: ANSI_D
+    orientation: portrait
+  components:
+  - id: DISC1
+    library_id: nema.breakers.mcb_3p_32a
+    x: 118.0
+    y: 141.5
+    rotation: 0
+    mirror: false
+    properties:
+      manufacturer: AutomationDirect
+      part_number: FAZ-C6-3-NA-L
+      catalog: FAZ-C6-3-NA-L
+      description: Eaton FAZ-NA-L miniature breaker, 6 A, 3-pole, C curve, UL 489,
+        10 kA at 240 VAC
+      catalog_verified: partial
+      catalog_source: https://cdn.automationdirect.com/static/specs/cutsheet/FAZ-C6-3-NA-L_cutsheet.pdf
+      catalog_key: AutomationDirect|faz-c6-3-na-l
+      amps: 6.0
+      In: 6A
+      poles: 3
+      ka: 10.0
+      Icu: 10kA
+      width_mm: 53.1
+      height_mm: 105.0
+      depth_mm: 60.0
+      dim_source: catalog
+      mounting: din
+      mount: din_rail
+      din_rail: true
+  - id: FU1
+    library_id: nema.protection.fuse_10a
+    x: 177.0
+    y: 141.5
+    rotation: 0
+    mirror: false
+    properties:
+      manufacturer: AutomationDirect
+      part_number: EHCC3DIU
+      catalog: EHCC3DIU
+      description: Edison modular Class CC fuse holder, indicator, 30 A, 600 V, 3-pole
+      catalog_verified: partial
+      catalog_source: https://cdn.automationdirect.com/static/specs/cutsheet/EHCC3DIU_cutsheet.pdf
+      catalog_key: AutomationDirect|ehcc3diu
+      amps: 30.0
+      In: 30A
+      poles: 3
+      sccr: 200kA
+      width_mm: 52.5
+      height_mm: 73.9
+      depth_mm: 52.8
+      dim_source: catalog
+      mounting: din
+      mount: din_rail
+      din_rail: true
+  - id: M1
+    library_id: nema.contactors.ac3_9a
+    x: 236.0
+    y: 141.5
+    rotation: 0
+    mirror: false
+    properties:
+      manufacturer: AutomationDirect
+      part_number: GH15BN-3-10A
+      catalog: GH15BN-3-10A
+      description: GH15 IEC contactor, AC-3 9 A at 440 V, 3 poles, 1 NO aux, 110-120
+        VAC coil, 45 mm frame
+      catalog_verified: full
+      catalog_source: https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf
+      catalog_key: AutomationDirect|gh15bn-3-10a
+      amps: 9.0
+      Ie: 9A
+      poles: 3
+      coil_voltage: 110-120VAC
+      coil: 110-120VAC
+      contact_config: 1NO
+      ka: 5.0
+      Icu: 5kA
+      sccr: 5kA
+      width_mm: 45.0
+      height_mm: 80.0
+      depth_mm: 85.0
+      dim_source: catalog
+      mounting: din
+      mount: din_rail
+      din_rail: true
+  - id: PS1
+    library_id: nema.power.psu_24v_5a
+    x: 118.0
+    y: 271.5
+    rotation: 0
+    mirror: false
+    properties:
+      manufacturer: AutomationDirect
+      part_number: PSP24-060S
+      catalog: PSP24-060S
+      description: Rhino PSP 24 VDC 2.5 A / 60 W power supply, 85-264 VAC input, IP20,
+        DIN or chassis
+      catalog_verified: partial
+      catalog_source: https://cdn.automationdirect.com/static/specs/cutsheet/PSP24-060S_cutsheet.pdf
+      catalog_key: AutomationDirect|psp24-060s
+      amps: 2.5
+      width_mm: 45.0
+      height_mm: 75.0
+      depth_mm: 100.0
+      dim_source: catalog
+      mounting: din
+      mount: din_rail
+      din_rail: true
+  - id: CR1
+    library_id: nema.contactors.ac3_9a
+    x: 169.0
+    y: 271.5
+    rotation: 0
+    mirror: false
+    properties:
+      manufacturer: AutomationDirect
+      part_number: GH15BN-3-10A
+      catalog: GH15BN-3-10A
+      description: GH15 IEC contactor, AC-3 9 A at 440 V, 3 poles, 1 NO aux, 110-120
+        VAC coil, 45 mm frame
+      catalog_verified: full
+      catalog_source: https://cdn.automationdirect.com/static/specs/ghseriescontactors.pdf
+      catalog_key: AutomationDirect|gh15bn-3-10a
+      amps: 9.0
+      Ie: 9A
+      poles: 3
+      coil_voltage: 110-120VAC
+      coil: 110-120VAC
+      contact_config: 1NO
+      ka: 5.0
+      Icu: 5kA
+      sccr: 5kA
+      width_mm: 45.0
+      height_mm: 80.0
+      depth_mm: 85.0
+      dim_source: catalog
+      mounting: din
+      mount: din_rail
+      din_rail: true
+  - id: X1-1
+    library_id: iec.terminals.phoenix_ut_2p5
+    x: 118.0
+    y: 404.75
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: X1-2
+    library_id: iec.terminals.phoenix_ut_2p5
+    x: 129.0
+    y: 404.75
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: X1-3
+    library_id: iec.terminals.phoenix_ut_2p5
+    x: 140.0
+    y: 404.75
+    rotation: 0
+    mirror: false
+    properties: {}
+  - id: X1-4
+    library_id: iec.terminals.phoenix_ut_2p5
+    x: 151.0
+    y: 404.75
+    rotation: 0
+    mirror: false
+    properties:
+      type: PE
+  rails:
+  - id: r-power
+    x: 116.0
+    y: 156.5
+    length_mm: 255.79999999999995
+    height_mm: 35.0
+    type: ts35
+  - id: r-control
+    x: 116.0
+    y: 286.5
+    length_mm: 255.79999999999995
+    height_mm: 35.0
+    type: ts35
+  - id: r-field
+    x: 116.0
+    y: 416.5
+    length_mm: 255.79999999999995
+    height_mm: 35.0
+    type: ts35
+  trays:
+  - id: wt-top
+    x: 36.0
+    y: 54.0
+    length_mm: 415.79999999999995
+    width_mm: 40.0
+    orientation: h
+  - id: wt-bot
+    x: 36.0
+    y: 521.4
+    length_mm: 415.79999999999995
+    width_mm: 40.0
+    orientation: h
+  - id: wt-left
+    x: 36.0
+    y: 94.0
+    length_mm: 427.4
+    width_mm: 40.0
+    orientation: v
+  - id: wt-right
+    x: 411.79999999999995
+    y: 94.0
+    length_mm: 427.4
+    width_mm: 40.0
+    orientation: v
+  enclosure:
+    x: 28.0
+    y: 36.0
+    width_mm: 431.79999999999995
+    height_mm: 533.4
+    depth_mm: 203.2
+    name: Backplate for NEMA 12, 24 x 20 x 8 in
+    draw_scale: 1.0
+    panel_width_mm: 431.79999999999995
+    panel_height_mm: 533.4
+    sized: true
+- id: strip
+  title: Terminal strip X1
+  description: ''
+  kind: terminal
+  page:
+    size: TABLOID
+    orientation: landscape
+  components: []
+  strip: X1
+last_saved:
+  user: ubuntu
+  host: cursor
+  time: '2026-11-07T01:15:50'
+  summary: saved
+activity:
+- user: ubuntu
+  host: cursor
+  time: '2026-11-07T01:15:50'
+  summary: saved

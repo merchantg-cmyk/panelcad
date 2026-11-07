@@ -1,0 +1,38 @@
+{
+  "id": "terminal",
+  "project": "examples/scan_ladder_demo.pcad.yaml",
+  "sheet": "strip",
+  "kind": "terminal",
+  "standard": "NEMA/ANSI",
+  "drawing_style": "ladder",
+  "page_mm": [
+    431.8,
+    279.4
+  ],
+  "page_size": "TABLOID",
+  "devices": [
+    "X1-1",
+    "X1-2",
+    "X1-3",
+    "X1-4"
+  ],
+  "offpage": [],
+  "wire_numbers": [
+    "201",
+    "301",
+    "202",
+    "302",
+    "303",
+    "204",
+    "304"
+  ],
+  "edges": [],
+  "texts": [
+    "Demo Controls",
+    "Demo MCC",
+    "E-100",
+    "Demo",
+    "Demo motor control",
+    "Terminal strip X1"
+  ]
+}

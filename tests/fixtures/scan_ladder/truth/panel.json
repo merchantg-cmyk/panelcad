@@ -1,0 +1,35 @@
+{
+  "id": "panel",
+  "project": "examples/scan_ladder_demo.pcad.yaml",
+  "sheet": "backplate",
+  "kind": "panel_layout",
+  "standard": "NEMA/ANSI",
+  "drawing_style": "ladder",
+  "page_mm": [
+    558.8,
+    863.6
+  ],
+  "page_size": "ANSI_D",
+  "devices": [
+    "DISC1",
+    "FU1",
+    "M1",
+    "PS1",
+    "CR1",
+    "X1-1",
+    "X1-2",
+    "X1-3",
+    "X1-4"
+  ],
+  "offpage": [],
+  "wire_numbers": [],
+  "edges": [],
+  "texts": [
+    "Demo Controls",
+    "Demo MCC",
+    "E-100",
+    "Demo",
+    "Demo motor control",
+    "Backplate"
+  ]
+}

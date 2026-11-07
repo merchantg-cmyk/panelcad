@@ -934,6 +934,25 @@ def _coil_annotation(
             mirror_rows=rows or None,
         )
     lines, marks = coil_contact_text(family, style, nc_mark)
+    # NEMA prints the contact list in a column to the right of the coil.
+    # Parking it under the coil stacks the next rung on top of the references.
+    if style == "nema":
+        return XrefAnnotation(
+            sheet_id=member.sheet.id,
+            owner=member.comp.id,
+            kind="coil",
+            style=style,
+            lines=lines,
+            marks=marks,
+            jump_sheet=jump.sheet.id,
+            jump_ref=jump.comp.id,
+            jump_x=jump.location.x,
+            jump_y=jump.location.y,
+            prefer="right",
+            anchor_x=box[2] + 4.0,
+            anchor_y=(box[1] + box[3]) * 0.5,
+            size=2.0,
+        )
     return XrefAnnotation(
         sheet_id=member.sheet.id,
         owner=member.comp.id,

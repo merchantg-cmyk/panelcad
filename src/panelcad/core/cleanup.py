@@ -415,6 +415,14 @@ def _rung_pin_y_offset(catalog: Catalog, comp: Component) -> float:
     return float(pins[0].y)
 
 
+def _messy_elementary(session: "Session", sheet: Sheet) -> bool:
+    """Re-issue a messy control ladder. A clean sheet, and a power column, stay put."""
+
+    from panelcad.core.elementary_layout import issue_elementary
+
+    return issue_elementary(session, sheet)
+
+
 def arrange_ladder(sheet: Sheet, catalog: Catalog) -> int:
     """Contacts from L1, coils/lamps/OL at L2. Hold-in aux under Start when no lamp."""
 
@@ -1003,6 +1011,9 @@ def cleanup_sheet(session: Session, sheet: Sheet) -> dict[str, Any]:
                 # A sideways starter row is already a power chain. Reflow was
                 # turning each phase into a step and shrinking it every Cleanup.
                 unstacked = powered
+            elif _messy_elementary(session, sheet):
+                # Facts stay. Positions are replaced by the ladder engine.
+                unstacked = 1
             elif _series_reaches_both_rails(session, sheet):
                 # Both rails are already on the series path. arrange_ladder
                 # would rebuild it by x and complete_ladder_rungs would short

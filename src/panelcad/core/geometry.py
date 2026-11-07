@@ -9,12 +9,17 @@ from pydantic import BaseModel, ConfigDict
 Rotation = Literal[0, 90, 180, 270]
 Side = Literal["left", "right", "top", "bottom"]
 
+# LETTER is ANSI A. TABLOID is ANSI B. C–E are the larger ANSI sheet sizes.
+# ISO A-series stays available when the scan actually measures as that sheet.
 PAGE_SIZES_MM = {
     "A4": (210.0, 297.0),
     "A3": (297.0, 420.0),
     "A2": (420.0, 594.0),
     "LETTER": (215.9, 279.4),
     "TABLOID": (279.4, 431.8),
+    "ANSI_C": (431.8, 558.8),
+    "ANSI_D": (558.8, 863.6),
+    "ANSI_E": (863.6, 1117.6),
 }
 
 
