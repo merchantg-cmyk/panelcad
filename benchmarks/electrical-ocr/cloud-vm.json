@@ -1,5 +1,5 @@
 {
-  "measured_at_utc": "2026-11-08T17:41:28Z",
+  "measured_at_utc": "2026-11-08T18:00:21Z",
   "hostname": "cursor",
   "machine_role": "other",
   "counts_as_local_target": false,
@@ -303,8 +303,8 @@
   ],
   "size": {
     "electrical": {
-      "footprint_bytes": 197421,
-      "package_bytes": 197421,
+      "footprint_bytes": 224533,
+      "package_bytes": 224533,
       "model_bytes": 0,
       "paths": [
         "/agent/repos/panelcad/src/panelcad/ocr"
@@ -360,15 +360,15 @@
       "token_recall": 0.7619,
       "held_out_sample_recall": 0.5556,
       "held_out_token_recall": 0.5833,
-      "held_out_seconds": 0.0829,
+      "held_out_seconds": 0.0846,
       "in_bank_sample_recall": 1.0,
       "in_bank_token_recall": 1.0,
-      "in_bank_seconds": 0.1162,
+      "in_bank_seconds": 0.1199,
       "sample_hits": 22,
       "sample_count": 30,
       "token_hits": 32,
       "token_count": 42,
-      "seconds": 0.1998,
+      "seconds": 0.205,
       "samples": [
         {
           "name": "clean-k1",
@@ -384,7 +384,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0496,
+          "seconds": 0.0499,
           "error": ""
         },
         {
@@ -405,7 +405,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0046,
+          "seconds": 0.0045,
           "error": ""
         },
         {
@@ -461,7 +461,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.004,
+          "seconds": 0.0041,
           "error": ""
         },
         {
@@ -490,7 +490,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0092,
+          "seconds": 0.0093,
           "error": ""
         },
         {
@@ -510,7 +510,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0045,
+          "seconds": 0.0053,
           "error": ""
         },
         {
@@ -528,7 +528,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0037,
+          "seconds": 0.0051,
           "error": ""
         },
         {
@@ -545,7 +545,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0034,
+          "seconds": 0.0037,
           "error": ""
         },
         {
@@ -556,13 +556,15 @@
             "FU1"
           ],
           "emitted": [
-            "FU1"
+            "FU1",
+            "-",
+            "."
           ],
           "token_hits": [
             true
           ],
           "hit": true,
-          "seconds": 0.0036,
+          "seconds": 0.0041,
           "error": ""
         },
         {
@@ -581,7 +583,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0035,
+          "seconds": 0.0036,
           "error": ""
         },
         {
@@ -610,7 +612,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0218,
+          "seconds": 0.022,
           "error": ""
         },
         {
@@ -627,7 +629,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0037,
+          "seconds": 0.0038,
           "error": ""
         },
         {
@@ -638,13 +640,14 @@
             "FU1"
           ],
           "emitted": [
-            "FU1"
+            "FU1",
+            "-"
           ],
           "token_hits": [
             true
           ],
           "hit": true,
-          "seconds": 0.0035,
+          "seconds": 0.0038,
           "error": ""
         },
         {
@@ -662,7 +665,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0035,
+          "seconds": 0.0037,
           "error": ""
         },
         {
@@ -692,13 +695,13 @@
           ],
           "emitted": [
             "104",
-            "."
+            ".-"
           ],
           "token_hits": [
             true
           ],
           "hit": true,
-          "seconds": 0.0043,
+          "seconds": 0.0044,
           "error": ""
         },
         {
@@ -717,7 +720,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.004,
+          "seconds": 0.0042,
           "error": ""
         },
         {
@@ -734,7 +737,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0026,
+          "seconds": 0.0024,
           "error": ""
         },
         {
@@ -771,7 +774,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0029,
+          "seconds": 0.0031,
           "error": ""
         },
         {
@@ -789,7 +792,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0031,
+          "seconds": 0.0028,
           "error": ""
         },
         {
@@ -807,7 +810,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.003,
+          "seconds": 0.0029,
           "error": ""
         },
         {
@@ -834,7 +837,7 @@
             true
           ],
           "hit": false,
-          "seconds": 0.0072,
+          "seconds": 0.0071,
           "error": ""
         },
         {
@@ -846,13 +849,16 @@
           ],
           "emitted": [
             "101",
-            "-."
+            "--",
+            "-",
+            "-",
+            "-"
           ],
           "token_hits": [
             false
           ],
           "hit": false,
-          "seconds": 0.0031,
+          "seconds": 0.004,
           "error": ""
         },
         {
@@ -863,13 +869,14 @@
             "Q1"
           ],
           "emitted": [
-            "E1"
+            "F1",
+            "-"
           ],
           "token_hits": [
             false
           ],
           "hit": false,
-          "seconds": 0.0025,
+          "seconds": 0.0026,
           "error": ""
         },
         {
@@ -939,9 +946,9 @@
             "TB1"
           ],
           "emitted": [
+            "TB1",
             "K1",
             "M1",
-            "TB1",
             "-",
             "-",
             "-",
@@ -954,7 +961,7 @@
             true
           ],
           "hit": false,
-          "seconds": 0.0243,
+          "seconds": 0.0246,
           "error": ""
         }
       ],
@@ -965,8 +972,8 @@
         "note": "Not measured. Tesseract runs as its own process, while the electrical engine and Paddle run inside Python. A resident-set reading would not cover all three the same way."
       },
       "size": {
-        "footprint_bytes": 197421,
-        "package_bytes": 197421,
+        "footprint_bytes": 224533,
+        "package_bytes": 224533,
         "model_bytes": 0,
         "paths": [
           "/agent/repos/panelcad/src/panelcad/ocr"
@@ -982,15 +989,15 @@
       "token_recall": 0.6429,
       "held_out_sample_recall": 0.5,
       "held_out_token_recall": 0.5833,
-      "held_out_seconds": 1.1536,
+      "held_out_seconds": 1.1584,
       "in_bank_sample_recall": 0.5833,
       "in_bank_token_recall": 0.7222,
-      "in_bank_seconds": 0.7881,
+      "in_bank_seconds": 0.8109,
       "sample_hits": 16,
       "sample_count": 30,
       "token_hits": 27,
       "token_count": 42,
-      "seconds": 1.9422,
+      "seconds": 1.9698,
       "samples": [
         {
           "name": "clean-k1",
@@ -1006,7 +1013,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0754,
+          "seconds": 0.0804,
           "error": ""
         },
         {
@@ -1023,7 +1030,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0646,
+          "seconds": 0.0665,
           "error": ""
         },
         {
@@ -1057,7 +1064,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0649,
+          "seconds": 0.0664,
           "error": ""
         },
         {
@@ -1074,7 +1081,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0649,
+          "seconds": 0.0654,
           "error": ""
         },
         {
@@ -1100,7 +1107,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0675,
+          "seconds": 0.07,
           "error": ""
         },
         {
@@ -1115,7 +1122,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0613,
+          "seconds": 0.0628,
           "error": ""
         },
         {
@@ -1132,7 +1139,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0623,
+          "seconds": 0.0658,
           "error": ""
         },
         {
@@ -1149,7 +1156,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0653,
+          "seconds": 0.064,
           "error": ""
         },
         {
@@ -1166,7 +1173,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0626,
+          "seconds": 0.0656,
           "error": ""
         },
         {
@@ -1181,7 +1188,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0596,
+          "seconds": 0.0624,
           "error": ""
         },
         {
@@ -1207,7 +1214,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0756,
+          "seconds": 0.0775,
           "error": ""
         },
         {
@@ -1241,7 +1248,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0627,
+          "seconds": 0.0614,
           "error": ""
         },
         {
@@ -1258,7 +1265,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0632,
+          "seconds": 0.0653,
           "error": ""
         },
         {
@@ -1275,7 +1282,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.062,
+          "seconds": 0.0642,
           "error": ""
         },
         {
@@ -1290,7 +1297,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0619,
+          "seconds": 0.0628,
           "error": ""
         },
         {
@@ -1305,7 +1312,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0621,
+          "seconds": 0.0627,
           "error": ""
         },
         {
@@ -1322,7 +1329,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0616,
+          "seconds": 0.0604,
           "error": ""
         },
         {
@@ -1339,7 +1346,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0619,
+          "seconds": 0.0645,
           "error": ""
         },
         {
@@ -1356,7 +1363,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0614,
+          "seconds": 0.0637,
           "error": ""
         },
         {
@@ -1373,7 +1380,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0607,
+          "seconds": 0.0633,
           "error": ""
         },
         {
@@ -1390,7 +1397,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0633,
+          "seconds": 0.0638,
           "error": ""
         },
         {
@@ -1416,7 +1423,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0676,
+          "seconds": 0.0701,
           "error": ""
         },
         {
@@ -1431,7 +1438,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0645,
+          "seconds": 0.0619,
           "error": ""
         },
         {
@@ -1448,7 +1455,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0639,
+          "seconds": 0.0644,
           "error": ""
         },
         {
@@ -1465,7 +1472,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0644,
+          "seconds": 0.0642,
           "error": ""
         },
         {
@@ -1482,7 +1489,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.065,
+          "seconds": 0.0633,
           "error": ""
         },
         {
@@ -1497,7 +1504,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0619,
+          "seconds": 0.0617,
           "error": ""
         },
         {
@@ -1524,7 +1531,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0839,
+          "seconds": 0.0791,
           "error": ""
         }
       ],
@@ -1557,15 +1564,15 @@
       "token_recall": 0.6905,
       "held_out_sample_recall": 0.5556,
       "held_out_token_recall": 0.625,
-      "held_out_seconds": 4.6009,
+      "held_out_seconds": 4.6858,
       "in_bank_sample_recall": 0.6667,
       "in_bank_token_recall": 0.7778,
-      "in_bank_seconds": 3.072,
+      "in_bank_seconds": 3.1259,
       "sample_hits": 18,
       "sample_count": 30,
       "token_hits": 29,
       "token_count": 42,
-      "seconds": 7.6736,
+      "seconds": 7.8125,
       "samples": [
         {
           "name": "clean-k1",
@@ -1582,7 +1589,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2498,
+          "seconds": 0.256,
           "error": ""
         },
         {
@@ -1600,7 +1607,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2504,
+          "seconds": 0.2576,
           "error": ""
         },
         {
@@ -1618,7 +1625,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2488,
+          "seconds": 0.2599,
           "error": ""
         },
         {
@@ -1636,7 +1643,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2478,
+          "seconds": 0.2562,
           "error": ""
         },
         {
@@ -1654,7 +1661,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2505,
+          "seconds": 0.2648,
           "error": ""
         },
         {
@@ -1684,7 +1691,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2632,
+          "seconds": 0.2773,
           "error": ""
         },
         {
@@ -1699,7 +1706,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2422,
+          "seconds": 0.2484,
           "error": ""
         },
         {
@@ -1717,7 +1724,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2425,
+          "seconds": 0.2522,
           "error": ""
         },
         {
@@ -1735,7 +1742,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2512,
+          "seconds": 0.2543,
           "error": ""
         },
         {
@@ -1753,7 +1760,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2457,
+          "seconds": 0.2532,
           "error": ""
         },
         {
@@ -1771,7 +1778,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2809,
+          "seconds": 0.2493,
           "error": ""
         },
         {
@@ -1801,7 +1808,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.299,
+          "seconds": 0.2967,
           "error": ""
         },
         {
@@ -1819,7 +1826,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2509,
+          "seconds": 0.2539,
           "error": ""
         },
         {
@@ -1837,7 +1844,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.254,
+          "seconds": 0.2528,
           "error": ""
         },
         {
@@ -1855,7 +1862,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2629,
+          "seconds": 0.278,
           "error": ""
         },
         {
@@ -1873,7 +1880,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.269,
+          "seconds": 0.282,
           "error": ""
         },
         {
@@ -1888,7 +1895,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2578,
+          "seconds": 0.2461,
           "error": ""
         },
         {
@@ -1906,7 +1913,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2558,
+          "seconds": 0.2521,
           "error": ""
         },
         {
@@ -1924,7 +1931,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2582,
+          "seconds": 0.2477,
           "error": ""
         },
         {
@@ -1942,7 +1949,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2519,
+          "seconds": 0.2581,
           "error": ""
         },
         {
@@ -1960,7 +1967,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2515,
+          "seconds": 0.2476,
           "error": ""
         },
         {
@@ -1978,7 +1985,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2468,
+          "seconds": 0.2491,
           "error": ""
         },
         {
@@ -1996,7 +2003,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.249,
+          "seconds": 0.2493,
           "error": ""
         },
         {
@@ -2025,7 +2032,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2597,
+          "seconds": 0.2739,
           "error": ""
         },
         {
@@ -2040,7 +2047,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2358,
+          "seconds": 0.262,
           "error": ""
         },
         {
@@ -2058,7 +2065,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2522,
+          "seconds": 0.2515,
           "error": ""
         },
         {
@@ -2076,7 +2083,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2444,
+          "seconds": 0.2569,
           "error": ""
         },
         {
@@ -2094,7 +2101,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2449,
+          "seconds": 0.2532,
           "error": ""
         },
         {
@@ -2112,7 +2119,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2466,
+          "seconds": 0.2511,
           "error": ""
         },
         {
@@ -2146,7 +2153,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.3095,
+          "seconds": 0.3205,
           "error": ""
         }
       ],
@@ -2179,15 +2186,15 @@
       "token_recall": 0.9286,
       "held_out_sample_recall": 0.9444,
       "held_out_token_recall": 0.9167,
-      "held_out_seconds": 3.7461,
+      "held_out_seconds": 3.4685,
       "in_bank_sample_recall": 0.9167,
       "in_bank_token_recall": 0.9444,
-      "in_bank_seconds": 3.1973,
+      "in_bank_seconds": 3.4134,
       "sample_hits": 28,
       "sample_count": 30,
       "token_hits": 39,
       "token_count": 42,
-      "seconds": 6.9442,
+      "seconds": 6.8829,
       "samples": [
         {
           "name": "clean-k1",
@@ -2203,7 +2210,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2254,
+          "seconds": 0.2488,
           "error": ""
         },
         {
@@ -2220,7 +2227,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1571,
+          "seconds": 0.181,
           "error": ""
         },
         {
@@ -2237,7 +2244,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1835,
+          "seconds": 0.1597,
           "error": ""
         },
         {
@@ -2254,7 +2261,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1502,
+          "seconds": 0.1625,
           "error": ""
         },
         {
@@ -2271,7 +2278,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1494,
+          "seconds": 0.153,
           "error": ""
         },
         {
@@ -2294,7 +2301,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2351,
+          "seconds": 0.2258,
           "error": ""
         },
         {
@@ -2311,7 +2318,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1524,
+          "seconds": 0.186,
           "error": ""
         },
         {
@@ -2328,7 +2335,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.159,
+          "seconds": 0.1893,
           "error": ""
         },
         {
@@ -2362,7 +2369,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1943,
+          "seconds": 0.1925,
           "error": ""
         },
         {
@@ -2405,7 +2412,7 @@
             true
           ],
           "hit": true,
-          "seconds": 1.2188,
+          "seconds": 1.3427,
           "error": ""
         },
         {
@@ -2422,7 +2429,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1639,
+          "seconds": 0.1638,
           "error": ""
         },
         {
@@ -2439,7 +2446,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1519,
+          "seconds": 0.1555,
           "error": ""
         },
         {
@@ -2456,7 +2463,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1728,
+          "seconds": 0.1494,
           "error": ""
         },
         {
@@ -2473,7 +2480,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1865,
+          "seconds": 0.1485,
           "error": ""
         },
         {
@@ -2490,7 +2497,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1519,
+          "seconds": 0.1471,
           "error": ""
         },
         {
@@ -2507,7 +2514,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1577,
+          "seconds": 0.1599,
           "error": ""
         },
         {
@@ -2524,7 +2531,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1044,
+          "seconds": 0.1038,
           "error": ""
         },
         {
@@ -2541,7 +2548,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1209,
+          "seconds": 0.1277,
           "error": ""
         },
         {
@@ -2558,7 +2565,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1109,
+          "seconds": 0.113,
           "error": ""
         },
         {
@@ -2575,7 +2582,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1108,
+          "seconds": 0.1119,
           "error": ""
         },
         {
@@ -2592,7 +2599,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.11,
+          "seconds": 0.1167,
           "error": ""
         },
         {
@@ -2615,7 +2622,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1977,
+          "seconds": 0.1766,
           "error": ""
         },
         {
@@ -2632,7 +2639,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.156,
+          "seconds": 0.1125,
           "error": ""
         },
         {
@@ -2649,7 +2656,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1447,
+          "seconds": 0.1032,
           "error": ""
         },
         {
@@ -2666,7 +2673,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1526,
+          "seconds": 0.1024,
           "error": ""
         },
         {
@@ -2683,7 +2690,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1353,
+          "seconds": 0.0965,
           "error": ""
         },
         {
@@ -2700,7 +2707,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1559,
+          "seconds": 0.1144,
           "error": ""
         },
         {
@@ -2726,7 +2733,7 @@
             false
           ],
           "hit": false,
-          "seconds": 1.2622,
+          "seconds": 1.2656,
           "error": ""
         }
       ],
@@ -2763,5 +2770,243 @@
       }
     }
   },
-  "how_to_read": "held_out_sample_recall is the fair accuracy number: pages not drawn with a prototype font. in_bank_sample_recall uses DejaVu, which is in the glyph bank, and is only a same-font check. size.footprint_bytes is a sum of files this process could stat. Null means that path was not on disk. runtime_memory is null: Tesseract is a separate process, so resident set was not compared. A machine_role of other is not a MichellesPC or DESKTOP-3S1HOH0 result."
+  "how_to_read": "held_out_sample_recall is the fair accuracy number: pages not drawn with a prototype font. in_bank_sample_recall uses DejaVu, which is in the glyph bank, and is only a same-font check. size.footprint_bytes is a sum of files this process could stat. Null means that path was not on disk. runtime_memory is null: Tesseract is a separate process, so resident set was not compared. A machine_role of other is not a MichellesPC or DESKTOP-3S1HOH0 result.",
+  "scans": {
+    "rows": [
+      {
+        "source": "schematic",
+        "variant": "phone",
+        "image": null,
+        "accuracy": null,
+        "note": "scan file is not in the repo"
+      },
+      {
+        "source": "schematic",
+        "variant": "jpeg",
+        "image": null,
+        "accuracy": null,
+        "note": "scan file is not in the repo"
+      },
+      {
+        "source": "schematic",
+        "variant": "dpi_150",
+        "image": "docs/proofs/scan-ladder/schematic/dpi_150.png",
+        "truth_devices": 18,
+        "truth_wires": 16,
+        "truth_texts": 6,
+        "engines": {
+          "electrical": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 0.0,
+            "seconds": 0.2081
+          },
+          "tesseract": {
+            "devices": 0.7778,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 0.5895
+          },
+          "paddle": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 40.299
+          }
+        }
+      },
+      {
+        "source": "schematic",
+        "variant": "fax",
+        "image": "docs/proofs/scan-ladder/schematic/fax.png",
+        "truth_devices": 18,
+        "truth_wires": 16,
+        "truth_texts": 6,
+        "engines": {
+          "electrical": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 0.0,
+            "seconds": 0.2776
+          },
+          "tesseract": {
+            "devices": 0.8889,
+            "wire_numbers": 0.8125,
+            "texts": 1.0,
+            "seconds": 0.8004
+          },
+          "paddle": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 63.7963
+          }
+        }
+      },
+      {
+        "source": "schematic",
+        "variant": "faded",
+        "image": "docs/proofs/scan-ladder/schematic/faded.png",
+        "truth_devices": 18,
+        "truth_wires": 16,
+        "truth_texts": 6,
+        "engines": {
+          "electrical": {
+            "devices": 0.9444,
+            "wire_numbers": 1.0,
+            "texts": 0.0,
+            "seconds": 0.2396
+          },
+          "tesseract": {
+            "devices": 0.8889,
+            "wire_numbers": 0.8125,
+            "texts": 1.0,
+            "seconds": 0.8312
+          },
+          "paddle": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 56.7598
+          }
+        }
+      },
+      {
+        "source": "schematic",
+        "variant": "skew",
+        "image": "docs/proofs/scan-ladder/schematic/skew.png",
+        "truth_devices": 18,
+        "truth_wires": 16,
+        "truth_texts": 6,
+        "engines": {
+          "electrical": {
+            "devices": 0.9444,
+            "wire_numbers": 0.875,
+            "texts": 0.0,
+            "seconds": 0.2768
+          },
+          "tesseract": {
+            "devices": 0.8333,
+            "wire_numbers": 0.8125,
+            "texts": 1.0,
+            "seconds": 0.9427
+          },
+          "paddle": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 57.5287
+          }
+        }
+      },
+      {
+        "source": "schematic",
+        "variant": "speckle",
+        "image": "docs/proofs/scan-ladder/schematic/speckle.png",
+        "truth_devices": 18,
+        "truth_wires": 16,
+        "truth_texts": 6,
+        "engines": {
+          "electrical": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 0.0,
+            "seconds": 0.2159
+          },
+          "tesseract": {
+            "devices": 0.7222,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 0.5895
+          },
+          "paddle": {
+            "devices": 0.9444,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 37.8133
+          }
+        }
+      },
+      {
+        "source": "panel",
+        "variant": "dpi_150",
+        "image": "docs/proofs/scan-ladder/panel/dpi_150.png",
+        "truth_devices": 9,
+        "truth_wires": 0,
+        "truth_texts": 6,
+        "engines": {
+          "electrical": {
+            "devices": 0.0,
+            "wire_numbers": null,
+            "texts": 0.0,
+            "seconds": 0.5306
+          },
+          "tesseract": {
+            "devices": 0.1111,
+            "wire_numbers": null,
+            "texts": 1.0,
+            "seconds": 1.3537
+          },
+          "paddle": {
+            "devices": 0.7778,
+            "wire_numbers": null,
+            "texts": 1.0,
+            "seconds": 78.1656
+          }
+        }
+      },
+      {
+        "source": "terminal",
+        "variant": "dpi_150",
+        "image": "docs/proofs/scan-ladder/terminal/dpi_150.png",
+        "truth_devices": 4,
+        "truth_wires": 7,
+        "truth_texts": 6,
+        "engines": {
+          "electrical": {
+            "devices": 0.0,
+            "wire_numbers": 0.0,
+            "texts": 0.0,
+            "seconds": 0.1648
+          },
+          "tesseract": {
+            "devices": 0.0,
+            "wire_numbers": 0.0,
+            "texts": 1.0,
+            "seconds": 0.5148
+          },
+          "paddle": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 32.7008
+          }
+        }
+      }
+    ],
+    "summary": {
+      "electrical": {
+        "devices": 0.6984,
+        "wire_numbers": 0.8125,
+        "texts": 0.0,
+        "seconds": 1.9134,
+        "scans": 7
+      },
+      "tesseract": {
+        "devices": 0.6032,
+        "wire_numbers": 0.7396,
+        "texts": 1.0,
+        "seconds": 5.6218,
+        "scans": 7
+      },
+      "paddle": {
+        "devices": 0.9603,
+        "wire_numbers": 1.0,
+        "texts": 1.0,
+        "seconds": 367.0635,
+        "scans": 7
+      }
+    },
+    "note": "Recall is truth tokens found in the engine text. Wire recall is null when that sheet's truth lists no wire numbers. Phone and JPEG stay null when those files are absent. after-*.png redraws are not inputs."
+  }
 }

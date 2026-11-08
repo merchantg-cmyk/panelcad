@@ -19,6 +19,7 @@ numbers; this module only returns words and boxes.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -39,6 +40,8 @@ _SOURCE = "electrical"
 # only get rewritten when the rest of the word is already numeric. 10M stays
 # 10M. 1O4 becomes 104.
 _DIGIT_LOOKALIKE = str.maketrans({"O": "0", "I": "1", "L": "1", "S": "5", "B": "8", "Z": "2", "G": "6"})
+_DESIGNATION_LEFT = re.compile(r"^[A-Z]{1,6}\d{1,4}(?:-\d{1,4})?$")
+_DESIGNATION_RIGHT = re.compile(r"^\d{1,4}$")
 
 _Bank = tuple[np.ndarray, np.ndarray, list[str]]
 _BANK: _Bank | None = None
@@ -230,8 +233,7 @@ def _read_upright(
         return []
     glyphs: list[_Glyph] = []
     for x, y, w, h in boxes:
-        crop = ink[y : y + h, x : x + w]
-        label, confidence = _classify(_feature(crop))
+        label, confidence = _classify(_feature_at(gray, ink, x, y, w, h))
         if allowed is not None and label not in allowed:
             continue
         if confidence < _MIN_NCC:
@@ -250,7 +252,7 @@ def _read_upright(
     for line in lines:
         ordered = sorted(line, key=lambda item: item.x)
         spans.extend(_spans(_split_words(ordered), rotation, spaces=False))
-    return spans
+    return _join_designations(spans)
 
 
 def _gray(image: np.ndarray) -> np.ndarray:
@@ -284,6 +286,13 @@ def _ink(gray: np.ndarray) -> np.ndarray:
     return binary
 
 
+def _rule_kernel(length: int) -> int:
+    proportional = max(28, int(length * 0.45))
+    if length >= 2000:
+        return min(proportional, 220)
+    return proportional
+
+
 def _suppress_rules(ink: np.ndarray) -> np.ndarray:
     """Drop long straight rules. A wire through a digit is one of those rules."""
 
@@ -292,14 +301,17 @@ def _suppress_rules(ink: np.ndarray) -> np.ndarray:
     # A rule runs a long way across the crop. A glyph stem does not. The
     # importer enlarges a tag before this runs, so a short kernel would delete
     # the upright of a "1".
+    # A full sheet only needs a short kernel: wires are long and letters are not.
+    # An enlarged word crop is the opposite, so the kernel has to stay taller
+    # than the digit stem or a "1" disappears.
     if width >= 28:
-        kernel = max(22, int(width * 0.45))
+        kernel = _rule_kernel(width)
         horizontal = cv2.morphologyEx(
             ink, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (kernel, 1))
         )
         rules = cv2.bitwise_or(rules, horizontal)
     if height >= 40:
-        kernel = max(28, int(height * 0.42))
+        kernel = _rule_kernel(height)
         vertical = cv2.morphologyEx(
             ink, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (1, kernel))
         )
@@ -330,9 +342,9 @@ def _glyph_boxes(ink: np.ndarray, mode: str) -> list[tuple[int, int, int, int]]:
                 max_h = height * 0.92
             else:
                 max_h = max(64.0, height * 0.18)
-            if h < 8 or h > max_h or w > width * 0.5:
+            if h < 4 or h > max_h or w > width * 0.5:
                 continue
-            if h <= 5 and w > 24:
+            if h <= 3 and w > 36:
                 continue
             if w <= 5 and h > 24:
                 continue
@@ -507,12 +519,86 @@ def _spans(groups: list[list[_Glyph]], rotation: int, *, spaces: bool) -> list[O
     return spans
 
 
+def _join_designations(spans: list[OcrSpan]) -> list[OcrSpan]:
+    """Glue a suffix that the hyphen no longer connects.
+
+    A ruled hyphen is removed with the wires, so M1 and 13 come back as two
+    words a fraction of a glyph apart. They are one reference designation.
+    """
+
+    ordered = sorted(spans, key=lambda span: (span.top + span.height / 2, span.left))
+    used: set[int] = set()
+    merged: list[OcrSpan] = []
+    for index, span in enumerate(ordered):
+        if index in used:
+            continue
+        current = span
+        progressed = True
+        while progressed:
+            progressed = False
+            for other_index, nxt in enumerate(ordered):
+                if other_index == index or other_index in used:
+                    continue
+                height = max(current.height, nxt.height, 1)
+                if abs((current.top + current.height / 2) - (nxt.top + nxt.height / 2)) > 0.45 * height:
+                    continue
+                gap = nxt.left - (current.left + current.width)
+                if gap < -3 or gap > 1.15 * height:
+                    continue
+                if not (_DESIGNATION_LEFT.match(current.text) and _DESIGNATION_RIGHT.match(nxt.text)):
+                    continue
+                if current.text.endswith("-"):
+                    text = f"{current.text}{nxt.text}"
+                else:
+                    text = f"{current.text}-{nxt.text}"
+                right = max(current.left + current.width, nxt.left + nxt.width)
+                bottom = max(current.top + current.height, nxt.top + nxt.height)
+                left = min(current.left, nxt.left)
+                top = min(current.top, nxt.top)
+                current = OcrSpan(
+                    text=text,
+                    left=left,
+                    top=top,
+                    width=max(1, right - left),
+                    height=max(1, bottom - top),
+                    confidence=min(current.confidence, nxt.confidence),
+                    rotation=current.rotation,
+                    source=current.source,
+                )
+                used.add(other_index)
+                progressed = True
+                break
+        merged.append(current)
+    return merged
+
+
 def _wire_digits(text: str) -> str:
+    """Rewrite a single digit lookalike inside a number. OL1 stays a tag."""
+
     if len(text) < 2:
+        return text
+    letters = [char for char in text if char.isalpha()]
+    if len(letters) != 1:
         return text
     if any(char.isdigit() for char in text) and all(char.isdigit() or char in "OILSBZG" for char in text):
         return text.translate(_DIGIT_LOOKALIKE)
     return text
+
+
+def _feature_at(gray: np.ndarray, ink: np.ndarray, x: int, y: int, w: int, h: int) -> np.ndarray:
+    """A 4 px caption has no shape until the gray crop is enlarged."""
+
+    if h >= 11:
+        return _feature(ink[y : y + h, x : x + w])
+    pad = 1
+    y0, x0 = max(0, y - pad), max(0, x - pad)
+    y1 = min(gray.shape[0], y + h + pad)
+    x1 = min(gray.shape[1], x + w + pad)
+    crop = gray[y0:y1, x0:x1]
+    if crop.size == 0:
+        return _feature(ink[y : y + h, x : x + w])
+    enlarged = cv2.resize(crop, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+    return _feature(_ink(enlarged))
 
 
 def _feature(crop: np.ndarray) -> np.ndarray:
@@ -568,6 +654,9 @@ def _prefer_electrical_pair(label: str, second: str, margin: float) -> str:
     """
 
     if margin < 0.10 and {label, second} == {"1", "I"}:
+        return "1"
+    # A coil circle turns the digit 1 into a hook that ties with J.
+    if margin < 0.04 and label == "J" and second == "1":
         return "1"
     if margin < 0.12 and label == "O" and second == "Q":
         return "Q"

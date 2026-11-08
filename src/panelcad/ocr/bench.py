@@ -110,6 +110,7 @@ def run_benchmark() -> dict[str, Any]:
     }
     _attach_memory(payload)
     _attach_size(payload)
+    payload["scans"] = score_scan_proofs()
     if role == "michelles-pc":
         local["MichellesPC"] = _public_scores(engines)
     elif role == "home-pc":
@@ -602,6 +603,211 @@ def _paddle_footprint() -> dict[str, Any]:
     }
 
 
+_SCAN_PROOFS = (
+    ("schematic", "dpi_150"),
+    ("schematic", "fax"),
+    ("schematic", "faded"),
+    ("schematic", "skew"),
+    ("schematic", "speckle"),
+    ("schematic", "phone"),
+    ("schematic", "jpeg"),
+    ("panel", "dpi_150"),
+    ("terminal", "dpi_150"),
+)
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def _scan_image(source: str, variant: str) -> Path | None:
+    root = _repo_root()
+    folder = root / "docs" / "proofs" / "scan-ladder" / source
+    for suffix in (".png", ".jpg", ".jpeg"):
+        path = folder / f"{variant}{suffix}"
+        if path.is_file():
+            return path
+    return None
+
+
+def score_scan_proofs() -> dict[str, Any]:
+    """Device, wire, and title accuracy on repo scan proofs that have truth JSON.
+
+    Phone and JPEG variants are scored only when the file is already in the tree.
+    A missing file stays null. It is not generated here.
+    """
+
+    from PIL import Image
+
+    truth_root = _repo_root() / "tests" / "fixtures" / "scan_ladder" / "truth"
+    rows: list[dict[str, Any]] = []
+    images: list[tuple[str, str, Path, dict[str, Any], Any]] = []
+    for source, variant in _SCAN_PROOFS:
+        truth_path = truth_root / f"{source}.json"
+        truth = json.loads(truth_path.read_text(encoding="utf-8")) if truth_path.is_file() else None
+        image_path = _scan_image(source, variant)
+        if image_path is None or truth is None:
+            rows.append(
+                {
+                    "source": source,
+                    "variant": variant,
+                    "image": None,
+                    "accuracy": None,
+                    "note": "scan file is not in the repo" if image_path is None else "truth JSON is missing",
+                }
+            )
+            continue
+        images.append((source, variant, image_path, truth, np.asarray(Image.open(image_path).convert("RGB"))))
+    readings = {
+        "electrical": _scan_electrical(images),
+        "tesseract": _scan_tesseract(images),
+        "paddle": _scan_paddle(images),
+    }
+    for source, variant, _path, _truth, _image in images:
+        rows.append(
+            {
+                "source": source,
+                "variant": variant,
+                "image": str(_scan_image(source, variant).relative_to(_repo_root())),
+                "truth_devices": len(_truth["devices"]),
+                "truth_wires": len(_truth.get("wire_numbers") or []),
+                "truth_texts": len(_truth.get("texts") or []),
+                "engines": {name: readings[name][(source, variant)] for name in readings},
+            }
+        )
+    return {
+        "rows": rows,
+        "summary": {name: _scan_summary(readings[name]) for name in readings},
+        "note": (
+            "Recall is truth tokens found in the engine text. "
+            "Wire recall is null when that sheet's truth lists no wire numbers. "
+            "Phone and JPEG stay null when those files are absent. "
+            "after-*.png redraws are not inputs."
+        ),
+    }
+
+
+def _token_bag(emitted: list[str]) -> set[str]:
+    bag: set[str] = set()
+    for item in emitted:
+        for part in str(item).replace("-", " ").split():
+            token = _norm(part)
+            if token:
+                bag.add(token)
+        whole = _norm(item)
+        if whole:
+            bag.add(whole)
+    return bag
+
+
+def _recall(bag: set[str], wanted: list[str], *, phrases: bool) -> float | None:
+    if not wanted:
+        return None
+    hits = 0
+    for item in wanted:
+        if phrases:
+            words = [_norm(part) for part in str(item).split() if _norm(part)]
+            if words and all(word in bag for word in words):
+                hits += 1
+        elif _norm(item) in bag:
+            hits += 1
+    return round(hits / len(wanted), 4)
+
+
+def _scan_row(emitted: list[str], truth: dict[str, Any], seconds: float) -> dict[str, Any]:
+    bag = _token_bag(emitted)
+    return {
+        "devices": _recall(bag, list(truth.get("devices") or []), phrases=False),
+        "wire_numbers": _recall(bag, list(truth.get("wire_numbers") or []), phrases=False),
+        "texts": _recall(bag, list(truth.get("texts") or []), phrases=True),
+        "seconds": round(seconds, 4),
+    }
+
+
+def _scan_electrical(images: list[tuple[str, str, Path, dict[str, Any], Any]]) -> dict[tuple[str, str], dict[str, Any]]:
+    engine = ElectricalOcr()
+    found: dict[tuple[str, str], dict[str, Any]] = {}
+    for source, variant, _path, truth, image in images:
+        started = time.perf_counter()
+        spans = engine.recognize(image, psm=11, rotations=(0,))
+        found[(source, variant)] = _scan_row([span.text for span in spans], truth, time.perf_counter() - started)
+    return found
+
+
+def _scan_tesseract(images: list[tuple[str, str, Path, dict[str, Any], Any]]) -> dict[tuple[str, str], dict[str, Any]]:
+    from panelcad.importer.raster import configure_tesseract, find_tesseract
+
+    found: dict[tuple[str, str], dict[str, Any]] = {}
+    if not find_tesseract():
+        for source, variant, _path, _truth, _image in images:
+            found[(source, variant)] = {"devices": None, "wire_numbers": None, "texts": None, "seconds": None, "note": "tesseract binary not found"}
+        return found
+    import pytesseract
+
+    configure_tesseract()
+    for source, variant, _path, truth, image in images:
+        started = time.perf_counter()
+        try:
+            data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT, config="--psm 11")
+            texts = [str(item) for item in (data.get("text") or []) if str(item).strip()]
+            error = ""
+        except Exception as exc:  # noqa: BLE001
+            texts = []
+            error = f"{type(exc).__name__}: {exc}"
+        row = _scan_row(texts, truth, time.perf_counter() - started)
+        if error:
+            row["note"] = error
+        found[(source, variant)] = row
+    return found
+
+
+def _scan_paddle(images: list[tuple[str, str, Path, dict[str, Any], Any]]) -> dict[tuple[str, str], dict[str, Any]]:
+    found: dict[tuple[str, str], dict[str, Any]] = {}
+    _quiet_paddle()
+    try:
+        from paddleocr import PaddleOCR
+
+        reader = _paddle_reader(PaddleOCR)
+    except Exception as exc:  # noqa: BLE001
+        note = f"{type(exc).__name__}: {exc}"
+        for source, variant, _path, _truth, _image in images:
+            found[(source, variant)] = {"devices": None, "wire_numbers": None, "texts": None, "seconds": None, "note": note}
+        return found
+    for source, variant, _path, truth, image in images:
+        started = time.perf_counter()
+        try:
+            texts = _paddle_texts(reader, image)
+            error = ""
+        except Exception as exc:  # noqa: BLE001
+            texts = []
+            error = f"{type(exc).__name__}: {exc}"
+        row = _scan_row(texts, truth, time.perf_counter() - started)
+        if error:
+            row["devices"] = None
+            row["wire_numbers"] = None
+            row["texts"] = None
+            row["note"] = error
+        found[(source, variant)] = row
+    return found
+
+
+def _scan_summary(rows: dict[tuple[str, str], dict[str, Any]]) -> dict[str, Any]:
+    def mean(key: str) -> float | None:
+        values = [row[key] for row in rows.values() if isinstance(row.get(key), float)]
+        if not values:
+            return None
+        return round(sum(values) / len(values), 4)
+
+    seconds = [row["seconds"] for row in rows.values() if isinstance(row.get("seconds"), float)]
+    return {
+        "devices": mean("devices"),
+        "wire_numbers": mean("wire_numbers"),
+        "texts": mean("texts"),
+        "seconds": round(sum(seconds), 4) if seconds else None,
+        "scans": len(rows),
+    }
+
+
 def _attach_size(payload: dict[str, Any]) -> None:
     size = payload.get("size") or {}
     engines = payload.get("engines") or {}
@@ -680,6 +886,14 @@ def _print_summary(payload: dict[str, Any]) -> None:
             f"footprint_bytes {size.get('footprint_bytes')}  "
             f"added_rss_bytes {memory.get('added_rss_bytes')}"
         )
+    scans = (payload.get("scans") or {}).get("summary") or {}
+    if scans:
+        print("scan proofs (devices / wires / texts / seconds):")
+        for name, row in scans.items():
+            print(
+                f"  {name}: devices {row.get('devices')}  wires {row.get('wire_numbers')}  "
+                f"texts {row.get('texts')}  {row.get('seconds')} s"
+            )
 
 
 if __name__ == "__main__":
