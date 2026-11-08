@@ -5,11 +5,13 @@ device tags, wire numbers, terminal and cable ids, and a title block. The
 glyphs are small, sometimes turned a quarter turn, and often crossed by a
 wire or sitting on a blue sheet.
 
-This engine stays on the PC. It suppresses long rules, cuts the remaining ink
-into glyphs, and matches each glyph to a prototype bank. The bank is built
-from the DejaVu fonts already in this repo, from OpenCV's built-in stroke
-fonts, and from the usual Windows UI fonts when those files are on the
-machine. Nothing is downloaded and no image leaves the process.
+A full print is read by PP-OCR weights from PaddleOCR, running on this PC
+through ONNX Runtime (see ``ppocr.py``). A tight crop, the kind the importer
+cuts around one tag, still uses the glyph matcher below: rules come out, the
+ink is cut into glyphs, and each glyph is matched to a prototype bank built
+from the DejaVu fonts in this repo, OpenCV's stroke fonts, and the usual
+Windows UI fonts when those files are on the machine. No image leaves the
+process.
 
 It is not a claim to beat Tesseract or Paddle. ``scripts/bench_electrical_ocr.py``
 measures that. The importer still decides which tokens are tags and wire
@@ -82,6 +84,14 @@ class ElectricalOcr:
             return []
         allowed = _allowed(whitelist)
         mode = _mode(psm)
+        if mode == "page" and min(arr.shape[:2]) >= 900:
+            from panelcad.ocr.ppocr import read_print
+
+            printed = read_print(arr)
+            if printed is not None:
+                if allowed is not None:
+                    printed = [span for span in printed if any(ch.upper() in allowed for ch in span.text)]
+                return printed
         found: list[OcrSpan] = []
         for rotation in rotations:
             if rotation not in {0, 90, 180, 270}:

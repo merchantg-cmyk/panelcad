@@ -59,6 +59,37 @@ pytest is a test dependency (MIT). It is not part of a release install.
 
 Tesseract OCR is a separate Apache-2.0 program. PanelCAD does not bundle it.
 
+## PaddleOCR weights and ONNX Runtime
+
+The electrical print reader (`panelcad.ocr.ppocr`) calls PaddleOCR's
+pipeline with `engine="onnxruntime"`. It does not import PaddlePaddle and
+it does not send the image to a service.
+
+The optional install is `pip install -e ".[electrical]"`, which is
+`paddleocr` and `onnxruntime`. `paddleocr` pulls `paddlex`. The first read
+downloads these ONNX exports into `~/.paddlex/official_models/`:
+
+| Weights | License |
+| --- | --- |
+| `PP-OCRv5_mobile_det_onnx` | Apache-2.0 |
+| `en_PP-OCRv5_mobile_rec_onnx` | Apache-2.0 |
+| `PP-OCRv6_small_det_onnx` | Apache-2.0 |
+| `PP-OCRv6_small_rec_onnx` | Apache-2.0 |
+| `PP-LCNet_x1_0_textline_ori_onnx` | Apache-2.0 |
+
+Copyright for those models is PaddlePaddle Authors. The model cards in each
+cache directory carry the Apache-2.0 notice. This repository does not vendor
+the weights or the PaddleOCR source. PanelCAD stays AGPL-3.0-or-later; that
+does not relicense PaddleOCR, PaddleX, or the weights.
+
+ONNX Runtime is MIT, copyright Microsoft Corporation. `pyclipper` (used by
+the PaddleOCR detector post-process) is Apache-2.0.
+
+The benchmark's stock Paddle baseline is a separate, optional install of
+`paddlepaddle` plus `paddleocr`. That baseline is not part of the electrical
+reader. On CPU it is started with `FLAGS_use_mkldnn=0` because Paddle 3.3's
+oneDNN kernel raised `NotImplementedError` here.
+
 ## Fonts
 
 The application loads a system font (Arial, Segoe UI, DejaVu, or Liberation).

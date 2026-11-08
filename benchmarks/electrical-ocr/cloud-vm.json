@@ -1,5 +1,5 @@
 {
-  "measured_at_utc": "2026-11-08T18:00:21Z",
+  "measured_at_utc": "2026-11-08T18:55:02Z",
   "hostname": "cursor",
   "machine_role": "other",
   "counts_as_local_target": false,
@@ -303,13 +303,73 @@
   ],
   "size": {
     "electrical": {
-      "footprint_bytes": 224533,
-      "package_bytes": 224533,
-      "model_bytes": 0,
+      "footprint_bytes": 141463232,
+      "package_bytes": 251394,
+      "runtime_bytes": 90074299,
+      "model_bytes": 51137539,
       "paths": [
-        "/agent/repos/panelcad/src/panelcad/ocr"
+        "/agent/repos/panelcad/src/panelcad/ocr",
+        "/tmp/panelcad-venv/lib/python3.12/site-packages/paddleocr",
+        "/tmp/panelcad-venv/lib/python3.12/site-packages/paddlex",
+        "/tmp/panelcad-venv/lib/python3.12/site-packages/onnxruntime",
+        "/tmp/panelcad-venv/lib/python3.12/site-packages/pyclipper",
+        "/tmp/panelcad-venv/lib/python3.12/site-packages/shapely",
+        "/home/ubuntu/.paddlex/official_models/PP-OCRv5_mobile_det_onnx",
+        "/home/ubuntu/.paddlex/official_models/en_PP-OCRv5_mobile_rec_onnx",
+        "/home/ubuntu/.paddlex/official_models/PP-OCRv6_small_det_onnx",
+        "/home/ubuntu/.paddlex/official_models/PP-OCRv6_small_rec_onnx",
+        "/home/ubuntu/.paddlex/official_models/PP-LCNet_x1_0_textline_ori_onnx"
       ],
-      "note": "Python sources for panelcad.ocr. No separate model file."
+      "packages": [
+        {
+          "name": "paddleocr",
+          "bytes": 980713,
+          "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/paddleocr"
+        },
+        {
+          "name": "paddlex",
+          "bytes": 13659173,
+          "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/paddlex"
+        },
+        {
+          "name": "onnxruntime",
+          "bytes": 68657812,
+          "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/onnxruntime"
+        },
+        {
+          "name": "pyclipper",
+          "bytes": 3549362,
+          "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/pyclipper"
+        },
+        {
+          "name": "shapely",
+          "bytes": 3227239,
+          "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/shapely"
+        }
+      ],
+      "models": [
+        {
+          "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv5_mobile_det_onnx",
+          "bytes": 4832018
+        },
+        {
+          "path": "/home/ubuntu/.paddlex/official_models/en_PP-OCRv5_mobile_rec_onnx",
+          "bytes": 7855184
+        },
+        {
+          "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv6_small_det_onnx",
+          "bytes": 10129753
+        },
+        {
+          "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv6_small_rec_onnx",
+          "bytes": 21537526
+        },
+        {
+          "path": "/home/ubuntu/.paddlex/official_models/PP-LCNet_x1_0_textline_ori_onnx",
+          "bytes": 6783058
+        }
+      ],
+      "note": "panelcad.ocr sources, plus paddleocr, paddlex, onnxruntime, pyclipper, and shapely, plus the ONNX exports of PP-OCRv5 mobile (English), PP-OCRv6 small, and the text-line orientation model. PaddlePaddle is not loaded and is not counted. OpenCV, Pillow, and numpy are already part of PanelCAD and are not added."
     },
     "tesseract": {
       "footprint_bytes": 20594221,
@@ -346,10 +406,36 @@
           "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/paddlex"
         }
       ],
+      "models": [
+        {
+          "name": "PP-OCRv6_medium_det",
+          "bytes": 62299794,
+          "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv6_medium_det"
+        },
+        {
+          "name": "PP-OCRv6_medium_rec",
+          "bytes": 76863994,
+          "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv6_medium_rec"
+        },
+        {
+          "name": "PP-LCNet_x1_0_doc_ori",
+          "bytes": 6872016,
+          "path": "/home/ubuntu/.paddlex/official_models/PP-LCNet_x1_0_doc_ori"
+        },
+        {
+          "name": "PP-LCNet_x1_0_textline_ori",
+          "bytes": 6858324,
+          "path": "/home/ubuntu/.paddlex/official_models/PP-LCNet_x1_0_textline_ori"
+        },
+        {
+          "name": "UVDoc",
+          "bytes": 32254812,
+          "path": "/home/ubuntu/.paddlex/official_models/UVDoc"
+        }
+      ],
       "model_path": "/home/ubuntu/.paddlex/official_models",
-      "note": "paddle, paddleocr, and paddlex package directories plus the PaddleX model cache. Shared libraries such as numpy are not included."
-    },
-    "note": "footprint_bytes sums only the paths listed. OpenCV, Pillow, and numpy are already part of PanelCAD and are not added to any engine. A null byte count means that path was not found, not that the size is zero unless model_bytes is 0."
+      "note": "paddle, paddleocr, and paddlex package directories plus the five model directories the stock English pipeline downloads (PP-OCRv6 medium det and rec, document orientation, text-line orientation, and UVDoc). ONNX exports used only by the electrical reader are not included. Shared libraries such as numpy are not included."
+    }
   },
   "engines": {
     "electrical": {
@@ -360,15 +446,15 @@
       "token_recall": 0.7619,
       "held_out_sample_recall": 0.5556,
       "held_out_token_recall": 0.5833,
-      "held_out_seconds": 0.0846,
+      "held_out_seconds": 0.0859,
       "in_bank_sample_recall": 1.0,
       "in_bank_token_recall": 1.0,
-      "in_bank_seconds": 0.1199,
+      "in_bank_seconds": 0.1193,
       "sample_hits": 22,
       "sample_count": 30,
       "token_hits": 32,
       "token_count": 42,
-      "seconds": 0.205,
+      "seconds": 0.2061,
       "samples": [
         {
           "name": "clean-k1",
@@ -384,7 +470,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0499,
+          "seconds": 0.0501,
           "error": ""
         },
         {
@@ -405,7 +491,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0045,
+          "seconds": 0.0047,
           "error": ""
         },
         {
@@ -443,7 +529,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0042,
+          "seconds": 0.0044,
           "error": ""
         },
         {
@@ -461,7 +547,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0041,
+          "seconds": 0.0042,
           "error": ""
         },
         {
@@ -490,7 +576,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0093,
+          "seconds": 0.0094,
           "error": ""
         },
         {
@@ -510,7 +596,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0053,
+          "seconds": 0.005,
           "error": ""
         },
         {
@@ -528,7 +614,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0051,
+          "seconds": 0.0037,
           "error": ""
         },
         {
@@ -545,7 +631,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0037,
+          "seconds": 0.0035,
           "error": ""
         },
         {
@@ -564,7 +650,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0041,
+          "seconds": 0.0043,
           "error": ""
         },
         {
@@ -612,7 +698,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.022,
+          "seconds": 0.0223,
           "error": ""
         },
         {
@@ -629,7 +715,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0038,
+          "seconds": 0.0039,
           "error": ""
         },
         {
@@ -647,7 +733,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0038,
+          "seconds": 0.0037,
           "error": ""
         },
         {
@@ -665,7 +751,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0037,
+          "seconds": 0.0035,
           "error": ""
         },
         {
@@ -683,7 +769,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0035,
+          "seconds": 0.0037,
           "error": ""
         },
         {
@@ -701,7 +787,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0044,
+          "seconds": 0.0045,
           "error": ""
         },
         {
@@ -720,7 +806,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0042,
+          "seconds": 0.0043,
           "error": ""
         },
         {
@@ -774,7 +860,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0031,
+          "seconds": 0.0033,
           "error": ""
         },
         {
@@ -792,7 +878,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0028,
+          "seconds": 0.0029,
           "error": ""
         },
         {
@@ -837,7 +923,7 @@
             true
           ],
           "hit": false,
-          "seconds": 0.0071,
+          "seconds": 0.0073,
           "error": ""
         },
         {
@@ -858,7 +944,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.004,
+          "seconds": 0.0041,
           "error": ""
         },
         {
@@ -876,7 +962,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0026,
+          "seconds": 0.0027,
           "error": ""
         },
         {
@@ -894,7 +980,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0023,
+          "seconds": 0.0024,
           "error": ""
         },
         {
@@ -932,7 +1018,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0031,
+          "seconds": 0.0029,
           "error": ""
         },
         {
@@ -961,7 +1047,7 @@
             true
           ],
           "hit": false,
-          "seconds": 0.0246,
+          "seconds": 0.0251,
           "error": ""
         }
       ],
@@ -972,13 +1058,73 @@
         "note": "Not measured. Tesseract runs as its own process, while the electrical engine and Paddle run inside Python. A resident-set reading would not cover all three the same way."
       },
       "size": {
-        "footprint_bytes": 224533,
-        "package_bytes": 224533,
-        "model_bytes": 0,
+        "footprint_bytes": 141463232,
+        "package_bytes": 251394,
+        "runtime_bytes": 90074299,
+        "model_bytes": 51137539,
         "paths": [
-          "/agent/repos/panelcad/src/panelcad/ocr"
+          "/agent/repos/panelcad/src/panelcad/ocr",
+          "/tmp/panelcad-venv/lib/python3.12/site-packages/paddleocr",
+          "/tmp/panelcad-venv/lib/python3.12/site-packages/paddlex",
+          "/tmp/panelcad-venv/lib/python3.12/site-packages/onnxruntime",
+          "/tmp/panelcad-venv/lib/python3.12/site-packages/pyclipper",
+          "/tmp/panelcad-venv/lib/python3.12/site-packages/shapely",
+          "/home/ubuntu/.paddlex/official_models/PP-OCRv5_mobile_det_onnx",
+          "/home/ubuntu/.paddlex/official_models/en_PP-OCRv5_mobile_rec_onnx",
+          "/home/ubuntu/.paddlex/official_models/PP-OCRv6_small_det_onnx",
+          "/home/ubuntu/.paddlex/official_models/PP-OCRv6_small_rec_onnx",
+          "/home/ubuntu/.paddlex/official_models/PP-LCNet_x1_0_textline_ori_onnx"
         ],
-        "note": "Python sources for panelcad.ocr. No separate model file."
+        "packages": [
+          {
+            "name": "paddleocr",
+            "bytes": 980713,
+            "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/paddleocr"
+          },
+          {
+            "name": "paddlex",
+            "bytes": 13659173,
+            "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/paddlex"
+          },
+          {
+            "name": "onnxruntime",
+            "bytes": 68657812,
+            "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/onnxruntime"
+          },
+          {
+            "name": "pyclipper",
+            "bytes": 3549362,
+            "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/pyclipper"
+          },
+          {
+            "name": "shapely",
+            "bytes": 3227239,
+            "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/shapely"
+          }
+        ],
+        "models": [
+          {
+            "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv5_mobile_det_onnx",
+            "bytes": 4832018
+          },
+          {
+            "path": "/home/ubuntu/.paddlex/official_models/en_PP-OCRv5_mobile_rec_onnx",
+            "bytes": 7855184
+          },
+          {
+            "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv6_small_det_onnx",
+            "bytes": 10129753
+          },
+          {
+            "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv6_small_rec_onnx",
+            "bytes": 21537526
+          },
+          {
+            "path": "/home/ubuntu/.paddlex/official_models/PP-LCNet_x1_0_textline_ori_onnx",
+            "bytes": 6783058
+          }
+        ],
+        "note": "panelcad.ocr sources, plus paddleocr, paddlex, onnxruntime, pyclipper, and shapely, plus the ONNX exports of PP-OCRv5 mobile (English), PP-OCRv6 small, and the text-line orientation model. PaddlePaddle is not loaded and is not counted. OpenCV, Pillow, and numpy are already part of PanelCAD and are not added."
       }
     },
     "tesseract": {
@@ -989,15 +1135,15 @@
       "token_recall": 0.6429,
       "held_out_sample_recall": 0.5,
       "held_out_token_recall": 0.5833,
-      "held_out_seconds": 1.1584,
+      "held_out_seconds": 1.1922,
       "in_bank_sample_recall": 0.5833,
       "in_bank_token_recall": 0.7222,
-      "in_bank_seconds": 0.8109,
+      "in_bank_seconds": 0.8349,
       "sample_hits": 16,
       "sample_count": 30,
       "token_hits": 27,
       "token_count": 42,
-      "seconds": 1.9698,
+      "seconds": 2.0279,
       "samples": [
         {
           "name": "clean-k1",
@@ -1013,7 +1159,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0804,
+          "seconds": 0.0795,
           "error": ""
         },
         {
@@ -1030,7 +1176,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0665,
+          "seconds": 0.0703,
           "error": ""
         },
         {
@@ -1047,7 +1193,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0641,
+          "seconds": 0.0656,
           "error": ""
         },
         {
@@ -1064,7 +1210,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0664,
+          "seconds": 0.0672,
           "error": ""
         },
         {
@@ -1081,7 +1227,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0654,
+          "seconds": 0.0651,
           "error": ""
         },
         {
@@ -1107,7 +1253,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.07,
+          "seconds": 0.0716,
           "error": ""
         },
         {
@@ -1122,7 +1268,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0628,
+          "seconds": 0.0625,
           "error": ""
         },
         {
@@ -1139,7 +1285,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0658,
+          "seconds": 0.0671,
           "error": ""
         },
         {
@@ -1156,7 +1302,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.064,
+          "seconds": 0.067,
           "error": ""
         },
         {
@@ -1173,7 +1319,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0656,
+          "seconds": 0.0746,
           "error": ""
         },
         {
@@ -1188,7 +1334,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0624,
+          "seconds": 0.0649,
           "error": ""
         },
         {
@@ -1214,7 +1360,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0775,
+          "seconds": 0.0795,
           "error": ""
         },
         {
@@ -1231,7 +1377,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0616,
+          "seconds": 0.0636,
           "error": ""
         },
         {
@@ -1248,7 +1394,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0614,
+          "seconds": 0.0659,
           "error": ""
         },
         {
@@ -1265,7 +1411,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0653,
+          "seconds": 0.0661,
           "error": ""
         },
         {
@@ -1282,7 +1428,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0642,
+          "seconds": 0.0645,
           "error": ""
         },
         {
@@ -1297,7 +1443,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0628,
+          "seconds": 0.063,
           "error": ""
         },
         {
@@ -1312,7 +1458,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0627,
+          "seconds": 0.0622,
           "error": ""
         },
         {
@@ -1329,7 +1475,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0604,
+          "seconds": 0.0668,
           "error": ""
         },
         {
@@ -1346,7 +1492,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0645,
+          "seconds": 0.0652,
           "error": ""
         },
         {
@@ -1363,7 +1509,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0637,
+          "seconds": 0.0657,
           "error": ""
         },
         {
@@ -1380,7 +1526,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0633,
+          "seconds": 0.0667,
           "error": ""
         },
         {
@@ -1397,7 +1543,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0638,
+          "seconds": 0.0648,
           "error": ""
         },
         {
@@ -1423,7 +1569,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0701,
+          "seconds": 0.0714,
           "error": ""
         },
         {
@@ -1438,7 +1584,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0619,
+          "seconds": 0.0632,
           "error": ""
         },
         {
@@ -1455,7 +1601,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0644,
+          "seconds": 0.0666,
           "error": ""
         },
         {
@@ -1472,7 +1618,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0642,
+          "seconds": 0.0657,
           "error": ""
         },
         {
@@ -1489,7 +1635,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0633,
+          "seconds": 0.0655,
           "error": ""
         },
         {
@@ -1504,7 +1650,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0617,
+          "seconds": 0.0627,
           "error": ""
         },
         {
@@ -1531,7 +1677,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.0791,
+          "seconds": 0.0826,
           "error": ""
         }
       ],
@@ -1564,15 +1710,15 @@
       "token_recall": 0.6905,
       "held_out_sample_recall": 0.5556,
       "held_out_token_recall": 0.625,
-      "held_out_seconds": 4.6858,
+      "held_out_seconds": 4.8922,
       "in_bank_sample_recall": 0.6667,
       "in_bank_token_recall": 0.7778,
-      "in_bank_seconds": 3.1259,
+      "in_bank_seconds": 3.207,
       "sample_hits": 18,
       "sample_count": 30,
       "token_hits": 29,
       "token_count": 42,
-      "seconds": 7.8125,
+      "seconds": 8.1004,
       "samples": [
         {
           "name": "clean-k1",
@@ -1589,7 +1735,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.256,
+          "seconds": 0.2605,
           "error": ""
         },
         {
@@ -1607,7 +1753,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2576,
+          "seconds": 0.2611,
           "error": ""
         },
         {
@@ -1625,7 +1771,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2599,
+          "seconds": 0.2633,
           "error": ""
         },
         {
@@ -1643,7 +1789,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2562,
+          "seconds": 0.2624,
           "error": ""
         },
         {
@@ -1661,7 +1807,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2648,
+          "seconds": 0.2655,
           "error": ""
         },
         {
@@ -1691,7 +1837,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2773,
+          "seconds": 0.2735,
           "error": ""
         },
         {
@@ -1706,7 +1852,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2484,
+          "seconds": 0.272,
           "error": ""
         },
         {
@@ -1724,7 +1870,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2522,
+          "seconds": 0.2616,
           "error": ""
         },
         {
@@ -1742,7 +1888,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2543,
+          "seconds": 0.2596,
           "error": ""
         },
         {
@@ -1760,7 +1906,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2532,
+          "seconds": 0.2626,
           "error": ""
         },
         {
@@ -1778,7 +1924,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2493,
+          "seconds": 0.2568,
           "error": ""
         },
         {
@@ -1808,7 +1954,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2967,
+          "seconds": 0.3081,
           "error": ""
         },
         {
@@ -1826,7 +1972,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2539,
+          "seconds": 0.2599,
           "error": ""
         },
         {
@@ -1844,7 +1990,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2528,
+          "seconds": 0.2836,
           "error": ""
         },
         {
@@ -1862,7 +2008,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.278,
+          "seconds": 0.275,
           "error": ""
         },
         {
@@ -1880,7 +2026,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.282,
+          "seconds": 0.2703,
           "error": ""
         },
         {
@@ -1895,7 +2041,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2461,
+          "seconds": 0.2611,
           "error": ""
         },
         {
@@ -1913,7 +2059,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2521,
+          "seconds": 0.2631,
           "error": ""
         },
         {
@@ -1931,7 +2077,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2477,
+          "seconds": 0.2683,
           "error": ""
         },
         {
@@ -1949,7 +2095,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2581,
+          "seconds": 0.264,
           "error": ""
         },
         {
@@ -1967,7 +2113,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2476,
+          "seconds": 0.2599,
           "error": ""
         },
         {
@@ -1985,7 +2131,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2491,
+          "seconds": 0.2584,
           "error": ""
         },
         {
@@ -2003,7 +2149,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2493,
+          "seconds": 0.2677,
           "error": ""
         },
         {
@@ -2032,7 +2178,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2739,
+          "seconds": 0.2794,
           "error": ""
         },
         {
@@ -2047,7 +2193,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.262,
+          "seconds": 0.2627,
           "error": ""
         },
         {
@@ -2065,7 +2211,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2515,
+          "seconds": 0.2655,
           "error": ""
         },
         {
@@ -2083,7 +2229,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2569,
+          "seconds": 0.2578,
           "error": ""
         },
         {
@@ -2101,7 +2247,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2532,
+          "seconds": 0.2735,
           "error": ""
         },
         {
@@ -2119,7 +2265,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.2511,
+          "seconds": 0.2809,
           "error": ""
         },
         {
@@ -2153,7 +2299,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.3205,
+          "seconds": 0.3411,
           "error": ""
         }
       ],
@@ -2186,15 +2332,15 @@
       "token_recall": 0.9286,
       "held_out_sample_recall": 0.9444,
       "held_out_token_recall": 0.9167,
-      "held_out_seconds": 3.4685,
+      "held_out_seconds": 3.6247,
       "in_bank_sample_recall": 0.9167,
       "in_bank_token_recall": 0.9444,
-      "in_bank_seconds": 3.4134,
+      "in_bank_seconds": 3.2506,
       "sample_hits": 28,
       "sample_count": 30,
       "token_hits": 39,
       "token_count": 42,
-      "seconds": 6.8829,
+      "seconds": 6.8764,
       "samples": [
         {
           "name": "clean-k1",
@@ -2210,7 +2356,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2488,
+          "seconds": 0.242,
           "error": ""
         },
         {
@@ -2227,7 +2373,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.181,
+          "seconds": 0.1762,
           "error": ""
         },
         {
@@ -2244,7 +2390,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1597,
+          "seconds": 0.1518,
           "error": ""
         },
         {
@@ -2261,7 +2407,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1625,
+          "seconds": 0.1892,
           "error": ""
         },
         {
@@ -2278,7 +2424,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.153,
+          "seconds": 0.1522,
           "error": ""
         },
         {
@@ -2301,7 +2447,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.2258,
+          "seconds": 0.2263,
           "error": ""
         },
         {
@@ -2318,7 +2464,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.186,
+          "seconds": 0.1876,
           "error": ""
         },
         {
@@ -2335,7 +2481,7 @@
             false
           ],
           "hit": false,
-          "seconds": 0.1893,
+          "seconds": 0.1552,
           "error": ""
         },
         {
@@ -2352,7 +2498,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1918,
+          "seconds": 0.1925,
           "error": ""
         },
         {
@@ -2369,7 +2515,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1925,
+          "seconds": 0.2004,
           "error": ""
         },
         {
@@ -2386,7 +2532,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1803,
+          "seconds": 0.1366,
           "error": ""
         },
         {
@@ -2412,7 +2558,7 @@
             true
           ],
           "hit": true,
-          "seconds": 1.3427,
+          "seconds": 1.2406,
           "error": ""
         },
         {
@@ -2429,7 +2575,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1638,
+          "seconds": 0.1589,
           "error": ""
         },
         {
@@ -2446,7 +2592,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1555,
+          "seconds": 0.1688,
           "error": ""
         },
         {
@@ -2463,7 +2609,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1494,
+          "seconds": 0.2056,
           "error": ""
         },
         {
@@ -2480,7 +2626,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1485,
+          "seconds": 0.1543,
           "error": ""
         },
         {
@@ -2497,7 +2643,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1471,
+          "seconds": 0.156,
           "error": ""
         },
         {
@@ -2514,7 +2660,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1599,
+          "seconds": 0.1672,
           "error": ""
         },
         {
@@ -2531,7 +2677,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1038,
+          "seconds": 0.1072,
           "error": ""
         },
         {
@@ -2548,7 +2694,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1277,
+          "seconds": 0.1242,
           "error": ""
         },
         {
@@ -2565,7 +2711,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.113,
+          "seconds": 0.1159,
           "error": ""
         },
         {
@@ -2582,7 +2728,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1119,
+          "seconds": 0.1425,
           "error": ""
         },
         {
@@ -2599,7 +2745,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1167,
+          "seconds": 0.1309,
           "error": ""
         },
         {
@@ -2622,7 +2768,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1766,
+          "seconds": 0.1806,
           "error": ""
         },
         {
@@ -2639,7 +2785,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1125,
+          "seconds": 0.1145,
           "error": ""
         },
         {
@@ -2656,7 +2802,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1032,
+          "seconds": 0.1055,
           "error": ""
         },
         {
@@ -2673,7 +2819,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1024,
+          "seconds": 0.1062,
           "error": ""
         },
         {
@@ -2690,7 +2836,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.0965,
+          "seconds": 0.0967,
           "error": ""
         },
         {
@@ -2707,7 +2853,7 @@
             true
           ],
           "hit": true,
-          "seconds": 0.1144,
+          "seconds": 0.1214,
           "error": ""
         },
         {
@@ -2733,7 +2879,7 @@
             false
           ],
           "hit": false,
-          "seconds": 1.2656,
+          "seconds": 1.2683,
           "error": ""
         }
       ],
@@ -2765,8 +2911,35 @@
             "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/paddlex"
           }
         ],
+        "models": [
+          {
+            "name": "PP-OCRv6_medium_det",
+            "bytes": 62299794,
+            "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv6_medium_det"
+          },
+          {
+            "name": "PP-OCRv6_medium_rec",
+            "bytes": 76863994,
+            "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv6_medium_rec"
+          },
+          {
+            "name": "PP-LCNet_x1_0_doc_ori",
+            "bytes": 6872016,
+            "path": "/home/ubuntu/.paddlex/official_models/PP-LCNet_x1_0_doc_ori"
+          },
+          {
+            "name": "PP-LCNet_x1_0_textline_ori",
+            "bytes": 6858324,
+            "path": "/home/ubuntu/.paddlex/official_models/PP-LCNet_x1_0_textline_ori"
+          },
+          {
+            "name": "UVDoc",
+            "bytes": 32254812,
+            "path": "/home/ubuntu/.paddlex/official_models/UVDoc"
+          }
+        ],
         "model_path": "/home/ubuntu/.paddlex/official_models",
-        "note": "paddle, paddleocr, and paddlex package directories plus the PaddleX model cache. Shared libraries such as numpy are not included."
+        "note": "paddle, paddleocr, and paddlex package directories plus the five model directories the stock English pipeline downloads (PP-OCRv6 medium det and rec, document orientation, text-line orientation, and UVDoc). ONNX exports used only by the electrical reader are not included. Shared libraries such as numpy are not included."
       }
     }
   },
@@ -2798,20 +2971,20 @@
           "electrical": {
             "devices": 1.0,
             "wire_numbers": 1.0,
-            "texts": 0.0,
-            "seconds": 0.2081
+            "texts": 1.0,
+            "seconds": 2.5233
           },
           "tesseract": {
             "devices": 0.7778,
             "wire_numbers": 1.0,
             "texts": 1.0,
-            "seconds": 0.5895
+            "seconds": 0.616
           },
           "paddle": {
             "devices": 1.0,
             "wire_numbers": 1.0,
             "texts": 1.0,
-            "seconds": 40.299
+            "seconds": 39.5586
           }
         }
       },
@@ -2826,20 +2999,20 @@
           "electrical": {
             "devices": 1.0,
             "wire_numbers": 1.0,
-            "texts": 0.0,
-            "seconds": 0.2776
+            "texts": 1.0,
+            "seconds": 3.5603
           },
           "tesseract": {
             "devices": 0.8889,
             "wire_numbers": 0.8125,
             "texts": 1.0,
-            "seconds": 0.8004
+            "seconds": 0.8185
           },
           "paddle": {
             "devices": 1.0,
             "wire_numbers": 1.0,
             "texts": 1.0,
-            "seconds": 63.7963
+            "seconds": 56.3751
           }
         }
       },
@@ -2852,22 +3025,22 @@
         "truth_texts": 6,
         "engines": {
           "electrical": {
-            "devices": 0.9444,
+            "devices": 1.0,
             "wire_numbers": 1.0,
-            "texts": 0.0,
-            "seconds": 0.2396
+            "texts": 1.0,
+            "seconds": 3.4591
           },
           "tesseract": {
             "devices": 0.8889,
             "wire_numbers": 0.8125,
             "texts": 1.0,
-            "seconds": 0.8312
+            "seconds": 0.8381
           },
           "paddle": {
             "devices": 1.0,
             "wire_numbers": 1.0,
             "texts": 1.0,
-            "seconds": 56.7598
+            "seconds": 54.0236
           }
         }
       },
@@ -2880,22 +3053,22 @@
         "truth_texts": 6,
         "engines": {
           "electrical": {
-            "devices": 0.9444,
-            "wire_numbers": 0.875,
-            "texts": 0.0,
-            "seconds": 0.2768
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 3.3683
           },
           "tesseract": {
             "devices": 0.8333,
             "wire_numbers": 0.8125,
             "texts": 1.0,
-            "seconds": 0.9427
+            "seconds": 0.9598
           },
           "paddle": {
             "devices": 1.0,
             "wire_numbers": 1.0,
             "texts": 1.0,
-            "seconds": 57.5287
+            "seconds": 56.3926
           }
         }
       },
@@ -2908,22 +3081,22 @@
         "truth_texts": 6,
         "engines": {
           "electrical": {
-            "devices": 1.0,
+            "devices": 0.9444,
             "wire_numbers": 1.0,
-            "texts": 0.0,
-            "seconds": 0.2159
+            "texts": 1.0,
+            "seconds": 1.6136
           },
           "tesseract": {
             "devices": 0.7222,
             "wire_numbers": 1.0,
             "texts": 1.0,
-            "seconds": 0.5895
+            "seconds": 0.5906
           },
           "paddle": {
             "devices": 0.9444,
             "wire_numbers": 1.0,
             "texts": 1.0,
-            "seconds": 37.8133
+            "seconds": 36.7818
           }
         }
       },
@@ -2936,22 +3109,22 @@
         "truth_texts": 6,
         "engines": {
           "electrical": {
-            "devices": 0.0,
+            "devices": 0.7778,
             "wire_numbers": null,
-            "texts": 0.0,
-            "seconds": 0.5306
+            "texts": 1.0,
+            "seconds": 1.9987
           },
           "tesseract": {
             "devices": 0.1111,
             "wire_numbers": null,
             "texts": 1.0,
-            "seconds": 1.3537
+            "seconds": 1.3806
           },
           "paddle": {
             "devices": 0.7778,
             "wire_numbers": null,
             "texts": 1.0,
-            "seconds": 78.1656
+            "seconds": 69.4749
           }
         }
       },
@@ -2964,46 +3137,46 @@
         "truth_texts": 6,
         "engines": {
           "electrical": {
-            "devices": 0.0,
-            "wire_numbers": 0.0,
-            "texts": 0.0,
-            "seconds": 0.1648
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 1.5326
           },
           "tesseract": {
             "devices": 0.0,
             "wire_numbers": 0.0,
             "texts": 1.0,
-            "seconds": 0.5148
+            "seconds": 0.4843
           },
           "paddle": {
             "devices": 1.0,
             "wire_numbers": 1.0,
             "texts": 1.0,
-            "seconds": 32.7008
+            "seconds": 31.1177
           }
         }
       }
     ],
     "summary": {
       "electrical": {
-        "devices": 0.6984,
-        "wire_numbers": 0.8125,
-        "texts": 0.0,
-        "seconds": 1.9134,
+        "devices": 0.9603,
+        "wire_numbers": 1.0,
+        "texts": 1.0,
+        "seconds": 18.0559,
         "scans": 7
       },
       "tesseract": {
         "devices": 0.6032,
         "wire_numbers": 0.7396,
         "texts": 1.0,
-        "seconds": 5.6218,
+        "seconds": 5.6879,
         "scans": 7
       },
       "paddle": {
         "devices": 0.9603,
         "wire_numbers": 1.0,
         "texts": 1.0,
-        "seconds": 367.0635,
+        "seconds": 343.7243,
         "scans": 7
       }
     },

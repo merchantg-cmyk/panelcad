@@ -451,14 +451,51 @@ def measure_footprints() -> dict[str, Any]:
 
 
 def _electrical_footprint() -> dict[str, Any]:
+    """Code, the ONNX Runtime stack, and the PP-OCR weights this path loads.
+
+    PaddlePaddle is not included. The electrical reader does not import it.
+    Stock Paddle's own footprint is measured separately and still includes that wheel.
+    """
+
+    from panelcad.ocr.ppocr import model_dirs, runtime_packages
+
     root = Path(__file__).resolve().parent
-    package = _dir_bytes(root)
+    code = _dir_bytes(root)
+    packages: list[dict[str, Any]] = []
+    for name in runtime_packages():
+        directory = _package_dir(name)
+        packages.append(
+            {
+                "name": name,
+                "bytes": _dir_bytes(directory) if directory is not None else None,
+                "path": str(directory) if directory is not None else None,
+            }
+        )
+    models = []
+    model_bytes = 0
+    for path in model_dirs():
+        size = _dir_bytes(Path(path))
+        models.append({"path": path, "bytes": size})
+        if isinstance(size, int):
+            model_bytes += size
+    parts = [code]
+    parts.extend(item["bytes"] for item in packages if isinstance(item["bytes"], int))
+    if models:
+        parts.append(model_bytes)
     return {
-        "footprint_bytes": package,
-        "package_bytes": package,
-        "model_bytes": 0,
-        "paths": [str(root)],
-        "note": "Python sources for panelcad.ocr. No separate model file.",
+        "footprint_bytes": sum(parts) if all(isinstance(item, int) for item in parts) else None,
+        "package_bytes": code,
+        "runtime_bytes": sum(item["bytes"] for item in packages if isinstance(item["bytes"], int)) or None,
+        "model_bytes": model_bytes if models else None,
+        "paths": [str(root), *[item["path"] for item in packages if item["path"]], *[item["path"] for item in models]],
+        "packages": packages,
+        "models": models,
+        "note": (
+            "panelcad.ocr sources, plus paddleocr, paddlex, onnxruntime, pyclipper, and shapely, "
+            "plus the ONNX exports of PP-OCRv5 mobile (English), PP-OCRv6 small, and the text-line "
+            "orientation model. PaddlePaddle is not loaded and is not counted. "
+            "OpenCV, Pillow, and numpy are already part of PanelCAD and are not added."
+        ),
     }
 
 
@@ -582,22 +619,48 @@ def _paddle_footprint() -> dict[str, Any]:
             packages.append({"name": name, "bytes": None, "path": None})
             continue
         packages.append({"name": name, "bytes": _dir_bytes(directory), "path": str(directory)})
-    model = Path.home() / ".paddlex" / "official_models"
-    model_bytes = _dir_bytes(model)
+    # Only the models the stock English pipeline fetches. Later ONNX exports
+    # for the electrical reader live in the same cache and are counted there.
+    model_root = Path.home() / ".paddlex" / "official_models"
+    stock_models = (
+        "PP-OCRv6_medium_det",
+        "PP-OCRv6_medium_rec",
+        "PP-LCNet_x1_0_doc_ori",
+        "PP-LCNet_x1_0_textline_ori",
+        "UVDoc",
+    )
+    model_rows = []
+    model_bytes = 0
+    found_model = False
+    for name in stock_models:
+        path = model_root / name
+        size = _dir_bytes(path)
+        model_rows.append({"name": name, "bytes": size, "path": str(path) if path.exists() else None})
+        if isinstance(size, int):
+            model_bytes += size
+            found_model = True
+    if not found_model:
+        model_bytes_out: int | None = None
+    else:
+        model_bytes_out = model_bytes
     parts = [item["bytes"] for item in packages if isinstance(item["bytes"], int)]
-    if isinstance(model_bytes, int):
-        parts.append(model_bytes)
+    if isinstance(model_bytes_out, int):
+        parts.append(model_bytes_out)
     footprint = sum(parts) if parts else None
-    if all(item["bytes"] is None for item in packages) and model_bytes is None:
+    if all(item["bytes"] is None for item in packages) and model_bytes_out is None:
         footprint = None
     return {
         "footprint_bytes": footprint,
         "package_bytes": sum(item["bytes"] for item in packages if isinstance(item["bytes"], int)) or None,
-        "model_bytes": model_bytes,
+        "model_bytes": model_bytes_out,
         "packages": packages,
-        "model_path": str(model) if model.exists() else None,
+        "models": model_rows,
+        "model_path": str(model_root) if model_root.exists() else None,
         "note": (
-            "paddle, paddleocr, and paddlex package directories plus the PaddleX model cache. "
+            "paddle, paddleocr, and paddlex package directories plus the five model "
+            "directories the stock English pipeline downloads (PP-OCRv6 medium det and rec, "
+            "document orientation, text-line orientation, and UVDoc). "
+            "ONNX exports used only by the electrical reader are not included. "
             "Shared libraries such as numpy are not included."
         ),
     }

@@ -44,8 +44,15 @@ PATH. English ``eng.traineddata`` is required.
     https://github.com/tesseract-ocr/tesseract
     https://tesseract-ocr.github.io/tessdoc/Downloads.html
 
-Paddle OCR (optional baseline, not a PanelCAD dependency). If this install
-fails, the harness records the error. The electrical engine still runs::
+Electrical print OCR (the engine under test). This is not the PaddlePaddle
+wheel. It is PaddleOCR's smaller ONNX models, run by ONNX Runtime. The
+weights download into the user cache on first use::
+
+    %USERPROFILE%\\panelcad-test\\venv\\Scripts\\python.exe -m pip install -e ".[electrical]"
+
+Paddle OCR (optional baseline, not what the electrical engine loads). If
+this install fails, the harness records the error. The electrical engine
+still runs::
 
     %USERPROFILE%\\panelcad-test\\venv\\Scripts\\python.exe -m pip install paddlepaddle paddleocr
 
@@ -55,8 +62,9 @@ A CPU wheel sometimes needs the Paddle index instead of PyPI::
     %USERPROFILE%\\panelcad-test\\venv\\Scripts\\python.exe -m pip install paddleocr
 
 The same command prints speed, held-out accuracy, same-font accuracy, and
-on-disk footprint. Paddle is started with ``FLAGS_use_mkldnn=0`` and
-``enable_mkldnn=False`` so the CPU oneDNN kernel is not used. Runtime memory
+on-disk footprint. The stock Paddle baseline is started with
+``FLAGS_use_mkldnn=0`` and ``enable_mkldnn=False`` so the CPU oneDNN kernel
+is not used. The electrical path does not use that kernel. Runtime memory
 is reported as null: Tesseract is a separate process, so one resident-set
 number would not cover all three engines.
 """
