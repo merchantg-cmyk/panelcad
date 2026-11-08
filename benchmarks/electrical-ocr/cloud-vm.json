@@ -1,0 +1,1092 @@
+{
+  "measured_at_utc": "2026-11-08T17:29:24Z",
+  "hostname": "cursor",
+  "machine_role": "other",
+  "counts_as_local_target": false,
+  "platform": "Linux-6.12.113+-x86_64-with-glibc2.39",
+  "python": "3.12.3",
+  "local_targets": {
+    "MichellesPC": "Shop PC. Leave null until this script is run there.",
+    "DESKTOP-3S1HOH0": "Home PC. Leave null until this script is run there."
+  },
+  "not_targets": [
+    "Drew-PC",
+    "Pixel 6 Pro"
+  ],
+  "local_results": {
+    "MichellesPC": null,
+    "DESKTOP-3S1HOH0": null
+  },
+  "samples": [
+    {
+      "name": "clean-k1",
+      "category": "clean",
+      "truths": [
+        "K1"
+      ],
+      "note": "DejaVu tag, in the prototype bank."
+    },
+    {
+      "name": "clean-cr12",
+      "category": "clean",
+      "truths": [
+        "CR12"
+      ],
+      "note": "Multi-letter IEC tag."
+    },
+    {
+      "name": "clean-tb1",
+      "category": "clean",
+      "truths": [
+        "TB1"
+      ],
+      "note": "Terminal strip tag."
+    },
+    {
+      "name": "clean-10m",
+      "category": "clean",
+      "truths": [
+        "10M"
+      ],
+      "note": "Number-first device tag."
+    },
+    {
+      "name": "wire-104",
+      "category": "wire",
+      "truths": [
+        "104"
+      ],
+      "note": "Wire number with no rule through it."
+    },
+    {
+      "name": "title-sheet",
+      "category": "title",
+      "truths": [
+        "SHEET",
+        "3",
+        "OF",
+        "7"
+      ],
+      "note": "Title-block line. Each word is a truth token."
+    },
+    {
+      "name": "struck-104",
+      "category": "struck",
+      "truths": [
+        "104"
+      ],
+      "note": "A horizontal rule crosses the digits."
+    },
+    {
+      "name": "blueprint-q1",
+      "category": "blueprint",
+      "truths": [
+        "Q1"
+      ],
+      "note": "Light glyphs on a blue sheet."
+    },
+    {
+      "name": "low-contrast-m1",
+      "category": "low-contrast",
+      "truths": [
+        "M1"
+      ],
+      "note": "Gray glyphs on a gray sheet."
+    },
+    {
+      "name": "small-fu1",
+      "category": "small",
+      "truths": [
+        "FU1"
+      ],
+      "note": "Cap height about 16 px."
+    },
+    {
+      "name": "rotated-w12",
+      "category": "rotated",
+      "truths": [
+        "W12"
+      ],
+      "note": "The crop is turned 90 degrees clockwise."
+    },
+    {
+      "name": "page-tags",
+      "category": "page",
+      "truths": [
+        "K1",
+        "M1",
+        "104",
+        "TB1"
+      ],
+      "note": "Tags beside symbol boxes, plus a wire number on a rule."
+    },
+    {
+      "name": "held-out-bitmap-k1",
+      "category": "held-out",
+      "truths": [
+        "K1"
+      ],
+      "note": "Pillow's built-in font, JPEG'd. That face is not in the prototype bank."
+    }
+  ],
+  "engines": {
+    "electrical": {
+      "name": "electrical",
+      "available": true,
+      "reason": "",
+      "sample_recall": 1.0,
+      "token_recall": 1.0,
+      "sample_hits": 13,
+      "sample_count": 13,
+      "token_hits": 19,
+      "token_count": 19,
+      "seconds": 0.1149,
+      "samples": [
+        {
+          "name": "clean-k1",
+          "category": "clean",
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "K1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0513,
+          "error": ""
+        },
+        {
+          "name": "clean-cr12",
+          "category": "clean",
+          "truths": [
+            "CR12"
+          ],
+          "emitted": [
+            "CR12",
+            "-",
+            "Q",
+            ".",
+            "-"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.004,
+          "error": ""
+        },
+        {
+          "name": "clean-tb1",
+          "category": "clean",
+          "truths": [
+            "TB1"
+          ],
+          "emitted": [
+            "TB1",
+            "-",
+            "."
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0036,
+          "error": ""
+        },
+        {
+          "name": "clean-10m",
+          "category": "clean",
+          "truths": [
+            "10M"
+          ],
+          "emitted": [
+            "10M",
+            "-",
+            "O"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0036,
+          "error": ""
+        },
+        {
+          "name": "wire-104",
+          "category": "wire",
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "104",
+            "-"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0039,
+          "error": ""
+        },
+        {
+          "name": "title-sheet",
+          "category": "title",
+          "truths": [
+            "SHEET",
+            "3",
+            "OF",
+            "7"
+          ],
+          "emitted": [
+            "SHEET",
+            "3",
+            "OF",
+            "7",
+            ".",
+            "M",
+            "."
+          ],
+          "token_hits": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "hit": true,
+          "seconds": 0.008,
+          "error": ""
+        },
+        {
+          "name": "struck-104",
+          "category": "struck",
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "104",
+            "C7",
+            "M4",
+            "."
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0041,
+          "error": ""
+        },
+        {
+          "name": "blueprint-q1",
+          "category": "blueprint",
+          "truths": [
+            "Q1"
+          ],
+          "emitted": [
+            "Q1",
+            "-"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0033,
+          "error": ""
+        },
+        {
+          "name": "low-contrast-m1",
+          "category": "low-contrast",
+          "truths": [
+            "M1"
+          ],
+          "emitted": [
+            "M1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0031,
+          "error": ""
+        },
+        {
+          "name": "small-fu1",
+          "category": "small",
+          "truths": [
+            "FU1"
+          ],
+          "emitted": [
+            "FU1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0031,
+          "error": ""
+        },
+        {
+          "name": "rotated-w12",
+          "category": "rotated",
+          "truths": [
+            "W12"
+          ],
+          "emitted": [
+            "-",
+            "W12",
+            "-"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0032,
+          "error": ""
+        },
+        {
+          "name": "page-tags",
+          "category": "page",
+          "truths": [
+            "K1",
+            "M1",
+            "104",
+            "TB1"
+          ],
+          "emitted": [
+            "104",
+            "K1",
+            "M1",
+            "TB1",
+            "-",
+            "-",
+            "."
+          ],
+          "token_hits": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0202,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-k1",
+          "category": "held-out",
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "K1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0033,
+          "error": ""
+        }
+      ]
+    },
+    "tesseract": {
+      "name": "tesseract",
+      "available": true,
+      "reason": "",
+      "sample_recall": 0.6154,
+      "token_recall": 0.7368,
+      "sample_hits": 8,
+      "sample_count": 13,
+      "token_hits": 14,
+      "token_count": 19,
+      "seconds": 0.8983,
+      "samples": [
+        {
+          "name": "clean-k1",
+          "category": "clean",
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "Kl"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0759,
+          "error": ""
+        },
+        {
+          "name": "clean-cr12",
+          "category": "clean",
+          "truths": [
+            "CR12"
+          ],
+          "emitted": [
+            "CR12"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0651,
+          "error": ""
+        },
+        {
+          "name": "clean-tb1",
+          "category": "clean",
+          "truths": [
+            "TB1"
+          ],
+          "emitted": [
+            "TB1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0747,
+          "error": ""
+        },
+        {
+          "name": "clean-10m",
+          "category": "clean",
+          "truths": [
+            "10M"
+          ],
+          "emitted": [
+            "10M"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0653,
+          "error": ""
+        },
+        {
+          "name": "wire-104",
+          "category": "wire",
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "104"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0669,
+          "error": ""
+        },
+        {
+          "name": "title-sheet",
+          "category": "title",
+          "truths": [
+            "SHEET",
+            "3",
+            "OF",
+            "7"
+          ],
+          "emitted": [
+            "SHEET",
+            "3",
+            "OF",
+            "7"
+          ],
+          "token_hits": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0803,
+          "error": ""
+        },
+        {
+          "name": "struck-104",
+          "category": "struck",
+          "truths": [
+            "104"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0643,
+          "error": ""
+        },
+        {
+          "name": "blueprint-q1",
+          "category": "blueprint",
+          "truths": [
+            "Q1"
+          ],
+          "emitted": [
+            "Ql"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0634,
+          "error": ""
+        },
+        {
+          "name": "low-contrast-m1",
+          "category": "low-contrast",
+          "truths": [
+            "M1"
+          ],
+          "emitted": [
+            "M1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0632,
+          "error": ""
+        },
+        {
+          "name": "small-fu1",
+          "category": "small",
+          "truths": [
+            "FU1"
+          ],
+          "emitted": [
+            "FUL"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0712,
+          "error": ""
+        },
+        {
+          "name": "rotated-w12",
+          "category": "rotated",
+          "truths": [
+            "W12"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0625,
+          "error": ""
+        },
+        {
+          "name": "page-tags",
+          "category": "page",
+          "truths": [
+            "K1",
+            "M1",
+            "104",
+            "TB1"
+          ],
+          "emitted": [
+            "104",
+            "K1",
+            "M1",
+            "TB1"
+          ],
+          "token_hits": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0799,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-k1",
+          "category": "held-out",
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "K1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0651,
+          "error": ""
+        }
+      ]
+    },
+    "tesseract_four_angles": {
+      "name": "tesseract_four_angles",
+      "available": true,
+      "reason": "",
+      "sample_recall": 0.6923,
+      "token_recall": 0.7895,
+      "sample_hits": 9,
+      "sample_count": 13,
+      "token_hits": 15,
+      "token_count": 19,
+      "seconds": 3.5249,
+      "samples": [
+        {
+          "name": "clean-k1",
+          "category": "clean",
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "Kl",
+            "DD"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.253,
+          "error": ""
+        },
+        {
+          "name": "clean-cr12",
+          "category": "clean",
+          "truths": [
+            "CR12"
+          ],
+          "emitted": [
+            "CR12",
+            "cTYO"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2518,
+          "error": ""
+        },
+        {
+          "name": "clean-tb1",
+          "category": "clean",
+          "truths": [
+            "TB1"
+          ],
+          "emitted": [
+            "TB1",
+            "Tal"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2552,
+          "error": ""
+        },
+        {
+          "name": "clean-10m",
+          "category": "clean",
+          "truths": [
+            "10M"
+          ],
+          "emitted": [
+            "10M",
+            "WOT"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2792,
+          "error": ""
+        },
+        {
+          "name": "wire-104",
+          "category": "wire",
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "104",
+            "voT"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.268,
+          "error": ""
+        },
+        {
+          "name": "title-sheet",
+          "category": "title",
+          "truths": [
+            "SHEET",
+            "3",
+            "OF",
+            "7"
+          ],
+          "emitted": [
+            "SHEET",
+            "3",
+            "OF",
+            "7",
+            "Z",
+            "AO",
+            "\u20ac",
+            "LAH4HS"
+          ],
+          "token_hits": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2686,
+          "error": ""
+        },
+        {
+          "name": "struck-104",
+          "category": "struck",
+          "truths": [
+            "104"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.2687,
+          "error": ""
+        },
+        {
+          "name": "blueprint-q1",
+          "category": "blueprint",
+          "truths": [
+            "Q1"
+          ],
+          "emitted": [
+            "Ql",
+            "TO"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.2776,
+          "error": ""
+        },
+        {
+          "name": "low-contrast-m1",
+          "category": "low-contrast",
+          "truths": [
+            "M1"
+          ],
+          "emitted": [
+            "M1",
+            "IW"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2594,
+          "error": ""
+        },
+        {
+          "name": "small-fu1",
+          "category": "small",
+          "truths": [
+            "FU1"
+          ],
+          "emitted": [
+            "FUL",
+            "tnd"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.2663,
+          "error": ""
+        },
+        {
+          "name": "rotated-w12",
+          "category": "rotated",
+          "truths": [
+            "W12"
+          ],
+          "emitted": [
+            "W12",
+            "CIM"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2604,
+          "error": ""
+        },
+        {
+          "name": "page-tags",
+          "category": "page",
+          "truths": [
+            "K1",
+            "M1",
+            "104",
+            "TB1"
+          ],
+          "emitted": [
+            "104",
+            "K1",
+            "M1",
+            "TB1",
+            "Tal",
+            "TW",
+            "DD",
+            "vot"
+          ],
+          "token_hits": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "hit": true,
+          "seconds": 0.3375,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-k1",
+          "category": "held-out",
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "K1",
+            "Ly"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2788,
+          "error": ""
+        }
+      ]
+    },
+    "paddle": {
+      "name": "paddle",
+      "available": false,
+      "reason": "NotImplementedError: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at /paddle/paddle/fluid/framework/new_executor/instruction/onednn/onednn_instruction.cc:116)\n",
+      "sample_recall": null,
+      "token_recall": null,
+      "seconds": 5.9318,
+      "samples": [
+        {
+          "name": "clean-k1",
+          "category": "clean",
+          "truths": [
+            "K1"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.5442,
+          "error": "NotImplementedError: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at /paddle/paddle/fluid/framework/new_executor/instruction/onednn/onednn_instruction.cc:116)\n"
+        },
+        {
+          "name": "clean-cr12",
+          "category": "clean",
+          "truths": [
+            "CR12"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.4696,
+          "error": "NotImplementedError: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at /paddle/paddle/fluid/framework/new_executor/instruction/onednn/onednn_instruction.cc:116)\n"
+        },
+        {
+          "name": "clean-tb1",
+          "category": "clean",
+          "truths": [
+            "TB1"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.4623,
+          "error": "NotImplementedError: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at /paddle/paddle/fluid/framework/new_executor/instruction/onednn/onednn_instruction.cc:116)\n"
+        },
+        {
+          "name": "clean-10m",
+          "category": "clean",
+          "truths": [
+            "10M"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.4598,
+          "error": "NotImplementedError: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at /paddle/paddle/fluid/framework/new_executor/instruction/onednn/onednn_instruction.cc:116)\n"
+        },
+        {
+          "name": "wire-104",
+          "category": "wire",
+          "truths": [
+            "104"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.4441,
+          "error": "NotImplementedError: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at /paddle/paddle/fluid/framework/new_executor/instruction/onednn/onednn_instruction.cc:116)\n"
+        },
+        {
+          "name": "title-sheet",
+          "category": "title",
+          "truths": [
+            "SHEET",
+            "3",
+            "OF",
+            "7"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "hit": false,
+          "seconds": 0.3995,
+          "error": "NotImplementedError: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at /paddle/paddle/fluid/framework/new_executor/instruction/onednn/onednn_instruction.cc:116)\n"
+        },
+        {
+          "name": "struck-104",
+          "category": "struck",
+          "truths": [
+            "104"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.4565,
+          "error": "NotImplementedError: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at /paddle/paddle/fluid/framework/new_executor/instruction/onednn/onednn_instruction.cc:116)\n"
+        },
+        {
+          "name": "blueprint-q1",
+          "category": "blueprint",
+          "truths": [
+            "Q1"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.4484,
+          "error": "NotImplementedError: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at /paddle/paddle/fluid/framework/new_executor/instruction/onednn/onednn_instruction.cc:116)\n"
+        },
+        {
+          "name": "low-contrast-m1",
+          "category": "low-contrast",
+          "truths": [
+            "M1"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.4503,
+          "error": "NotImplementedError: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at /paddle/paddle/fluid/framework/new_executor/instruction/onednn/onednn_instruction.cc:116)\n"
+        },
+        {
+          "name": "small-fu1",
+          "category": "small",
+          "truths": [
+            "FU1"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.4509,
+          "error": "NotImplementedError: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at /paddle/paddle/fluid/framework/new_executor/instruction/onednn/onednn_instruction.cc:116)\n"
+        },
+        {
+          "name": "rotated-w12",
+          "category": "rotated",
+          "truths": [
+            "W12"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.4583,
+          "error": "NotImplementedError: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at /paddle/paddle/fluid/framework/new_executor/instruction/onednn/onednn_instruction.cc:116)\n"
+        },
+        {
+          "name": "page-tags",
+          "category": "page",
+          "truths": [
+            "K1",
+            "M1",
+            "104",
+            "TB1"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "hit": false,
+          "seconds": 0.4417,
+          "error": "NotImplementedError: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at /paddle/paddle/fluid/framework/new_executor/instruction/onednn/onednn_instruction.cc:116)\n"
+        },
+        {
+          "name": "held-out-bitmap-k1",
+          "category": "held-out",
+          "truths": [
+            "K1"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.4455,
+          "error": "NotImplementedError: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at /paddle/paddle/fluid/framework/new_executor/instruction/onednn/onednn_instruction.cc:116)\n"
+        }
+      ]
+    }
+  },
+  "how_to_read": "sample_recall is the fraction of samples whose every truth token was emitted. token_recall is the fraction of truth tokens emitted. A machine_role of other is not a MichellesPC or DESKTOP-3S1HOH0 result."
+}

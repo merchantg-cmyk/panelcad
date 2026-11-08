@@ -1847,21 +1847,26 @@ def _accepted_ocr(image: np.ndarray) -> str:
     A zero confidence score is not agreement. Words that are not tags stay unknown.
     """
 
-    try:
-        from panelcad.importer.raster import configure_tesseract
-        import pytesseract
-    except ImportError:
-        return ""
-    if not configure_tesseract():
-        return ""
+    from panelcad.ocr.dispatch import image_to_data, image_to_string, tesseract_required
+
+    output_type = None
+    if tesseract_required():
+        try:
+            from panelcad.importer.raster import configure_tesseract
+            import pytesseract
+        except ImportError:
+            return ""
+        if not configure_tesseract():
+            return ""
+        output_type = pytesseract.Output.DICT
     config = "--psm {psm} -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-"
 
     def once(psm: int) -> tuple[str, float]:
         try:
-            heard = pytesseract.image_to_string(image, config=config.format(psm=psm))
-            data = pytesseract.image_to_data(
+            heard = image_to_string(image, config=config.format(psm=psm))
+            data = image_to_data(
                 image,
-                output_type=pytesseract.Output.DICT,
+                output_type=output_type,
                 config=config.format(psm=psm),
             )
         except Exception:  # noqa: BLE001
