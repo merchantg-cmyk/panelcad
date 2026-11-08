@@ -230,4 +230,10 @@ def test_local_target_gate() -> None:
     assert counts_as_local_target("Drew-PC") is False
     assert counts_as_local_target("Pixel 6 Pro") is False
     samples = electrical_samples()
-    assert {sample.name for sample in samples} >= {"clean-k1", "rotated-w12", "held-out-bitmap-k1", "page-tags"}
+    by_name = {sample.name: sample for sample in samples}
+    assert by_name["clean-k1"].in_bank is True
+    assert by_name["held-out-bitmap-k1"].in_bank is False
+    assert by_name["held-out-stick-k1"].in_bank is False
+    assert by_name["held-out-stick-page"].in_bank is False
+    held = [sample for sample in samples if not sample.in_bank]
+    assert {sample.category for sample in held} >= {"small", "rotated", "low-contrast", "struck", "blueprint", "page"}

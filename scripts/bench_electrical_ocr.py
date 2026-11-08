@@ -53,6 +53,12 @@ A CPU wheel sometimes needs the Paddle index instead of PyPI::
 
     %USERPROFILE%\\panelcad-test\\venv\\Scripts\\python.exe -m pip install paddlepaddle -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
     %USERPROFILE%\\panelcad-test\\venv\\Scripts\\python.exe -m pip install paddleocr
+
+The same command prints speed, held-out accuracy, same-font accuracy, and
+on-disk footprint. Paddle is started with ``FLAGS_use_mkldnn=0`` and
+``enable_mkldnn=False`` so the CPU oneDNN kernel is not used. Runtime memory
+is reported as null: Tesseract is a separate process, so one resident-set
+number would not cover all three engines.
 """
 
 from __future__ import annotations

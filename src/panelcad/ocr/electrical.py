@@ -548,9 +548,30 @@ def _classify(feature: np.ndarray) -> tuple[str, float]:
     sample = sample - float(sample.mean())
     norm = float(np.linalg.norm(sample)) + 1e-6
     sims = centered @ sample / (norms * norm)
-    best = int(np.argmax(sims))
-    score = float(sims[best])
-    return labels[best], max(0.0, min(1.0, score))
+    best_for: dict[str, float] = {}
+    for index, score in enumerate(sims.tolist()):
+        label = labels[index]
+        if label not in best_for or score > best_for[label]:
+            best_for[label] = score
+    ordered = sorted(best_for.items(), key=lambda item: item[1], reverse=True)
+    label, score = ordered[0]
+    second, second_score = ordered[1] if len(ordered) > 1 else ("", score)
+    label = _prefer_electrical_pair(label, second, score - second_score)
+    return label, max(0.0, min(1.0, score))
+
+
+def _prefer_electrical_pair(label: str, second: str, margin: float) -> str:
+    """A near tie between two lookalikes keeps the one shop text actually uses.
+
+    The prototypes still decide. This only fires when the runner-up is close,
+    and it does not add the held-out alphabet to the bank.
+    """
+
+    if margin < 0.10 and {label, second} == {"1", "I"}:
+        return "1"
+    if margin < 0.12 and label == "O" and second == "Q":
+        return "Q"
+    return label
 
 
 def _bank() -> _Bank:
