@@ -361,14 +361,19 @@ def _text_orientation(image: Image.Image) -> tuple[Image.Image, int] | None:
 
 
 def _text_scores(image: Image.Image) -> list[float]:
-    try:
-        import pytesseract
+    from panelcad.ocr.dispatch import active_backend
 
-        from panelcad.importer.raster import configure_tesseract
+    electrical = active_backend() == "electrical"
+    pytesseract = None
+    if not electrical:
+        try:
+            import pytesseract
 
-        configure_tesseract()
-    except ImportError:
-        return []
+            from panelcad.importer.raster import configure_tesseract
+
+            configure_tesseract()
+        except ImportError:
+            return []
     scores: list[float] = []
     current = image
     for quarter in range(4):
@@ -411,7 +416,12 @@ def _text_score(image: Image.Image, pytesseract: object) -> float:
             Image.Resampling.LANCZOS,
         )
     try:
-        data = pytesseract.image_to_data(probe, output_type=pytesseract.Output.DICT, config="--psm 11")
+        from panelcad.ocr.dispatch import active_backend, image_to_data
+
+        if active_backend() == "electrical" or pytesseract is None:
+            data = image_to_data(probe, config="--psm 11")
+        else:
+            data = pytesseract.image_to_data(probe, output_type=pytesseract.Output.DICT, config="--psm 11")
     except Exception:  # noqa: BLE001 — missing binary falls back to template probe
         from .preprocess import fallback_probe_text_score
 

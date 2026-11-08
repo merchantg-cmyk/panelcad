@@ -264,20 +264,21 @@ def _crop(gray: np.ndarray, block: dict[str, Any], y0_frac: float, y1_frac: floa
 def _ocr(image: np.ndarray, *, digits: bool = False) -> str:
     if image.size == 0:
         return ""
-    try:
-        import pytesseract
+    from panelcad.ocr.dispatch import image_to_string, tesseract_required
 
-        from panelcad.importer.raster import configure_tesseract
-    except Exception:
-        return ""
-    if not configure_tesseract():
-        return ""
+    if tesseract_required():
+        try:
+            from panelcad.importer.raster import configure_tesseract
+        except Exception:
+            return ""
+        if not configure_tesseract():
+            return ""
     up = cv2.resize(image, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
     up = cv2.copyMakeBorder(up, 16, 16, 16, 16, cv2.BORDER_CONSTANT, value=255)
     whitelist = "0123456789" if digits else "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
     try:
         return str(
-            pytesseract.image_to_string(
+            image_to_string(
                 up,
                 config=f"--psm 7 -c tessedit_char_whitelist={whitelist}",
             )

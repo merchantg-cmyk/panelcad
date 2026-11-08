@@ -26,6 +26,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+# On-device print OCR. Pulls PaddleOCR's pipeline and ONNX Runtime, not the
+# PaddlePaddle wheel. The PP-OCR weights download into the local cache on
+# first use. Stock `paddlepaddle` is only needed for the benchmark baseline.
+electrical = ["paddleocr>=3.7,<3.8", "onnxruntime>=1.17"]
 
 [project.scripts]
 panelcad = "panelcad.launch:main"

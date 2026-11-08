@@ -1,0 +1,3185 @@
+{
+  "measured_at_utc": "2026-11-08T18:55:02Z",
+  "hostname": "cursor",
+  "machine_role": "other",
+  "counts_as_local_target": false,
+  "platform": "Linux-6.12.113+-x86_64-with-glibc2.39",
+  "python": "3.12.3",
+  "local_targets": {
+    "MichellesPC": "Shop PC. Leave null until this script is run there.",
+    "DESKTOP-3S1HOH0": "Home PC. Leave null until this script is run there."
+  },
+  "not_targets": [
+    "Drew-PC",
+    "Pixel 6 Pro"
+  ],
+  "local_results": {
+    "MichellesPC": null,
+    "DESKTOP-3S1HOH0": null
+  },
+  "samples": [
+    {
+      "name": "clean-k1",
+      "category": "clean",
+      "truths": [
+        "K1"
+      ],
+      "note": "DejaVu tag, in the prototype bank.",
+      "in_bank": true
+    },
+    {
+      "name": "clean-cr12",
+      "category": "clean",
+      "truths": [
+        "CR12"
+      ],
+      "note": "Multi-letter IEC tag.",
+      "in_bank": true
+    },
+    {
+      "name": "clean-tb1",
+      "category": "clean",
+      "truths": [
+        "TB1"
+      ],
+      "note": "Terminal strip tag.",
+      "in_bank": true
+    },
+    {
+      "name": "clean-10m",
+      "category": "clean",
+      "truths": [
+        "10M"
+      ],
+      "note": "Number-first device tag.",
+      "in_bank": true
+    },
+    {
+      "name": "wire-104",
+      "category": "wire",
+      "truths": [
+        "104"
+      ],
+      "note": "Wire number with no rule through it.",
+      "in_bank": true
+    },
+    {
+      "name": "title-sheet",
+      "category": "title",
+      "truths": [
+        "SHEET",
+        "3",
+        "OF",
+        "7"
+      ],
+      "note": "Title-block line. Each word is a truth token.",
+      "in_bank": true
+    },
+    {
+      "name": "struck-104",
+      "category": "struck",
+      "truths": [
+        "104"
+      ],
+      "note": "A horizontal rule crosses the digits.",
+      "in_bank": true
+    },
+    {
+      "name": "blueprint-q1",
+      "category": "blueprint",
+      "truths": [
+        "Q1"
+      ],
+      "note": "Light glyphs on a blue sheet.",
+      "in_bank": true
+    },
+    {
+      "name": "low-contrast-m1",
+      "category": "low-contrast",
+      "truths": [
+        "M1"
+      ],
+      "note": "Gray glyphs on a gray sheet.",
+      "in_bank": true
+    },
+    {
+      "name": "small-fu1",
+      "category": "small",
+      "truths": [
+        "FU1"
+      ],
+      "note": "Cap height about 16 px.",
+      "in_bank": true
+    },
+    {
+      "name": "rotated-w12",
+      "category": "rotated",
+      "truths": [
+        "W12"
+      ],
+      "note": "The crop is turned 90 degrees clockwise.",
+      "in_bank": true
+    },
+    {
+      "name": "page-tags",
+      "category": "page",
+      "truths": [
+        "K1",
+        "M1",
+        "104",
+        "TB1"
+      ],
+      "note": "Tags beside symbol boxes, plus a wire number on a rule.",
+      "in_bank": true
+    },
+    {
+      "name": "held-out-bitmap-k1",
+      "category": "held-out",
+      "truths": [
+        "K1"
+      ],
+      "note": "Pillow built-in font, JPEG. Not in the bank.",
+      "in_bank": false
+    },
+    {
+      "name": "held-out-bitmap-small-fu1",
+      "category": "small",
+      "truths": [
+        "FU1"
+      ],
+      "note": "Pillow built-in font, small.",
+      "in_bank": false
+    },
+    {
+      "name": "held-out-bitmap-blueprint-q1",
+      "category": "blueprint",
+      "truths": [
+        "Q1"
+      ],
+      "note": "Pillow built-in font on a blue sheet.",
+      "in_bank": false
+    },
+    {
+      "name": "held-out-bitmap-low-m1",
+      "category": "low-contrast",
+      "truths": [
+        "M1"
+      ],
+      "note": "Pillow built-in font, gray on gray.",
+      "in_bank": false
+    },
+    {
+      "name": "held-out-bitmap-struck-104",
+      "category": "struck",
+      "truths": [
+        "104"
+      ],
+      "note": "Pillow built-in font with a rule through the digits.",
+      "in_bank": false
+    },
+    {
+      "name": "held-out-bitmap-rotated-w12",
+      "category": "rotated",
+      "truths": [
+        "W12"
+      ],
+      "note": "Pillow built-in font, turned 90 degrees clockwise.",
+      "in_bank": false
+    },
+    {
+      "name": "held-out-stick-k1",
+      "category": "held-out",
+      "truths": [
+        "K1"
+      ],
+      "note": "Stick alphabet. Not a bank font.",
+      "in_bank": false
+    },
+    {
+      "name": "held-out-stick-cr12",
+      "category": "held-out",
+      "truths": [
+        "CR12"
+      ],
+      "note": "Stick alphabet, multi-letter tag.",
+      "in_bank": false
+    },
+    {
+      "name": "held-out-stick-tb1",
+      "category": "held-out",
+      "truths": [
+        "TB1"
+      ],
+      "note": "Stick alphabet, terminal tag.",
+      "in_bank": false
+    },
+    {
+      "name": "held-out-stick-10m",
+      "category": "held-out",
+      "truths": [
+        "10M"
+      ],
+      "note": "Stick alphabet, number-first tag.",
+      "in_bank": false
+    },
+    {
+      "name": "held-out-stick-104",
+      "category": "wire",
+      "truths": [
+        "104"
+      ],
+      "note": "Stick alphabet, wire number.",
+      "in_bank": false
+    },
+    {
+      "name": "held-out-stick-title",
+      "category": "title",
+      "truths": [
+        "SHEET",
+        "3",
+        "OF",
+        "7"
+      ],
+      "note": "Stick alphabet title line.",
+      "in_bank": false
+    },
+    {
+      "name": "held-out-stick-struck-104",
+      "category": "struck",
+      "truths": [
+        "104"
+      ],
+      "note": "Stick digits with a rule through them.",
+      "in_bank": false
+    },
+    {
+      "name": "held-out-stick-blueprint-q1",
+      "category": "blueprint",
+      "truths": [
+        "Q1"
+      ],
+      "note": "Stick tag on a blue sheet.",
+      "in_bank": false
+    },
+    {
+      "name": "held-out-stick-low-m1",
+      "category": "low-contrast",
+      "truths": [
+        "M1"
+      ],
+      "note": "Stick tag, gray on gray.",
+      "in_bank": false
+    },
+    {
+      "name": "held-out-stick-small-fu1",
+      "category": "small",
+      "truths": [
+        "FU1"
+      ],
+      "note": "Stick tag at about half the usual size.",
+      "in_bank": false
+    },
+    {
+      "name": "held-out-stick-rotated-w12",
+      "category": "rotated",
+      "truths": [
+        "W12"
+      ],
+      "note": "Stick tag turned 90 degrees clockwise.",
+      "in_bank": false
+    },
+    {
+      "name": "held-out-stick-page",
+      "category": "page",
+      "truths": [
+        "K1",
+        "M1",
+        "104",
+        "TB1"
+      ],
+      "note": "Stick tags beside symbol boxes, one wire number crossed by a rule.",
+      "in_bank": false
+    }
+  ],
+  "size": {
+    "electrical": {
+      "footprint_bytes": 141463232,
+      "package_bytes": 251394,
+      "runtime_bytes": 90074299,
+      "model_bytes": 51137539,
+      "paths": [
+        "/agent/repos/panelcad/src/panelcad/ocr",
+        "/tmp/panelcad-venv/lib/python3.12/site-packages/paddleocr",
+        "/tmp/panelcad-venv/lib/python3.12/site-packages/paddlex",
+        "/tmp/panelcad-venv/lib/python3.12/site-packages/onnxruntime",
+        "/tmp/panelcad-venv/lib/python3.12/site-packages/pyclipper",
+        "/tmp/panelcad-venv/lib/python3.12/site-packages/shapely",
+        "/home/ubuntu/.paddlex/official_models/PP-OCRv5_mobile_det_onnx",
+        "/home/ubuntu/.paddlex/official_models/en_PP-OCRv5_mobile_rec_onnx",
+        "/home/ubuntu/.paddlex/official_models/PP-OCRv6_small_det_onnx",
+        "/home/ubuntu/.paddlex/official_models/PP-OCRv6_small_rec_onnx",
+        "/home/ubuntu/.paddlex/official_models/PP-LCNet_x1_0_textline_ori_onnx"
+      ],
+      "packages": [
+        {
+          "name": "paddleocr",
+          "bytes": 980713,
+          "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/paddleocr"
+        },
+        {
+          "name": "paddlex",
+          "bytes": 13659173,
+          "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/paddlex"
+        },
+        {
+          "name": "onnxruntime",
+          "bytes": 68657812,
+          "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/onnxruntime"
+        },
+        {
+          "name": "pyclipper",
+          "bytes": 3549362,
+          "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/pyclipper"
+        },
+        {
+          "name": "shapely",
+          "bytes": 3227239,
+          "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/shapely"
+        }
+      ],
+      "models": [
+        {
+          "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv5_mobile_det_onnx",
+          "bytes": 4832018
+        },
+        {
+          "path": "/home/ubuntu/.paddlex/official_models/en_PP-OCRv5_mobile_rec_onnx",
+          "bytes": 7855184
+        },
+        {
+          "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv6_small_det_onnx",
+          "bytes": 10129753
+        },
+        {
+          "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv6_small_rec_onnx",
+          "bytes": 21537526
+        },
+        {
+          "path": "/home/ubuntu/.paddlex/official_models/PP-LCNet_x1_0_textline_ori_onnx",
+          "bytes": 6783058
+        }
+      ],
+      "note": "panelcad.ocr sources, plus paddleocr, paddlex, onnxruntime, pyclipper, and shapely, plus the ONNX exports of PP-OCRv5 mobile (English), PP-OCRv6 small, and the text-line orientation model. PaddlePaddle is not loaded and is not counted. OpenCV, Pillow, and numpy are already part of PanelCAD and are not added."
+    },
+    "tesseract": {
+      "footprint_bytes": 20594221,
+      "binary_bytes": 39320,
+      "tessdata_bytes": 14679861,
+      "library_bytes": 5875040,
+      "install_directory_bytes": null,
+      "paths": [
+        "/usr/bin/tesseract",
+        "/usr/share/tesseract-ocr/5/tessdata",
+        "/lib/x86_64-linux-gnu/libtesseract.so.5",
+        "/lib/x86_64-linux-gnu/liblept.so.5"
+      ],
+      "note": "Binary, tessdata directory, and shared libraries named by ldd. System directories are not included."
+    },
+    "paddle": {
+      "footprint_bytes": 940539572,
+      "package_bytes": 755390632,
+      "model_bytes": 185148940,
+      "packages": [
+        {
+          "name": "paddle",
+          "bytes": 740750746,
+          "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/paddle"
+        },
+        {
+          "name": "paddleocr",
+          "bytes": 980713,
+          "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/paddleocr"
+        },
+        {
+          "name": "paddlex",
+          "bytes": 13659173,
+          "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/paddlex"
+        }
+      ],
+      "models": [
+        {
+          "name": "PP-OCRv6_medium_det",
+          "bytes": 62299794,
+          "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv6_medium_det"
+        },
+        {
+          "name": "PP-OCRv6_medium_rec",
+          "bytes": 76863994,
+          "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv6_medium_rec"
+        },
+        {
+          "name": "PP-LCNet_x1_0_doc_ori",
+          "bytes": 6872016,
+          "path": "/home/ubuntu/.paddlex/official_models/PP-LCNet_x1_0_doc_ori"
+        },
+        {
+          "name": "PP-LCNet_x1_0_textline_ori",
+          "bytes": 6858324,
+          "path": "/home/ubuntu/.paddlex/official_models/PP-LCNet_x1_0_textline_ori"
+        },
+        {
+          "name": "UVDoc",
+          "bytes": 32254812,
+          "path": "/home/ubuntu/.paddlex/official_models/UVDoc"
+        }
+      ],
+      "model_path": "/home/ubuntu/.paddlex/official_models",
+      "note": "paddle, paddleocr, and paddlex package directories plus the five model directories the stock English pipeline downloads (PP-OCRv6 medium det and rec, document orientation, text-line orientation, and UVDoc). ONNX exports used only by the electrical reader are not included. Shared libraries such as numpy are not included."
+    }
+  },
+  "engines": {
+    "electrical": {
+      "name": "electrical",
+      "available": true,
+      "reason": "",
+      "sample_recall": 0.7333,
+      "token_recall": 0.7619,
+      "held_out_sample_recall": 0.5556,
+      "held_out_token_recall": 0.5833,
+      "held_out_seconds": 0.0859,
+      "in_bank_sample_recall": 1.0,
+      "in_bank_token_recall": 1.0,
+      "in_bank_seconds": 0.1193,
+      "sample_hits": 22,
+      "sample_count": 30,
+      "token_hits": 32,
+      "token_count": 42,
+      "seconds": 0.2061,
+      "samples": [
+        {
+          "name": "clean-k1",
+          "category": "clean",
+          "in_bank": true,
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "K1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0501,
+          "error": ""
+        },
+        {
+          "name": "clean-cr12",
+          "category": "clean",
+          "in_bank": true,
+          "truths": [
+            "CR12"
+          ],
+          "emitted": [
+            "CR12",
+            "-",
+            "Q",
+            ".",
+            "-"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0047,
+          "error": ""
+        },
+        {
+          "name": "clean-tb1",
+          "category": "clean",
+          "in_bank": true,
+          "truths": [
+            "TB1"
+          ],
+          "emitted": [
+            "TB1",
+            "-",
+            "."
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0041,
+          "error": ""
+        },
+        {
+          "name": "clean-10m",
+          "category": "clean",
+          "in_bank": true,
+          "truths": [
+            "10M"
+          ],
+          "emitted": [
+            "10M",
+            "-",
+            "O"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0044,
+          "error": ""
+        },
+        {
+          "name": "wire-104",
+          "category": "wire",
+          "in_bank": true,
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "104",
+            "-"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0042,
+          "error": ""
+        },
+        {
+          "name": "title-sheet",
+          "category": "title",
+          "in_bank": true,
+          "truths": [
+            "SHEET",
+            "3",
+            "OF",
+            "7"
+          ],
+          "emitted": [
+            "SHEET",
+            "3",
+            "OF",
+            "7",
+            ".",
+            "M",
+            "."
+          ],
+          "token_hits": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0094,
+          "error": ""
+        },
+        {
+          "name": "struck-104",
+          "category": "struck",
+          "in_bank": true,
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "104",
+            "C7",
+            "M4",
+            "."
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.005,
+          "error": ""
+        },
+        {
+          "name": "blueprint-q1",
+          "category": "blueprint",
+          "in_bank": true,
+          "truths": [
+            "Q1"
+          ],
+          "emitted": [
+            "Q1",
+            "-"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0037,
+          "error": ""
+        },
+        {
+          "name": "low-contrast-m1",
+          "category": "low-contrast",
+          "in_bank": true,
+          "truths": [
+            "M1"
+          ],
+          "emitted": [
+            "M1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0035,
+          "error": ""
+        },
+        {
+          "name": "small-fu1",
+          "category": "small",
+          "in_bank": true,
+          "truths": [
+            "FU1"
+          ],
+          "emitted": [
+            "FU1",
+            "-",
+            "."
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0043,
+          "error": ""
+        },
+        {
+          "name": "rotated-w12",
+          "category": "rotated",
+          "in_bank": true,
+          "truths": [
+            "W12"
+          ],
+          "emitted": [
+            "-",
+            "W12",
+            "-"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0036,
+          "error": ""
+        },
+        {
+          "name": "page-tags",
+          "category": "page",
+          "in_bank": true,
+          "truths": [
+            "K1",
+            "M1",
+            "104",
+            "TB1"
+          ],
+          "emitted": [
+            "104",
+            "K1",
+            "M1",
+            "TB1",
+            "-",
+            "-",
+            "."
+          ],
+          "token_hits": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0223,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-k1",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "K1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0039,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-small-fu1",
+          "category": "small",
+          "in_bank": false,
+          "truths": [
+            "FU1"
+          ],
+          "emitted": [
+            "FU1",
+            "-"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0037,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-blueprint-q1",
+          "category": "blueprint",
+          "in_bank": false,
+          "truths": [
+            "Q1"
+          ],
+          "emitted": [
+            "Q1",
+            "-"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0035,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-low-m1",
+          "category": "low-contrast",
+          "in_bank": false,
+          "truths": [
+            "M1"
+          ],
+          "emitted": [
+            "M1",
+            "-"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0037,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-struck-104",
+          "category": "struck",
+          "in_bank": false,
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "104",
+            ".-"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0045,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-rotated-w12",
+          "category": "rotated",
+          "in_bank": false,
+          "truths": [
+            "W12"
+          ],
+          "emitted": [
+            "W12",
+            "-",
+            "M"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0043,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-k1",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "K1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0024,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-cr12",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "CR12"
+          ],
+          "emitted": [
+            "EF1E",
+            "-"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0035,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-tb1",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "TB1"
+          ],
+          "emitted": [
+            "TB1",
+            "-",
+            "."
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0033,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-10m",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "10M"
+          ],
+          "emitted": [
+            "1EM",
+            "-"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0029,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-104",
+          "category": "wire",
+          "in_bank": false,
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "1EH",
+            "-"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0029,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-title",
+          "category": "title",
+          "in_bank": false,
+          "truths": [
+            "SHEET",
+            "3",
+            "OF",
+            "7"
+          ],
+          "emitted": [
+            "EHEET",
+            "EF",
+            "7",
+            "E",
+            "-"
+          ],
+          "token_hits": [
+            false,
+            false,
+            false,
+            true
+          ],
+          "hit": false,
+          "seconds": 0.0073,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-struck-104",
+          "category": "struck",
+          "in_bank": false,
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "101",
+            "--",
+            "-",
+            "-",
+            "-"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0041,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-blueprint-q1",
+          "category": "blueprint",
+          "in_bank": false,
+          "truths": [
+            "Q1"
+          ],
+          "emitted": [
+            "F1",
+            "-"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0027,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-low-m1",
+          "category": "low-contrast",
+          "in_bank": false,
+          "truths": [
+            "M1"
+          ],
+          "emitted": [
+            "M1",
+            "-"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0024,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-small-fu1",
+          "category": "small",
+          "in_bank": false,
+          "truths": [
+            "FU1"
+          ],
+          "emitted": [
+            "FU1",
+            "-",
+            "O",
+            "."
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0028,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-rotated-w12",
+          "category": "rotated",
+          "in_bank": false,
+          "truths": [
+            "W12"
+          ],
+          "emitted": [
+            "-",
+            "W1E"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0029,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-page",
+          "category": "page",
+          "in_bank": false,
+          "truths": [
+            "K1",
+            "M1",
+            "104",
+            "TB1"
+          ],
+          "emitted": [
+            "TB1",
+            "K1",
+            "M1",
+            "-",
+            "-",
+            "-",
+            "."
+          ],
+          "token_hits": [
+            true,
+            true,
+            false,
+            true
+          ],
+          "hit": false,
+          "seconds": 0.0251,
+          "error": ""
+        }
+      ],
+      "runtime_memory": {
+        "added_rss_bytes": null,
+        "peak_rss_bytes": null,
+        "baseline_rss_bytes": null,
+        "note": "Not measured. Tesseract runs as its own process, while the electrical engine and Paddle run inside Python. A resident-set reading would not cover all three the same way."
+      },
+      "size": {
+        "footprint_bytes": 141463232,
+        "package_bytes": 251394,
+        "runtime_bytes": 90074299,
+        "model_bytes": 51137539,
+        "paths": [
+          "/agent/repos/panelcad/src/panelcad/ocr",
+          "/tmp/panelcad-venv/lib/python3.12/site-packages/paddleocr",
+          "/tmp/panelcad-venv/lib/python3.12/site-packages/paddlex",
+          "/tmp/panelcad-venv/lib/python3.12/site-packages/onnxruntime",
+          "/tmp/panelcad-venv/lib/python3.12/site-packages/pyclipper",
+          "/tmp/panelcad-venv/lib/python3.12/site-packages/shapely",
+          "/home/ubuntu/.paddlex/official_models/PP-OCRv5_mobile_det_onnx",
+          "/home/ubuntu/.paddlex/official_models/en_PP-OCRv5_mobile_rec_onnx",
+          "/home/ubuntu/.paddlex/official_models/PP-OCRv6_small_det_onnx",
+          "/home/ubuntu/.paddlex/official_models/PP-OCRv6_small_rec_onnx",
+          "/home/ubuntu/.paddlex/official_models/PP-LCNet_x1_0_textline_ori_onnx"
+        ],
+        "packages": [
+          {
+            "name": "paddleocr",
+            "bytes": 980713,
+            "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/paddleocr"
+          },
+          {
+            "name": "paddlex",
+            "bytes": 13659173,
+            "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/paddlex"
+          },
+          {
+            "name": "onnxruntime",
+            "bytes": 68657812,
+            "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/onnxruntime"
+          },
+          {
+            "name": "pyclipper",
+            "bytes": 3549362,
+            "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/pyclipper"
+          },
+          {
+            "name": "shapely",
+            "bytes": 3227239,
+            "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/shapely"
+          }
+        ],
+        "models": [
+          {
+            "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv5_mobile_det_onnx",
+            "bytes": 4832018
+          },
+          {
+            "path": "/home/ubuntu/.paddlex/official_models/en_PP-OCRv5_mobile_rec_onnx",
+            "bytes": 7855184
+          },
+          {
+            "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv6_small_det_onnx",
+            "bytes": 10129753
+          },
+          {
+            "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv6_small_rec_onnx",
+            "bytes": 21537526
+          },
+          {
+            "path": "/home/ubuntu/.paddlex/official_models/PP-LCNet_x1_0_textline_ori_onnx",
+            "bytes": 6783058
+          }
+        ],
+        "note": "panelcad.ocr sources, plus paddleocr, paddlex, onnxruntime, pyclipper, and shapely, plus the ONNX exports of PP-OCRv5 mobile (English), PP-OCRv6 small, and the text-line orientation model. PaddlePaddle is not loaded and is not counted. OpenCV, Pillow, and numpy are already part of PanelCAD and are not added."
+      }
+    },
+    "tesseract": {
+      "name": "tesseract",
+      "available": true,
+      "reason": "",
+      "sample_recall": 0.5333,
+      "token_recall": 0.6429,
+      "held_out_sample_recall": 0.5,
+      "held_out_token_recall": 0.5833,
+      "held_out_seconds": 1.1922,
+      "in_bank_sample_recall": 0.5833,
+      "in_bank_token_recall": 0.7222,
+      "in_bank_seconds": 0.8349,
+      "sample_hits": 16,
+      "sample_count": 30,
+      "token_hits": 27,
+      "token_count": 42,
+      "seconds": 2.0279,
+      "samples": [
+        {
+          "name": "clean-k1",
+          "category": "clean",
+          "in_bank": true,
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "Kl"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0795,
+          "error": ""
+        },
+        {
+          "name": "clean-cr12",
+          "category": "clean",
+          "in_bank": true,
+          "truths": [
+            "CR12"
+          ],
+          "emitted": [
+            "CR12"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0703,
+          "error": ""
+        },
+        {
+          "name": "clean-tb1",
+          "category": "clean",
+          "in_bank": true,
+          "truths": [
+            "TB1"
+          ],
+          "emitted": [
+            "TB1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0656,
+          "error": ""
+        },
+        {
+          "name": "clean-10m",
+          "category": "clean",
+          "in_bank": true,
+          "truths": [
+            "10M"
+          ],
+          "emitted": [
+            "10M"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0672,
+          "error": ""
+        },
+        {
+          "name": "wire-104",
+          "category": "wire",
+          "in_bank": true,
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "104"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0651,
+          "error": ""
+        },
+        {
+          "name": "title-sheet",
+          "category": "title",
+          "in_bank": true,
+          "truths": [
+            "SHEET",
+            "3",
+            "OF",
+            "7"
+          ],
+          "emitted": [
+            "SHEET",
+            "3",
+            "OF",
+            "7"
+          ],
+          "token_hits": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0716,
+          "error": ""
+        },
+        {
+          "name": "struck-104",
+          "category": "struck",
+          "in_bank": true,
+          "truths": [
+            "104"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0625,
+          "error": ""
+        },
+        {
+          "name": "blueprint-q1",
+          "category": "blueprint",
+          "in_bank": true,
+          "truths": [
+            "Q1"
+          ],
+          "emitted": [
+            "Ql"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0671,
+          "error": ""
+        },
+        {
+          "name": "low-contrast-m1",
+          "category": "low-contrast",
+          "in_bank": true,
+          "truths": [
+            "M1"
+          ],
+          "emitted": [
+            "M1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.067,
+          "error": ""
+        },
+        {
+          "name": "small-fu1",
+          "category": "small",
+          "in_bank": true,
+          "truths": [
+            "FU1"
+          ],
+          "emitted": [
+            "FUL"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0746,
+          "error": ""
+        },
+        {
+          "name": "rotated-w12",
+          "category": "rotated",
+          "in_bank": true,
+          "truths": [
+            "W12"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0649,
+          "error": ""
+        },
+        {
+          "name": "page-tags",
+          "category": "page",
+          "in_bank": true,
+          "truths": [
+            "K1",
+            "M1",
+            "104",
+            "TB1"
+          ],
+          "emitted": [
+            "104",
+            "K1",
+            "M1",
+            "TB1"
+          ],
+          "token_hits": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0795,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-k1",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "K1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0636,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-small-fu1",
+          "category": "small",
+          "in_bank": false,
+          "truths": [
+            "FU1"
+          ],
+          "emitted": [
+            "FU1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0659,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-blueprint-q1",
+          "category": "blueprint",
+          "in_bank": false,
+          "truths": [
+            "Q1"
+          ],
+          "emitted": [
+            "Q1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0661,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-low-m1",
+          "category": "low-contrast",
+          "in_bank": false,
+          "truths": [
+            "M1"
+          ],
+          "emitted": [
+            "M1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0645,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-struck-104",
+          "category": "struck",
+          "in_bank": false,
+          "truths": [
+            "104"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.063,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-rotated-w12",
+          "category": "rotated",
+          "in_bank": false,
+          "truths": [
+            "W12"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0622,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-k1",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "K1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0668,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-cr12",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "CR12"
+          ],
+          "emitted": [
+            "CRic"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0652,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-tb1",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "TB1"
+          ],
+          "emitted": [
+            "TH1"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0657,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-10m",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "10M"
+          ],
+          "emitted": [
+            "10M"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0667,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-104",
+          "category": "wire",
+          "in_bank": false,
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "104"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0648,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-title",
+          "category": "title",
+          "in_bank": false,
+          "truths": [
+            "SHEET",
+            "3",
+            "OF",
+            "7"
+          ],
+          "emitted": [
+            "SHEET",
+            "3",
+            "OF",
+            "7"
+          ],
+          "token_hits": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0714,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-struck-104",
+          "category": "struck",
+          "in_bank": false,
+          "truths": [
+            "104"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0632,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-blueprint-q1",
+          "category": "blueprint",
+          "in_bank": false,
+          "truths": [
+            "Q1"
+          ],
+          "emitted": [
+            "M1"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0666,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-low-m1",
+          "category": "low-contrast",
+          "in_bank": false,
+          "truths": [
+            "M1"
+          ],
+          "emitted": [
+            "M1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0657,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-small-fu1",
+          "category": "small",
+          "in_bank": false,
+          "truths": [
+            "FU1"
+          ],
+          "emitted": [
+            "FUL"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0655,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-rotated-w12",
+          "category": "rotated",
+          "in_bank": false,
+          "truths": [
+            "W12"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0627,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-page",
+          "category": "page",
+          "in_bank": false,
+          "truths": [
+            "K1",
+            "M1",
+            "104",
+            "TB1"
+          ],
+          "emitted": [
+            "PF]",
+            "LI",
+            "K1",
+            "M1",
+            "TH1"
+          ],
+          "token_hits": [
+            true,
+            true,
+            false,
+            false
+          ],
+          "hit": false,
+          "seconds": 0.0826,
+          "error": ""
+        }
+      ],
+      "runtime_memory": {
+        "added_rss_bytes": null,
+        "peak_rss_bytes": null,
+        "baseline_rss_bytes": null,
+        "note": "Not measured. Tesseract runs as its own process, while the electrical engine and Paddle run inside Python. A resident-set reading would not cover all three the same way."
+      },
+      "size": {
+        "footprint_bytes": 20594221,
+        "binary_bytes": 39320,
+        "tessdata_bytes": 14679861,
+        "library_bytes": 5875040,
+        "install_directory_bytes": null,
+        "paths": [
+          "/usr/bin/tesseract",
+          "/usr/share/tesseract-ocr/5/tessdata",
+          "/lib/x86_64-linux-gnu/libtesseract.so.5",
+          "/lib/x86_64-linux-gnu/liblept.so.5"
+        ],
+        "note": "Binary, tessdata directory, and shared libraries named by ldd. System directories are not included."
+      }
+    },
+    "tesseract_four_angles": {
+      "name": "tesseract_four_angles",
+      "available": true,
+      "reason": "",
+      "sample_recall": 0.6,
+      "token_recall": 0.6905,
+      "held_out_sample_recall": 0.5556,
+      "held_out_token_recall": 0.625,
+      "held_out_seconds": 4.8922,
+      "in_bank_sample_recall": 0.6667,
+      "in_bank_token_recall": 0.7778,
+      "in_bank_seconds": 3.207,
+      "sample_hits": 18,
+      "sample_count": 30,
+      "token_hits": 29,
+      "token_count": 42,
+      "seconds": 8.1004,
+      "samples": [
+        {
+          "name": "clean-k1",
+          "category": "clean",
+          "in_bank": true,
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "Kl",
+            "DD"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.2605,
+          "error": ""
+        },
+        {
+          "name": "clean-cr12",
+          "category": "clean",
+          "in_bank": true,
+          "truths": [
+            "CR12"
+          ],
+          "emitted": [
+            "CR12",
+            "cTYO"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2611,
+          "error": ""
+        },
+        {
+          "name": "clean-tb1",
+          "category": "clean",
+          "in_bank": true,
+          "truths": [
+            "TB1"
+          ],
+          "emitted": [
+            "TB1",
+            "Tal"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2633,
+          "error": ""
+        },
+        {
+          "name": "clean-10m",
+          "category": "clean",
+          "in_bank": true,
+          "truths": [
+            "10M"
+          ],
+          "emitted": [
+            "10M",
+            "WOT"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2624,
+          "error": ""
+        },
+        {
+          "name": "wire-104",
+          "category": "wire",
+          "in_bank": true,
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "104",
+            "voT"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2655,
+          "error": ""
+        },
+        {
+          "name": "title-sheet",
+          "category": "title",
+          "in_bank": true,
+          "truths": [
+            "SHEET",
+            "3",
+            "OF",
+            "7"
+          ],
+          "emitted": [
+            "SHEET",
+            "3",
+            "OF",
+            "7",
+            "Z",
+            "AO",
+            "\u20ac",
+            "LAH4HS"
+          ],
+          "token_hits": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2735,
+          "error": ""
+        },
+        {
+          "name": "struck-104",
+          "category": "struck",
+          "in_bank": true,
+          "truths": [
+            "104"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.272,
+          "error": ""
+        },
+        {
+          "name": "blueprint-q1",
+          "category": "blueprint",
+          "in_bank": true,
+          "truths": [
+            "Q1"
+          ],
+          "emitted": [
+            "Ql",
+            "TO"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.2616,
+          "error": ""
+        },
+        {
+          "name": "low-contrast-m1",
+          "category": "low-contrast",
+          "in_bank": true,
+          "truths": [
+            "M1"
+          ],
+          "emitted": [
+            "M1",
+            "IW"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2596,
+          "error": ""
+        },
+        {
+          "name": "small-fu1",
+          "category": "small",
+          "in_bank": true,
+          "truths": [
+            "FU1"
+          ],
+          "emitted": [
+            "FUL",
+            "tnd"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.2626,
+          "error": ""
+        },
+        {
+          "name": "rotated-w12",
+          "category": "rotated",
+          "in_bank": true,
+          "truths": [
+            "W12"
+          ],
+          "emitted": [
+            "W12",
+            "CIM"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2568,
+          "error": ""
+        },
+        {
+          "name": "page-tags",
+          "category": "page",
+          "in_bank": true,
+          "truths": [
+            "K1",
+            "M1",
+            "104",
+            "TB1"
+          ],
+          "emitted": [
+            "104",
+            "K1",
+            "M1",
+            "TB1",
+            "Tal",
+            "TW",
+            "DD",
+            "vot"
+          ],
+          "token_hits": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "hit": true,
+          "seconds": 0.3081,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-k1",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "K1",
+            "Ly"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2599,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-small-fu1",
+          "category": "small",
+          "in_bank": false,
+          "truths": [
+            "FU1"
+          ],
+          "emitted": [
+            "FU1",
+            "tnd"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2836,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-blueprint-q1",
+          "category": "blueprint",
+          "in_bank": false,
+          "truths": [
+            "Q1"
+          ],
+          "emitted": [
+            "Q1",
+            "LO"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.275,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-low-m1",
+          "category": "low-contrast",
+          "in_bank": false,
+          "truths": [
+            "M1"
+          ],
+          "emitted": [
+            "M1",
+            "LI"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2703,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-struck-104",
+          "category": "struck",
+          "in_bank": false,
+          "truths": [
+            "104"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.2611,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-rotated-w12",
+          "category": "rotated",
+          "in_bank": false,
+          "truths": [
+            "W12"
+          ],
+          "emitted": [
+            "w12",
+            "CLM"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2631,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-k1",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "K1",
+            "1A"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2683,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-cr12",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "CR12"
+          ],
+          "emitted": [
+            "CRic",
+            "ela"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.264,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-tb1",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "TB1"
+          ],
+          "emitted": [
+            "TH1",
+            "Tal"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.2599,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-10m",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "10M"
+          ],
+          "emitted": [
+            "10M",
+            "WOT"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2584,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-104",
+          "category": "wire",
+          "in_bank": false,
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "104",
+            "HOt"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2677,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-title",
+          "category": "title",
+          "in_bank": false,
+          "truths": [
+            "SHEET",
+            "3",
+            "OF",
+            "7"
+          ],
+          "emitted": [
+            "SHEET",
+            "3",
+            "OF",
+            "7",
+            "\u00a330",
+            "E\u2014",
+            "L33HS"
+          ],
+          "token_hits": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2794,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-struck-104",
+          "category": "struck",
+          "in_bank": false,
+          "truths": [
+            "104"
+          ],
+          "emitted": [],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.2627,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-blueprint-q1",
+          "category": "blueprint",
+          "in_bank": false,
+          "truths": [
+            "Q1"
+          ],
+          "emitted": [
+            "M1",
+            "TH"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.2655,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-low-m1",
+          "category": "low-contrast",
+          "in_bank": false,
+          "truths": [
+            "M1"
+          ],
+          "emitted": [
+            "M1",
+            "IW"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2578,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-small-fu1",
+          "category": "small",
+          "in_bank": false,
+          "truths": [
+            "FU1"
+          ],
+          "emitted": [
+            "FUL",
+            "Td"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.2735,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-rotated-w12",
+          "category": "rotated",
+          "in_bank": false,
+          "truths": [
+            "W12"
+          ],
+          "emitted": [
+            "Wie",
+            "clM"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.2809,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-page",
+          "category": "page",
+          "in_bank": false,
+          "truths": [
+            "K1",
+            "M1",
+            "104",
+            "TB1"
+          ],
+          "emitted": [
+            "PF]",
+            "LI",
+            "K1",
+            "M1",
+            "TH1",
+            "|",
+            "|x",
+            "Tal",
+            "IW",
+            "1A",
+            "Py",
+            "aL"
+          ],
+          "token_hits": [
+            true,
+            true,
+            false,
+            false
+          ],
+          "hit": false,
+          "seconds": 0.3411,
+          "error": ""
+        }
+      ],
+      "runtime_memory": {
+        "added_rss_bytes": null,
+        "peak_rss_bytes": null,
+        "baseline_rss_bytes": null,
+        "note": "Not measured. Tesseract runs as its own process, while the electrical engine and Paddle run inside Python. A resident-set reading would not cover all three the same way."
+      },
+      "size": {
+        "footprint_bytes": 20594221,
+        "binary_bytes": 39320,
+        "tessdata_bytes": 14679861,
+        "library_bytes": 5875040,
+        "install_directory_bytes": null,
+        "paths": [
+          "/usr/bin/tesseract",
+          "/usr/share/tesseract-ocr/5/tessdata",
+          "/lib/x86_64-linux-gnu/libtesseract.so.5",
+          "/lib/x86_64-linux-gnu/liblept.so.5"
+        ],
+        "note": "Binary, tessdata directory, and shared libraries named by ldd. System directories are not included."
+      }
+    },
+    "paddle": {
+      "name": "paddle",
+      "available": true,
+      "reason": "",
+      "sample_recall": 0.9333,
+      "token_recall": 0.9286,
+      "held_out_sample_recall": 0.9444,
+      "held_out_token_recall": 0.9167,
+      "held_out_seconds": 3.6247,
+      "in_bank_sample_recall": 0.9167,
+      "in_bank_token_recall": 0.9444,
+      "in_bank_seconds": 3.2506,
+      "sample_hits": 28,
+      "sample_count": 30,
+      "token_hits": 39,
+      "token_count": 42,
+      "seconds": 6.8764,
+      "samples": [
+        {
+          "name": "clean-k1",
+          "category": "clean",
+          "in_bank": true,
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "K1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.242,
+          "error": ""
+        },
+        {
+          "name": "clean-cr12",
+          "category": "clean",
+          "in_bank": true,
+          "truths": [
+            "CR12"
+          ],
+          "emitted": [
+            "CR12"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1762,
+          "error": ""
+        },
+        {
+          "name": "clean-tb1",
+          "category": "clean",
+          "in_bank": true,
+          "truths": [
+            "TB1"
+          ],
+          "emitted": [
+            "TB1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1518,
+          "error": ""
+        },
+        {
+          "name": "clean-10m",
+          "category": "clean",
+          "in_bank": true,
+          "truths": [
+            "10M"
+          ],
+          "emitted": [
+            "10M"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1892,
+          "error": ""
+        },
+        {
+          "name": "wire-104",
+          "category": "wire",
+          "in_bank": true,
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "104"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1522,
+          "error": ""
+        },
+        {
+          "name": "title-sheet",
+          "category": "title",
+          "in_bank": true,
+          "truths": [
+            "SHEET",
+            "3",
+            "OF",
+            "7"
+          ],
+          "emitted": [
+            "SHEET 3 OF 7"
+          ],
+          "token_hits": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2263,
+          "error": ""
+        },
+        {
+          "name": "struck-104",
+          "category": "struck",
+          "in_bank": true,
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "104"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1876,
+          "error": ""
+        },
+        {
+          "name": "blueprint-q1",
+          "category": "blueprint",
+          "in_bank": true,
+          "truths": [
+            "Q1"
+          ],
+          "emitted": [
+            "t\u00f2"
+          ],
+          "token_hits": [
+            false
+          ],
+          "hit": false,
+          "seconds": 0.1552,
+          "error": ""
+        },
+        {
+          "name": "low-contrast-m1",
+          "category": "low-contrast",
+          "in_bank": true,
+          "truths": [
+            "M1"
+          ],
+          "emitted": [
+            "M1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1925,
+          "error": ""
+        },
+        {
+          "name": "small-fu1",
+          "category": "small",
+          "in_bank": true,
+          "truths": [
+            "FU1"
+          ],
+          "emitted": [
+            "FU1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2004,
+          "error": ""
+        },
+        {
+          "name": "rotated-w12",
+          "category": "rotated",
+          "in_bank": true,
+          "truths": [
+            "W12"
+          ],
+          "emitted": [
+            "W12"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1366,
+          "error": ""
+        },
+        {
+          "name": "page-tags",
+          "category": "page",
+          "in_bank": true,
+          "truths": [
+            "K1",
+            "M1",
+            "104",
+            "TB1"
+          ],
+          "emitted": [
+            "104",
+            "K1",
+            "M1",
+            "TB1"
+          ],
+          "token_hits": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "hit": true,
+          "seconds": 1.2406,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-k1",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "K1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1589,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-small-fu1",
+          "category": "small",
+          "in_bank": false,
+          "truths": [
+            "FU1"
+          ],
+          "emitted": [
+            "FU1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1688,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-blueprint-q1",
+          "category": "blueprint",
+          "in_bank": false,
+          "truths": [
+            "Q1"
+          ],
+          "emitted": [
+            "Q1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.2056,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-low-m1",
+          "category": "low-contrast",
+          "in_bank": false,
+          "truths": [
+            "M1"
+          ],
+          "emitted": [
+            "M1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1543,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-struck-104",
+          "category": "struck",
+          "in_bank": false,
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "104"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.156,
+          "error": ""
+        },
+        {
+          "name": "held-out-bitmap-rotated-w12",
+          "category": "rotated",
+          "in_bank": false,
+          "truths": [
+            "W12"
+          ],
+          "emitted": [
+            "W12"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1672,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-k1",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "K1"
+          ],
+          "emitted": [
+            "K1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1072,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-cr12",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "CR12"
+          ],
+          "emitted": [
+            "CR12"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1242,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-tb1",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "TB1"
+          ],
+          "emitted": [
+            "TB1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1159,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-10m",
+          "category": "held-out",
+          "in_bank": false,
+          "truths": [
+            "10M"
+          ],
+          "emitted": [
+            "10M"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1425,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-104",
+          "category": "wire",
+          "in_bank": false,
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "104"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1309,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-title",
+          "category": "title",
+          "in_bank": false,
+          "truths": [
+            "SHEET",
+            "3",
+            "OF",
+            "7"
+          ],
+          "emitted": [
+            "SHEET 3 OF 7"
+          ],
+          "token_hits": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1806,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-struck-104",
+          "category": "struck",
+          "in_bank": false,
+          "truths": [
+            "104"
+          ],
+          "emitted": [
+            "104"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1145,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-blueprint-q1",
+          "category": "blueprint",
+          "in_bank": false,
+          "truths": [
+            "Q1"
+          ],
+          "emitted": [
+            "Q1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1055,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-low-m1",
+          "category": "low-contrast",
+          "in_bank": false,
+          "truths": [
+            "M1"
+          ],
+          "emitted": [
+            "M1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1062,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-small-fu1",
+          "category": "small",
+          "in_bank": false,
+          "truths": [
+            "FU1"
+          ],
+          "emitted": [
+            "FU1"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.0967,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-rotated-w12",
+          "category": "rotated",
+          "in_bank": false,
+          "truths": [
+            "W12"
+          ],
+          "emitted": [
+            "W12"
+          ],
+          "token_hits": [
+            true
+          ],
+          "hit": true,
+          "seconds": 0.1214,
+          "error": ""
+        },
+        {
+          "name": "held-out-stick-page",
+          "category": "page",
+          "in_bank": false,
+          "truths": [
+            "K1",
+            "M1",
+            "104",
+            "TB1"
+          ],
+          "emitted": [
+            "10T",
+            "K1",
+            "M1",
+            "T81"
+          ],
+          "token_hits": [
+            true,
+            true,
+            false,
+            false
+          ],
+          "hit": false,
+          "seconds": 1.2683,
+          "error": ""
+        }
+      ],
+      "cpu_path": "FLAGS_use_mkldnn=0; PaddleOCR(lang='en', enable_mkldnn=False, device='cpu')",
+      "runtime_memory": {
+        "added_rss_bytes": null,
+        "peak_rss_bytes": null,
+        "baseline_rss_bytes": null,
+        "note": "Not measured. Tesseract runs as its own process, while the electrical engine and Paddle run inside Python. A resident-set reading would not cover all three the same way."
+      },
+      "size": {
+        "footprint_bytes": 940539572,
+        "package_bytes": 755390632,
+        "model_bytes": 185148940,
+        "packages": [
+          {
+            "name": "paddle",
+            "bytes": 740750746,
+            "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/paddle"
+          },
+          {
+            "name": "paddleocr",
+            "bytes": 980713,
+            "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/paddleocr"
+          },
+          {
+            "name": "paddlex",
+            "bytes": 13659173,
+            "path": "/tmp/panelcad-venv/lib/python3.12/site-packages/paddlex"
+          }
+        ],
+        "models": [
+          {
+            "name": "PP-OCRv6_medium_det",
+            "bytes": 62299794,
+            "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv6_medium_det"
+          },
+          {
+            "name": "PP-OCRv6_medium_rec",
+            "bytes": 76863994,
+            "path": "/home/ubuntu/.paddlex/official_models/PP-OCRv6_medium_rec"
+          },
+          {
+            "name": "PP-LCNet_x1_0_doc_ori",
+            "bytes": 6872016,
+            "path": "/home/ubuntu/.paddlex/official_models/PP-LCNet_x1_0_doc_ori"
+          },
+          {
+            "name": "PP-LCNet_x1_0_textline_ori",
+            "bytes": 6858324,
+            "path": "/home/ubuntu/.paddlex/official_models/PP-LCNet_x1_0_textline_ori"
+          },
+          {
+            "name": "UVDoc",
+            "bytes": 32254812,
+            "path": "/home/ubuntu/.paddlex/official_models/UVDoc"
+          }
+        ],
+        "model_path": "/home/ubuntu/.paddlex/official_models",
+        "note": "paddle, paddleocr, and paddlex package directories plus the five model directories the stock English pipeline downloads (PP-OCRv6 medium det and rec, document orientation, text-line orientation, and UVDoc). ONNX exports used only by the electrical reader are not included. Shared libraries such as numpy are not included."
+      }
+    }
+  },
+  "how_to_read": "held_out_sample_recall is the fair accuracy number: pages not drawn with a prototype font. in_bank_sample_recall uses DejaVu, which is in the glyph bank, and is only a same-font check. size.footprint_bytes is a sum of files this process could stat. Null means that path was not on disk. runtime_memory is null: Tesseract is a separate process, so resident set was not compared. A machine_role of other is not a MichellesPC or DESKTOP-3S1HOH0 result.",
+  "scans": {
+    "rows": [
+      {
+        "source": "schematic",
+        "variant": "phone",
+        "image": null,
+        "accuracy": null,
+        "note": "scan file is not in the repo"
+      },
+      {
+        "source": "schematic",
+        "variant": "jpeg",
+        "image": null,
+        "accuracy": null,
+        "note": "scan file is not in the repo"
+      },
+      {
+        "source": "schematic",
+        "variant": "dpi_150",
+        "image": "docs/proofs/scan-ladder/schematic/dpi_150.png",
+        "truth_devices": 18,
+        "truth_wires": 16,
+        "truth_texts": 6,
+        "engines": {
+          "electrical": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 2.5233
+          },
+          "tesseract": {
+            "devices": 0.7778,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 0.616
+          },
+          "paddle": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 39.5586
+          }
+        }
+      },
+      {
+        "source": "schematic",
+        "variant": "fax",
+        "image": "docs/proofs/scan-ladder/schematic/fax.png",
+        "truth_devices": 18,
+        "truth_wires": 16,
+        "truth_texts": 6,
+        "engines": {
+          "electrical": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 3.5603
+          },
+          "tesseract": {
+            "devices": 0.8889,
+            "wire_numbers": 0.8125,
+            "texts": 1.0,
+            "seconds": 0.8185
+          },
+          "paddle": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 56.3751
+          }
+        }
+      },
+      {
+        "source": "schematic",
+        "variant": "faded",
+        "image": "docs/proofs/scan-ladder/schematic/faded.png",
+        "truth_devices": 18,
+        "truth_wires": 16,
+        "truth_texts": 6,
+        "engines": {
+          "electrical": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 3.4591
+          },
+          "tesseract": {
+            "devices": 0.8889,
+            "wire_numbers": 0.8125,
+            "texts": 1.0,
+            "seconds": 0.8381
+          },
+          "paddle": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 54.0236
+          }
+        }
+      },
+      {
+        "source": "schematic",
+        "variant": "skew",
+        "image": "docs/proofs/scan-ladder/schematic/skew.png",
+        "truth_devices": 18,
+        "truth_wires": 16,
+        "truth_texts": 6,
+        "engines": {
+          "electrical": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 3.3683
+          },
+          "tesseract": {
+            "devices": 0.8333,
+            "wire_numbers": 0.8125,
+            "texts": 1.0,
+            "seconds": 0.9598
+          },
+          "paddle": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 56.3926
+          }
+        }
+      },
+      {
+        "source": "schematic",
+        "variant": "speckle",
+        "image": "docs/proofs/scan-ladder/schematic/speckle.png",
+        "truth_devices": 18,
+        "truth_wires": 16,
+        "truth_texts": 6,
+        "engines": {
+          "electrical": {
+            "devices": 0.9444,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 1.6136
+          },
+          "tesseract": {
+            "devices": 0.7222,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 0.5906
+          },
+          "paddle": {
+            "devices": 0.9444,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 36.7818
+          }
+        }
+      },
+      {
+        "source": "panel",
+        "variant": "dpi_150",
+        "image": "docs/proofs/scan-ladder/panel/dpi_150.png",
+        "truth_devices": 9,
+        "truth_wires": 0,
+        "truth_texts": 6,
+        "engines": {
+          "electrical": {
+            "devices": 0.7778,
+            "wire_numbers": null,
+            "texts": 1.0,
+            "seconds": 1.9987
+          },
+          "tesseract": {
+            "devices": 0.1111,
+            "wire_numbers": null,
+            "texts": 1.0,
+            "seconds": 1.3806
+          },
+          "paddle": {
+            "devices": 0.7778,
+            "wire_numbers": null,
+            "texts": 1.0,
+            "seconds": 69.4749
+          }
+        }
+      },
+      {
+        "source": "terminal",
+        "variant": "dpi_150",
+        "image": "docs/proofs/scan-ladder/terminal/dpi_150.png",
+        "truth_devices": 4,
+        "truth_wires": 7,
+        "truth_texts": 6,
+        "engines": {
+          "electrical": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 1.5326
+          },
+          "tesseract": {
+            "devices": 0.0,
+            "wire_numbers": 0.0,
+            "texts": 1.0,
+            "seconds": 0.4843
+          },
+          "paddle": {
+            "devices": 1.0,
+            "wire_numbers": 1.0,
+            "texts": 1.0,
+            "seconds": 31.1177
+          }
+        }
+      }
+    ],
+    "summary": {
+      "electrical": {
+        "devices": 0.9603,
+        "wire_numbers": 1.0,
+        "texts": 1.0,
+        "seconds": 18.0559,
+        "scans": 7
+      },
+      "tesseract": {
+        "devices": 0.6032,
+        "wire_numbers": 0.7396,
+        "texts": 1.0,
+        "seconds": 5.6879,
+        "scans": 7
+      },
+      "paddle": {
+        "devices": 0.9603,
+        "wire_numbers": 1.0,
+        "texts": 1.0,
+        "seconds": 343.7243,
+        "scans": 7
+      }
+    },
+    "note": "Recall is truth tokens found in the engine text. Wire recall is null when that sheet's truth lists no wire numbers. Phone and JPEG stay null when those files are absent. after-*.png redraws are not inputs."
+  }
+}

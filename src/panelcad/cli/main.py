@@ -644,6 +644,11 @@ def import_cmd(
         "--answers",
         help="With `import answer`, a JSON file of {id, value} rows, or a map of id to value.",
     ),
+    ocr_backend: Optional[str] = typer.Option(
+        None,
+        "--ocr-backend",
+        help="Raster OCR: tesseract (default) or electrical. Electrical runs on this PC. It does not call a cloud service.",
+    ),
 ) -> None:
     """Import a package, or turn a print (PDF, scan, DXF, SVG) into a PanelCAD project.
 
@@ -662,6 +667,7 @@ def import_cmd(
             prep_dir=agent_prep,
             answers=answers,
             extra=list(ctx.args),
+            ocr_backend=ocr_backend,
         )
         return
     if paths and paths[0].name == "diag" and not paths[0].exists():
@@ -705,6 +711,7 @@ def import_cmd(
             reasoning_effort=reasoning_effort,
             dpi=dpi,
             truth=truth,
+            ocr_backend=ocr_backend,
         )
         return
     if len(paths) != 1:
@@ -739,9 +746,36 @@ def _import_agent_command(
     prep_dir: Optional[Path],
     answers: Optional[Path] = None,
     extra: Optional[list[str]] = None,
+    ocr_backend: Optional[str] = None,
 ) -> None:
     """`import prep`, `import apply`, and `import answer` share the existing import command."""
 
+    from panelcad.ocr.backend import normalize_backend, ocr_scope
+
+    try:
+        normalize_backend(ocr_backend)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from None
+    with ocr_scope(ocr_backend):
+        _import_agent_command_body(
+            paths,
+            out=out,
+            dpi=dpi,
+            prep_dir=prep_dir,
+            answers=answers,
+            extra=extra,
+        )
+
+
+def _import_agent_command_body(
+    paths: list[Path],
+    *,
+    out: Optional[Path],
+    dpi: Optional[float],
+    prep_dir: Optional[Path],
+    answers: Optional[Path] = None,
+    extra: Optional[list[str]] = None,
+) -> None:
     from panelcad.importer.agent_exchange import DEFAULT_DPI, apply_response, prepare_print
 
     verb = paths[0].name
@@ -801,6 +835,67 @@ def _is_print_source(path: Path) -> bool:
 
 
 def _import_print(
+    sources: list[Path],
+    *,
+    into: Optional[Path],
+    out: Optional[Path],
+    photos: Optional[Path],
+    standard: Optional[str],
+    resume: Optional[Path],
+    workspace: Optional[Path],
+    external: bool,
+    vision_backend: Optional[str] = None,
+    vision_model: Optional[str] = None,
+    vision_base_url: Optional[str] = None,
+    vision_api_key_env: Optional[str] = None,
+    workers: Optional[int] = None,
+    keep_grok_sessions: bool = False,
+    grok_tools_none: bool = False,
+    timeout: Optional[float] = None,
+    page_timeout: Optional[float] = None,
+    num_ctx: Optional[int] = None,
+    num_predict: Optional[int] = None,
+    think: Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
+    dpi: Optional[float] = None,
+    truth: Optional[Path] = None,
+    ocr_backend: Optional[str] = None,
+) -> None:
+    from panelcad.ocr.backend import normalize_backend, ocr_scope
+
+    try:
+        normalize_backend(ocr_backend)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from None
+    with ocr_scope(ocr_backend):
+        _import_print_body(
+            sources,
+            into=into,
+            out=out,
+            photos=photos,
+            standard=standard,
+            resume=resume,
+            workspace=workspace,
+            external=external,
+            vision_backend=vision_backend,
+            vision_model=vision_model,
+            vision_base_url=vision_base_url,
+            vision_api_key_env=vision_api_key_env,
+            workers=workers,
+            keep_grok_sessions=keep_grok_sessions,
+            grok_tools_none=grok_tools_none,
+            timeout=timeout,
+            page_timeout=page_timeout,
+            num_ctx=num_ctx,
+            num_predict=num_predict,
+            think=think,
+            reasoning_effort=reasoning_effort,
+            dpi=dpi,
+            truth=truth,
+        )
+
+
+def _import_print_body(
     sources: list[Path],
     *,
     into: Optional[Path],

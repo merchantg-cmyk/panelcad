@@ -591,10 +591,14 @@ def _reraise_tesseract(exc: BaseException) -> None:
 
 
 def _ocr_tokens(gray: np.ndarray, rgb: np.ndarray, ppm: float, width_mm: float, height_mm: float) -> list[dict[str, Any]]:
-    import pytesseract
+    from panelcad.ocr.dispatch import tesseract_required
 
-    if not configure_tesseract():
-        raise TesseractMissing(TESSERACT_MESSAGE)
+    pytesseract = None
+    if tesseract_required():
+        import pytesseract
+
+        if not configure_tesseract():
+            raise TesseractMissing(TESSERACT_MESSAGE)
     try:
         ink = _text_ink(gray, rgb)
         tokens = _sparse_tokens(_ocr_canvas(gray, rgb), ppm, height_mm, pytesseract)
@@ -664,8 +668,11 @@ def _tokens_in_band(
     x0: int,
     pytesseract: Any,
 ) -> list[dict[str, Any]]:
+    from panelcad.ocr.dispatch import image_to_data
+
     up = cv2.resize(band, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-    data = pytesseract.image_to_data(up, output_type=pytesseract.Output.DICT, config="--psm 11")
+    output_type = pytesseract.Output.DICT if pytesseract is not None else None
+    data = image_to_data(up, output_type=output_type, config="--psm 11")
     found: list[dict[str, Any]] = []
     for index, raw in enumerate(data["text"]):
         try:
@@ -793,9 +800,10 @@ def _ocr_word(
     psm: int,
     ppm: float,
 ) -> str:
-    import pytesseract
+    from panelcad.ocr.dispatch import image_to_string, tesseract_required
 
-    configure_tesseract()
+    if tesseract_required():
+        configure_tesseract()
 
     left, top, width, height = box
     pad = int(expand_left_mm * ppm * 2.0)
@@ -809,7 +817,7 @@ def _ocr_word(
     bigger = cv2.resize(crop, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
     bigger = cv2.copyMakeBorder(bigger, 16, 16, 16, 16, cv2.BORDER_CONSTANT, value=255)
     config = f"--psm {psm} -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    return str(pytesseract.image_to_string(bigger, config=config) or "").strip()
+    return str(image_to_string(bigger, config=config) or "").strip()
 
 
 def _fix_token(raw: str) -> str:
@@ -946,8 +954,10 @@ def _read_closed_digits(
     ink = ink[rows.min() : rows.max() + 1, cols.min() : cols.max() + 1]
     up = cv2.resize((~ink).astype(np.uint8) * 255, None, fx=6, fy=6, interpolation=cv2.INTER_CUBIC)
     _thr, bw = cv2.threshold(up, 160, 255, cv2.THRESH_BINARY)
+    from panelcad.ocr.dispatch import image_to_string
+
     bw = cv2.copyMakeBorder(bw, 18, 18, 18, 18, cv2.BORDER_CONSTANT, value=255)
-    return pytesseract.image_to_string(bw, config="--psm 7 -c tessedit_char_whitelist=0123456789").strip()
+    return str(image_to_string(bw, config="--psm 7 -c tessedit_char_whitelist=0123456789") or "").strip()
 
 
 def ocr_title_sheet(
@@ -1076,14 +1086,17 @@ def _merge_sheet_reads(results: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _tesseract_words(image: np.ndarray, psm: int) -> list[_OcrToken]:
-    import pytesseract
+    from panelcad.ocr.dispatch import image_to_data, tesseract_required
 
-    if not configure_tesseract():
-        raise TesseractMissing(TESSERACT_MESSAGE)
+    pytesseract = None
+    if tesseract_required():
+        import pytesseract
+
+        if not configure_tesseract():
+            raise TesseractMissing(TESSERACT_MESSAGE)
     try:
-        data = pytesseract.image_to_data(
-            image, output_type=pytesseract.Output.DICT, config=f"--psm {psm}"
-        )
+        output_type = pytesseract.Output.DICT if pytesseract is not None else None
+        data = image_to_data(image, output_type=output_type, config=f"--psm {psm}")
     except TesseractMissing:
         raise
     except Exception as exc:  # noqa: BLE001 — a missing binary is TesseractMissing
@@ -1444,9 +1457,13 @@ def _title_tokens(rgb: np.ndarray, ppm: float, width_mm: float, height_mm: float
 def _read_title_cells(rgb: np.ndarray, ppm: float, width_mm: float, height_mm: float) -> list[dict[str, Any]]:
     """Columns and rows are the ruled cells, read one cell-row at a time."""
 
-    import pytesseract
+    from panelcad.ocr.dispatch import tesseract_required
 
-    configure_tesseract()
+    pytesseract = None
+    if tesseract_required():
+        import pytesseract
+
+        configure_tesseract()
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     height, width = gray.shape
     top = max(0, height - int(68 * ppm))
@@ -1487,9 +1504,12 @@ def _read_title_cells(rgb: np.ndarray, ppm: float, width_mm: float, height_mm: f
 
 
 def _cell_words(cell: np.ndarray, pytesseract: Any, ppm: float, *, origin_x: int, origin_y: int) -> list[dict[str, Any]]:
+    from panelcad.ocr.dispatch import image_to_data
+
     up = cv2.resize(cell, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
     up = cv2.copyMakeBorder(up, 12, 12, 12, 12, cv2.BORDER_CONSTANT, value=255)
-    data = pytesseract.image_to_data(up, output_type=pytesseract.Output.DICT, config="--psm 6")
+    output_type = pytesseract.Output.DICT if pytesseract is not None else None
+    data = image_to_data(up, output_type=output_type, config="--psm 6")
     found: list[dict[str, Any]] = []
     for index, raw in enumerate(data["text"]):
         text = str(raw or "").strip()
@@ -2033,9 +2053,9 @@ def _read_coil_tag(
 ) -> str:
     """Letters inside a coil after the circle or square stroke is painted out."""
 
-    import pytesseract
+    from panelcad.ocr.dispatch import image_to_string, tesseract_required
 
-    if not configure_tesseract():
+    if tesseract_required() and not configure_tesseract():
         return ""
     x0 = max(0, int(round(ox * ppm)))
     y0 = max(0, int(round(oy * ppm)))
@@ -2052,7 +2072,7 @@ def _read_coil_tag(
     crop[ring] = 255
     up = cv2.resize(crop, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
     try:
-        heard = pytesseract.image_to_string(
+        heard = image_to_string(
             up,
             config="--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
         )
