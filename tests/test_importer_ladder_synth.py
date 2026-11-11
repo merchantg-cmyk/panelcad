@@ -130,6 +130,29 @@ def _make_degraded_scan_workspace(tmp_path: Path) -> Workspace:
     return ws
 
 
+def test_a_terminal_strip_label_does_not_replace_printed_l1_l2() -> None:
+    facts = {
+        "title_block": {"standard": "NEMA/ANSI"},
+        "devices": [
+            {"tag": "L1"},
+            {"tag": "L2"},
+            {"tag": "X1"},
+            {"tag": "X1-1", "library_id": "nema.terminals.feed_through", "symbol": "terminal"},
+            {"tag": "X1-2", "library_id": "nema.terminals.feed_through", "symbol": "terminal"},
+            {"tag": "PB1", "library_id": "nema.operators.pb_no", "symbol": "pb_no"},
+            {"tag": "CR1", "library_id": "nema.contactors.coil", "symbol": "coil"},
+        ],
+        "wires": [
+            {"from": "L1", "to": "PB1.3", "number": "101"},
+            {"from": "PB1.4", "to": "CR1.A1", "number": "102"},
+            {"from": "CR1.A2", "to": "L2", "number": "103"},
+        ],
+    }
+    schedule = extract_import_from_to(facts)
+    assert schedule.rail_hot == "L1"
+    assert schedule.rail_return == "L2"
+
+
 def test_degraded_scan_from_to_extraction_and_ladder_synthesis(tmp_path: Path) -> None:
     ws = _make_degraded_scan_workspace(tmp_path)
 
@@ -259,6 +282,34 @@ def test_example_projects_ladder_synth_zero_errors_and_zero_layout_flags(
     ver = verify_imported_from_to(synth, sched)
     assert ver["matched"] is True
     assert ver["missing_count"] == 0
+
+
+def test_a_landed_contact_is_not_given_a_second_wire_to_the_coil() -> None:
+    """CR1-13 already leaves to the off-page. It is not also tied to the coil."""
+
+    src = Session.open(Path(__file__).resolve().parents[1] / "examples" / "xref_nema_seal_in.pcad.yaml")
+    sched = extract_import_from_to(src)
+    synth = synthesize_imported_ladder(src, schedule=sched)
+    saved = synth.project.properties["print_import"]["from_to_schedule"]
+    invented = [
+        row
+        for row in saved["from_to_rows"]
+        if row.get("source") == "rung_inferred"
+        and {row.get("from_tag"), row.get("to_tag")} == {"CR1", "CR1-13"}
+    ]
+    assert invented == []
+    cr = next(comp for comp in synth.project.sheet("control").components if comp.id == "CR1")
+    assert cr.library_id == "nema.relays.cr"
+    from panelcad.core.elementary_layout import elementary_layout_issues
+    from panelcad.core.ladder import rail_xs
+    from panelcad.render.sheet import pin_world
+
+    sheet = synth.project.sheet("control")
+    assert elementary_layout_issues(synth, sheet) == []
+    device = synth.catalog.get(cr.library_id)
+    pin = next(item for item in device.pins if str(item.side) == "right")
+    _left, right = rail_xs(sheet)
+    assert right - pin_world(cr, pin)[0] <= 36.0
 
 
 def test_import_review_panel_from_to_and_rebuild_clean_ladder(tmp_path: Path) -> None:

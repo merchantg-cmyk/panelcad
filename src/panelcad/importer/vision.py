@@ -1704,6 +1704,48 @@ class OpenAICompatibleVision:
         return ""
 
     def extract(self, work: dict[str, Any]) -> dict[str, Any]:
+        if str(work.get("kind") or "") == "cleanup":
+            return self._extract_cleanup(work)
+        return self._extract_tile(work)
+
+    def _extract_cleanup(self, work: dict[str, Any]) -> dict[str, Any]:
+        """Ask for leftover facts. Tile prompts and the detection schema are not used."""
+
+        from panelcad.importer.cleanup import CLEANUP_SYSTEM_PROMPT, cleanup_prompt
+
+        image = Path(str(work.get("image") or ""))
+        reason = self.over_budget(str(work.get("page_id") or "") or None) or self.unavailable_reason()
+        if reason:
+            raise VisionFallback(reason)
+        if not image.is_file():
+            raise VisionFallback("crop missing")
+        import base64
+
+        prompt = cleanup_prompt(work)
+        encoded_images = _cleanup_images(work, image)
+        encoded = encoded_images[0][0] if encoded_images else ""
+        media = encoded_images[0][1] if encoded_images else "image/png"
+        if self.settings.preset == PRESET_OLLAMA:
+            body = self._ollama_chat(
+                prompt,
+                encoded,
+                system=CLEANUP_SYSTEM_PROMPT,
+                response_format=None,
+                extra_images=[item[0] for item in encoded_images[1:]],
+            )
+        else:
+            body = self._openai_chat(
+                prompt,
+                encoded,
+                media,
+                system=CLEANUP_SYSTEM_PROMPT,
+                extra_images=encoded_images[1:],
+            )
+        self._account(_with_usage(body))
+        data = _reply_object(body)
+        return data if isinstance(data, dict) else {}
+
+    def _extract_tile(self, work: dict[str, Any]) -> dict[str, Any]:
         started = time.perf_counter()
         meta: dict[str, Any] = {
             "timeout": False,
@@ -1848,7 +1890,15 @@ class OpenAICompatibleVision:
             return self._ollama_chat(prompt, encoded)
         return self._openai_chat(prompt, encoded, media)
 
-    def _ollama_chat(self, prompt: str, encoded: str) -> Any:
+    def _ollama_chat(
+        self,
+        prompt: str,
+        encoded: str,
+        *,
+        system: str = "You extract one drawing crop. Reply with the JSON object only.",
+        response_format: dict[str, Any] | None = DETECTION_SCHEMA,
+        extra_images: list[str] | None = None,
+    ) -> Any:
         from panelcad.sharpen.loop import OllamaClient
 
         client = OllamaClient(
@@ -1859,16 +1909,16 @@ class OpenAICompatibleVision:
             timeout=float(self.settings.timeout_s),
             num_predict=int(self.settings.num_predict or 4096),
             think=bool(self.settings.think),
-            response_format=DETECTION_SCHEMA,
+            response_format=response_format,
             transport=self._transport,
         )
         try:
             return client.chat(
                 [
-                    {"role": "system", "content": "You extract one drawing crop. Reply with the JSON object only."},
+                    {"role": "system", "content": system},
                     {"role": "user", "content": prompt},
                 ],
-                images=[encoded],
+                images=[encoded, *(extra_images or [])] if encoded else list(extra_images or []),
             )
         except VisionHTTPError as exc:
             if exc.status == 400:
@@ -1876,7 +1926,7 @@ class OpenAICompatibleVision:
                 try:
                     return client.chat(
                         [
-                            {"role": "system", "content": "You extract one drawing crop. Reply with the JSON object only."},
+                            {"role": "system", "content": system},
                             {"role": "user", "content": prompt},
                         ],
                         images=[encoded],
@@ -1896,7 +1946,15 @@ class OpenAICompatibleVision:
                 raise VisionFallback("connection failed") from None
             raise VisionFallback("malformed JSON" if "JSON" in text else _public_error(exc, "")) from None
 
-    def _openai_chat(self, prompt: str, encoded: str, media: str) -> Any:
+    def _openai_chat(
+        self,
+        prompt: str,
+        encoded: str,
+        media: str,
+        *,
+        system: str = "You extract one drawing crop. Reply with the JSON object only.",
+        extra_images: list[tuple[str, str]] | None = None,
+    ) -> Any:
         predict = int(self.settings.num_predict or 4096)
         payload: dict[str, Any] = {
             "model": self.settings.model,
@@ -1905,7 +1963,7 @@ class OpenAICompatibleVision:
             "messages": [
                 {
                     "role": "system",
-                    "content": "You extract one drawing crop. Reply with the JSON object only.",
+                    "content": system,
                 },
                 {
                     "role": "user",
@@ -1918,6 +1976,13 @@ class OpenAICompatibleVision:
                             },
                         },
                         {"type": "text", "text": prompt},
+                        *[
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:{mime};base64,{data}", "detail": "high"},
+                            }
+                            for data, mime in (extra_images or [])
+                        ],
                     ],
                 },
             ],
@@ -2167,6 +2232,30 @@ def raw_model_text(body: Any) -> str:
     if isinstance(raw, dict):
         return json.dumps(raw)
     return ""
+
+
+def _cleanup_images(work: dict[str, Any], fallback: Path) -> list[tuple[str, str]]:
+    """Crop files for one cleanup call. The full page is used only when no crop was cut."""
+
+    import base64
+
+    paths: list[Path] = []
+    crops = work.get("crops") if isinstance(work.get("crops"), list) else []
+    for crop in crops:
+        if not isinstance(crop, dict):
+            continue
+        path = Path(str(crop.get("path") or ""))
+        if path.is_file():
+            paths.append(path)
+    if not paths and fallback.is_file():
+        paths.append(fallback)
+    found: list[tuple[str, str]] = []
+    for path in paths:
+        encoded = base64.standard_b64encode(path.read_bytes()).decode("ascii")
+        suffix = path.suffix.lower().lstrip(".")
+        media = "image/jpeg" if suffix in {"jpg", "jpeg"} else "image/png"
+        found.append((encoded, media))
+    return found
 
 
 def _reply_object(body: Any) -> dict[str, Any]:

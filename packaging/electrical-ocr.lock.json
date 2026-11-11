@@ -1,0 +1,282 @@
+{
+  "onnxruntime_version": "1.31.1",
+  "paddleocr_version": "3.7.0",
+  "flatbuffers_version": "25.12.19",
+  "numpy_version": "2.3.5",
+  "packaging_version": "26.3",
+  "protobuf_version": "5.29.5",
+  "note": "Shop install reads resources/ocr/electrical. It does not download these files. wheels/ includes ONNX Runtime and the distributions that wheel requires (flatbuffers, numpy, packaging, protobuf). numpy 2.3.5 also satisfies PaddleX (numpy<2.4). Symbolic and quantization extras are omitted.",
+  "wheels": [
+    {
+      "filename": "onnxruntime-1.31.1-cp311-cp311-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/69/82/2e2bf967ade9567d77c307533566ef56a19c32e2114fc062a405703def88/onnxruntime-1.31.1-cp311-cp311-win_amd64.whl",
+      "sha256": "c3d91b5de31e2fc82d71bd65b2b22bddee8b49057a3a36338e9a868e0ea90c05",
+      "bytes": 14885761,
+      "python": "3.11",
+      "platform": "win_amd64"
+    },
+    {
+      "filename": "onnxruntime-1.31.1-cp311-cp311-win_arm64.whl",
+      "url": "https://files.pythonhosted.org/packages/c4/c6/1995e04cc964c6abac426f59525b41c31f766c9392cabfb1e67c51718823/onnxruntime-1.31.1-cp311-cp311-win_arm64.whl",
+      "sha256": "93800007a7023b3ab26ad72e6463d0d57d84ead49a2f6341954d91438e046bc0",
+      "bytes": 14735267,
+      "python": "3.11",
+      "platform": "win_arm64"
+    },
+    {
+      "filename": "onnxruntime-1.31.1-cp312-cp312-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/45/b2/793b4051d8dc6acb379ead9b72050f0ffa283ca49a6904add2e218b83e2e/onnxruntime-1.31.1-cp312-cp312-win_amd64.whl",
+      "sha256": "ae8a9a351efda685cc59a66226cdefaa37a126c1d66872ca23a2de9425326130",
+      "bytes": 14888466,
+      "python": "3.12",
+      "platform": "win_amd64"
+    },
+    {
+      "filename": "onnxruntime-1.31.1-cp312-cp312-win_arm64.whl",
+      "url": "https://files.pythonhosted.org/packages/ed/72/09d635ab4b6137d8ac63d4911a37dad8b1ef15a77d20b65d7ed40fdca012/onnxruntime-1.31.1-cp312-cp312-win_arm64.whl",
+      "sha256": "fe8b9ac1ae8e894e12c47ee82e4f6dfc1835768133687257866469fda80d0bf1",
+      "bytes": 14740724,
+      "python": "3.12",
+      "platform": "win_arm64"
+    },
+    {
+      "filename": "onnxruntime-1.31.1-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/59/bf/a1d282b4c753ba3e9b31f4c11abd2bc2390513dc5e3792ca3b78e42401c3/onnxruntime-1.31.1-cp313-cp313-win_amd64.whl",
+      "sha256": "0558f29d5f6ac09957390c9c5495931485ee8ae7f0ce781ccee86a0ae5c2348b",
+      "bytes": 14888304,
+      "python": "3.13",
+      "platform": "win_amd64"
+    },
+    {
+      "filename": "onnxruntime-1.31.1-cp313-cp313-win_arm64.whl",
+      "url": "https://files.pythonhosted.org/packages/7e/fd/529135287474dbaf19d9362ccda61998128ab18507f78bc82931e1bbaf22/onnxruntime-1.31.1-cp313-cp313-win_arm64.whl",
+      "sha256": "075147c2e2430b4b29c436bffa78537b902a6ed58ed66f99ae3c6795e2081cb5",
+      "bytes": 14740772,
+      "python": "3.13",
+      "platform": "win_arm64"
+    },
+    {
+      "filename": "onnxruntime-1.31.1-cp314-cp314-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/e5/e9/9112e9322aef42bff80e805915b61cdcbb82577589bdd42dedf73a5ff9b6/onnxruntime-1.31.1-cp314-cp314-win_amd64.whl",
+      "sha256": "0a3998e18cb667ef54287556bd62291a788ed235723dd90c83b2294b24e71d81",
+      "bytes": 15268752,
+      "python": "3.14",
+      "platform": "win_amd64"
+    },
+    {
+      "filename": "onnxruntime-1.31.1-cp314-cp314-win_arm64.whl",
+      "url": "https://files.pythonhosted.org/packages/ed/ee/b69384d9b94c6bf3beb030bcba25dc573e490d3136117be0f78d79078d35/onnxruntime-1.31.1-cp314-cp314-win_arm64.whl",
+      "sha256": "fc01b4e7c0a81778fb741bcf5c16b7871d196275f6240720a8b8bfd9f0c0af14",
+      "bytes": 15153930,
+      "python": "3.14",
+      "platform": "win_arm64"
+    },
+    {
+      "filename": "flatbuffers-25.12.19-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl",
+      "sha256": "7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4",
+      "bytes": 26661,
+      "python": "py2.py3",
+      "platform": "any"
+    },
+    {
+      "filename": "numpy-2.3.5-cp311-cp311-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/aa/44/9fe81ae1dcc29c531843852e2874080dc441338574ccc4306b39e2ff6e59/numpy-2.3.5-cp311-cp311-win_amd64.whl",
+      "sha256": "a414504bef8945eae5f2d7cb7be2d4af77c5d1cb5e20b296c2c25b61dff2900c",
+      "bytes": 13078442,
+      "python": "3.11",
+      "platform": "win_amd64"
+    },
+    {
+      "filename": "numpy-2.3.5-cp311-cp311-win_arm64.whl",
+      "url": "https://files.pythonhosted.org/packages/6d/a7/f99a41553d2da82a20a2f22e93c94f928e4490bb447c9ff3c4ff230581d3/numpy-2.3.5-cp311-cp311-win_arm64.whl",
+      "sha256": "0cd00b7b36e35398fa2d16af7b907b65304ef8bb4817a550e06e5012929830fa",
+      "bytes": 10458555,
+      "python": "3.11",
+      "platform": "win_arm64"
+    },
+    {
+      "filename": "numpy-2.3.5-cp312-cp312-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/2d/57/8aeaf160312f7f489dea47ab61e430b5cb051f59a98ae68b7133ce8fa06a/numpy-2.3.5-cp312-cp312-win_amd64.whl",
+      "sha256": "86945f2ee6d10cdfd67bcb4069c1662dd711f7e2a4343db5cecec06b87cf31aa",
+      "bytes": 12782922,
+      "python": "3.12",
+      "platform": "win_amd64"
+    },
+    {
+      "filename": "numpy-2.3.5-cp312-cp312-win_arm64.whl",
+      "url": "https://files.pythonhosted.org/packages/78/a6/aae5cc2ca78c45e64b9ef22f089141d661516856cf7c8a54ba434576900d/numpy-2.3.5-cp312-cp312-win_arm64.whl",
+      "sha256": "f28620fe26bee16243be2b7b874da327312240a7cdc38b769a697578d2100013",
+      "bytes": 10194667,
+      "python": "3.12",
+      "platform": "win_arm64"
+    },
+    {
+      "filename": "numpy-2.3.5-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/0c/88/e2eaa6cffb115b85ed7c7c87775cb8bcf0816816bc98ca8dbfa2ee33fe6e/numpy-2.3.5-cp313-cp313-win_amd64.whl",
+      "sha256": "00dc4e846108a382c5869e77c6ed514394bdeb3403461d25a829711041217d5b",
+      "bytes": 12779090,
+      "python": "3.13",
+      "platform": "win_amd64"
+    },
+    {
+      "filename": "numpy-2.3.5-cp313-cp313-win_arm64.whl",
+      "url": "https://files.pythonhosted.org/packages/8f/88/3f41e13a44ebd4034ee17baa384acac29ba6a4fcc2aca95f6f08ca0447d1/numpy-2.3.5-cp313-cp313-win_arm64.whl",
+      "sha256": "0472f11f6ec23a74a906a00b48a4dcf3849209696dff7c189714511268d103ae",
+      "bytes": 10194710,
+      "python": "3.13",
+      "platform": "win_arm64"
+    },
+    {
+      "filename": "numpy-2.3.5-cp314-cp314-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/a3/2e/235b4d96619931192c91660805e5e49242389742a7a82c27665021db690c/numpy-2.3.5-cp314-cp314-win_amd64.whl",
+      "sha256": "e6a0bc88393d65807d751a614207b7129a310ca4fe76a74e5c7da5fa5671417e",
+      "bytes": 12919388,
+      "python": "3.14",
+      "platform": "win_amd64"
+    },
+    {
+      "filename": "numpy-2.3.5-cp314-cp314-win_arm64.whl",
+      "url": "https://files.pythonhosted.org/packages/07/2b/29fd75ce45d22a39c61aad74f3d718e7ab67ccf839ca8b60866054eb15f8/numpy-2.3.5-cp314-cp314-win_arm64.whl",
+      "sha256": "aeffcab3d4b43712bb7a60b65f6044d444e75e563ff6180af8f98dd4b905dfd2",
+      "bytes": 10476651,
+      "python": "3.14",
+      "platform": "win_arm64"
+    },
+    {
+      "filename": "packaging-26.3-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
+      "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+      "bytes": 129956,
+      "python": "py3",
+      "platform": "any"
+    },
+    {
+      "filename": "protobuf-5.29.5-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/7e/cc/7e77861000a0691aeea8f4566e5d3aa716f2b1dece4a24439437e41d3d25/protobuf-5.29.5-py3-none-any.whl",
+      "sha256": "6cf42630262c59b2d8de33954443d94b746c952b01434fc58a417fdbd2e84bd5",
+      "bytes": 172823,
+      "python": "py3",
+      "platform": "any"
+    }
+  ],
+  "models": [
+    {
+      "name": "PP-OCRv5_mobile_det",
+      "directory": "PP-OCRv5_mobile_det_onnx",
+      "repo": "PaddlePaddle/PP-OCRv5_mobile_det_onnx",
+      "revision": "e6f4fa85f00e168c862bc462aebca69eef9b3d3d",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "name": "inference.onnx",
+          "bytes": 4826518,
+          "sha256": "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_det_onnx/resolve/e6f4fa85f00e168c862bc462aebca69eef9b3d3d/inference.onnx"
+        },
+        {
+          "name": "inference.yml",
+          "bytes": 903,
+          "sha256": "98069072e1b6b37d727fd9d9f11725faa46d6ea0de012f2ed26caea011c37699",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_det_onnx/resolve/e6f4fa85f00e168c862bc462aebca69eef9b3d3d/inference.yml"
+        }
+      ]
+    },
+    {
+      "name": "en_PP-OCRv5_mobile_rec",
+      "directory": "en_PP-OCRv5_mobile_rec_onnx",
+      "repo": "PaddlePaddle/en_PP-OCRv5_mobile_rec_onnx",
+      "revision": "3fafbc3b5dcf93dd72add9f48368be8a3a2cd33b",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "name": "inference.onnx",
+          "bytes": 7848423,
+          "sha256": "b5f833dfc5d0eb71da397b4efa06ebeee9b431b690a47d6af40d77d8eabc557f",
+          "url": "https://huggingface.co/PaddlePaddle/en_PP-OCRv5_mobile_rec_onnx/resolve/3fafbc3b5dcf93dd72add9f48368be8a3a2cd33b/inference.onnx"
+        },
+        {
+          "name": "inference.yml",
+          "bytes": 3964,
+          "sha256": "27e91d0582f40168aa218303c76e184bc78fa7a5d105aad0cfbad8458b441067",
+          "url": "https://huggingface.co/PaddlePaddle/en_PP-OCRv5_mobile_rec_onnx/resolve/3fafbc3b5dcf93dd72add9f48368be8a3a2cd33b/inference.yml"
+        }
+      ]
+    },
+    {
+      "name": "PP-OCRv6_small_det",
+      "directory": "PP-OCRv6_small_det_onnx",
+      "repo": "PaddlePaddle/PP-OCRv6_small_det_onnx",
+      "revision": "28fe5895c24fd108c19eb3e8479f4ab385fbfc62",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "name": "inference.onnx",
+          "bytes": 9880512,
+          "sha256": "d73e0058b7a8086bbd57f3d10b8bcd4ff95363f67e06e2762b5e814fe9c9410e",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_det_onnx/resolve/28fe5895c24fd108c19eb3e8479f4ab385fbfc62/inference.onnx"
+        },
+        {
+          "name": "inference.yml",
+          "bytes": 885,
+          "sha256": "193f435274bf9f0b5f71a929bbfbcf148282df7e633b34e7c373e8f44741b516",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_det_onnx/resolve/28fe5895c24fd108c19eb3e8479f4ab385fbfc62/inference.yml"
+        },
+        {
+          "name": "inference.json",
+          "bytes": 229307,
+          "sha256": "89240f689a4a77aad75ef55a8df0a15c8e1d4980a327d17e58f24bbadde5aeab",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_det_onnx/resolve/28fe5895c24fd108c19eb3e8479f4ab385fbfc62/inference.json"
+        }
+      ]
+    },
+    {
+      "name": "PP-OCRv6_small_rec",
+      "directory": "PP-OCRv6_small_rec_onnx",
+      "repo": "PaddlePaddle/PP-OCRv6_small_rec_onnx",
+      "revision": "b8f84f0b80c529de40b4fbb3544b84fa7233a513",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "name": "inference.onnx",
+          "bytes": 21159378,
+          "sha256": "5435fd747c9e0efe15a96d0b378d5bd157e9492ed8fd80edf08f30d02fa24634",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/b8f84f0b80c529de40b4fbb3544b84fa7233a513/inference.onnx"
+        },
+        {
+          "name": "inference.yml",
+          "bytes": 150579,
+          "sha256": "ab078671bb49f06228eadccd34f1bb501e157f7a047095ffb943ba81512c77d1",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/b8f84f0b80c529de40b4fbb3544b84fa7233a513/inference.yml"
+        },
+        {
+          "name": "inference.json",
+          "bytes": 208004,
+          "sha256": "f0bf53c853937a917affdd74467472167727f8ab0f0f7bded01c4a16c27e46e6",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/b8f84f0b80c529de40b4fbb3544b84fa7233a513/inference.json"
+        }
+      ]
+    },
+    {
+      "name": "PP-LCNet_x1_0_textline_ori",
+      "directory": "PP-LCNet_x1_0_textline_ori_onnx",
+      "repo": "PaddlePaddle/PP-LCNet_x1_0_textline_ori_onnx",
+      "revision": "7fdcf3cf7061163eda7183b224aa334bd33068f7",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "name": "inference.onnx",
+          "bytes": 6777816,
+          "sha256": "38aa97cd4be591e0ad304e659f07ba30d946f27a63315433f6659c69c8778345",
+          "url": "https://huggingface.co/PaddlePaddle/PP-LCNet_x1_0_textline_ori_onnx/resolve/7fdcf3cf7061163eda7183b224aa334bd33068f7/inference.onnx"
+        },
+        {
+          "name": "inference.yml",
+          "bytes": 735,
+          "sha256": "8d5120d0e1a30a9df7ed46aa9119da3796ed066777089d1c1d705f132d5e90f9",
+          "url": "https://huggingface.co/PaddlePaddle/PP-LCNet_x1_0_textline_ori_onnx/resolve/7fdcf3cf7061163eda7183b224aa334bd33068f7/inference.yml"
+        }
+      ]
+    }
+  ]
+}

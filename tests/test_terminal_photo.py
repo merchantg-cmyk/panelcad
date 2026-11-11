@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -58,9 +57,9 @@ def _app() -> QApplication:
 
 
 def _need_tesseract() -> None:
+    """The default reader is electrical. pytesseract stays importable for the fallback."""
+
     pytest.importorskip("pytesseract")
-    if shutil.which("tesseract") is None:
-        pytest.skip("tesseract is not installed")
 
 
 def _screw(painter: QPainter, rect: dict) -> None:
@@ -219,7 +218,7 @@ def test_detection_groups_rails_blocks_pe_jumpers_and_plates(tmp_path: Path) -> 
     assert not lower.jumpers
 
 
-def test_detection_reads_tags_when_tesseract_is_installed(tmp_path: Path) -> None:
+def test_detection_reads_tags(tmp_path: Path) -> None:
     _need_tesseract()
     meta = _paint_cabinet(tmp_path / "cabinet.png")
     hits = _hits(meta["path"])

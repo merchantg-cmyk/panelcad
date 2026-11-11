@@ -435,6 +435,8 @@ def wire_networks(
         for end in (wire.frm, wire.to):
             if comms or end_is_comms(sheet, end, catalog):
                 continue
+            # A named rail is one net on every sheet. A number already printed
+            # on a landing stays; only a blank landing takes that net's number.
             pins.setdefault(_end_key(sheet, project, end), []).append(idx)
         net = _norm(wire.net)
         if net and not comms:
@@ -537,6 +539,27 @@ def _pick_existing(wires: list[Wire], extras: Iterable[str], *, overwrite: bool)
     return existing[0] if existing else ""
 
 
+def _sheet_line_number(text: str | None) -> str:
+    token = _norm(text)
+    if re.fullmatch(r"[1-9]\d{2,3}", token):
+        return token
+    return ""
+
+
+def _touches_rail(sheet: Sheet, project: Project, wire: Wire) -> bool:
+    return any(_is_rail(sheet, project, end) for end in (wire.frm, wire.to))
+
+
+def _rail_label(text: str | None, sheet: Sheet, project: Project) -> bool:
+    from panelcad.core.ladder import rail_names
+
+    token = _norm(text).upper()
+    if not token:
+        return False
+    hot, ret = rail_names(sheet, project)
+    return token in {hot.upper(), ret.upper(), "L1", "L2", "L3", "N", "X1", "X2", "0V"}
+
+
 def _next_number(scheme: str, sheet_no: int, start: int, used: set[str]) -> str:
     if scheme == "iec":
         n = start
@@ -558,6 +581,45 @@ def _next_number(scheme: str, sheet_no: int, start: int, used: set[str]) -> str:
     value = str(n)
     used.add(value)
     return value
+
+
+def _device_pins(sheet: Sheet, project: Project, wire: Wire) -> list[str]:
+    pins: list[str] = []
+    for end in (wire.frm, wire.to):
+        if _is_rail(sheet, project, end):
+            continue
+        ref, pin = split_end(end)
+        if ref:
+            pins.append(f"{ref}.{pin}".upper() if pin else ref.upper())
+    return pins
+
+
+def _sync_shared_pin(
+    sheet: Sheet,
+    wire: Wire,
+    items: list[tuple[Sheet, Wire]],
+    project: Project,
+    chosen: str,
+) -> int:
+    """A jumper already numbered on this pin takes the landing's number.
+
+    The two-number checker joins wires that share a pin. A locked print stays.
+    """
+
+    pins = set(_device_pins(sheet, project, wire))
+    if not pins:
+        return 0
+    changed = 0
+    for other_sheet, other in items:
+        if other is wire or is_locked(other):
+            continue
+        if not pins.intersection(_device_pins(other_sheet, project, other)):
+            continue
+        current = _norm(other.number)
+        if _sheet_line_number(current) and current != chosen:
+            other.number = chosen
+            changed += 1
+    return changed
 
 
 def assign_wire_numbers(
@@ -621,13 +683,19 @@ def assign_wire_numbers(
             chosen = _next_number(use_scheme, _sheet_no(project, sheet.id), use_start, used)
         elif chosen not in used:
             used.add(chosen)
-        for wire in wires:
+        for sheet, wire in items:
             if is_locked(wire):
                 continue
             current = _norm(wire.number)
             if current == chosen:
                 continue
             if current and is_protected(wire, extras):
+                continue
+            # A printed sheet/line number is never replaced by the rail's name.
+            if _sheet_line_number(current) and _rail_label(chosen, sheet, project):
+                continue
+            # Printed numbers stay. Sharing L2 does not turn 102 into 104.
+            if current and _touches_rail(sheet, project, wire):
                 continue
             if mode == "full" and overwrite and not is_protected(wire, extras):
                 wire.number = chosen
@@ -636,10 +704,8 @@ def assign_wire_numbers(
             if not current:
                 wire.number = chosen
                 assigned += 1
+                assigned += _sync_shared_pin(sheet, wire, items, project, chosen)
                 continue
-            if mode == "incremental" and not is_locked(wire) and not conventional_name(current, extras):
-                wire.number = chosen
-                assigned += 1
     return {
         "assigned": assigned,
         "nets": len(networks),

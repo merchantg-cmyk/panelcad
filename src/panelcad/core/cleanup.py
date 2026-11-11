@@ -1469,6 +1469,20 @@ def _rank(q: dict[str, int]) -> tuple[int, ...]:
     )
 
 
+def _real_fix(after: dict[str, int], before: dict[str, int]) -> bool:
+    """Fewer elbows alone do not rearrange a page that already reads.
+
+    Overlaps, wires through symbols, crossings, parts off the sheet, and
+    outputs that are not seated are the reasons to keep a tidy. A drop in
+    bends with none of those improved is the old reshuffle.
+    """
+
+    from panelcad.core.sheet_quality import PRIMARY
+
+    keys = (*PRIMARY, "outside", "unseated")
+    return any(int(after.get(key) or 0) < int(before.get(key) or 0) for key in keys)
+
+
 def _idle_cleanup(sheet_id: str) -> dict[str, Any]:
     return {"sheet": sheet_id, "scaled": 0, "aligned": 0, "unstacked": 0, "clamped": 0, "spaced": 0}
 
@@ -1568,7 +1582,11 @@ def _guarded_cleanup(session: Session, sheet_id: str) -> dict[str, Any]:
         after = _quality(session, session.sheet(sheet_id))
         seated = int(result.get("seated") or 0)
         relaxed = {**before, "bends": before["bends"] + OUTPUT_SEAT_BENDS * seated}
-        if (no_worse(after, before) or (seated and no_worse(after, relaxed))) and _rank(after) < best[0]:
+        if (
+            (no_worse(after, before) or (seated and no_worse(after, relaxed)))
+            and _real_fix(after, before)
+            and _rank(after) < best[0]
+        ):
             best = (_rank(after), session.project.model_copy(deep=True), {**result, "method": name}, after)
     def _keep_overflow_note() -> None:
         # Cleanup records branches that do not fit the power columns. That
@@ -1595,7 +1613,7 @@ def _guarded_cleanup(session: Session, sheet_id: str) -> dict[str, Any]:
         if seated:
             after = _quality(session, page)
             relaxed = {**before, "bends": before["bends"] + OUTPUT_SEAT_BENDS * seated}
-            if (no_worse(after, before) or no_worse(after, relaxed)) and _rank(after) < best[0]:
+            if (no_worse(after, before) or no_worse(after, relaxed)) and _real_fix(after, before) and _rank(after) < best[0]:
                 best = (
                     _rank(after),
                     session.project.model_copy(deep=True),

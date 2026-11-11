@@ -1,0 +1,254 @@
+{
+  "id": "tesseract-5.5.3-win64-eng-fast-4.1.0",
+  "tesseract_version": "5.5.3",
+  "platform": "win-x64",
+  "installer": {
+    "filename": "tesseract-ocr-w64-setup-5.5.3.20260724.exe",
+    "url": "https://github.com/tesseract-ocr/tesseract/releases/download/5.5.3/tesseract-ocr-w64-setup-5.5.3.20260724.exe",
+    "sha256": "bee9e3434bd94fd65387d9be28cd467a41f61b1275383b55b0f59a1331270ae4",
+    "bytes": 26573224
+  },
+  "tessdata_fast": {
+    "version": "4.1.0",
+    "repo": "tesseract-ocr/tessdata_fast",
+    "path": "tessdata/eng.traineddata",
+    "url": "https://github.com/tesseract-ocr/tessdata_fast/raw/4.1.0/eng.traineddata",
+    "sha256": "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2",
+    "bytes": 4113088,
+    "note": "English fast model only. tessdata_best is not part of this runtime."
+  },
+  "files": [
+    {
+      "path": "tesseract.exe",
+      "sha256": "c66f0f12ed76f6aa455dac97684bbc86756d6a732380bee09122454cfda3f420",
+      "bytes": 1867784,
+      "source": "installer"
+    },
+    {
+      "path": "libtesseract-5.dll",
+      "sha256": "54d54528b453ce3a5ba79487687f8df43e7b194b9ea97beba74200453fe1fb46",
+      "bytes": 3501048,
+      "source": "installer"
+    },
+    {
+      "path": "libleptonica-6.dll",
+      "sha256": "1869b44e3d46fd830620b042477e5d60a950779582f38f60291547efb27792f1",
+      "bytes": 2850600,
+      "source": "installer"
+    },
+    {
+      "path": "libarchive-13.dll",
+      "sha256": "ddabddfdc98e1e1342ce4a7069fb4004de6c870d7bc9f4e95ef243dd18468e97",
+      "bytes": 972210,
+      "source": "installer"
+    },
+    {
+      "path": "libcurl-4.dll",
+      "sha256": "3d302f9690e810fdfd950254e2f0663d0ff768737f350c602a4ed3a06e9b6b2b",
+      "bytes": 1226963,
+      "source": "installer"
+    },
+    {
+      "path": "libtiff-6.dll",
+      "sha256": "47fe69165bf8e211aaa84224f51f145dc894e330fe7ca167f7c99419e0c8c894",
+      "bytes": 625178,
+      "source": "installer"
+    },
+    {
+      "path": "libgcc_s_seh-1.dll",
+      "sha256": "172cfdc9d83703ec0a0ca2cee08f6cf2a166b801717ee51a56b3a63b36bc2f83",
+      "bytes": 954773,
+      "source": "installer"
+    },
+    {
+      "path": "libstdc++-6.dll",
+      "sha256": "5fe5d4d8f6636eb6f2dc55be99dc5dc8a6c40db1abdf592e84480d1e6985abd0",
+      "bytes": 26390974,
+      "source": "installer"
+    },
+    {
+      "path": "libwinpthread-1.dll",
+      "sha256": "6a661d5846d80a91394dbb9b2dab87ba3cc705eac80ad45fe73677bff70cd6d2",
+      "bytes": 65955,
+      "source": "installer"
+    },
+    {
+      "path": "libb2-1.dll",
+      "sha256": "77bab532b5421d6cdddb96c3ae9a4bde144eb481ccaf243336c9f8c690a50987",
+      "bytes": 34653,
+      "source": "installer"
+    },
+    {
+      "path": "libbrotlicommon.dll",
+      "sha256": "ca7bc06ead80259971badf2cd0bfc688db9154dad65f139f49a38b4be9976f97",
+      "bytes": 143429,
+      "source": "installer"
+    },
+    {
+      "path": "libbrotlidec.dll",
+      "sha256": "a142dc6cfa77cb907028aa9426f486f3d8de37855e8db2ae2894147908121881",
+      "bytes": 62461,
+      "source": "installer"
+    },
+    {
+      "path": "libbz2-1.dll",
+      "sha256": "b79cd3a7102e359ef6324e98966a67939e58ec2b651ae2847cae84a4dfa453f7",
+      "bytes": 100964,
+      "source": "installer"
+    },
+    {
+      "path": "libdeflate.dll",
+      "sha256": "3f3fc3a73bc3623dc93b37bb321c484d3731d93006fd01c0495d15711826eb44",
+      "bytes": 99228,
+      "source": "installer"
+    },
+    {
+      "path": "libexpat-1.dll",
+      "sha256": "92ae866c6c58dd2d8366aa0e6230ba8d434d5306e8d8c3a08b7e61750fc16153",
+      "bytes": 237603,
+      "source": "installer"
+    },
+    {
+      "path": "libgif-7.dll",
+      "sha256": "5b3d837ccaab84683dd93fbaddf2d98e1a9f90e0ddb8ea73dc70157adb4d26f1",
+      "bytes": 45777,
+      "source": "installer"
+    },
+    {
+      "path": "libiconv-2.dll",
+      "sha256": "7a282a854e01be726c6cccfe46f548c716aa45b3014818468253aaa4efbcd067",
+      "bytes": 1143148,
+      "source": "installer"
+    },
+    {
+      "path": "libidn2-0.dll",
+      "sha256": "9880b52651a0247640a2531d777380f7c35fac7efa7e3979b265ddcb78db8642",
+      "bytes": 247081,
+      "source": "installer"
+    },
+    {
+      "path": "libintl-8.dll",
+      "sha256": "0537c3dd2378218508ebe3cc416d72a99ee2d24ae1c5525e23458f32544ef861",
+      "bytes": 298731,
+      "source": "installer"
+    },
+    {
+      "path": "libjbig-0.dll",
+      "sha256": "275a827ba6839d47cfdbe059db1b1b403a92ff26e2b76a29362915487868bef2",
+      "bytes": 62083,
+      "source": "installer"
+    },
+    {
+      "path": "libjpeg-8.dll",
+      "sha256": "b564d34adaca83e73af0e2231719dd0198ea6cd074c64b2ba85bfd7182f27db7",
+      "bytes": 967968,
+      "source": "installer"
+    },
+    {
+      "path": "libLerc.dll",
+      "sha256": "6887fb5aeabf382a835a4cb693025e8d48d9c90e82ca4eae5d2d8ffb70c6ca9a",
+      "bytes": 804265,
+      "source": "installer"
+    },
+    {
+      "path": "liblz4.dll",
+      "sha256": "35f917274bca8f19677ba66f1b3cc3c83568c3249fc43215fc16e76439c8e856",
+      "bytes": 158649,
+      "source": "installer"
+    },
+    {
+      "path": "liblzma-5.dll",
+      "sha256": "dc9edb9bd83b0371fe68d96cb3e70cd17b7a5aba958326a18f8210cb812432e9",
+      "bytes": 191836,
+      "source": "installer"
+    },
+    {
+      "path": "libopenjp2-7.dll",
+      "sha256": "123587086cb1a25d2a338fb9b7c1d6bda10bf9062625b4f08c6a92b3d9cafe47",
+      "bytes": 519082,
+      "source": "installer"
+    },
+    {
+      "path": "libpng16-16.dll",
+      "sha256": "3737838ee8d6b893df7bdabf7439775371a57dce7e17ee6b35586023c64bd9ab",
+      "bytes": 264269,
+      "source": "installer"
+    },
+    {
+      "path": "libpsl-5.dll",
+      "sha256": "b31fc70eda598a39b65fe2736d815518db0652d641346f75eac40c2a0499b058",
+      "bytes": 105304,
+      "source": "installer"
+    },
+    {
+      "path": "libsharpyuv-0.dll",
+      "sha256": "ab0c9f61dc69b6bcdff1011e215f8d5fd6e5096aba9be3386ab87f217fbbeffe",
+      "bytes": 53757,
+      "source": "installer"
+    },
+    {
+      "path": "libssh2-1.dll",
+      "sha256": "ee7fe3e749859334c99e9261689481dd879811122598d22585421f95d29fc7ae",
+      "bytes": 271318,
+      "source": "installer"
+    },
+    {
+      "path": "libunistring-5.dll",
+      "sha256": "b91e2850d3668d4931056a8f4d35783b8ec3eea3735485108a936a072cd16071",
+      "bytes": 2251328,
+      "source": "installer"
+    },
+    {
+      "path": "libwebp-7.dll",
+      "sha256": "c6c21a10f8cfe13270832e64640b82709e1d87b956b5f15af435a6c25acd6bbf",
+      "bytes": 749724,
+      "source": "installer"
+    },
+    {
+      "path": "libwebpmux-3.dll",
+      "sha256": "2c8a2e9d7901ec65330f31f9989c2a07ef0506e903b485fcd8b241a6bab9b88f",
+      "bytes": 82858,
+      "source": "installer"
+    },
+    {
+      "path": "libzstd.dll",
+      "sha256": "b95c223a9548a9ecf51377c962e0bc8f0c51eb0c6f67a296dbc885996f0dd40d",
+      "bytes": 1218273,
+      "source": "installer"
+    },
+    {
+      "path": "zlib1.dll",
+      "sha256": "93e9243a44c29200eeacaf9658efe2558581770e4b11ca4b500e18e424a6e3b5",
+      "bytes": 128488,
+      "source": "installer"
+    },
+    {
+      "path": "tessdata/configs/tsv",
+      "sha256": "59d079bb75d8b3d7c839a3564580cb559e362c93a9d70f234e421c0c3e767e04",
+      "bytes": 22,
+      "source": "installer",
+      "installer_path": "tessdata/configs/tsv"
+    },
+    {
+      "path": "licenses/tesseract/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "bytes": 11358,
+      "source": "installer",
+      "installer_path": "doc/LICENSE"
+    },
+    {
+      "path": "licenses/tesseract/AUTHORS",
+      "sha256": "720862b7253993b348fe15f37ed6e0d4feb0fc8df8324284d75975d54dd29923",
+      "bytes": 787,
+      "source": "installer",
+      "installer_path": "doc/AUTHORS"
+    },
+    {
+      "path": "tessdata/eng.traineddata",
+      "sha256": "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2",
+      "bytes": 4113088,
+      "source": "tessdata_fast",
+      "url": "https://github.com/tesseract-ocr/tessdata_fast/raw/4.1.0/eng.traineddata"
+    }
+  ]
+}

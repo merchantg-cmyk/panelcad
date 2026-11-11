@@ -1,7 +1,8 @@
 """Read a scan from pixels only.
 
-Deskew and denoise with OpenCV, read text with Tesseract, match library
-symbol renders against the ink, and snap traced line ends to those pins.
+Deskew and denoise with OpenCV, read text with the electrical OCR engine,
+match library symbol renders against the ink, and snap traced line ends to
+those pins. Tesseract is only the fallback when that engine cannot load.
 This module does not open a PDF and does not read a text layer.
 """
 
@@ -19,6 +20,7 @@ from PIL import Image
 from panelcad.core.geometry import rotate_point
 from panelcad.importer.models import CONVENTIONAL_WIRES
 from panelcad.importer.read import (
+    HYPHEN_WIRE_RE,
     LEAD_WIRE_RE,
     TAG_RE,
     WIRE_RE,
@@ -36,6 +38,8 @@ from panelcad.importer.read import (
     read_title_block,
 )
 from panelcad.importer.symbols import PREFIX_CONFIDENCE, shape_class, tag_prefix
+from panelcad.importer.tesseract_runtime import configure_tesseract
+from panelcad.importer.tesseract_runtime import find_tesseract as find_tesseract
 
 # A template hit at this ink fraction is a symbol. Below it, the tag letters
 # are only a prefix guess. OCR keeps this bar.
@@ -57,7 +61,8 @@ TERMINAL_PIN_MM = 8.0
 ENDPOINT_LIBRARY = "iec.connection.node"
 TESSERACT_MESSAGE = (
     "Scans need OCR or vision turned on. "
-    "Tesseract OCR was not found. Install Tesseract and put the tesseract command on PATH. "
+    "Tesseract OCR was not found. PanelCAD looks for the runtime shipped with the install, "
+    "then for the tesseract command on PATH. "
     "Official source: https://github.com/tesseract-ocr/tesseract "
     "Downloads: https://tesseract-ocr.github.io/tessdoc/Downloads.html"
 )
@@ -220,11 +225,14 @@ def read_pixels(
     ]
     devices.extend(_coils_from_ink(gray, binary, devices, ppm, catalog, standard))
     _land_body_symbols(binary, devices, ppm, catalog, standard)
+    _sibling_terminal_captions(gray, devices, ppm, catalog)
     _mark_caption_tags(devices, tokens)
     # Rotation first, so the trace sees line pins on the bus side. Spread after
     # the trace so a moved origin does not leave the ink.
     orient_ladder_devices(devices, catalog, spread=False)
     wires = _trace_wires(labeled["wires"], binary, rgb, devices, catalog, ppm, width_mm, height_mm)
+    wires.extend(_unstored_sheet_lines(tokens, wires, devices, catalog))
+    record_open_stubs(devices, catalog, binary, ppm, wires)
     orient_ladder_devices(devices, catalog, spread=True, page_width=width_mm)
     from panelcad.importer.strip_scan import read_terminal_strip
 
@@ -539,43 +547,12 @@ def _ink(gray: np.ndarray) -> np.ndarray:
     return (blur < 180).astype(np.uint8)
 
 
-def find_tesseract() -> str:
-    """The tesseract binary on PATH or in a usual install folder. Empty when it is absent."""
+def require_tesseract() -> str:
+    """Point pytesseract at the resolved binary, or raise TesseractMissing."""
 
-    import os
-    import shutil
-
-    candidates: list[str] = []
-    for key in ("TESSERACT_CMD", "PANELCAD_TESSERACT"):
-        value = str(os.environ.get(key) or "").strip()
-        if value:
-            candidates.append(value)
-    found = shutil.which("tesseract")
-    if found:
-        candidates.append(found)
-    candidates.extend(
-        [
-            "/usr/bin/tesseract",
-            "/usr/local/bin/tesseract",
-            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-        ]
-    )
-    for candidate in candidates:
-        if candidate and Path(candidate).is_file():
-            return str(Path(candidate))
-    return ""
-
-
-def configure_tesseract() -> str:
-    """Point pytesseract at the local binary. Returns the path, or empty."""
-
-    path = find_tesseract()
+    path = configure_tesseract()
     if not path:
-        return ""
-    import pytesseract
-
-    pytesseract.pytesseract.tesseract_cmd = path
+        raise TesseractMissing(TESSERACT_MESSAGE)
     return path
 
 
@@ -591,10 +568,13 @@ def _reraise_tesseract(exc: BaseException) -> None:
 
 
 def _ocr_tokens(gray: np.ndarray, rgb: np.ndarray, ppm: float, width_mm: float, height_mm: float) -> list[dict[str, Any]]:
-    import pytesseract
+    from panelcad.ocr.dispatch import tesseract_required
 
-    if not configure_tesseract():
-        raise TesseractMissing(TESSERACT_MESSAGE)
+    pytesseract = None
+    if tesseract_required():
+        import pytesseract
+
+        require_tesseract()
     try:
         ink = _text_ink(gray, rgb)
         tokens = _sparse_tokens(_ocr_canvas(gray, rgb), ppm, height_mm, pytesseract)
@@ -664,8 +644,11 @@ def _tokens_in_band(
     x0: int,
     pytesseract: Any,
 ) -> list[dict[str, Any]]:
+    from panelcad.ocr.dispatch import image_to_data
+
     up = cv2.resize(band, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-    data = pytesseract.image_to_data(up, output_type=pytesseract.Output.DICT, config="--psm 11")
+    output_type = pytesseract.Output.DICT if pytesseract is not None else None
+    data = image_to_data(up, output_type=output_type, config="--psm 11")
     found: list[dict[str, Any]] = []
     for index, raw in enumerate(data["text"]):
         try:
@@ -793,9 +776,10 @@ def _ocr_word(
     psm: int,
     ppm: float,
 ) -> str:
-    import pytesseract
+    from panelcad.ocr.dispatch import image_to_string, tesseract_required
 
-    configure_tesseract()
+    if tesseract_required():
+        configure_tesseract()
 
     left, top, width, height = box
     pad = int(expand_left_mm * ppm * 2.0)
@@ -809,7 +793,7 @@ def _ocr_word(
     bigger = cv2.resize(crop, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
     bigger = cv2.copyMakeBorder(bigger, 16, 16, 16, 16, cv2.BORDER_CONSTANT, value=255)
     config = f"--psm {psm} -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    return str(pytesseract.image_to_string(bigger, config=config) or "").strip()
+    return str(image_to_string(bigger, config=config) or "").strip()
 
 
 def _fix_token(raw: str) -> str:
@@ -822,7 +806,12 @@ def _fix_token(raw: str) -> str:
     if is_cross_ref(str(raw or "")):
         return ""
     hyphenated = re.sub(r"[^A-Za-z0-9\-]", "", raw or "").upper()
-    if is_device_tag(hyphenated) or LEAD_WIRE_RE.match(hyphenated) or BUS_WIRE_RE.match(hyphenated):
+    if (
+        is_device_tag(hyphenated)
+        or LEAD_WIRE_RE.match(hyphenated)
+        or BUS_WIRE_RE.match(hyphenated)
+        or HYPHEN_WIRE_RE.match(hyphenated)
+    ):
         return hyphenated
     text = re.sub(r"[^A-Za-z0-9]", "", raw or "").upper()
     if not text:
@@ -946,8 +935,10 @@ def _read_closed_digits(
     ink = ink[rows.min() : rows.max() + 1, cols.min() : cols.max() + 1]
     up = cv2.resize((~ink).astype(np.uint8) * 255, None, fx=6, fy=6, interpolation=cv2.INTER_CUBIC)
     _thr, bw = cv2.threshold(up, 160, 255, cv2.THRESH_BINARY)
+    from panelcad.ocr.dispatch import image_to_string
+
     bw = cv2.copyMakeBorder(bw, 18, 18, 18, 18, cv2.BORDER_CONSTANT, value=255)
-    return pytesseract.image_to_string(bw, config="--psm 7 -c tessedit_char_whitelist=0123456789").strip()
+    return str(image_to_string(bw, config="--psm 7 -c tessedit_char_whitelist=0123456789") or "").strip()
 
 
 def ocr_title_sheet(
@@ -1076,14 +1067,16 @@ def _merge_sheet_reads(results: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _tesseract_words(image: np.ndarray, psm: int) -> list[_OcrToken]:
-    import pytesseract
+    from panelcad.ocr.dispatch import image_to_data, tesseract_required
 
-    if not configure_tesseract():
-        raise TesseractMissing(TESSERACT_MESSAGE)
+    pytesseract = None
+    if tesseract_required():
+        import pytesseract
+
+        require_tesseract()
     try:
-        data = pytesseract.image_to_data(
-            image, output_type=pytesseract.Output.DICT, config=f"--psm {psm}"
-        )
+        output_type = pytesseract.Output.DICT if pytesseract is not None else None
+        data = image_to_data(image, output_type=output_type, config=f"--psm {psm}")
     except TesseractMissing:
         raise
     except Exception as exc:  # noqa: BLE001 — a missing binary is TesseractMissing
@@ -1173,6 +1166,13 @@ def _upscale_title_pieces(gray: np.ndarray, upscale: float) -> list[np.ndarray]:
 
 
 def _finish_title_piece(gray: np.ndarray) -> np.ndarray:
+    from panelcad.ocr.dispatch import tesseract_required
+
+    # The 18 px margin is for Tesseract. On the electrical reader it makes a
+    # short line tall enough that rule removal eats the letter stems, so OF
+    # comes back as QF. The raw crop is already the line.
+    if not tesseract_required():
+        return gray
     short = min(gray.shape[:2]) if gray.size else 0
     if short >= 15 and float(np.median(gray)) < 210:
         block = 31 if short >= 32 else 15
@@ -1410,10 +1410,24 @@ def _edge_title_crops(gray: np.ndarray, box: tuple[int, int, int, int]) -> list[
 def _both_ways(strip: np.ndarray) -> list[np.ndarray]:
     if strip.size == 0:
         return []
-    return [
+    views = [
         cv2.rotate(strip, cv2.ROTATE_90_CLOCKWISE),
         cv2.rotate(strip, cv2.ROTATE_90_COUNTERCLOCKWISE),
     ]
+    from panelcad.ocr.dispatch import tesseract_required
+
+    # A turned side title is only a few pixels tall. At that size the
+    # electrical reader draws an 8 as a B. Twice as tall, the same reader
+    # keeps the 8. Tesseract already reads the thin strip.
+    if tesseract_required():
+        return views
+    grown: list[np.ndarray] = []
+    for view in views:
+        short = min(view.shape[:2]) if view.size else 0
+        if 0 < short < 36:
+            view = cv2.resize(view, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        grown.append(view)
+    return grown
 
 
 def _inked(crops: list[np.ndarray]) -> list[np.ndarray]:
@@ -1444,9 +1458,13 @@ def _title_tokens(rgb: np.ndarray, ppm: float, width_mm: float, height_mm: float
 def _read_title_cells(rgb: np.ndarray, ppm: float, width_mm: float, height_mm: float) -> list[dict[str, Any]]:
     """Columns and rows are the ruled cells, read one cell-row at a time."""
 
-    import pytesseract
+    from panelcad.ocr.dispatch import tesseract_required
 
-    configure_tesseract()
+    pytesseract = None
+    if tesseract_required():
+        import pytesseract
+
+        configure_tesseract()
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     height, width = gray.shape
     top = max(0, height - int(68 * ppm))
@@ -1487,9 +1505,12 @@ def _read_title_cells(rgb: np.ndarray, ppm: float, width_mm: float, height_mm: f
 
 
 def _cell_words(cell: np.ndarray, pytesseract: Any, ppm: float, *, origin_x: int, origin_y: int) -> list[dict[str, Any]]:
+    from panelcad.ocr.dispatch import image_to_data
+
     up = cv2.resize(cell, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
     up = cv2.copyMakeBorder(up, 12, 12, 12, 12, cv2.BORDER_CONSTANT, value=255)
-    data = pytesseract.image_to_data(up, output_type=pytesseract.Output.DICT, config="--psm 6")
+    output_type = pytesseract.Output.DICT if pytesseract is not None else None
+    data = image_to_data(up, output_type=output_type, config="--psm 6")
     found: list[dict[str, Any]] = []
     for index, raw in enumerate(data["text"]):
         text = str(raw or "").strip()
@@ -1932,6 +1953,100 @@ def _land_body_symbols(
         used.add(nearest_i)
 
 
+def _sibling_terminal_captions(
+    gray: np.ndarray,
+    devices: list[dict[str, Any]],
+    ppm: float,
+    catalog: Any,
+) -> None:
+    """Read captions of the other blocks in a row that already has one terminal.
+
+    The tag is the text OCR returned. A block with no readable caption is left
+    out. A tag that was already read is not rewritten.
+    """
+
+    import pytesseract
+
+    from panelcad.importer.read import is_device_tag
+
+    if ppm <= 0 or not configure_tesseract():
+        return
+    taken = {str(device.get("tag") or "") for device in devices}
+    seeds = []
+    for device in devices:
+        tag = str(device.get("tag") or "")
+        lib = str(device.get("library_id") or "")
+        if not lib or not re.fullmatch(r"[A-Z]{1,4}\d+-\d+", tag):
+            continue
+        if "terminal" not in lib.lower() and not tag.startswith("X"):
+            continue
+        box = _symbol_box(device, catalog)
+        if box is None:
+            continue
+        seeds.append((device, tag.rsplit("-", 1)[0], box))
+    for device, family, (ox, oy, width, height) in seeds:
+        x0 = int(round((ox - 6) * ppm))
+        x1 = int(round((ox + width + 140) * ppm))
+        bands = (
+            (oy + height - 1, oy + height + 12),
+            (oy - 6, oy + 4),
+        )
+        for top, bot in bands:
+            y0 = int(round(top * ppm))
+            y1 = int(round(bot * ppm))
+            xa, xb = max(0, x0), min(gray.shape[1], x1)
+            ya, yb = max(0, y0), min(gray.shape[0], y1)
+            if xb - xa < 12 or yb - ya < 8:
+                continue
+            crop = gray[ya:yb, xa:xb]
+            up = cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+            up = cv2.copyMakeBorder(up, 12, 12, 12, 12, cv2.BORDER_CONSTANT, value=255)
+            try:
+                data = pytesseract.image_to_data(
+                    up,
+                    output_type=pytesseract.Output.DICT,
+                    config="--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-",
+                )
+            except Exception as exc:  # noqa: BLE001
+                _reraise_tesseract(exc)
+                return
+            texts = data.get("text") or []
+            for index, raw in enumerate(texts):
+                tag = _fix_token(str(raw or "").strip())
+                if not tag or tag in taken or not tag.startswith(family + "-"):
+                    continue
+                if not is_device_tag(tag):
+                    continue
+                try:
+                    left = int(data["left"][index])
+                    word_w = int(data["width"][index])
+                except (KeyError, ValueError, IndexError):
+                    continue
+                # image_to_data is on the upscaled, padded crop. 12 px is that pad.
+                center_px = (left + word_w / 2.0 - 12.0) / 3.0
+                world_x = (xa + center_px) / ppm - width / 2.0
+                if any(abs(world_x - float(other.get("x") or 0)) < width * 0.6 and abs(oy - float(other.get("y") or 0)) < height for other in devices if other.get("library_id")):
+                    continue
+                devices.append(
+                    {
+                        "tag": tag,
+                        "type": "terminal",
+                        "symbol": "terminal",
+                        "pins": [],
+                        "x": round(world_x, 2),
+                        "y": round(oy, 2),
+                        "confidence": 0.72,
+                        "unreadable": False,
+                        "guess": False,
+                        "library_id": str(device.get("library_id") or ""),
+                        "pin_frame": "schematic",
+                        "scale": 1.0,
+                        "source": "symbol",
+                    }
+                )
+                taken.add(tag)
+
+
 def _coils_from_ink(
     gray: np.ndarray,
     binary: np.ndarray,
@@ -1977,14 +2092,20 @@ def _coils_from_ink(
             total = int((tmpl > 0).sum())
             if total < 8 or binary.shape[0] <= tmpl.shape[0] or binary.shape[1] <= tmpl.shape[1]:
                 continue
-            response = cv2.matchTemplate(binary, tmpl, cv2.TM_CCORR)
+            # A one-pixel circle only hits the stroke when the grid lands on it.
+            # Dilate the same way symbol matching does, so a coil on a coarse
+            # scan still peaks.
+            match_ink = cv2.dilate(binary, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
+            response = cv2.matchTemplate(match_ink, tmpl, cv2.TM_CCORR)
             work = response.copy()
             th, tw = tmpl.shape
             for _ in range(12):
                 index = int(np.argmax(work))
                 iy, ix = divmod(index, work.shape[1])
                 score = float(work[iy, ix]) / total
-                if score < MATCH_MIN:
+                # Below a clear template hit, keep the peak only when the
+                # letters inside the circle read as a device tag.
+                if score < 0.60:
                     break
                 y0, y1 = max(0, iy - max(th // 2, 1)), min(work.shape[0], iy + max(th // 2, 1))
                 x0, x1 = max(0, ix - max(tw // 2, 1)), min(work.shape[1], ix + max(tw // 2, 1))
@@ -1995,6 +2116,10 @@ def _coils_from_ink(
                     continue
                 tag = _read_coil_tag(gray, ox, oy, device, ppm)
                 if not tag or not is_device_tag(tag) or tag in taken:
+                    continue
+                # A weak circle is kept only when the letters are a coil tag.
+                # A misread such as F5 is not a coil.
+                if score < MATCH_MIN and tag_prefix(tag) not in {"M", "CR", "K", "TR", "KT"}:
                     continue
                 if tag_prefix(tag) == "K" and not str(device.library_id).startswith("iec."):
                     continue
@@ -2031,11 +2156,12 @@ def _read_coil_tag(
     device: Any,
     ppm: float,
 ) -> str:
-    """Letters inside a coil after the circle or square stroke is painted out."""
+    """Letters inside a coil. A blank interior stays unread. Nothing is invented."""
 
-    import pytesseract
+    from panelcad.importer.read import is_device_tag
+    from panelcad.ocr.dispatch import image_to_string, tesseract_required
 
-    if not configure_tesseract():
+    if tesseract_required() and not configure_tesseract():
         return ""
     x0 = max(0, int(round(ox * ppm)))
     y0 = max(0, int(round(oy * ppm)))
@@ -2043,23 +2169,43 @@ def _read_coil_tag(
     y1 = min(gray.shape[0], int(round((oy + float(device.schematic_height)) * ppm)))
     if x1 - x0 < 8 or y1 - y0 < 8:
         return ""
-    crop = gray[y0:y1, x0:x1].copy()
+    crop = gray[y0:y1, x0:x1]
     height, width = crop.shape
+    # The circle stroke is not a letter. The tag sits in the open middle.
+    y_a, y_b = int(height * 0.30), int(height * 0.70)
+    x_a, x_b = int(width * 0.30), int(width * 0.70)
+    center = crop[y_a:y_b, x_a:x_b]
+    # A blank circle has no letters in the middle. Do not OCR the ring.
+    if center.size == 0 or int(np.count_nonzero(center < 180)) < 12:
+        return ""
+    pieces = [center]
+    wiped = crop.copy()
     yy, xx = np.ogrid[:height, :width]
     cy, cx = height / 2.0, width / 2.0
     radius = np.hypot(yy - cy, xx - cx)
     ring = (radius > min(height, width) * 0.22) & (radius < min(height, width) * 0.42)
-    crop[ring] = 255
-    up = cv2.resize(crop, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
-    try:
-        heard = pytesseract.image_to_string(
-            up,
-            config="--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-        )
-    except Exception as exc:  # noqa: BLE001
-        _reraise_tesseract(exc)
-        return ""
-    return _fix_token(str(heard or "").strip())
+    wiped[ring] = 255
+    pieces.append(wiped)
+    whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    for piece in pieces:
+        if piece.size == 0 or min(piece.shape) < 4:
+            continue
+        up = cv2.resize(piece, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+        up = cv2.copyMakeBorder(up, 16, 16, 16, 16, cv2.BORDER_CONSTANT, value=255)
+        _, bw = cv2.threshold(up, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        for image in (bw, up):
+            try:
+                heard = image_to_string(
+                    image,
+                    config=f"--psm 7 -c tessedit_char_whitelist={whitelist}",
+                )
+            except Exception as exc:  # noqa: BLE001
+                _reraise_tesseract(exc)
+                return ""
+            tag = _fix_token(str(heard or "").strip())
+            if tag and is_device_tag(tag):
+                return tag
+    return ""
 
 
 def _trace_wires(
@@ -2073,15 +2219,21 @@ def _trace_wires(
     height_mm: float,
 ) -> list[dict[str, Any]]:
     pins = _pin_points(devices, catalog)
+    numbers = _wire_numbers_on_the_page(numbers, devices, catalog)
     mask = _wire_mask(binary, rgb, devices, catalog, ppm)
     segments = _line_segments(mask, ppm, width_mm, height_mm)
     chains = _chains(segments)
     dots = _junction_dots(binary, ppm)
     labeled: list[dict[str, Any]] = []
     used_numbers: set[int] = set()
-    # A conductor is the ink between two pins. Line segments still feed the
-    # chain fallback when the pins are further apart than that direct run.
-    for pin_a, pin_b, point_a, point_b in _pin_links(pins, mask, ppm):
+    # A conductor is the ink between two pins. A tee off that run is the
+    # parallel branch. Line segments still feed the chain fallback.
+    direct = _pin_links(pins, mask, ppm)
+    direct.extend(_tee_links(direct, pins, mask, ppm))
+    direct.extend(_port_rail_runs(direct, pins, mask, ppm, width_mm))
+    direct_pairs = {tuple(sorted((pin_a, pin_b))) for pin_a, pin_b, _, _ in direct}
+    seated: list[tuple[int, tuple[float, float], tuple[float, float]]] = []
+    for pin_a, pin_b, point_a, point_b in direct:
         number, nindex = _nearest_number([point_a, point_b], numbers, used_numbers)
         if number is None:
             number = {"text": "?", "x": point_a[0], "y": point_a[1], "confidence": 0.4}
@@ -2089,9 +2241,16 @@ def _trace_wires(
         else:
             used_numbers.add(nindex)
         labeled.append(_wire_item(_zone_digit(number), pin_a, pin_b, False))
+        seated.append((len(labeled) - 1, point_a, point_b))
+    _seat_unread_numbers(labeled, seated, numbers, used_numbers)
     for chain in chains:
         ends = _snap_ends(chain, pins, dots)
         if ends is None:
+            continue
+        a, b, ambiguous = ends
+        if a[0] == b[0]:
+            continue
+        if not ambiguous and tuple(sorted((a, b))) in direct_pairs:
             continue
         number, nindex = _nearest_number(chain, numbers, used_numbers)
         if number is None:
@@ -2099,7 +2258,6 @@ def _trace_wires(
             nindex = -1
         else:
             used_numbers.add(nindex)
-        a, b, ambiguous = ends
         number = _zone_digit(number)
         if number["text"] == "?" and ambiguous:
             continue
@@ -2135,7 +2293,7 @@ def collapse_wire_numbers(wires: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     kept: list[dict[str, Any] | None] = []
     index_of: dict[tuple[str, tuple[tuple[str, str], tuple[str, str]]], int] = {}
-    loose_of: dict[str, int] = {}
+    loose_of: dict[str, list[int]] = {}
     pinned_numbers: set[str] = set()
     for wire in wires:
         number = str(wire.get("number") or "")
@@ -2143,22 +2301,38 @@ def collapse_wire_numbers(wires: list[dict[str, Any]]) -> list[dict[str, Any]]:
             kept.append(wire)
             continue
         # One printed number can feed several pins (a bus). Different pin pairs stay.
-        # An unpinned stub of that number does not.
+        # An unpinned stub of that number does not, unless it is printed far away on another rung.
         pair = _pinned_pair(wire)
         if pair is None:
-            if number in pinned_numbers:
+            if number in pinned_numbers and not all(
+                _same_number_elsewhere(wire, item)
+                for item in kept
+                if item and str(item.get("number") or "") == number and _pinned_pair(item) is not None
+            ):
                 continue
-            prior = loose_of.get(number)
-            if prior is None:
-                loose_of[number] = len(kept)
+            priors = loose_of.setdefault(number, [])
+            near_idx = next(
+                (idx for idx in priors if kept[idx] is not None and not _same_number_elsewhere(wire, kept[idx])),
+                None,
+            )
+            if near_idx is None:
+                priors.append(len(kept))
                 kept.append(wire)
-            elif _wire_rank(wire) > _wire_rank(kept[prior] or wire):
-                kept[prior] = wire
+            elif _wire_rank(wire) > _wire_rank(kept[near_idx] or wire):
+                kept[near_idx] = wire
             continue
         pinned_numbers.add(number)
-        loose = loose_of.pop(number, None)
-        if loose is not None:
-            kept[loose] = None
+        priors = loose_of.get(number) or []
+        still_loose: list[int] = []
+        for idx in priors:
+            if kept[idx] is not None and _same_number_elsewhere(kept[idx], wire):
+                still_loose.append(idx)
+            else:
+                kept[idx] = None
+        if still_loose:
+            loose_of[number] = still_loose
+        else:
+            loose_of.pop(number, None)
         prior = index_of.get((number, pair))
         if prior is None:
             index_of[(number, pair)] = len(kept)
@@ -2167,6 +2341,29 @@ def collapse_wire_numbers(wires: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if _wire_rank(wire) > _wire_rank(kept[prior] or wire):
             kept[prior] = wire
     return [wire for wire in kept if wire is not None]
+
+
+def _pinned_with_number(kept: list[dict[str, Any] | None], number: str) -> dict[str, Any]:
+    for item in kept:
+        if item and str(item.get("number") or "") == number and item.get("from_pin") and item.get("to_pin") and not item.get("ambiguous"):
+            return item
+    return {}
+
+
+def _same_number_elsewhere(loose: dict[str, Any] | None, pinned: dict[str, Any]) -> bool:
+    """A second printing of the same digits, far from the pinned wire, stays.
+
+    Collapsing it drops the only token near the run that should carry it.
+    """
+
+    if not loose:
+        return False
+    try:
+        lx, ly = float(loose["x"]), float(loose["y"])
+        px, py = float(pinned["x"]), float(pinned["y"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return math.hypot(lx - px, ly - py) > 25.0
 
 
 def _pinned_pair(wire: dict[str, Any]) -> tuple[tuple[str, str], tuple[str, str]] | None:
@@ -3466,6 +3663,653 @@ def _pin_points(
     return found
 
 
+def open_stub_pins(
+    pins: list[tuple[str, float, float]],
+    segments: list[tuple[tuple[float, float], tuple[float, float]]],
+    box: tuple[float, float, float, float] | None = None,
+) -> list[str]:
+    """Pin ids whose lead is a short line that ends in open air.
+
+    ``pins`` is ``(pin id, x, y)``. ``segments`` are page lines in millimetres.
+    A stub starts at the pin, leaves the symbol, and does not reach another pin.
+    """
+
+    found: list[str] = []
+    for pid, px, py in pins:
+        for start, end in segments:
+            near_start = math.hypot(start[0] - px, start[1] - py)
+            near_end = math.hypot(end[0] - px, end[1] - py)
+            if near_start > 2.5 and near_end > 2.5:
+                continue
+            far = end if near_start <= near_end else start
+            length = math.hypot(start[0] - end[0], start[1] - end[1])
+            if length < 2.0 or length > 22.0:
+                continue
+            if box is not None:
+                ox, oy, width, height = box
+                if (ox - 1.0) <= far[0] <= (ox + width + 1.0) and (oy - 1.0) <= far[1] <= (oy + height + 1.0):
+                    continue
+            if any(
+                other != pid and math.hypot(far[0] - ox, far[1] - oy) <= 3.0
+                for other, ox, oy in pins
+            ):
+                continue
+            found.append(str(pid))
+            break
+    return found
+
+
+def _attached_pins(wires: list[dict[str, Any]]) -> set[tuple[str, str]]:
+    """Pins that already have a conductor. An open stub cannot be one of these.
+
+    A wire may name a library pin id or a side (``left`` / ``right`` / …). Both
+    forms count as attached so a landed lead is never recorded as open.
+    """
+
+    found: set[tuple[str, str]] = set()
+    for wire in wires:
+        if wire.get("ambiguous") and not (wire.get("from_pin") and wire.get("to_pin")):
+            continue
+        for tag_key, pin_key in (("from_tag", "from_pin"), ("to_tag", "to_pin")):
+            tag = str(wire.get(tag_key) or "").strip()
+            pin = str(wire.get(pin_key) or "").strip()
+            if tag and pin:
+                found.add((tag, pin))
+    return found
+
+
+def _rail_like_orthogonal_ink(
+    mask: np.ndarray,
+    ppm: float,
+    point: tuple[float, float],
+    dx: float,
+    dy: float,
+) -> bool:
+    """True when ``point`` lies on a long stroke perpendicular to ``(dx, dy)`` (such as a rail)."""
+
+    px, py = -dy, dx
+    hits = sum(
+        1
+        for dist in (-7.2, -4.8, -2.4, 2.4, 4.8, 7.2)
+        if _ink_at(mask, ppm, (point[0] + px * dist, point[1] + py * dist))
+    )
+    return hits >= 5
+
+
+def _ink_open_stub(
+    mask: np.ndarray,
+    ppm: float,
+    x: float,
+    y: float,
+    side: str,
+    others: list[tuple[float, float]],
+) -> bool:
+    """True when the printed terminal stub ends at this pin in open air.
+
+    Catalog leads run *inside* the symbol and stop at the pin. A stub needs
+    terminal ink at the pin (and inward), and no continuing conductor outward.
+    Blank paper and a wire that keeps going both return False.
+    """
+
+    step = {"left": (-1.0, 0.0), "right": (1.0, 0.0), "top": (0.0, -1.0), "bottom": (0.0, 1.0)}.get(side)
+    if step is None or ppm <= 0:
+        return False
+    dx, dy = step
+    at_pin = _ink_at(mask, ppm, (x, y)) or any(
+        _ink_at(mask, ppm, (x + ox, y + oy))
+        for ox, oy in ((0.8, 0.0), (-0.8, 0.0), (0.0, 0.8), (0.0, -0.8))
+    )
+    if not at_pin:
+        return False
+    inward = 0.0
+    for dist in (0.8, 1.6, 2.4, 3.2):
+        if _ink_at(mask, ppm, (x - dx * dist, y - dy * dist)):
+            inward += 0.8
+    if inward < 2.4:
+        return False
+    ink = 0.0
+    gap = 0.0
+    travelled = 0.0
+    while travelled < 18.4:
+        travelled += 0.8
+        pos = (x + dx * travelled, y + dy * travelled)
+        if any(math.hypot(pos[0] - ox, pos[1] - oy) <= 3.0 for ox, oy in others):
+            return False
+        if _ink_at(mask, ppm, pos):
+            if _rail_like_orthogonal_ink(mask, ppm, pos, dx, dy):
+                return False
+            if gap >= 1.6:
+                ahead = (x + dx * (travelled + 0.8), y + dy * (travelled + 0.8))
+                if ink > 0 or _ink_at(mask, ppm, ahead):
+                    return False
+            ink += 0.8
+            gap = 0.0
+            if ink > 14.0:
+                return False
+            continue
+        gap += 0.8
+        if gap >= 3.2 and (ink <= 1.6 or ink <= 14.0):
+            # Also verify no rail sits within 3.0 mm beyond the tip.
+            if gap >= 4.0:
+                return True
+    return ink <= 14.0 and gap >= 3.2
+
+
+def record_open_stubs(
+    devices: list[dict[str, Any]],
+    catalog: Any,
+    mask: np.ndarray,
+    ppm: float,
+    wires: list[dict[str, Any]] | None = None,
+) -> None:
+    """Write ``open_stubs`` for printed leads that end in open air.
+
+    A pin that already has a wire (by pin id or by side) is never an open stub.
+    The lead has to reach the pin from inside the symbol and stop outward.
+    """
+
+    if catalog is None:
+        return
+    attached = _attached_pins(wires or [])
+    attached_lower = {(tag, pin.lower()) for tag, pin in attached}
+    located: list[tuple[str, str, float, float, str]] = []
+    for device in devices:
+        lib = str(device.get("library_id") or "")
+        if not lib or device.get("guess"):
+            continue
+        try:
+            part = catalog.get(lib)
+        except KeyError:
+            continue
+        ox, oy = float(device.get("x") or 0), float(device.get("y") or 0)
+        scale = float(device.get("scale") or 1.0)
+        rotation = int(device.get("rotation") or 0)
+        tag = str(device.get("tag") or "")
+        for pin in part.pins:
+            px, py = rotate_point(float(pin.x) * scale, float(pin.y) * scale, rotation)
+            located.append((tag, str(pin.id), ox + px, oy + py, str(pin.side)))
+    by_tag: dict[str, list[tuple[str, float, float, str]]] = {}
+    for tag, pid, x, y, side in located:
+        by_tag.setdefault(tag, []).append((pid, x, y, side))
+    for device in devices:
+        tag = str(device.get("tag") or "")
+        pins = by_tag.get(tag) or []
+        found: list[str] = []
+        for pid, x, y, side in pins:
+            if (tag, pid) in attached or (tag, side.lower()) in attached_lower:
+                continue
+            others = [(ox, oy) for otag, opid, ox, oy, _side in located if (otag, opid) != (tag, pid)]
+            if _ink_open_stub(mask, ppm, x, y, side, others):
+                found.append(pid)
+        if found:
+            device["open_stubs"] = found
+        elif "open_stubs" in device:
+            device.pop("open_stubs", None)
+
+
+def _wire_numbers_on_the_page(
+    numbers: list[dict[str, Any]],
+    devices: list[dict[str, Any]],
+    catalog: Any,
+) -> list[dict[str, Any]]:
+    """Drop a digit that is a pin caption or a stacked cross-reference.
+
+    A wire number sits on the conductor, outside the symbol. Letters inside a
+    coil and a sheet-line reference glued into one blob are not wire numbers.
+    """
+
+    kept: list[dict[str, Any]] = []
+    for number in numbers:
+        text = str(number.get("text") or "")
+        try:
+            x = float(number.get("x"))
+            y = float(number.get("y"))
+        except (TypeError, ValueError):
+            continue
+        if _number_inside_symbol(x, y, devices, catalog):
+            continue
+        if _glued_cross_ref(text, x, y, numbers):
+            continue
+        if _stacked_coil_xref(text, x, y, numbers, devices, catalog):
+            continue
+        kept.append(number)
+    return kept
+
+
+def _number_inside_symbol(
+    x: float,
+    y: float,
+    devices: list[dict[str, Any]],
+    catalog: Any,
+) -> bool:
+    for device in devices:
+        if device.get("guess") or not device.get("library_id"):
+            continue
+        box = _symbol_box(device, catalog)
+        if box is None:
+            continue
+        ox, oy, width, height = box
+        # The coil tag and the pin digits sit in the middle of the body.
+        # A wire number beside a terminal is near the edge and stays a number.
+        margin_x = max(1.2, width * 0.22)
+        margin_y = max(1.2, height * 0.30)
+        if (ox + margin_x) <= x <= (ox + width - margin_x) and (oy + margin_y) <= y <= (oy + height - margin_y):
+            return True
+    return False
+
+
+def _coil_xref_boxes(devices: list[dict[str, Any]] | None, catalog: Any) -> list[tuple[float, float, float, float]]:
+    boxes: list[tuple[float, float, float, float]] = []
+    for device in devices or []:
+        if device.get("guess"):
+            continue
+        lib = str(device.get("library_id") or "").lower()
+        if not ("coil" in lib or "relays." in lib or "timers." in lib):
+            continue
+        box = _symbol_box(device, catalog)
+        if box is None:
+            try:
+                box = (float(device["x"]), float(device["y"]), 20.0, 20.0)
+            except (KeyError, TypeError, ValueError):
+                continue
+        boxes.append(box)
+    return boxes
+
+
+def _unhyphenated_coil_xref(
+    token: str,
+    x: float,
+    y: float,
+    numbers: list[dict[str, Any]],
+    coil_boxes: list[tuple[float, float, float, float]],
+) -> bool:
+    """True when ``token`` belongs to a >=2-row ``(2-digit, 3-digit)`` xref column under a coil."""
+
+    if not coil_boxes or not (re.fullmatch(r"\d{2}", token) or re.fullmatch(r"\d{3}", token)):
+        return False
+    parsed: list[tuple[str, float, float]] = []
+    for item in numbers:
+        txt = str(item.get("text") or "").strip()
+        if not (re.fullmatch(r"\d{2}", txt) or re.fullmatch(r"\d{3}", txt)):
+            continue
+        try:
+            parsed.append((txt, float(item["x"]), float(item["y"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+    for bx, by, bw, bh in coil_boxes:
+        pairs: list[tuple[float, float, float, float]] = []
+        for ltxt, lx, ly in parsed:
+            if not re.fullmatch(r"\d{2}", ltxt):
+                continue
+            for rtxt, rx, ry in parsed:
+                if not re.fullmatch(r"\d{3}", rtxt):
+                    continue
+                if abs(ry - ly) > 3.5 or not (0.0 < (rx - lx) <= 24.0):
+                    continue
+                if not ((bx - 12.0) <= rx <= (bx + bw + 20.0) and (by + bh - 2.0) <= ry <= (by + bh + 36.0)):
+                    continue
+                pairs.append((lx, ly, rx, ry))
+        for lx1, ly1, rx1, ry1 in pairs:
+            on_pair = (
+                re.fullmatch(r"\d{2}", token) and abs(lx1 - x) < 0.2 and abs(ly1 - y) < 0.2
+            ) or (
+                re.fullmatch(r"\d{3}", token) and abs(rx1 - x) < 0.2 and abs(ry1 - y) < 0.2
+            )
+            if not on_pair:
+                continue
+            aligned = any(
+                abs(ry2 - ry1) >= 3.0 and abs(lx1 - lx2) <= 4.0 and abs(rx1 - rx2) <= 6.0
+                for lx2, _ly2, rx2, ry2 in pairs
+            )
+            if aligned:
+                return True
+    return False
+
+
+def _stacked_coil_xref(
+    text: str,
+    x: float,
+    y: float,
+    numbers: list[dict[str, Any]],
+    devices: list[dict[str, Any]] | None = None,
+    catalog: Any = None,
+) -> bool:
+    """A contact cross-reference under a coil, such as ``3-4 109``, is not a wire number.
+
+    The line reference and the three-digit entry sit in one column. A conductor
+    number off to the side of that column, or a standalone hyphenated wire
+    label such as ``2-15`` with no 3-digit cross-reference entry, stays a wire
+    number.
+    """
+
+    token = str(text or "").strip().replace("–", "-").replace("—", "-")
+    if re.fullmatch(r"\d{1,2}-\d{1,2}\s+\d{3}", token):
+        return True
+    if re.fullmatch(r"\d{1,2}-\d{1,2}", token):
+        for other in numbers:
+            other_text = str(other.get("text") or "").strip().replace("–", "-").replace("—", "-")
+            if not re.fullmatch(r"\d{3}", other_text):
+                continue
+            try:
+                ox = float(other.get("x"))
+                oy = float(other.get("y"))
+            except (TypeError, ValueError):
+                continue
+            same_line = abs(oy - y) <= 3.5 and 0.0 <= (ox - x) <= 24.0
+            stacked = abs(ox - x) <= 8.0 and abs(oy - y) <= 24.0
+            if same_line or stacked:
+                return True
+        return False
+    if re.fullmatch(r"\d{3}", token):
+        for other in numbers:
+            other_text = str(other.get("text") or "").strip().replace("–", "-").replace("—", "-")
+            if other_text == token and abs(float(other.get("x") or 0) - x) < 0.2 and abs(float(other.get("y") or 0) - y) < 0.2:
+                continue
+            try:
+                ox = float(other.get("x"))
+                oy = float(other.get("y"))
+            except (TypeError, ValueError):
+                continue
+            if not (
+                re.fullmatch(r"\d{1,2}-\d{1,2}", other_text)
+                or re.fullmatch(r"\d{1,2}-\d{1,2}\s+\d{3}", other_text)
+            ):
+                continue
+            # "3-4 109" is one text line. The digits sit to the right of the line
+            # reference, often more than 8 mm from its origin.
+            same_line = abs(oy - y) <= 3.5 and 0.0 <= (x - ox) <= 24.0
+            stacked = abs(ox - x) <= 8.0 and abs(oy - y) <= 24.0
+            if same_line or stacked:
+                return True
+    return _unhyphenated_coil_xref(token, x, y, numbers, _coil_xref_boxes(devices, catalog))
+
+
+def _unstored_sheet_lines(
+    tokens: list[dict[str, Any]],
+    wires: list[dict[str, Any]],
+    devices: list[dict[str, Any]] | None = None,
+    catalog: Any = None,
+) -> list[dict[str, Any]]:
+    """A sheet-line the reader saw and did not leave on a wire.
+
+    The suspect path can only use a token that was stored. A cross-reference
+    under a coil is not stored again.
+    """
+
+    from panelcad.core.ansi_drafting import _SHEET_LINE
+
+    extra: list[dict[str, Any]] = []
+    for token in tokens:
+        text = str(token.get("text") or "").strip()
+        if _SHEET_LINE.match(text) is None:
+            continue
+        try:
+            x = float(token.get("x"))
+            y = float(token.get("y"))
+        except (TypeError, ValueError):
+            continue
+        if _stacked_coil_xref(text, x, y, tokens, devices, catalog):
+            continue
+        if any(
+            str(wire.get("number") or "").strip() == text
+            and abs(float(wire.get("x") or 0) - x) <= 8.0
+            and abs(float(wire.get("y") or 0) - y) <= 8.0
+            for wire in wires
+        ):
+            continue
+        extra.append(
+            {
+                "number": text,
+                "x": x,
+                "y": y,
+                "from_tag": "",
+                "to_tag": "",
+                "from_pin": "",
+                "to_pin": "",
+                "confidence": 0.4,
+                "unreadable": False,
+                "ambiguous": True,
+                "source": "ocr",
+            }
+        )
+    return extra
+
+
+def _glued_cross_ref(text: str, x: float, y: float, numbers: list[dict[str, Any]]) -> bool:
+    """34111 beside a lone 3 is the cross-reference 3-4 111, not a wire."""
+
+    if not re.fullmatch(r"\d{5,6}", text) and not re.fullmatch(r"\d{1,2}", text):
+        return False
+    for other in numbers:
+        other_text = str(other.get("text") or "")
+        if other_text == text and abs(float(other.get("x") or 0) - x) < 0.2 and abs(float(other.get("y") or 0) - y) < 0.2:
+            continue
+        if abs(float(other.get("x") or 0) - x) > 10 or abs(float(other.get("y") or 0) - y) > 6:
+            continue
+        if re.fullmatch(r"\d{5,6}", text) and re.fullmatch(r"\d{1,2}", other_text):
+            return True
+        if re.fullmatch(r"\d{1,2}", text) and re.fullmatch(r"\d{5,6}", other_text):
+            return True
+    return False
+
+
+def _port_rail_runs(
+    links: list[tuple[tuple[str, str], tuple[str, str], tuple[float, float], tuple[float, float]]],
+    pins: list[tuple[str, str, float, float]],
+    mask: np.ndarray,
+    ppm: float,
+    width_mm: float,
+) -> list[tuple[tuple[str, str], tuple[str, str], tuple[float, float], tuple[float, float]]]:
+    """A catalog port whose own ink reaches the sheet rail.
+
+    The walk starts at that port and stops at another port. A bus elsewhere
+    on the sheet does not tie this pin. The rail name is L1 on the left and
+    L2 on the right, which is where the ink ended.
+    """
+
+    occupied = {end for link in links for end in (link[0], link[1])}
+    seen = {tuple(sorted((link[0], link[1]))) for link in links}
+    found = []
+    for pin in pins:
+        ident = (pin[0], pin[1])
+        if ident in occupied or re.match(r"^X\d", pin[0]):
+            continue
+        for direction, rail_name in ((-1.0, "L1"), (1.0, "L2")):
+            end, dist, going = _walk_ink(mask, ppm, (pin[2], pin[3]), direction, 0.0, limit=220.0)
+            if going or dist < 10.0:
+                continue
+            if direction < 0 and end[0] > 36.0:
+                continue
+            if direction > 0 and end[0] < width_mm - 40.0:
+                continue
+            if not _run_is_clear((pin[2], pin[3]), end, pins, ident):
+                continue
+            _up, up_dist, _ug = _walk_ink(mask, ppm, end, 0.0, -1.0, limit=28.0)
+            _down, down_dist, _dg = _walk_ink(mask, ppm, end, 0.0, 1.0, limit=28.0)
+            if up_dist + down_dist < 16.0:
+                continue
+            rail = (rail_name, rail_name)
+            pair = tuple(sorted((ident, rail)))
+            if pair in seen:
+                continue
+            found.append((ident, rail, (pin[2], pin[3]), end))
+            seen.add(pair)
+            occupied.add(ident)
+            break
+    return found
+
+
+def _run_is_clear(
+    start: tuple[float, float],
+    end: tuple[float, float],
+    pins: list[tuple[str, str, float, float]],
+    ident: tuple[str, str],
+) -> bool:
+    """False when another port lies on this stroke."""
+
+    for pin in pins:
+        if (pin[0], pin[1]) == ident:
+            continue
+        perp, along = _perp_along(pin[2], pin[3], start, end)
+        if along > 0.0 or perp > 4.0:
+            continue
+        if math.hypot(pin[2] - start[0], pin[3] - start[1]) < 3.0:
+            continue
+        return False
+    return True
+
+
+def _tee_links(
+    links: list[tuple[tuple[str, str], tuple[str, str], tuple[float, float], tuple[float, float]]],
+    pins: list[tuple[str, str, float, float]],
+    mask: np.ndarray,
+    ppm: float,
+) -> list[tuple[tuple[str, str], tuple[str, str], tuple[float, float], tuple[float, float]]]:
+    """A branch that leaves a straight run and ends on another pin.
+
+    The branch is stored from the upstream pin of that run, the way a ladder
+    wire leaves the device on the left. A rail that continues past the pin
+    is not a branch.
+    """
+
+    extras = []
+    seen = {tuple(sorted((a, b))) for a, b, _pa, _pb in links}
+    used_branch: set[tuple[str, str]] = set()
+    for host_a, host_b, point_a, point_b in links:
+        dx = point_b[0] - point_a[0]
+        dy = point_b[1] - point_a[1]
+        length = math.hypot(dx, dy)
+        if length < 4:
+            continue
+        horizontal = abs(dx) >= abs(dy)
+        if horizontal and abs(dy) > 4:
+            continue
+        if not horizontal and abs(dx) > 4:
+            continue
+        if horizontal:
+            upstream = host_a if point_a[0] <= point_b[0] else host_b
+            directions = ((0.0, -1.0), (0.0, 1.0))
+        else:
+            upstream = host_a if point_a[1] <= point_b[1] else host_b
+            directions = ((-1.0, 0.0), (1.0, 0.0))
+        steps = max(4, int(length / 0.8))
+        up_point = point_a if upstream == host_a else point_b
+        for index in range(steps + 1):
+            tee = index / steps
+            x = point_a[0] * (1 - tee) + point_b[0] * tee
+            y = point_a[1] * (1 - tee) + point_b[1] * tee
+            for dx, dy in directions:
+                end, dist, still_going = _walk_ink(mask, ppm, (x, y), dx, dy)
+                # A rail is still running at the limit. A branch stops.
+                if still_going or dist < 6.0 or dist > 42.0:
+                    continue
+                pin = _nearest_free_pin_point(end, pins, host_a, host_b, used_branch, limit=8.0)
+                if pin is None:
+                    # The branch can turn once. The corner must still be ink to the pin.
+                    pin = _nearest_free_pin_point(end, pins, host_a, host_b, used_branch, limit=16.0)
+                    if pin is not None:
+                        fraction, gap = _ink_run(mask, ppm, end, (pin[2], pin[3]))
+                        if fraction < 0.7 or gap > 3.0:
+                            pin = None
+                if pin is None:
+                    continue
+                branch = (pin[0], pin[1])
+                pair = tuple(sorted((upstream, branch)))
+                if pair in seen:
+                    continue
+                extras.append((upstream, branch, up_point, (pin[2], pin[3])))
+                seen.add(pair)
+                used_branch.add(branch)
+    return extras
+
+
+def _seat_unread_numbers(
+    labeled: list[dict[str, Any]],
+    seated: list[tuple[int, tuple[float, float], tuple[float, float]]],
+    numbers: list[dict[str, Any]],
+    used: set[int],
+) -> None:
+    """Put a read number on the conductor it sits on. Do not replace a real number."""
+
+    for index, number in enumerate(numbers):
+        if index in used:
+            continue
+        text = str(number.get("text") or "")
+        if not text.isdigit() or len(text) < 3:
+            continue
+        best_i = None
+        best_s: float | None = None
+        for wire_index, start, end in seated:
+            score = _convention_score(float(number["x"]), float(number["y"]), start, end, 8.0)
+            if score is None:
+                continue
+            if best_s is None or score < best_s:
+                best_s = score
+                best_i = wire_index
+        if best_i is None:
+            continue
+        current = str(labeled[best_i].get("number") or "")
+        if current.isdigit() and len(current) >= 3:
+            continue
+        labeled[best_i]["number"] = text
+        labeled[best_i]["x"] = number.get("x")
+        labeled[best_i]["y"] = number.get("y")
+        used.add(index)
+
+
+def _walk_ink(
+    mask: np.ndarray,
+    ppm: float,
+    start: tuple[float, float],
+    dx: float,
+    dy: float,
+    limit: float = 42.0,
+) -> tuple[tuple[float, float], float, bool]:
+    """Follow ink. The third value is true when ink is still there at the limit."""
+
+    step = 0.8
+    traveled = 0.0
+    x, y = start
+    last = start
+    while traveled + step <= limit:
+        nxt = (x + dx * step, y + dy * step)
+        if not _ink_at(mask, ppm, nxt):
+            return last, traveled, False
+        x, y = nxt
+        last = nxt
+        traveled += step
+    return last, traveled, _ink_at(mask, ppm, (x + dx * step, y + dy * step))
+
+
+def _ink_at(mask: np.ndarray, ppm: float, point: tuple[float, float]) -> bool:
+    px, py = int(round(point[0] * ppm)), int(round(point[1] * ppm))
+    height, width = mask.shape
+    window = mask[max(0, py - 1) : min(height, py + 2), max(0, px - 1) : min(width, px + 2)]
+    return bool(window.size and int(window.max()) > 0)
+
+
+def _nearest_free_pin_point(
+    point: tuple[float, float],
+    pins: list[tuple[str, str, float, float]],
+    host_a: tuple[str, str],
+    host_b: tuple[str, str],
+    used: set[tuple[str, str]],
+    limit: float,
+) -> tuple[str, str, float, float] | None:
+    best = None
+    best_d = limit
+    hosts = {host_a[0], host_b[0]}
+    for pin in pins:
+        ident = (pin[0], pin[1])
+        if ident in (host_a, host_b) or ident in used or pin[0] in hosts:
+            continue
+        dist = math.hypot(pin[2] - point[0], pin[3] - point[1])
+        if dist < best_d:
+            best = pin
+            best_d = dist
+    return best
+
+
 def _pin_links(
     pins: list[tuple[str, str, float, float]],
     mask: np.ndarray,
@@ -3482,7 +4326,8 @@ def _pin_links(
     candidates = []
     for index, first in enumerate(pins):
         for second in pins[index + 1 :]:
-            if first[0] == second[0] and first[1] == second[1]:
+            # Two pins of one symbol are the device, not a wire between them.
+            if first[0] == second[0]:
                 continue
             length = math.hypot(first[2] - second[2], first[3] - second[3])
             facing = _facing_pair(first, second, side_of)
@@ -3593,6 +4438,10 @@ def _wire_mask(
             continue
         fat = cv2.dilate(tmpl, np.ones((3, 3), np.uint8))
         mask[oy : oy + th, ox : ox + tw][fat > 0] = 0
+    # A coarse scan breaks a stroke into gaps of a pixel or two. Closing
+    # those gaps is much smaller than the open space of a contact.
+    if ppm < 10:
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
     return mask
 
 
@@ -3761,6 +4610,10 @@ def _nearest_number(
         score = _convention_score(float(number["x"]), float(number["y"]), start, end, 16.0)
         if score is None:
             continue
+        # A 1- or 2-digit fragment loses to a full wire number on the same run.
+        text = str(number.get("text") or "")
+        if text.isdigit() and len(text) <= 2:
+            score += 10.0
         if best_s is None or score < best_s:
             best_s = score
             best_i = index

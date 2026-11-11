@@ -23,12 +23,138 @@ _TITLE_CLEAR = 4.0
 _WIRE_CLEAR = 2.0
 
 
+def _repair_conductors(session: Session, sheet: Sheet) -> None:
+    """Land each wire on the pin that faces the other end. Drop a wire through one body.
+
+    A reader that ties a device to itself, or to the far pin, draws the conductor
+    across the symbol. The devices stay. The pin that faces the other end is the
+    landing. No new rail tie is added.
+    """
+
+    from panelcad.core.ladder import endpoint_is_rail, rail_names
+    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.render.wiring import clear_route_cache
+
+    hot, ret = rail_names(sheet, session.project)
+    by_id = {comp.id: comp for comp in sheet.components}
+    kept = []
+    for wire in sheet.wires:
+        try:
+            a_ref, a_pin = parse_pin_ref(wire.frm)
+        except ValueError:
+            a_ref, a_pin = str(wire.frm).split(".")[0], ""
+        try:
+            b_ref, b_pin = parse_pin_ref(wire.to)
+        except ValueError:
+            b_ref, b_pin = str(wire.to).split(".")[0], ""
+        if a_ref and a_ref == b_ref and a_ref in by_id:
+            # A wire across a device's own pins is a short. Keep it so the
+            # checker can refuse the sheet. Do not retarget it into a bypass.
+            kept.append(wire)
+            continue
+        a_rail = endpoint_is_rail(sheet, wire.frm, session.project)
+        b_rail = endpoint_is_rail(sheet, wire.to, session.project)
+        taken = _taken_ends(sheet.wires, wire.id)
+        # A fuse or a transformer pin is not a control-rung landing. Moving the
+        # rail wire onto the pin that faces L2 puts it on the primary and the
+        # next wire is judged to tie that primary to the return.
+        if a_rail and not b_rail and b_ref in by_id and not _power_device(by_id[b_ref]):
+            faced = _facing_pin(session.catalog, by_id[b_ref], "left" if a_ref == hot else "right")
+            landed = f"{b_ref}.{faced}" if faced else ""
+            # The pin that faces the rail may already hold the primary. Moving
+            # the rail wire onto it ties that primary to the return.
+            if faced and faced != b_pin and landed not in taken:
+                wire.to = landed
+        elif b_rail and not a_rail and a_ref in by_id and not _power_device(by_id[a_ref]):
+            faced = _facing_pin(session.catalog, by_id[a_ref], "left" if b_ref == hot else "right")
+            landed = f"{a_ref}.{faced}" if faced else ""
+            if faced and faced != a_pin and landed not in taken:
+                wire.frm = landed
+        wire.points = []
+        kept.append(wire)
+    sheet.wires = kept
+    clear_route_cache()
+
+
+def _separate_crossings(session: Session, sheet: Sheet) -> None:
+    """A wire into the far pin of a device on the left is drawn through that body.
+
+    Land it on the near pin instead. A wire that already uses the near pin stays.
+    """
+
+    from panelcad.render.sheet import parse_pin_ref, pin_world
+    from panelcad.render.wiring import clear_route_cache
+
+    by_id = {comp.id: comp for comp in sheet.components}
+    for wire in sheet.wires:
+        try:
+            a_ref, a_pin = parse_pin_ref(wire.frm)
+            b_ref, b_pin = parse_pin_ref(wire.to)
+        except ValueError:
+            continue
+        if a_ref not in by_id or b_ref not in by_id or a_ref == b_ref:
+            continue
+        for ref, pin_id, other in ((b_ref, b_pin, a_ref), (a_ref, a_pin, b_ref)):
+            comp = by_id[ref]
+            device = _device(session.catalog, comp)
+            other_comp = by_id[other]
+            if device is None:
+                continue
+            landed = next((pin for pin in device.pins if str(pin.id) == pin_id), None)
+            if landed is None or str(landed.side) != "right":
+                continue
+            px, py = pin_world(comp, landed)
+            if other_comp.x > px:
+                continue
+            # A branch that leaves the rung vertically is not a wire through the body.
+            other_dev = _device(session.catalog, other_comp)
+            if other_dev is None:
+                continue
+            _ox, oy = pin_world(other_comp, _pin_named(other_dev, "", "left"))
+            if abs(oy - py) > 8.0:
+                continue
+            near = _facing_pin(session.catalog, comp, "left")
+            if not near or near == pin_id:
+                continue
+            if ref == b_ref:
+                wire.to = f"{b_ref}.{near}"
+            else:
+                wire.frm = f"{a_ref}.{near}"
+            wire.points = []
+    clear_route_cache()
+
+
+def _taken_ends(wires: list[Any], skip: str) -> set[str]:
+    taken: set[str] = set()
+    for other in wires:
+        if str(getattr(other, "id", "") or "") == skip:
+            continue
+        taken.add(str(other.frm))
+        taken.add(str(other.to))
+    return taken
+
+
+def _power_device(comp: Component) -> bool:
+    lib = str(comp.library_id or "").lower()
+    return "fuse" in lib or "transformer" in lib
+
+
+def _facing_pin(catalog: Catalog, comp: Component, side: str) -> str:
+    device = _device(catalog, comp)
+    if device is None:
+        return ""
+    pins = [pin for pin in device.pins if str(pin.side) == side]
+    return str(pins[0].id) if pins else ""
+
+
 def layout_elementary(session: Session, sheet: Sheet) -> int:
     """Replace symbol positions from the wire list. Wires and tags stay."""
 
+    _repair_conductors(session, sheet)
     moved = _layout(session, sheet, snap=True)
     if elementary_layout_issues(session, sheet):
         moved = _layout(session, sheet, snap=False)
+    _separate_crossings(session, sheet)
     return moved
 
 
@@ -110,13 +236,12 @@ def issue_elementary(session: Session, sheet: Sheet, *, force: bool = False) -> 
     if not force and not elementary_layout_issues(session, sheet):
         return False
     saved = [(comp, comp.x, comp.y, comp.rotation) for comp in sheet.components]
-    wires = [(wire, list(wire.points)) for wire in sheet.wires]
+    wires = [wire.model_copy(deep=True) for wire in sheet.wires]
     layout_elementary(session, sheet)
     if elementary_layout_issues(session, sheet):
         for comp, x, y, rotation in saved:
             comp.x, comp.y, comp.rotation = x, y, rotation
-        for wire, points in wires:
-            wire.points = points
+        sheet.wires = wires
         return False
     return True
 
@@ -142,6 +267,12 @@ def elementary_layout_issues(session: Session, sheet: Sheet) -> list[str]:
     issues.extend(_body_problems(session, sheet, catalog))
     issues.extend(_terminal_gate(session, sheet, catalog))
     issues.extend(_loads_on_the_right(session, sheet, catalog))
+    issues.extend(_own_pin_wires(sheet))
+    issues.extend(_contacts_only_rungs(sheet))
+    issues.extend(_fuse_across_rails(sheet))
+    issues.extend(_rail_without_a_load(sheet))
+    issues.extend(_rail_gaps(session, sheet, catalog))
+    issues.extend(_shorted_numbers(session, sheet))
     return issues
 
 
@@ -164,13 +295,20 @@ def _place_power(sheet, session, by_id, devices, placed) -> int:
     from panelcad.core.zones import rung_y
 
     y = rung_y(sheet, 1, project=session.project)
-    moved = _place_pin(transformer, device, _pin_named(device, "H1", "left"), _left_x(sheet) + 78.0, y)
+    anchor = _left_x(sheet) + 78.0
+    fuses = [comp for comp in by_id.values() if comp.id not in placed and "fuse" in comp.library_id.lower()]
+    fuses.sort(key=lambda comp: comp.id)
+    if any(not _pin_side_wired(sheet, comp.id, devices[comp.id], "left") for comp in fuses):
+        from panelcad.core.ladder import rail_xs
+
+        left, _right = rail_xs(sheet)
+        fuse_w = max(float(devices[comp.id].schematic_width) for comp in fuses)
+        anchor = max(anchor, left + 56.0 + fuse_w + 14.0)
+    moved = _place_pin(transformer, device, _pin_named(device, "H1", "left"), anchor, y)
     placed.add(transformer.id)
     h1 = _pin_named(device, "H1", "left")
     h4 = _pin_named(device, "H4", "left")
     lower = y + float(h4.y) - float(h1.y)
-    fuses = [comp for comp in by_id.values() if comp.id not in placed and "fuse" in comp.library_id.lower()]
-    fuses.sort(key=lambda comp: comp.id)
     if fuses:
         moved += _place_left_of(fuses[0], devices[fuses[0].id], transformer, y)
         placed.add(fuses[0].id)
@@ -203,7 +341,7 @@ def _rungs(sheet, by_id, devices, adj, placed) -> list[tuple[list[str], list[tup
         series, parallel = _split_parallel(sheet, output, nodes, by_id, adj)
         rungs.append((series, parallel))
     rungs.sort(key=lambda item: _rung_key(item[0], by_id))
-    return rungs
+    return _park_unwired_holding_contacts(by_id, adj, rungs)
 
 
 def _reachable(origin: str, by_id, adj, claimed: set[str]) -> set[str]:
@@ -231,7 +369,7 @@ def _split_parallel(sheet, output: str, nodes: set[str], by_id, adj) -> tuple[li
         if len(nbrs) < 2:
             continue
         if _connected(nbrs[0], nbrs[1], nodes - {ref}, adj):
-            under = _under_contact(nbrs, by_id)
+            under = _under_contact(nbrs, by_id, nodes - {ref}, adj)
             parallel.append((ref, under))
             series_nodes.discard(ref)
     series = _path_order(series_nodes, adj, by_id, output, sheet=sheet)
@@ -303,11 +441,90 @@ def _touches_rail(sheet: Sheet | None, ref: str, rail: str) -> bool:
     return False
 
 
-def _under_contact(nbrs: list[str], by_id) -> str:
+def _park_unwired_holding_contacts(by_id, adj, rungs):
+    """An unread holding contact sits under the start. It is not its own rung.
+
+    The contact was read. No wire is added. A contact that already has a wire
+    stays on the rung that wire defines.
+    """
+
+    wired = {ref for ref, nbrs in adj.items() if nbrs}
+    starts = [
+        ref
+        for ref, comp in by_id.items()
+        if "pb_no" in comp.library_id.lower() and "aux" not in comp.library_id.lower()
+    ]
+    if len(starts) != 1:
+        return rungs
+    start = starts[0]
+    holding = [
+        ref
+        for ref, comp in by_id.items()
+        if ref not in wired and _role(comp.library_id) == "aux" and str(ref).upper().endswith("-13")
+    ]
+    if not holding:
+        return rungs
+    held = set(holding)
+    cleaned: list[tuple[list[str], list[tuple[str, str]]]] = []
+    for series, parallel in rungs:
+        series = [ref for ref in series if ref not in held]
+        parallel = [(aux, under) for aux, under in parallel if aux not in held]
+        if series:
+            cleaned.append((series, parallel))
+    attached = False
+    parked: list[tuple[list[str], list[tuple[str, str]]]] = []
+    for series, parallel in cleaned:
+        if not attached and (start in series or any(under == start for _aux, under in parallel)):
+            parallel = list(parallel) + [(ref, start) for ref in holding]
+            attached = True
+        parked.append((series, parallel))
+    if not attached:
+        parked.append(([start], [(ref, start) for ref in holding]))
+    return parked
+
+
+def _under_contact(nbrs: list[str], by_id, nodes: set[str] | None = None, adj=None) -> str:
+    """The button a parallel contact sits under.
+
+    A seal-in that lands on the coil pin, not on the start button, still
+    belongs under that button when the button is the device between the
+    two landings.
+    """
+
     for ref in nbrs:
-        if "pb_no" in by_id[ref].library_id.lower():
+        lib = by_id[ref].library_id.lower()
+        if "pb_no" in lib and "aux" not in lib:
             return ref
+    if nodes is not None and adj is not None and len(nbrs) >= 2:
+        for ref in _path_between(nbrs[0], nbrs[1], nodes, adj):
+            if ref not in by_id:
+                continue
+            lib = by_id[ref].library_id.lower()
+            if "pb_no" in lib and "aux" not in lib:
+                return ref
     return nbrs[0]
+
+
+def _path_between(start: str, goal: str, nodes: set[str], adj) -> list[str]:
+    parent: dict[str, str | None] = {start: None}
+    queue = [start]
+    while queue:
+        node = queue.pop(0)
+        if node == goal:
+            break
+        for nbr in adj.get(node, ()):
+            if nbr not in nodes or nbr in parent:
+                continue
+            parent[nbr] = node
+            queue.append(nbr)
+    if goal not in parent:
+        return []
+    path: list[str] = []
+    cur: str | None = goal
+    while cur is not None:
+        path.append(cur)
+        cur = parent.get(cur)
+    return path
 
 
 def _rung_key(series: list[str], by_id) -> tuple:
@@ -331,13 +548,6 @@ def _rung_y(session, sheet, by_id, devices, series, floor: float, *, snap: bool)
     minimum = floor + _GAP + above
     y = _fit_pin_y(session, sheet, minimum, below) if snap else minimum
     return y, floor
-
-
-def _feeds_only_a_terminal(ref: str, by_id, adj) -> bool:
-    if _role(by_id[ref].library_id) == "terminal":
-        return False
-    neighbors = [nbr for nbr in adj.get(ref, ()) if nbr in by_id]
-    return bool(neighbors) and all(_role(by_id[nbr].library_id) == "terminal" for nbr in neighbors)
 
 
 def _column_pin_x(sheet: Sheet, width: float = 16.0) -> float:
@@ -364,15 +574,21 @@ def _place_terminals(sheet, session, by_id, devices, adj, placed, floor: float) 
     sample = devices[loose[0].id]
     width = float(sample.schematic_width)
     half = float(sample.schematic_height) / 2.0
+    from panelcad.core.ladder import rail_names, rail_xs
+
+    _left_rail, right_rail = rail_xs(sheet)
     x_right = _column_pin_x(sheet, width)
+    # Inset from the rail unless this terminal's wire actually lands on it.
+    # A pin id that happens to sit on the right is not that landing: the next
+    # redraw would retarget the pin and shift the whole column.
+    _hot, ret = rail_names(sheet, session.project)
+    if loose and not _lands_on_rail(sheet, loose[-1].id, ret):
+        x_right = min(x_right, right_rail - 56.0 - width)
     _wx, wy, _ww, wh = working_rect(sheet)
     limit = wy + wh - _TITLE_CLEAR - half
     hosted_y = None
     for comp in loose:
-        host = next(
-            (nbr for nbr in adj.get(comp.id, ()) if nbr in placed and _feeds_only_a_terminal(nbr, by_id, adj)),
-            None,
-        )
+        host = next((nbr for nbr in adj.get(comp.id, ()) if nbr in placed), None)
         if host is None:
             continue
         _hx, hosted_y = pin_world(by_id[host], _pin_named(devices[host], "", "left"))
@@ -485,9 +701,25 @@ def _route_primary_return(session, sheet, by_id, devices) -> float | None:
         rail = next((ref for ref in ends if ref not in by_id), None)
         if fuse is None or rail is None:
             continue
-        ax, ay, _aside, bx, by, _bside = wire_ends(sheet, session.catalog, wire, session.project)
+        ax, ay, a_side, bx, by, b_side = wire_ends(sheet, session.catalog, wire, session.project)
         device_x, rail_x = (ax, bx) if a_ref == fuse else (bx, ax)
-        wire.points = [Point(x=device_x, y=under), Point(x=rail_x, y=under)]
+        if rail_x <= device_x:
+            continue
+        pin_y = ay if a_ref == fuse else by
+        pin_side = a_side if a_ref == fuse else b_side
+        # A pin that faces the rail drops straight to the channel. A pin on the
+        # far side leaves outward first, so the drop does not enter the body.
+        rail_side = "right" if rail_x > device_x else "left"
+        if pin_side == rail_side:
+            wire.points = [Point(x=device_x, y=under), Point(x=rail_x, y=under)]
+            continue
+        sign = -1.0 if pin_side == "left" else 1.0
+        exit_x = device_x + sign * 6.0
+        wire.points = [
+            Point(x=exit_x, y=pin_y),
+            Point(x=exit_x, y=under),
+            Point(x=rail_x, y=under),
+        ]
     return under
 
 
@@ -530,35 +762,108 @@ def _arch_blocked_wires(session, sheet, by_id) -> None:
 
 
 def _is_rung_load(library_id: str) -> bool:
-    """Coil, pilot, or the overload that sits with the coil at L2."""
+    """Coil, relay, timer, pilot, or the overload that sits with the coil at L2."""
 
     lib = library_id.lower()
     return _role(lib) == "output" or "ol_contact" in lib
 
 
+def _lands_on_rail(sheet: Sheet, ref: str, rail: str) -> bool:
+    """True when a wire from ``ref`` ends on the named rail, not merely on a right-hand pin."""
+
+    want = str(rail or "").strip().upper()
+    if not want:
+        return False
+    for wire in sheet.wires:
+        ends = [str(wire.frm or ""), str(wire.to or "")]
+        refs = {end.split(".")[0].upper() for end in ends}
+        if ref.upper() in refs and want in refs:
+            return True
+    return False
+
+
+def _pin_side_wired(sheet: Sheet, ref: str, device, side: str) -> bool:
+    from panelcad.render.sheet import parse_pin_ref
+
+    pins = {str(pin.id): str(pin.side) for pin in device.pins}
+    for wire in sheet.wires:
+        for text in (wire.frm, wire.to):
+            try:
+                other, pin = parse_pin_ref(text)
+            except ValueError:
+                continue
+            if other == ref and pins.get(pin) == side:
+                return True
+    return False
+
+
+def _wired_to_right_pin(sheet: Sheet, ref: str, by_id, devices) -> bool:
+    """True when ``ref`` is tied to another load's right-hand port."""
+
+    from panelcad.render.sheet import parse_pin_ref
+
+    for wire in sheet.wires:
+        try:
+            a_ref, a_pin = parse_pin_ref(wire.frm)
+            b_ref, b_pin = parse_pin_ref(wire.to)
+        except ValueError:
+            continue
+        if ref not in {a_ref, b_ref}:
+            continue
+        other, pin = (b_ref, b_pin) if a_ref == ref else (a_ref, a_pin)
+        if other not in by_id or not _is_rung_load(by_id[other].library_id):
+            continue
+        device = devices.get(other)
+        if device is None:
+            continue
+        for item in device.pins:
+            if str(item.id) == pin and str(item.side) == "right":
+                return True
+    return False
+
+
 def _place_row(sheet, by_id, devices, refs: list[str], y: float) -> int:
-    """Contacts from the left rail. The coil, light, and overload sit against L2."""
+    """Contacts from the left rail. A load with a return wire sits against L2.
+
+    A device with no wire on the rail side is kept clear of that rail. The
+    gap is not drawn as a landing the scan did not read.
+    """
 
     from panelcad.core.ladder import rail_xs
 
     left, right = rail_xs(sheet)
     loads = [ref for ref in refs if _is_rung_load(by_id[ref].library_id)]
     contacts = [ref for ref in refs if ref not in loads]
+    at_rail = [ref for ref in loads if _pin_side_wired(sheet, ref, devices[ref], "right")]
+    # An overload wired to the coil's right pin sits between that coil and L2.
+    # No rail wire is added. The confirmed edge is what places it.
+    return_side = [ref for ref in loads if ref not in at_rail and _wired_to_right_pin(sheet, ref, by_id, devices)]
+    held = [ref for ref in loads if ref not in at_rail and ref not in return_side]
     edge = right - 14.0
     moved = 0
-    for ref in reversed(loads):
+    for ref in return_side:
+        device = devices[ref]
+        width = float(device.schematic_width)
+        edge -= width
+        moved += _place_on(by_id[ref], device, edge, y)
+        edge -= 6.0
+    for ref in reversed(at_rail):
         device = devices[ref]
         width = float(device.schematic_width)
         edge -= width
         moved += _place_on(by_id[ref], device, edge, y)
         edge -= 10.0
-    x = left + 18.0
-    limit = edge - 8.0 if loads else right - 36.0
-    for ref in contacts:
+    row = [*contacts, *held]
+    origin = left + 18.0
+    if row and not _pin_side_wired(sheet, row[0], devices[row[0]], "left"):
+        origin = left + 56.0
+    x = origin
+    limit = edge - 8.0 if at_rail else right - 56.0
+    for ref in row:
         device = devices[ref]
         width = float(device.schematic_width)
         if x + width > limit:
-            x = left + 18.0
+            x = origin
         moved += _place_on(by_id[ref], device, x, y)
         x += width + 12.0
     return moved
@@ -684,7 +989,11 @@ def _role(library_id: str) -> str:
         return "aux"
     if "ol_contact" in lib:
         return "contact"
-    if "coil" in lib or "pilot" in lib or "lamp" in lib:
+    # A timer contact stays on the left. The timer coil (on-delay, off-delay)
+    # and a control-relay circle are loads, same as a contactor coil.
+    if "contact" in lib and "coil" not in lib:
+        return "contact"
+    if "coil" in lib or "pilot" in lib or "lamp" in lib or "relays." in lib or ".timers." in lib:
         return "output"
     return "contact"
 
@@ -803,7 +1112,7 @@ def _bad_routes(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
                 for a, b in zip(pts, pts[1:], strict=False)
             ):
                 issues.append(f"{sheet.id}: {wire.id} loops around the terminals")
-        if kind == "power" and len(pts) > 4:
+        if kind == "power" and _power_jog(pts):
             issues.append(f"{sheet.id}: {wire.id} jogs through the power block")
     from panelcad.core.route import path_hits_obstacles
     from panelcad.render.sheet import parse_pin_ref
@@ -821,12 +1130,76 @@ def _bad_routes(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
                 continue
             skip.add(ref)
         walls = sheet_obstacles(sheet, catalog, skip=skip)
-        if not path_hits_obstacles(pts, walls, skip_ends=True):
-            continue
-        if _straight_terminal_jumper(sheet, catalog, pts):
-            continue
-        issues.append(f"{sheet.id}: {wire.id} runs through a symbol")
+        if path_hits_obstacles(pts, walls, skip_ends=True):
+            if not _straight_terminal_jumper(sheet, catalog, pts):
+                issues.append(f"{sheet.id}: {wire.id} runs through a symbol")
+                continue
+        if _crosses_own_body(sheet, catalog, wire, pts):
+            issues.append(f"{sheet.id}: {wire.id} runs through a symbol")
     return issues
+
+
+def _power_jog(pts) -> bool:
+    """A power return may use one channel under the block. Two long runs weave."""
+
+    if len(pts) <= 4:
+        return False
+    longs = 0
+    for a, b in zip(pts, pts[1:], strict=False):
+        if abs(float(a.y) - float(b.y)) <= 0.8 and abs(float(a.x) - float(b.x)) > 18.0:
+            longs += 1
+    return longs >= 2
+
+
+def _crosses_own_body(sheet: Sheet, catalog: Catalog, wire, pts) -> bool:
+    """A wire between a device's own pins, or a far-pin rail wire whose path enters the body."""
+
+    from panelcad.core.ladder import endpoint_is_rail, rail_names
+    from panelcad.render.sheet import parse_pin_ref
+
+    def parsed(text: str) -> tuple[str, str]:
+        try:
+            ref, pin = parse_pin_ref(text)
+        except ValueError:
+            ref, pin = str(text).split(".")[0], ""
+        return ref, pin
+
+    a_ref, a_pin = parsed(wire.frm)
+    b_ref, b_pin = parsed(wire.to)
+    if a_ref and a_ref == b_ref:
+        return True
+    hot, ret = rail_names(sheet, None)
+    by_id = {comp.id: comp for comp in sheet.components}
+
+    def far_pin(rail_ref: str, device_ref: str, pin_id: str) -> bool:
+        comp = by_id.get(device_ref)
+        device = _device(catalog, comp) if comp is not None else None
+        if device is None or not pin_id:
+            return False
+        want = "left" if rail_ref == hot else "right" if rail_ref == ret else ""
+        if not want:
+            return False
+        for pin in device.pins:
+            if str(pin.id) == pin_id:
+                return str(pin.side) != want
+        return False
+
+    device_ref = ""
+    if endpoint_is_rail(sheet, wire.frm, None) and far_pin(a_ref, b_ref, b_pin):
+        device_ref = b_ref
+    elif endpoint_is_rail(sheet, wire.to, None) and far_pin(b_ref, a_ref, a_pin):
+        device_ref = a_ref
+    if not device_ref:
+        return False
+    # The pin faces the other rail. That is through the body only when the
+    # drawn path enters the body. A jog that stays outside is a clean landing.
+    comp = by_id.get(device_ref)
+    if comp is None or not pts:
+        return True
+    from panelcad.core.route import path_hits_obstacles
+    from panelcad.render.wiring import component_obstacle
+
+    return path_hits_obstacles(pts, [component_obstacle(sheet, catalog, comp)], skip_ends=True)
 
 
 def _straight_terminal_jumper(sheet: Sheet, catalog: Catalog, pts) -> bool:
@@ -998,6 +1371,363 @@ def _terminal_gate(session: Session, sheet: Sheet, catalog: Catalog) -> list[str
     return issues
 
 
+def _own_pin_wires(sheet: Sheet) -> list[str]:
+    """A wire between a device's own pins bypasses that device. It must not be issued."""
+
+    from panelcad.core.ladder import rail_names
+    from panelcad.render.sheet import parse_pin_ref
+
+    hot, ret = rail_names(sheet, None)
+    rails = {hot, ret, "L1", "L2", "L3", "N", "X1", "X2"}
+    issues: list[str] = []
+    for wire in sheet.wires:
+        try:
+            a_ref, _a_pin = parse_pin_ref(wire.frm)
+            b_ref, _b_pin = parse_pin_ref(wire.to)
+        except ValueError:
+            a_ref, b_ref = str(wire.frm).split(".")[0], str(wire.to).split(".")[0]
+        if not a_ref or a_ref != b_ref or a_ref in rails:
+            continue
+        issues.append(f"{sheet.id}: {wire.id} connects {a_ref}'s own pins")
+    return issues
+
+
+def _fuse_across_rails(sheet: Sheet) -> list[str]:
+    """A fuse whose only path runs from one rail to the other is not a feeder."""
+
+    from panelcad.render.sheet import parse_pin_ref
+
+    hot = str(getattr(sheet, "rail_hot", "") or "L1")
+    ret = str(getattr(sheet, "rail_return", "") or "L2")
+    fuses = {comp.id for comp in sheet.components if "fuse" in comp.library_id.lower()}
+    if not fuses:
+        return []
+    adj: dict[str, set[str]] = {}
+
+    def add(left: str, right: str) -> None:
+        if not left or not right or left == right:
+            return
+        adj.setdefault(left, set()).add(right)
+        adj.setdefault(right, set()).add(left)
+
+    def end_ref(text: str) -> str:
+        try:
+            ref, _pin = parse_pin_ref(text)
+        except ValueError:
+            ref = str(text).split(".")[0]
+        return ref
+
+    for wire in sheet.wires:
+        add(end_ref(wire.frm), end_ref(wire.to))
+    issues: list[str] = []
+    for tag in sorted(fuses):
+        # Walk every simple path. The fuse is rail-to-rail when one path's
+        # only device is that fuse.
+        stack: list[tuple[str, list[str]]] = [(hot, [hot])]
+        seen_paths: set[tuple[str, ...]] = set()
+        while stack:
+            node, path = stack.pop()
+            if len(path) > 6:
+                continue
+            for nbr in sorted(adj.get(node, ())):
+                if nbr in path:
+                    continue
+                nxt = path + [nbr]
+                if nbr == ret:
+                    devices = tuple(ref for ref in nxt if ref not in {hot, ret})
+                    if devices == (tag,) and devices not in seen_paths:
+                        seen_paths.add(devices)
+                        issues.append(f"{sheet.id}: {tag} is a fuse from {hot} to {ret}")
+                    continue
+                stack.append((nbr, nxt))
+    return issues
+
+
+def _rail_without_a_load(sheet: Sheet) -> list[str]:
+    """A device landed on a rail, with no path from it through a load.
+
+    The drawing is a straight rail tie. A fuse, contact, or button may touch
+    a rail only when the rung reaches a coil, a lamp, a transformer, or the
+    same kind of load. The checker still owns that. Nothing is redrawn away.
+    """
+
+    from panelcad.render.sheet import parse_pin_ref
+
+    hot = str(getattr(sheet, "rail_hot", "") or "L1")
+    ret = str(getattr(sheet, "rail_return", "") or "L2")
+    rails = {hot, ret}
+    adj: dict[str, set[str]] = {}
+
+    def add(left: str, right: str) -> None:
+        if not left or not right or left == right:
+            return
+        adj.setdefault(left, set()).add(right)
+        adj.setdefault(right, set()).add(left)
+
+    def end_ref(text: str) -> str:
+        try:
+            ref, _pin = parse_pin_ref(text)
+        except ValueError:
+            ref = str(text).split(".")[0]
+        return ref
+
+    for wire in sheet.wires:
+        add(end_ref(wire.frm), end_ref(wire.to))
+    by_id = {comp.id: comp for comp in sheet.components}
+
+    def is_load(ref: str) -> bool:
+        comp = by_id.get(ref)
+        if comp is None:
+            return False
+        lib = comp.library_id.lower()
+        role = _role(lib)
+        # An off-page is the rest of the rung. It is not a bare rail tie.
+        return role in {"output", "terminal", "transformer", "offpage"} or "ol_contact" in lib
+
+    def reaches_load(start: str) -> bool:
+        seen = {start}
+        stack = [start]
+        while stack:
+            node = stack.pop()
+            if node not in rails and is_load(node):
+                return True
+            for nbr in adj.get(node, ()):
+                if nbr in seen or nbr in rails:
+                    continue
+                seen.add(nbr)
+                stack.append(nbr)
+        return False
+
+    issues: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    for wire in sheet.wires:
+        ends = [end_ref(wire.frm), end_ref(wire.to)]
+        for device, rail in (ends, list(reversed(ends))):
+            if rail not in rails or device in rails or device not in by_id:
+                continue
+            if is_load(device) or reaches_load(device):
+                continue
+            key = (device, rail)
+            if key in seen:
+                continue
+            seen.add(key)
+            issues.append(f"{sheet.id}: {device} is wired to {rail} with no path through a load")
+    return issues
+
+
+def _contacts_only_rungs(sheet: Sheet) -> list[str]:
+    """An L1-to-L2 path of only contacts is not a rung. It must not be issued."""
+
+    from panelcad.render.sheet import parse_pin_ref
+
+    hot = str(getattr(sheet, "rail_hot", "") or "L1")
+    ret = str(getattr(sheet, "rail_return", "") or "L2")
+    adj: dict[str, set[str]] = {}
+
+    def add(left: str, right: str) -> None:
+        if not left or not right or left == right:
+            return
+        adj.setdefault(left, set()).add(right)
+        adj.setdefault(right, set()).add(left)
+
+    def end_ref(text: str) -> str:
+        try:
+            ref, _pin = parse_pin_ref(text)
+        except ValueError:
+            ref = str(text).split(".")[0]
+        return ref
+
+    for wire in sheet.wires:
+        add(end_ref(wire.frm), end_ref(wire.to))
+    if hot not in adj or ret not in adj:
+        return []
+    by_id = {comp.id: comp for comp in sheet.components}
+
+    def carries_a_load(ref: str) -> bool:
+        if ref in {hot, ret}:
+            return False
+        comp = by_id.get(ref)
+        if comp is None:
+            return True
+        lib = comp.library_id.lower()
+        role = _role(lib)
+        return role in {"output", "terminal", "transformer", "fuse"} or "ol_contact" in lib
+
+    found: list[tuple[str, ...]] = []
+    seen: set[tuple[str, ...]] = set()
+    stack: list[tuple[str, list[str]]] = [(hot, [hot])]
+    while stack:
+        node, path = stack.pop()
+        if len(path) > len(by_id) + 2:
+            continue
+        for nbr in sorted(adj.get(node, ())):
+            if nbr in path:
+                continue
+            nxt = path + [nbr]
+            if nbr == ret:
+                devices = tuple(ref for ref in nxt if ref not in {hot, ret})
+                if devices and not any(carries_a_load(ref) for ref in devices) and devices not in seen:
+                    seen.add(devices)
+                    found.append(devices)
+                continue
+            stack.append((nbr, nxt))
+    return [
+        f"{sheet.id}: {', '.join(devices)} runs from {hot} to {ret} with no load" for devices in found
+    ]
+
+
+def _shorted_numbers(session: Session, sheet: Sheet) -> list[str]:
+    """One node with two printed numbers, or a primary net landed on the return.
+
+    Rails do not join rungs. A fuse or a transformer primary (H1–H4) that
+    also reaches the return rail is a short, and so is a tee that puts 101
+    and 104 on the same pin.
+    """
+
+    from panelcad.core.ansi_drafting import _SHEET_LINE
+    from panelcad.core.ladder import endpoint_is_rail, rail_names
+    from panelcad.render.sheet import parse_pin_ref
+
+    _hot, ret = rail_names(sheet, session.project)
+    parent: dict[str, str] = {}
+
+    def find(node: str) -> str:
+        parent.setdefault(node, node)
+        while parent[node] != node:
+            parent[node] = parent[parent[node]]
+            node = parent[node]
+        return node
+
+    def union(left: str, right: str) -> None:
+        ra, rb = find(left), find(right)
+        if ra != rb:
+            parent[rb] = ra
+
+    grouped: dict[str, list[tuple[Any, list[tuple[str, str]]]]] = {}
+    for wire in sheet.wires:
+        ends: list[tuple[str, str]] = []
+        pins: list[str] = []
+        for text in (wire.frm, wire.to):
+            if endpoint_is_rail(sheet, text, session.project):
+                ends.append(("rail", str(text).split(".")[0].upper()))
+                continue
+            try:
+                ref, pin = parse_pin_ref(text)
+            except ValueError:
+                ref, pin = str(text).split(".")[0], ""
+            token = f"{ref}.{pin}" if pin else ref
+            ends.append(("pin", token))
+            pins.append(token)
+        if len(pins) >= 2:
+            for pin in pins[1:]:
+                union(pins[0], pin)
+        key = find(pins[0]) if pins else f"wire:{wire.id}"
+        grouped.setdefault(key, []).append((wire, ends))
+    # Re-key after every union, so wires that only meet through a third wire share a net.
+    nets: dict[str, list[tuple[Any, list[tuple[str, str]]]]] = {}
+    for items in grouped.values():
+        for wire, ends in items:
+            pins = [name for kind, name in ends if kind == "pin"]
+            key = find(pins[0]) if pins else f"wire:{wire.id}"
+            nets.setdefault(key, []).append((wire, ends))
+    issues: list[str] = []
+    for items in nets.values():
+        numbers = sorted(
+            {
+                str(wire.number or "").strip()
+                for wire, _ends in items
+                if _SHEET_LINE.match(str(wire.number or "").strip() or "")
+            }
+        )
+        if len(numbers) >= 2:
+            issues.append(f"{sheet.id}: {', '.join(numbers)} are two wire numbers on one net")
+        primary = False
+        to_return = False
+        for _wire, ends in items:
+            for kind, name in ends:
+                if kind == "rail" and name == ret.upper():
+                    to_return = True
+                if kind == "pin" and _pin_is_primary(sheet, name):
+                    primary = True
+        if primary and to_return:
+            label = numbers[0] if numbers else items[0][0].id
+            issues.append(f"{sheet.id}: {label} ties the primary to {ret}")
+    return issues
+
+
+def _pin_is_primary(sheet: Sheet, token: str) -> bool:
+    ref, _, pin = token.partition(".")
+    comp = next((item for item in sheet.components if item.id == ref), None)
+    if comp is None:
+        return False
+    lib = comp.library_id.lower()
+    # The load side of a control fuse reaches the coil and the return on
+    # purpose. Only the transformer primary is a short when it does.
+    return "transformer" in lib and pin.upper().startswith("H")
+
+
+def _rail_gaps(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
+    """A pin drawn in the rail column with no wire to that rail is not a landing."""
+
+    from panelcad.core.ladder import endpoint_is_rail, rail_names, rail_xs
+    from panelcad.render.sheet import parse_pin_ref, pin_world
+
+    hot, ret = rail_names(sheet, session.project)
+    left, right = rail_xs(sheet)
+    near = 42.0
+    wired_left: set[str] = set()
+    wired_right: set[str] = set()
+
+    def end_pin(text: str) -> tuple[str, str]:
+        try:
+            ref, pin = parse_pin_ref(text)
+        except ValueError:
+            ref, pin = str(text).split(".")[0], ""
+        return ref, pin
+
+    by_id = {comp.id: comp for comp in sheet.components}
+    for wire in sheet.wires:
+        for text in (wire.frm, wire.to):
+            if endpoint_is_rail(sheet, text, session.project):
+                continue
+            ref, pin_id = end_pin(text)
+            comp = by_id.get(ref)
+            device = _device(catalog, comp) if comp is not None else None
+            if device is None:
+                continue
+            side = ""
+            for pin in device.pins:
+                if str(pin.id) == pin_id:
+                    side = str(pin.side)
+                    break
+            if side == "left":
+                wired_left.add(ref)
+            elif side == "right":
+                wired_right.add(ref)
+    issues: list[str] = []
+    for comp in sheet.components:
+        device = _device(catalog, comp)
+        if device is None:
+            continue
+        role = _role(comp.library_id)
+        if role in {"transformer", "offpage"}:
+            continue
+        left_pins = [pin for pin in device.pins if str(pin.side) == "left"]
+        right_pins = [pin for pin in device.pins if str(pin.side) == "right"]
+        if left_pins and comp.id not in wired_left:
+            px, _py = pin_world(comp, left_pins[0])
+            if 0.0 < px - left <= near:
+                issues.append(f"{sheet.id}: {comp.id} does not land on {hot}")
+                continue
+        if right_pins and comp.id not in wired_right and (
+            role in {"output", "terminal", "fuse"} or "ol_contact" in comp.library_id.lower()
+        ):
+            px, _py = pin_world(comp, right_pins[0])
+            if 0.0 < right - px <= near:
+                issues.append(f"{sheet.id}: {comp.id} does not land on {ret}")
+    return issues
+
+
 def _loads_on_the_right(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
     """A coil, overload, or pilot belongs just left of L2, not mid-sheet."""
 
@@ -1013,6 +1743,8 @@ def _loads_on_the_right(session: Session, sheet: Sheet, catalog: Catalog) -> lis
             continue
         load = _is_rung_load(comp.library_id)
         contact = _role(comp.library_id) in {"contact", "aux", "offpage"} and not load
+        if load and not _pin_side_wired(sheet, comp.id, device, "right"):
+            load = False
         if not load and not contact:
             continue
         pins = [pin for pin in device.pins if str(pin.side) == "right"] or list(device.pins)

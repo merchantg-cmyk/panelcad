@@ -95,6 +95,78 @@ REMINDER = (
     "Return only the JSON object with devices, conductors, wire_numbers, and buses. "
     "Do not put a tag or a part type in to_pin."
 )
+CLEANUP_REMINDER = (
+    "Do not use tools. Do not run a terminal or call MCP. "
+    "Return only one JSON object with optional devices, wires, connections, and challenges. "
+    "A challenge removes one contradicted fact. It does not add or move anything. "
+    "Do not draw or return coordinates."
+)
+CLEANUP_TIMEOUT_S = 120.0
+CLEANUP_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "devices": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "tag": {"type": "string"},
+                    "library_id": {"type": "string"},
+                    "replaces": {"type": "string"},
+                    "gap": {"type": "string"},
+                    "confidence": {"type": "number"},
+                    "unreadable": {"type": "boolean"},
+                },
+            },
+        },
+        "wires": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "gap": {"type": "string"},
+                    "number": {"type": "string"},
+                    "confidence": {"type": "number"},
+                    "unreadable": {"type": "boolean"},
+                },
+            },
+        },
+        "connections": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "gap": {"type": "string"},
+                    "from": {"type": "string"},
+                    "to": {"type": "string"},
+                    "number": {"type": "string"},
+                    "confidence": {"type": "number"},
+                    "unreadable": {"type": "boolean"},
+                },
+            },
+        },
+        "challenges": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "gap": {"type": "string"},
+                    "target": {"type": "string"},
+                    "reason": {"type": "string"},
+                    "evidence": {"type": "string"},
+                    "confidence": {"type": "number"},
+                    "unreadable": {"type": "boolean"},
+                },
+                "required": ["gap", "target", "reason", "evidence", "confidence"],
+            },
+        },
+    },
+}
 # Replaces the CLI's long default system prompt. The image is already inline.
 SYSTEM_PROMPT = (
     "Extract one electrical drawing crop into JSON with devices, conductors, wire_numbers, and buses. "
@@ -367,6 +439,50 @@ class GrokBuildVision:
         return ""
 
     def extract(self, work: dict[str, Any]) -> dict[str, Any]:
+        if str(work.get("kind") or "") == "cleanup":
+            return self._extract_cleanup(work)
+        return self._extract_tile(work)
+
+    def _extract_cleanup(self, work: dict[str, Any]) -> dict[str, Any]:
+        """Ask for leftover facts. The reply is not a tile detection list."""
+
+        from panelcad.importer.cleanup import cleanup_prompt
+
+        image = Path(str(work.get("image") or ""))
+        reason = self.over_budget(str(work.get("page_id") or "") or None) or self.unavailable_reason()
+        if reason:
+            raise VisionFallback(reason)
+        if not image.is_file():
+            raise VisionFallback("crop missing")
+        prompt = cleanup_prompt(work)
+        blocks = [{"type": "text", "text": prompt}]
+        crops = work.get("crops") if isinstance(work.get("crops"), list) else []
+        if not crops:
+            crops = [{"id": "page", "read": "", "path": str(image)}]
+        for crop in crops:
+            path = Path(str(crop.get("path") or ""))
+            if not path.is_file():
+                continue
+            encoded, mime = _encode_file(path)
+            label = f"Gap {crop.get('id') or ''}. Existing read: {crop.get('read') or '?'}."
+            blocks.append({"type": "text", "text": label})
+            blocks.append({"type": "image", "data": encoded, "mimeType": mime})
+        if len(blocks) == 1:
+            encoded, mime = _encode_file(image)
+            blocks.append({"type": "image", "data": encoded, "mimeType": mime})
+        # One attempt. A timeout leaves the gaps unread. No tile reread.
+        first = self._call_once("", "", "", remind=False, cleanup=True, blocks=blocks, timeout=CLEANUP_TIMEOUT_S)
+        if first is None:
+            raise VisionFallback("request timed out")
+        if first["signed_out"]:
+            raise VisionFallback(SIGN_IN_MESSAGE)
+        self._charge(first["payload"])
+        structured = first["structured"]
+        if not isinstance(structured, dict):
+            raise VisionFallback(first["reason"] or "no structured answer")
+        return structured
+
+    def _extract_tile(self, work: dict[str, Any]) -> dict[str, Any]:
         started = time.perf_counter()
         meta: dict[str, Any] = {
             "timeout": False,
@@ -567,31 +683,54 @@ class GrokBuildVision:
             return False, "grok models failed. If this PC is signed out, run grok login. PanelCAD does not store credentials."
         return True, f"Signed in. Found grok at {exe}. PanelCAD does not store credentials."
 
-    def _call_once(self, prompt: str, encoded: str, mime: str, *, remind: bool) -> dict[str, Any] | None:
-        """One launch. ``None`` means the tile timed out and the caller may retry once."""
+    def _call_once(
+        self,
+        prompt: str,
+        encoded: str,
+        mime: str,
+        *,
+        remind: bool,
+        cleanup: bool = False,
+        blocks: list[dict[str, str]] | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any] | None:
+        """One launch. ``None`` means the call timed out. Cleanup retries that once."""
 
         try:
-            return self._call(prompt, encoded, mime, remind=remind)
+            return self._call(prompt, encoded, mime, remind=remind, cleanup=cleanup, blocks=blocks, timeout=timeout)
         except VisionFallback as exc:
             if exc.reason == "request timed out":
                 return None
             raise
 
-    def _call(self, prompt: str, encoded: str, mime: str, *, remind: bool) -> dict[str, Any]:
-        blocks: list[dict[str, str]] = [
-            {"type": "text", "text": prompt},
-            {"type": "image", "data": encoded, "mimeType": mime},
-        ]
+    def _call(
+        self,
+        prompt: str,
+        encoded: str,
+        mime: str,
+        *,
+        remind: bool,
+        cleanup: bool = False,
+        blocks: list[dict[str, str]] | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        if blocks is None:
+            blocks = [
+                {"type": "text", "text": prompt},
+                {"type": "image", "data": encoded, "mimeType": mime},
+            ]
+        else:
+            blocks = list(blocks)
         if remind:
-            blocks.append({"type": "text", "text": REMINDER})
+            blocks.append({"type": "text", "text": CLEANUP_REMINDER if cleanup else REMINDER})
         session_id = str(uuid.uuid4())
         root, owned = self._workdir()
         try:
             prompt_path = root / f"prompt-{session_id}.json"
             prompt_path.write_text(json.dumps(blocks), encoding="utf-8")
-            argv = self._argv(prompt_path, root, session_id)
+            argv = self._argv(prompt_path, root, session_id, cleanup=cleanup)
             try:
-                code, out, err = self._invoke(argv, str(root))
+                code, out, err = self._invoke(argv, str(root), timeout=timeout)
             except TimeoutError as exc:
                 out = str(getattr(exc, "out", "") or "")
                 _structured, payload, _parsed = parse_grok_result(out)
@@ -606,7 +745,10 @@ class GrokBuildVision:
                 delete_grok_session(session_id, root)
             if owned:
                 shutil.rmtree(root, ignore_errors=True)
-        structured, payload, parsed = parse_grok_result(out)
+        if cleanup:
+            structured, payload, parsed = parse_cleanup_result(out)
+        else:
+            structured, payload, parsed = parse_grok_result(out)
         signed_out = _signed_out(err, out, parsed=parsed)
         tool = structured is None and _tool_attempt(payload, out, err)
         reason = ""
@@ -619,6 +761,8 @@ class GrokBuildVision:
                 field = payload.get("structured_output")
             if isinstance(field, str) and field.strip():
                 raw_text = field
+            elif cleanup and isinstance(structured, dict):
+                raw_text = json.dumps(structured)
             elif isinstance(field, dict) and _has_detection_rows(field):
                 raw_text = json.dumps(field)
             elif isinstance(structured, dict) and _has_detection_rows(structured):
@@ -638,35 +782,53 @@ class GrokBuildVision:
             "reason": reason,
         }
 
-    def _argv(self, prompt_path: Path, cwd: Path, session_id: str) -> list[str]:
+    def _argv(self, prompt_path: Path, cwd: Path, session_id: str, *, cleanup: bool = False) -> list[str]:
+        from panelcad.importer.cleanup import CLEANUP_SYSTEM_PROMPT
+
         exe = find_grok()
         program = str(exe) if exe is not None else "grok"
         argv = [
             program,
             "--prompt-file",
             str(prompt_path),
-            "--json-schema",
-            json.dumps(DETECTION_SCHEMA, separators=(",", ":")),
-            "--output-format",
-            "json",
-            "--permission-mode",
-            "dontAsk",
-            "--effort",
-            "low",
-            "--max-turns",
-            "5",
-            "--cwd",
-            str(cwd),
-            "--no-auto-update",
-            "--no-subagents",
-            "--no-memory",
-            "--no-plan",
-            "--disable-web-search",
-            "--system-prompt-override",
-            SYSTEM_PROMPT,
-            "--session-id",
-            session_id,
         ]
+        if cleanup:
+            argv.extend(
+                [
+                    "--json-schema",
+                    json.dumps(CLEANUP_SCHEMA, separators=(",", ":")),
+                ]
+            )
+        else:
+            argv.extend(
+                [
+                    "--json-schema",
+                    json.dumps(DETECTION_SCHEMA, separators=(",", ":")),
+                ]
+            )
+        argv.extend(
+            [
+                "--output-format",
+                "json",
+                "--permission-mode",
+                "dontAsk",
+                "--effort",
+                "low",
+                "--max-turns",
+                "5",
+                "--cwd",
+                str(cwd),
+                "--no-auto-update",
+                "--no-subagents",
+                "--no-memory",
+                "--no-plan",
+                "--disable-web-search",
+                "--system-prompt-override",
+                CLEANUP_SYSTEM_PROMPT if cleanup else SYSTEM_PROMPT,
+                "--session-id",
+                session_id,
+            ]
+        )
         argv.extend(_sandbox_argv())
         for name in _DENY:
             argv.extend(["--deny", name])
@@ -745,6 +907,65 @@ class GrokBuildVision:
             if cost > 0:
                 self._priced_cost += cost
                 self._priced_calls += 1
+
+
+def parse_cleanup_result(text: str) -> tuple[Any, dict[str, Any], bool]:
+    """Return the model's JSON object for a cleanup call, without flattening it.
+
+    A reply that has ``devices`` is leftover facts or a tile body. It is not
+    coerced into a detections list. Tile extract does not use this function.
+    """
+
+    events = _grok_events(text)
+    if not events:
+        return None, {}, False
+    for event in reversed(events):
+        found = _cleanup_object(event)
+        if found is not None:
+            return found, event, True
+    joined = _json_object("\n".join(_event_text_chunks(events)))
+    if isinstance(joined, dict):
+        return joined, events[-1], True
+    return None, events[-1], True
+
+
+def _cleanup_object(event: dict[str, Any]) -> dict[str, Any] | None:
+    for key in ("structuredOutput", "structured_output"):
+        found = _json_object(event.get(key))
+        if isinstance(found, dict) and _is_fact_object(found):
+            return found
+    for key in ("text", "result", "output", "response"):
+        found = _json_object(event.get(key))
+        if isinstance(found, dict) and _is_fact_object(found):
+            return found
+    return None
+
+
+def _json_object(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if text.startswith("```"):
+        lines = [line for line in text.splitlines() if not line.strip().startswith("```")]
+        text = "\n".join(lines).strip()
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        data = json.loads(text[start : end + 1])
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _is_fact_object(value: dict[str, Any]) -> bool:
+    return any(
+        key in value
+        for key in ("devices", "wires", "connections", "challenges", "detections", "conductors", "wire_numbers", "buses")
+    )
 
 
 def parse_grok_result(text: str) -> tuple[Any, dict[str, Any], bool]:

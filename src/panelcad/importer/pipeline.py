@@ -173,6 +173,54 @@ class EmptyImport(RuntimeError):
     """The print saved, but it is not a drawing. Callers must not report built."""
 
 
+def _wrap_up_built_scan(job: ImportJob, session: Any) -> None:
+    """Run the gap cleanup on a ladder rebuild. No vision backend leaves the sheet as read."""
+
+    from panelcad.importer.cleanup import wrap_up_scan
+
+    image = ""
+    pages: list[dict[str, Any]] = []
+    for page_id in job.manifest.get("pages") or []:
+        try:
+            page = job._page(page_id)
+        except KeyError:
+            continue
+        page_image = str(page.get("image") or "")
+        if page_image and not image:
+            image = page_image
+        merged = job.ws.read_json("pages", page_id, "merged.json", default={}) or {}
+        if not isinstance(merged, dict):
+            merged = {}
+        info = page.get("classification") if isinstance(page.get("classification"), dict) else {}
+        pages.append(
+            {
+                "id": str(page_id),
+                "image": page_image,
+                "devices": len(merged.get("devices") or []),
+                "wires": len(merged.get("wires") or []),
+                "tags": [str(device.get("tag") or "") for device in (merged.get("devices") or []) if isinstance(device, dict)],
+                "kind": str((info or {}).get("kind") or ""),
+            }
+        )
+    summary = wrap_up_scan(session, image=image, backend=job._backend, pages=pages)
+    info = session.project.properties.setdefault("print_import", {})
+    if isinstance(info, dict):
+        info["cleanup"] = {
+            "called": bool(summary.get("called")),
+            "issued": bool(summary.get("issued")),
+            "reason": str(summary.get("reason") or ""),
+            "added": list(summary.get("added") or []),
+            "dropped": [str(row.get("reason") or "") for row in summary.get("dropped") or [] if isinstance(row, dict)],
+            "gaps_sent": int(summary.get("gaps_sent") or 0),
+            "resolved": int(summary.get("resolved") or 0),
+            "calls": int(summary.get("calls") or 0),
+            "seconds": float(summary.get("seconds") or 0.0),
+            "prompt_chars": int(summary.get("prompt_chars") or 0),
+            "crops": int(summary.get("crops") or 0),
+            "violations": int(summary.get("violations") or 0),
+        }
+
+
 class ImportJob:
     def __init__(self, root: Path | str | Workspace) -> None:
         if isinstance(root, Workspace):
@@ -206,7 +254,9 @@ class ImportJob:
 
     @classmethod
     def open(cls, root: Path | str | Workspace) -> "ImportJob":
-        return cls(root)
+        job = cls(root)
+        job._relocate_page_images()
+        return job
 
     @classmethod
     def start(
@@ -565,6 +615,7 @@ class ImportJob:
         layout_mode: str = "preserve",
         target_standard: str = "auto",
     ) -> Session:
+        self._relocate_page_images()
         if self.manifest.get("stage") not in {"ready", "built"}:
             self.pump()
             self._drain()
@@ -609,6 +660,8 @@ class ImportJob:
             layout_mode=eff_layout,
             target_standard=eff_target_std,
         )
+        if eff_layout in {"ladder", "clean_ladder", "clean"}:
+            _wrap_up_built_scan(self, session)
         pi = (session.project.properties or {}).get("print_import")
         if isinstance(pi, dict) and isinstance(pi.get("from_to_schedule"), dict):
             stitched["from_to_schedule"] = pi["from_to_schedule"]
@@ -649,6 +702,23 @@ class ImportJob:
         self._save()
         self._stamp_rebuilt(session)
         return session
+
+    def set_cleanup_vision(self, preset: str, model: str = "") -> None:
+        """Point the gap cleanup at a vision backend. The page read is already finished.
+
+        Raster import stays the source of the facts. This only affects
+        ``wrap_up_scan`` inside ``build`` when the layout is a ladder.
+        """
+
+        from panelcad.importer.vision import backend_for
+        from panelcad.importer.vision_config import VisionSettings
+
+        settings = VisionSettings(preset=preset, model=model).resolved()
+        self._backend = backend_for(settings.preset, vision=settings)
+        vision = dict(self.manifest.get("vision") or {})
+        vision["preset"] = settings.preset
+        vision["model"] = settings.model
+        self.manifest["vision"] = vision
 
     def _drain(self) -> None:
         backend = self._backend
@@ -2009,6 +2079,27 @@ class ImportJob:
         if not rows:
             return True
         return all(bool(item.get("vision_fallback")) for item in rows)
+
+    def _relocate_page_images(self) -> None:
+        """Point a copied workspace at its own page.png when the stored path is gone.
+
+        The raster read writes an absolute image path. A PC without Tesseract
+        opens that workspace and only runs the leftover call.
+        """
+
+        for page_id in list(self.manifest.get("pages") or []):
+            try:
+                page = self._page(page_id)
+            except KeyError:
+                continue
+            stored = Path(str(page.get("image") or ""))
+            if stored.is_file():
+                continue
+            local = self.ws.path("pages", page_id, "page.png")
+            if not local.is_file():
+                continue
+            page["image"] = str(local.resolve())
+            self._save_page(page)
 
     def _page(self, page_id: str) -> dict[str, Any]:
         data = self.ws.read_json("pages", page_id, "page.json")

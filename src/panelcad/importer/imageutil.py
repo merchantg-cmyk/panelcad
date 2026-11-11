@@ -194,20 +194,23 @@ def denoise(image: Image.Image) -> Image.Image:
 def auto_rotate(image: Image.Image) -> tuple[Image.Image, int]:
     """Put the page upright. Returns quarter turns applied (each is 90° CCW).
 
-    A line drawing is decided by reading tags and title words at 0/90/180/270.
-    That reading wins over a title-band guess, so an upright sheet is not turned
-    over by one faint rule. A ruled title band is used when the reading is not
-    decisive, and it is checked before OSD so a sideways OSD cannot leave an
-    upside-down band on its edge. Bottom-band ink uses a binarized probe.
-    The page stays as scanned when none of those is decisive.
+    Tag scores decide when they can. Electrical OCR transcribes a line in
+    either direction, and a rotated copy carries that score vector around
+    with it, so the choice is a ratio between the four quarters, not a fixed
+    cutoff. Letter shape only splits a tie that the ratios leave open. A
+    ruled title band is used when there is no tag score. The page stays as
+    scanned when none of those is decisive.
     """
 
-    # Tags and title words decide before a title-band guess, including on a
-    # line drawing whose BOX thumbnail looks blank.
+    # Tags decide before a title-band guess, including on a line drawing
+    # whose BOX thumbnail looks blank.
     scores = _text_scores(image)
-    oriented = _orientation_from_scores(image, scores)
-    if oriented is not None:
-        return oriented
+    quarter = choose_quarter(scores, _glyph_quarter(image))
+    if quarter is not None:
+        turned = image
+        for _ in range(quarter):
+            turned = turned.transpose(Image.Transpose.ROTATE_270)
+        return turned, quarter
     titled = _decisive_title(image)
     if titled is not None:
         return titled
@@ -320,8 +323,12 @@ _TAG_LIKE = re.compile(r"^(?:[A-Z]{1,4}\d{1,4}[A-Z]?|\d{1,4}[A-Z]{1,4}(?:-[A-Z0-
 
 
 def _osd_reading(image: Image.Image) -> tuple[int | None, float]:
-    """Tesseract OSD. Confidence 0 when the binary is missing or the page is blank."""
+    """Tesseract OSD. Confidence 0 when the electrical reader is in use, the binary is missing, or the page is blank."""
 
+    from panelcad.ocr.dispatch import tesseract_required
+
+    if not tesseract_required():
+        return None, 0.0
     try:
         import pytesseract
 
@@ -357,18 +364,29 @@ def _text_orientation(image: Image.Image) -> tuple[Image.Image, int] | None:
     no such tokens returns None so the title-band ink test can run.
     """
 
-    return _orientation_from_scores(image, _text_scores(image))
+    quarter = choose_quarter(_text_scores(image), _glyph_quarter(image))
+    if quarter is None:
+        return None
+    turned = image
+    for _ in range(quarter):
+        turned = turned.transpose(Image.Transpose.ROTATE_270)
+    return turned, quarter
 
 
 def _text_scores(image: Image.Image) -> list[float]:
-    try:
-        import pytesseract
+    from panelcad.ocr.dispatch import active_backend
 
-        from panelcad.importer.raster import configure_tesseract
+    electrical = active_backend() == "electrical"
+    pytesseract = None
+    if not electrical:
+        try:
+            import pytesseract
 
-        configure_tesseract()
-    except ImportError:
-        return []
+            from panelcad.importer.raster import configure_tesseract
+
+            configure_tesseract()
+        except ImportError:
+            return []
     scores: list[float] = []
     current = image
     for quarter in range(4):
@@ -376,6 +394,161 @@ def _text_scores(image: Image.Image) -> list[float]:
             current = current.transpose(Image.Transpose.ROTATE_270)
         scores.append(_text_score(current, pytesseract))
     return scores
+
+
+def _axis_tied(left: float, right: float) -> bool:
+    """Opposite quarters within 1.5% are one reading, not two directions.
+
+    Which of the two is listed first is not a direction. A wider gap, such as
+    the short scan whose weak pair differs by about 2.4%, is a real minimum.
+    """
+
+    higher = max(left, right)
+    if higher <= 0.0:
+        return True
+    return abs(left - right) <= higher * 0.015
+
+
+def choose_quarter(scores: list[float], glyph: int | None) -> int | None:
+    """Pick how many CCW quarter turns put the page upright.
+
+    The four scores rotate with the page. Comparing them to a fixed cutoff
+    treats an upright sheet that also reads upside down the same as a sheet
+    whose best quarter is a real 90° turn. The decision uses the shape of
+    the four scores:
+
+    - Opposite quarters within 1.5% are tied. The index of the first weak
+      score is then just list order, so letter shape breaks the tie. With
+      no letter shape, an upright read that ties its reverse stays upright.
+    - One quarter that scores at least twice the stronger quarter on the
+      other axis is the only direction the page read. Letter shape does not
+      override that. A lead whose runner-up is still on the other axis is
+      not this case.
+    - When every quarter read and one is distinctly weak, that quarter sits
+      one turn clockwise of upright.
+    - Otherwise letter shape splits what is left, and only when that quarter
+      scored. With no letter signal, a page that already reads upright is
+      not turned over just because the upside-down pass scored more.
+
+    None means there is no tag score. The title band decides those pages.
+    """
+
+    if len(scores) != 4:
+        return None
+    values = [float(score) for score in scores]
+    strongest = max(values)
+    if strongest < 80.0:
+        return None
+    # No letter shape, and only the upright pair reads. The side quarters
+    # scored nothing. A near tie follows the higher score. A larger
+    # upside-down lead stays put. A page that still reads on a side is not
+    # this case: that vector belongs to the ratio rules below.
+    if (
+        glyph not in {0, 1, 2, 3}
+        and values[0] >= 80.0
+        and values[2] >= 80.0
+        and max(values[1], values[3]) < 80.0
+    ):
+        higher = 0 if values[0] >= values[2] else 2
+        lower = 2 if higher == 0 else 0
+        if values[higher] <= values[lower] * 1.05:
+            return higher
+        return 0
+    # 0 against 180, and 90 against 270. A tie on both axes has no weakest
+    # index. Letter shape, not argmin order, chooses.
+    if _axis_tied(values[0], values[2]) and _axis_tied(values[1], values[3]):
+        if glyph in {0, 1, 2, 3} and values[glyph] >= 80.0:
+            return glyph
+        if values[0] >= 80.0:
+            return 0
+    upright_pair = 0 if values[0] >= values[2] else 2
+    side_pair = 1 if values[1] >= values[3] else 3
+    if values[upright_pair] >= values[side_pair]:
+        winner, other = upright_pair, side_pair
+    else:
+        winner, other = side_pair, upright_pair
+    # Twice the stronger quarter on the other axis. The page read in one
+    # direction, so letter shape does not override that quarter. A lead
+    # whose runner-up is still on the other axis stays under this bar.
+    if values[other] <= 0.0 or values[winner] >= values[other] * 2.0:
+        return winner
+    weakest = min(values)
+    # All four quarters read, and the low one is not a tie. It sits one
+    # turn clockwise of upright.
+    if weakest / strongest >= 0.36:
+        return (values.index(weakest) + 1) % 4
+    if glyph in {0, 1, 2, 3} and values[glyph] >= 80.0:
+        return glyph
+    if values[0] >= 80.0 and values[2] >= 80.0 and max(values[1], values[3]) < min(values[0], values[2]):
+        higher = 0 if values[0] >= values[2] else 2
+        lower = 2 if higher == 0 else 0
+        if values[higher] <= values[lower] * 1.05:
+            return higher
+        return 0
+    return values.index(strongest)
+
+
+def _glyph_quarter(image: Image.Image) -> int | None:
+    """Quarter turn that puts the heavy top of a capital letter on top.
+
+    None when the page has no lettering, so a blank test page still follows
+    the tag scores.
+    """
+
+    scores: list[int] = []
+    current = image
+    for quarter in range(4):
+        if quarter:
+            current = current.transpose(Image.Transpose.ROTATE_270)
+        scores.append(_glyph_balance(current))
+    best_q = max(range(4), key=lambda index: scores[index])
+    best = scores[best_q]
+    second = max(score for index, score in enumerate(scores) if index != best_q)
+    if best < 40 or best < second + 40:
+        return None
+    return best_q
+
+
+def _glyph_balance(image: Image.Image) -> int:
+    """Ink in the top third of each letter band, minus the bottom third."""
+
+    import numpy as np
+
+    scale = 900.0 / float(max(image.size))
+    probe = image.convert("L").resize(
+        (max(1, int(image.width * scale)), max(1, int(image.height * scale)))
+    )
+    ink = np.asarray(probe) < 160
+    height, width = ink.shape
+    row = ink.sum(axis=1)
+    rule = row > width * 0.35
+    ink = ink.copy()
+    ink[rule] = False
+    row = ink.sum(axis=1)
+    ys = np.where((row > 6) & (row < width * 0.55))[0]
+    if len(ys) < 3:
+        return 0
+    bands: list[tuple[int, int]] = []
+    start = prev = int(ys[0])
+    for y in list(ys[1:]) + [10**9]:
+        y = int(y)
+        if y > prev + 2:
+            bands.append((start, prev))
+            start = y
+        prev = y
+    total = 0
+    for top_y, bot_y in bands:
+        span = bot_y - top_y + 1
+        if span < 8 or span > int(height * 0.12):
+            continue
+        sl = ink[top_y : bot_y + 1]
+        if int(sl.sum()) < 30:
+            continue
+        third = max(1, span // 3)
+        top_ink = int(sl[:third].sum())
+        bot_ink = int(sl[span - third :].sum())
+        total += top_ink - bot_ink
+    return total
 
 
 def _orientation_from_scores(image: Image.Image, scores: list[float]) -> tuple[Image.Image, int] | None:
@@ -388,6 +561,11 @@ def _orientation_from_scores(image: Image.Image, scores: list[float]) -> tuple[I
     second = max(score for index, score in enumerate(scores) if index != best_q)
     if best < second + 60.0:
         return None
+    # The electrical reader transcribes a line either way up, so an upright
+    # page that already has tags must not be turned over. A page that does
+    # not read until it is rotated still turns.
+    if best_q == 2 and scores[0] >= 80.0:
+        return image, 0
     turned = image
     for _ in range(best_q):
         turned = turned.transpose(Image.Transpose.ROTATE_270)
@@ -411,7 +589,12 @@ def _text_score(image: Image.Image, pytesseract: object) -> float:
             Image.Resampling.LANCZOS,
         )
     try:
-        data = pytesseract.image_to_data(probe, output_type=pytesseract.Output.DICT, config="--psm 11")
+        from panelcad.ocr.dispatch import active_backend, image_to_data
+
+        if active_backend() == "electrical" or pytesseract is None:
+            data = image_to_data(probe, config="--psm 11")
+        else:
+            data = pytesseract.image_to_data(probe, output_type=pytesseract.Output.DICT, config="--psm 11")
     except Exception:  # noqa: BLE001 — missing binary falls back to template probe
         from .preprocess import fallback_probe_text_score
 

@@ -521,7 +521,7 @@ OP_HELP: dict[str, dict[str, str]] = {
     "import_any": "Auto-detect package, yaml, json, csv, library, sheet. Args: path, replace?",
     "import_library": "Args: path",
     "import_sheet": "Args: path",
-    "import_start": "Start a print import. Returns the next crop plus instructions and a JSON schema, or a ready status when the file is vector. The status summary includes tiles_done, tiles_total, spent_usd, input_tokens, estimated_usd, fallbacks, fallback_reasons, and ocr_skipped. Args: path or paths[], photos?, standard?, workspace?, resume?, backend?=external|auto|fake, vision_backend?=none|grok|grok-build|ollama|custom, vision_model?, vision_base_url?, vision_api_key_env?, vision_workers? or workers? (default 3, max 8), vision_timeout_s? (one request; Ollama default 300), vision_page_timeout_s? (one page, not the whole job; Ollama default 3600), num_ctx? (Ollama context, default 16384), num_predict?, think? (Ollama thinking, default false), reasoning_effort? (none|low|medium|high for a /v1 server), clean_grok_sessions? (default true; deletes only that tile's folder under ~/.grok/sessions/<encoded cwd>/<id>), grok_tools_none? (default false; passes --tools none), truth? (json or yaml ground truth). The API key is read from that environment variable and is not stored. Local Grok Build does not take a key.",
+    "import_start": "Start a print import. Returns the next crop plus instructions and a JSON schema, or a ready status when the file is vector. The status summary includes tiles_done, tiles_total, spent_usd, input_tokens, estimated_usd, fallbacks, fallback_reasons, and ocr_skipped. Args: path or paths[], photos?, standard?, workspace?, resume?, backend?=external|auto|fake, ocr_backend?=electrical|tesseract, vision_backend?=none|grok|grok-build|ollama|custom, vision_model?, vision_base_url?, vision_api_key_env?, vision_workers? or workers? (default 3, max 8), vision_timeout_s? (one request; Ollama default 300), vision_page_timeout_s? (one page, not the whole job; Ollama default 3600), num_ctx? (Ollama context, default 16384), num_predict?, think? (Ollama thinking, default false), reasoning_effort? (none|low|medium|high for a /v1 server), clean_grok_sessions? (default true; deletes only that tile's folder under ~/.grok/sessions/<encoded cwd>/<id>), grok_tools_none? (default false; passes --tools none), truth? (json or yaml ground truth). The API key is read from that environment variable and is not stored. Local Grok Build does not take a key. ocr_backend defaults to electrical.",
     "import_next": "The current crop work item. No args.",
     "import_submit": "Submit extracted JSON for the current crop. Args: work_id, data{}.",
     "import_status": "Compact import status. No images. No args.",
@@ -2539,6 +2539,12 @@ class Agent:
         return self.print_import
 
     def op_import_start(self, msg: dict[str, Any]) -> dict[str, Any]:
+        from panelcad.ocr.backend import ocr_scope
+
+        with ocr_scope(msg.get("ocr_backend")):
+            return self._import_start_body(msg)
+
+    def _import_start_body(self, msg: dict[str, Any]) -> dict[str, Any]:
         from panelcad.importer.pipeline import ImportJob
 
         resume = msg.get("resume") or msg.get("workspace")

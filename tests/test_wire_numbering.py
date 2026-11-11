@@ -49,22 +49,24 @@ def test_connected_segments_share_a_number_through_a_junction():
     assert through.number == "102"
 
 
-def test_ladder_rails_share_a_number_across_sheets():
+def test_ladder_rails_do_not_merge_rung_numbers():
+    """Two rungs that both land on L2 are not one numbered net."""
+
     s = Session.create("Rails")
     s.set_title_block(drawing_style="ladder")
     s.place("iec.contactors.coil", ref="K1", x=80, y=30)
-    s.wire("L1", "K1.A1")
-    s.wire("K1.A2", "L2")
+    s.wire("L1", "K1.A1", number="11")
+    s.wire("K1.A2", "L2", number="12")
     s.add_sheet("two", kind="schematic")
     s.place("iec.contactors.coil", ref="K2", x=80, y=30, sheet_id="two")
-    s.wire("L1", "K2.A1", sheet_id="two")
-    s.wire("K2.A2", "L2", sheet_id="two")
-    s.number_wires(overwrite=True)
-    l2 = {w.number for sh in s.project.sheets for w in sh.wires if "L2" in (w.frm, w.to)}
-    l1 = {w.number for sh in s.project.sheets for w in sh.wires if "L1" in (w.frm, w.to)}
-    assert len(l1) == 1 and next(iter(l1))
-    assert len(l2) == 1 and next(iter(l2))
-    assert l1 != l2
+    s.wire("L1", "K2.A1", number="21", sheet_id="two")
+    s.wire("K2.A2", "L2", number="22", sheet_id="two")
+    s.number_wires(overwrite=False)
+    numbers = {(w.frm, w.to): w.number for sh in s.project.sheets for w in sh.wires}
+    assert numbers[("L1", "K1.A1")] == "11"
+    assert numbers[("K1.A2", "L2")] == "12"
+    assert numbers[("L1", "K2.A1")] == "21"
+    assert numbers[("K2.A2", "L2")] == "22"
 
 
 def test_same_net_on_two_sheets_shares_one_number():

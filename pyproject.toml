@@ -1,6 +1,6 @@
 [project]
 name = "panelcad"
-version = "0.5.23"
+version = "0.5.27"
 description = "CAD for industrial control panels, PLCs, HMIs, and power distribution"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,6 +22,8 @@ dependencies = [
     "pillow>=10.0",
     "opencv-python-headless>=4.9",
     "pytesseract>=0.3.10",
+    "paddleocr==3.7.0",
+    "onnxruntime==1.31.1",
 ]
 
 [project.optional-dependencies]

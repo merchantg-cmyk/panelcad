@@ -102,7 +102,7 @@ Copy **one** file, `PanelCAD-<version>-setup.zip`, onto the PC. Do not split it 
 
 Unattended: `Install-PanelCAD.cmd /quiet`, or set `PANELCAD_INSTALL_QUIET=1`. That skips `pause` and does not open the window.
 
-That installs or upgrades `%USERPROFILE%\PanelCAD`, keeps the venv at `%USERPROFILE%\.venvs\panelcad`, and leaves your drawings and extra files alone. The desktop and Start menu shortcuts use the PanelCAD icon. Opening the window shows a splash screen while the parts library loads. How to build the zip, check its SHA-256, and publish an update feed: `docs/RELEASE.md`. On a shop PC, **Help → Updates** points at that feed (an https URL or a file in a synced folder). PanelCAD does not install an update until you click **Install now**.
+That installs or upgrades `%USERPROFILE%\PanelCAD`, keeps the venv at `%USERPROFILE%\.venvs\panelcad`, and leaves your drawings and extra files alone. The setup zip includes the electrical scan reader (ONNX Runtime, the wheels it requires, and the pinned weights). The installer does not download those files, does not put them on PATH, and does not run a separate OCR installer. Tesseract 5 in the same zip is only a fallback. The desktop and Start menu shortcuts use the PanelCAD icon. Opening the window shows a splash screen while the parts library loads. How to build the zip, check its SHA-256, and publish an update feed: `docs/RELEASE.md`. On a shop PC, **Help → Updates** points at that feed (an https URL or a file in a synced folder). PanelCAD does not install an update until you click **Install now**.
 
 ## Pydantic AI
 

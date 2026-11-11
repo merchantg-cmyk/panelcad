@@ -23,6 +23,6 @@ Standard enclosures are a separate table, `libraries/enclosures.yaml` (override 
 
 See `docs/FORMAT.md` for the draw shorthand.
 
-Terminal jumpers are a compact `jumpers:` table in `builtin/jumpers.yaml` (family, pitch, poles, manufacturer, part number). The engine expands each row into a `connection.jumper` device. Copy a row to add Phoenix / WAGO / Weidmüller / Dinkle parts your shop stocks. Matching uses the terminal's `jumper_family` and `pitch_mm` (see `oem_terminals.yaml` and `iec.terminals.x_2p5`).
+Terminal jumpers are a compact `jumpers:` table in `builtin/jumpers.yaml` (family, pitch, poles, manufacturer, part number). The engine expands each row into a `connection.jumper` device. Copy a row to add Phoenix / WAGO / Weidmüller / Dinkle parts shops stock. Matching uses the terminal's `jumper_family` and `pitch_mm` (see `oem_terminals.yaml` and `iec.terminals.x_2p5`).
 
 Do not encode symbols in Python. If a symbol is wrong, fix the YAML.

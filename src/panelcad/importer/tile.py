@@ -214,9 +214,14 @@ def merge_extractions(parts: list[dict[str, Any]]) -> dict[str, Any]:
     xrefs: list[dict[str, Any]] = []
     texts: list[dict[str, Any]] = []
     spatial_drops: list[dict[str, Any]] = []
+    raw_wires: list[dict[str, Any]] = []
+    for part in parts:
+        for wire in part.get("wires") or []:
+            if isinstance(wire, dict):
+                raw_wires.append(wire)
     for part in parts:
         for device in part.get("devices") or []:
-            _merge_device(devices, device, spatial_drops)
+            _merge_device(devices, device, spatial_drops, wires=raw_wires)
         for wire in part.get("wires") or []:
             _merge_wire(wires, wire)
         for xref in part.get("xrefs") or []:
@@ -263,23 +268,45 @@ def _prefer_incoming(current: dict[str, Any], device: dict[str, Any]) -> bool:
     return _device_keep_score(device) > _device_keep_score(current)
 
 
-def _fold_device(current: dict[str, Any], device: dict[str, Any]) -> None:
-    """Keep one dict for the tag. The stronger reading replaces the fields."""
+def _fold_device(
+    current: dict[str, Any],
+    device: dict[str, Any],
+    wires: list[dict[str, Any]] | None = None,
+) -> None:
+    """Keep one dict for the tag. The stronger reading replaces the fields.
 
+    ``open_stubs`` from both reads are kept (minus pins a traced wire already
+    named), so an overlap fold cannot drop a real open terminal.
+    """
+
+    old_stubs = [str(pin) for pin in (current.get("open_stubs") or []) if str(pin).strip()]
+    new_stubs = [str(pin) for pin in (device.get("open_stubs") or []) if str(pin).strip()]
+    tag = str(current.get("tag") or device.get("tag") or "")
+    traced = _traced_pins(wires, tag) if wires is not None else set()
+    merged = sorted((set(old_stubs) | set(new_stubs)) - traced)
     if not _prefer_incoming(current, device):
+        if merged:
+            current["open_stubs"] = merged
+        elif "open_stubs" in current:
+            current.pop("open_stubs", None)
         return
-    tag = current.get("tag")
+    keep_tag = current.get("tag")
     current.clear()
     current.update(device)
     current["recovered"] = False
-    if tag:
-        current["tag"] = tag
+    if keep_tag:
+        current["tag"] = keep_tag
+    if merged:
+        current["open_stubs"] = merged
+    else:
+        current.pop("open_stubs", None)
 
 
 def _merge_device(
     devices: list[dict[str, Any]],
     device: dict[str, Any],
     spatial_drops: list[dict[str, Any]] | None = None,
+    wires: list[dict[str, Any]] | None = None,
 ) -> None:
     tag = device_tag_key(str(device.get("tag") or ""))
     if device.get("unreadable") or not tag:
@@ -292,7 +319,7 @@ def _merge_device(
         # A coil and its contact, or the same tag printed again further along
         # the sheet, stay separate occurrences.
         if _same_overlapped_symbol(current, device):
-            _fold_device(current, device)
+            _fold_device(current, device, wires)
             return
     if _reject_spatial_duplicate(devices, device, spatial_drops):
         return
@@ -330,9 +357,10 @@ def collapse_devices_across_sheets(sheets: list[dict[str, Any]]) -> None:
 
     for sheet in sheets:
         devices: list[dict[str, Any]] = []
+        wires = [wire for wire in (sheet.get("wires") or []) if isinstance(wire, dict)]
         for device in sheet.get("devices") or []:
             if isinstance(device, dict):
-                _merge_device(devices, device)
+                _merge_device(devices, device, wires=wires)
         sheet["devices"] = devices
 
 
@@ -490,11 +518,16 @@ def _merge_wire(wires: list[dict[str, Any]], wire: dict[str, Any]) -> None:
     wires.append(wire)
 
 
+_RAIL_BUS_TAGS = frozenset({"L1", "L2", "L3", "N", "PE", "24V", "+24V", "0V", "X1", "X2"})
+
+
 def _absorb_pinless_labels(wires: list[dict[str, Any]]) -> None:
     """Join a pinless wire number to the nearest conductor that already has pins.
 
     The label and the conductor share a number and sit in one tile, or in two
-    tiles whose page boxes overlap. The label does not stay as its own wire.
+    tiles whose page boxes overlap. A rail bus repeats its number on separate
+    rungs, so a pinless label on another rung is not absorbed into a distant
+    rail landing that merely shares a tall low-DPI tile.
     """
 
     consumed: set[int] = set()
@@ -509,6 +542,17 @@ def _absorb_pinless_labels(wires: list[dict[str, Any]]) -> None:
             if _wire_text(other.get("number")) != _wire_text(label.get("number")):
                 continue
             if not (_close(label, other, 8.0) or _tiles_share(label, other)):
+                continue
+            if (
+                not _close(label, other, 8.0)
+                and "y" in label
+                and "y" in other
+                and (
+                    {str(other.get("from_tag") or "").upper(), str(other.get("to_tag") or "").upper()}
+                    & _RAIL_BUS_TAGS
+                )
+                and abs(float(label.get("y") or 0) - float(other.get("y") or 0)) > 18.0
+            ):
                 continue
             distance = _point_distance(label, other)
             if best_distance is None or distance < best_distance:

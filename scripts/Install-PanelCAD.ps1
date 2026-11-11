@@ -187,6 +187,79 @@ function Test-Tesseract {
     return $false
 }
 
+function Test-BundledTesseract([string]$Source) {
+    $exe = Join-Path $Source "resources\ocr\tesseract\tesseract.exe"
+    $trained = Join-Path $Source "resources\ocr\tesseract\tessdata\eng.traineddata"
+    return (Test-Path -LiteralPath $exe) -and (Test-Path -LiteralPath $trained)
+}
+
+function Get-ElectricalLockWheelNames([string]$Source) {
+    # The lock names every wheel the offline ONNX Runtime install needs,
+    # including flatbuffers, numpy, packaging, and protobuf.
+    # Write one string per wheel. An empty result writes nothing, so the
+    # caller's @() has Count 0. A nested empty array counts as one item,
+    # and Join-Path then refuses to treat that array as a path.
+    $lock = Join-Path $Source "packaging\electrical-ocr.lock.json"
+    if (-not (Test-Path -LiteralPath $lock)) { return }
+    $data = Get-Content -Raw -LiteralPath $lock | ConvertFrom-Json
+    foreach ($wheel in @($data.wheels)) {
+        $name = [string]$wheel.filename
+        if ($name) { $name }
+    }
+}
+
+function Test-BundledElectrical([string]$Source) {
+    $root = Join-Path $Source "resources\ocr\electrical"
+    $need = @(
+        "models\PP-OCRv5_mobile_det_onnx\inference.onnx",
+        "models\PP-OCRv5_mobile_det_onnx\inference.yml",
+        "models\en_PP-OCRv5_mobile_rec_onnx\inference.onnx",
+        "models\en_PP-OCRv5_mobile_rec_onnx\inference.yml",
+        "models\PP-OCRv6_small_det_onnx\inference.onnx",
+        "models\PP-OCRv6_small_det_onnx\inference.yml",
+        "models\PP-OCRv6_small_rec_onnx\inference.onnx",
+        "models\PP-OCRv6_small_rec_onnx\inference.yml",
+        "models\PP-LCNet_x1_0_textline_ori_onnx\inference.onnx",
+        "models\PP-LCNet_x1_0_textline_ori_onnx\inference.yml",
+        "licenses\NOTICE.md"
+    )
+    foreach ($rel in $need) {
+        if (-not (Test-Path -LiteralPath (Join-Path $root $rel))) { return $false }
+    }
+    $wheels = Join-Path $root "wheels"
+    if (-not (Test-Path -LiteralPath $wheels)) { return $false }
+    $names = @(Get-ElectricalLockWheelNames $Source)
+    if ($names.Count -lt 1) { return $false }
+    foreach ($name in $names) {
+        if ($name -isnot [string] -or -not $name) { return $false }
+        if (-not (Test-Path -LiteralPath (Join-Path $wheels $name))) { return $false }
+    }
+    return $true
+}
+
+function Install-BundledOnnxRuntime([string]$VenvPy, [string]$Source) {
+    $wheelDir = Join-Path $Source "resources\ocr\electrical\wheels"
+    $spec = & $VenvPy -c "import sys,platform; print(sys.version_info[0]); print(sys.version_info[1]); print(platform.machine())"
+    if ($LASTEXITCODE -ne 0) { throw "Could not read the venv Python version." }
+    $lines = @($spec) | ForEach-Object { "$_".Trim() } | Where-Object { $_ }
+    if ($lines.Count -lt 3) { throw "Could not read the venv Python version." }
+    $tag = "cp$($lines[0])$($lines[1])"
+    $machine = $lines[2].ToLower()
+    $arch = "win_amd64"
+    if ($machine -eq "arm64" -or $machine -eq "aarch64") { $arch = "win_arm64" }
+    $match = @(Get-ChildItem -LiteralPath $wheelDir -Filter "onnxruntime-*$tag-*$arch.whl" -ErrorAction SilentlyContinue)
+    if ($match.Count -lt 1) {
+        throw "This setup has no ONNX Runtime wheel for Python $($lines[0]).$($lines[1]) ($arch). The scan reader does not download one."
+    }
+    Write-Step "Installing the shipped ONNX Runtime ($($match[0].Name))"
+    # --find-links is the only place pip may look. The required wheels
+    # (flatbuffers, numpy, packaging, protobuf) sit next to this file.
+    & $VenvPy -m pip install --disable-pip-version-check --no-index "--only-binary=:all:" --find-links $wheelDir $match[0].FullName
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not install the shipped ONNX Runtime wheel. The wheels folder must also contain flatbuffers, numpy, packaging, and protobuf. The scan reader does not download them."
+    }
+}
+
 function Copy-Source([string]$From, [string]$To, [string]$Python) {
     # scripts/install_tree.py always overwrites, including files whose size
     # and timestamp already match (robocopy /E /IS /IT). It then deletes
@@ -219,6 +292,10 @@ function Assert-InstalledVersion([string]$Python, [string]$Expected) {
     Write-Host "Python reports PanelCAD $reported"
 }
 
+# Running this file installs PanelCAD. Dot-sourcing only loads the functions.
+# return here would leave the caller, so the install body stays inside this if.
+if ($MyInvocation.InvocationName -ne '.') {
+
 $source = Get-SourceRoot
 $version = Get-PanelCadVersion $source
 Write-Host "PanelCAD $version installer"
@@ -237,12 +314,15 @@ if (-not $python) {
 Write-Step "Using $python"
 & $python -c "import sys; print(sys.version)"
 
-if (-not (Test-Tesseract)) {
-    Write-Host ""
-    Write-Host "Tesseract OCR was not found. A scan can still use a vision backend." -ForegroundColor Yellow
-    Write-Host "Pixel OCR needs the tesseract command on PATH."
-    Write-Host "Official source: https://github.com/tesseract-ocr/tesseract"
-    Write-Host "Downloads: https://tesseract-ocr.github.io/tessdoc/Downloads.html"
+if (-not (Test-BundledElectrical $source)) {
+    throw "This setup is missing the electrical OCR reader (resources\ocr\electrical), including the wheels ONNX Runtime requires. Rebuild the setup zip. A scan does not download weights or ONNX Runtime."
+}
+Write-Host "Pixel OCR uses the electrical reader shipped in this setup."
+Write-Host "The installer does not download OCR models, does not change PATH, and does not run a separate OCR installer."
+if (Test-BundledTesseract $source) {
+    Write-Host "Tesseract 5 is in this setup only as a fallback. A scan does not need it."
+} elseif (Test-Tesseract) {
+    Write-Host "A tesseract command is already on this PC. It is used only if the electrical reader cannot load."
 }
 $treeScript = Join-Path $source "scripts\install_tree.py"
 $didBackup = Backup-ExistingInstall $InstallRoot $python $treeScript
@@ -260,8 +340,15 @@ if (-not (Test-Path $venvPy)) { throw "venv python was not created at $venvPy" }
 Write-Step "Installing PanelCAD and Qt (this is the long step)"
 & $venvPy -m pip install --upgrade pip
 if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed" }
+Install-BundledOnnxRuntime $venvPy $source
 & $venvPy -m pip install -e $InstallRoot
 if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
+# paddlex asks for opencv-contrib-python. That build carries its own Qt and
+# replaces the headless cv2 PanelCAD already uses. Put the headless module
+# back. The contrib package name stays installed so the OCR dependency check
+# still passes, and import cv2 is the headless build.
+& $venvPy -m pip install --force-reinstall --no-deps "opencv-python-headless>=4.9,<5"
+if ($LASTEXITCODE -ne 0) { throw "Could not restore opencv-python-headless" }
 
 Assert-InstalledVersion $venvPy $version
 
@@ -381,3 +468,4 @@ if ($startMenuPath) {
 Write-Host ""
 Write-Host "Next time, double-click PanelCAD on the desktop."
 Write-Host "Open your own .pcad.yaml with File -> Open. Those files were not overwritten."
+}

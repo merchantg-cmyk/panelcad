@@ -347,7 +347,13 @@ def _place_sheet(session: Session, sheet_id: str, sheet: dict[str, Any], report:
             "print_import_crop": str(device.get("crop") or ""),
             "print_import_page": str(device.get("page_id") or sheet.get("page_id") or ""),
             "print_import_source": str(device.get("source") or ""),
+            # Scan frame, kept after the ladder engine moves the symbol.
+            "print_import_x": round(float(x), 2),
+            "print_import_y": round(float(y), 2),
         }
+        stubs = [str(pin) for pin in (device.get("open_stubs") or []) if str(pin).strip()]
+        if stubs:
+            props["print_open_stubs"] = ",".join(stubs)
         if device.get("catalog") and device.get("catalog_matched"):
             props["catalog"] = device["catalog"]
             if device.get("manufacturer"):
@@ -2684,6 +2690,91 @@ def _find_component(session: Session, tag: str) -> Any | None:
     return None
 
 
+def _add_loose_number_items(items: list[dict[str, Any]], stitched: dict[str, Any]) -> None:
+    """Keep a printed number the reader saw and did not attach.
+
+    The raster read leaves that token on the sheet as an ambiguous wire with
+    a position and no ends. A ladder build does not copy it into the review
+    list, so the question never fires. A number that already names both pins
+    stays a wire, not a second question.
+    """
+
+    from panelcad.core.ansi_drafting import _SHEET_LINE
+
+    seen = {
+        (
+            str(item.get("sheet") or ""),
+            str(item.get("text") or "").strip(),
+            _loose_key(item.get("x")),
+            _loose_key(item.get("y")),
+        )
+        for item in items
+        if str(item.get("kind") or "") == "wire"
+    }
+    for sheet in stitched.get("sheets") or []:
+        if not isinstance(sheet, dict):
+            continue
+        sheet_id = str(sheet.get("id") or "")
+        for wire in sheet.get("wires") or []:
+            if not isinstance(wire, dict) or wire.get("rejected") or wire.get("unreadable"):
+                continue
+            number = str(wire.get("number") or "").strip()
+            if _SHEET_LINE.match(number) is None:
+                continue
+            pinned = bool(
+                (
+                    wire.get("from_pin")
+                    and wire.get("to_pin")
+                    and wire.get("from_tag")
+                    and wire.get("to_tag")
+                    and not wire.get("ambiguous")
+                )
+                or wire.get("attached_by_synth")
+            )
+            try:
+                x = float(wire["x"])
+                y = float(wire["y"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            key = (sheet_id, number, _loose_key(x), _loose_key(y))
+            if key in seen:
+                continue
+            seen.add(key)
+            if pinned:
+                # The digits were read. A rail-named return can only be corrected
+                # when this position is still on the review list.
+                items.append(
+                    {
+                        "kind": "wire",
+                        "text": number,
+                        "sheet": sheet_id,
+                        "reason": "printed",
+                        "confidence": wire.get("confidence") if wire.get("confidence") is not None else 0.7,
+                        "x": x,
+                        "y": y,
+                    }
+                )
+                continue
+            items.append(
+                {
+                    "kind": "wire",
+                    "text": number,
+                    "sheet": sheet_id,
+                    "reason": "ambiguous" if wire.get("ambiguous") else "unattached",
+                    "confidence": wire.get("confidence") if wire.get("confidence") is not None else 0.4,
+                    "x": x,
+                    "y": y,
+                }
+            )
+
+
+def _loose_key(value: Any) -> str:
+    try:
+        return f"{float(value):.1f}"
+    except (TypeError, ValueError):
+        return ""
+
+
 def _stamp_properties(
     session: Session,
     stitched: dict[str, Any],
@@ -2714,6 +2805,7 @@ def _stamp_properties(
         if crop:
             item["crop"] = crop
         items.append(item)
+    _add_loose_number_items(items, stitched)
     for sheet in stitched.get("sheets") or []:
         for device in sheet.get("devices") or []:
             if float(device.get("confidence") or 1) < LOW_CONFIDENCE or device.get("library_guess"):
@@ -2799,6 +2891,56 @@ def _stamp_properties(
         "target_standard": str(target_standard or "auto"),
         "from_to_schedule": from_to_sched or {},
     }
+    _stamp_open_stubs(session, stitched)
+
+
+def _component_wired_pins(sheet: Any, ref: str) -> set[str]:
+    found: set[str] = set()
+    for wire in getattr(sheet, "wires", None) or []:
+        for text in (str(wire.frm), str(wire.to)):
+            head, dot, pin = text.partition(".")
+            if dot and head == ref and pin:
+                found.add(pin)
+    return found
+
+
+def _stamp_open_stubs(session: Session, stitched: dict[str, Any]) -> None:
+    """Copy printed open stubs onto placed components. A wired pin is never one."""
+
+    by_tag: dict[str, list[str]] = {}
+    device_lists: list[list[Any]] = []
+    for sheet in (stitched.get("sheets") or stitched.get("pages") or []):
+        if isinstance(sheet, dict) and isinstance(sheet.get("devices"), list):
+            device_lists.append(sheet["devices"])
+    if isinstance(stitched.get("devices"), list):
+        device_lists.append(stitched["devices"])
+    for devices in device_lists:
+        for device in devices:
+            if not isinstance(device, dict):
+                continue
+            tag = str(device.get("tag") or "").strip()
+            stubs = [str(pin) for pin in (device.get("open_stubs") or []) if str(pin).strip()]
+            if tag and stubs:
+                merged = by_tag.setdefault(tag, [])
+                for pin in stubs:
+                    if pin not in merged:
+                        merged.append(pin)
+    for sheet in session.project.sheets:
+        for comp in sheet.components:
+            props = comp.properties if isinstance(comp.properties, dict) else {}
+            stubs = list(by_tag.get(comp.id) or [])
+            if not stubs:
+                raw = str(props.get("print_open_stubs") or "")
+                stubs = [part.strip() for part in raw.split(",") if part.strip()]
+            if not stubs:
+                continue
+            wired = _component_wired_pins(sheet, comp.id)
+            kept = [pin for pin in stubs if pin not in wired]
+            if kept:
+                props["print_open_stubs"] = ",".join(kept)
+            else:
+                props.pop("print_open_stubs", None)
+            comp.properties = props
 
 
 def _mst(devices: list[dict[str, Any]]) -> list[tuple[dict[str, Any], dict[str, Any]]]:

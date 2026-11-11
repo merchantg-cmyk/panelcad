@@ -432,13 +432,9 @@ def test_sheet_numbers_cover_common_title_blocks_and_do_not_guess():
 def test_title_region_ocr_reads_varied_sheet_numbers():
     """Low-resolution photos, scans, corner blocks, and a side title. Not one shop's layout."""
 
-    import shutil
-
     import numpy as np
     from PIL import Image, ImageDraw, ImageFilter
 
-    if shutil.which("tesseract") is None:
-        pytest.skip("tesseract is not installed")
     from panelcad.importer.raster import ocr_title_sheet, read_pixels
     from panelcad.library.catalog import default_catalog
 
@@ -563,13 +559,9 @@ def test_title_on_dark_background_survives_tilt_and_a_left_edge():
     and a bare scale stay blank. Nothing here is one shop's sheet.
     """
 
-    import shutil
-
     import numpy as np
     from PIL import Image, ImageDraw, ImageFilter
 
-    if shutil.which("tesseract") is None:
-        pytest.skip("tesseract is not installed")
     from panelcad.importer.raster import ocr_title_sheet
 
     def face(size: int, *, heavy: bool = False):
@@ -796,13 +788,9 @@ def test_bare_of_count_needs_a_number_on_the_of_line():
 def test_empty_of_field_and_a_far_digit_are_not_a_sheet_number():
     """An empty SHEET NO field, and a digit far from OF, never become the sheet."""
 
-    import shutil
-
     import numpy as np
     from PIL import Image, ImageDraw
 
-    if shutil.which("tesseract") is None:
-        pytest.skip("tesseract is not installed")
     from panelcad.importer.raster import ocr_title_sheet, prepare_opencv, read_pixels
     from panelcad.library.catalog import default_catalog
 
@@ -877,13 +865,9 @@ def test_empty_of_field_and_a_far_digit_are_not_a_sheet_number():
 def test_page_fraction_is_read_from_the_title():
     """PAGE 2/5 and 12/12 are the sheet fraction, through the crop and the page read."""
 
-    import shutil
-
     import numpy as np
     from PIL import Image, ImageDraw
 
-    if shutil.which("tesseract") is None:
-        pytest.skip("tesseract is not installed")
     from panelcad.importer.raster import ocr_title_sheet, prepare_opencv, read_pixels
     from panelcad.library.catalog import default_catalog
 

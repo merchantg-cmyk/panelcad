@@ -44,6 +44,19 @@ Update checks offer the public GitHub Releases for
 merchantg-cmyk/panelcad. PANELCAD_GITHUB_REPOSITORY=owner/name overrides
 that default.
 
+The Windows zip also contains the electrical OCR reader under
+resources/ocr/electrical: pinned ONNX weights, the ONNX Runtime wheels, and
+the wheels that runtime requires (flatbuffers, numpy, packaging, protobuf).
+The build machine downloads those once and checks
+packaging/electrical-ocr.lock.json. The shop PC does not download them and
+the installer does not change PATH.
+
+The zip still contains a pinned Tesseract 5.5.3 x64 runtime under
+resources/ocr/tesseract (official installer, English tessdata_fast only).
+That binary is only a fallback when the electrical reader cannot load.
+The build machine needs 7-Zip to unpack that installer. The shop PC does
+not download Tesseract and the installer does not change PATH.
+
 Zip timestamps are per file, not one fixed date. Each entry uses the UTC
 time of the git commit that last changed that path, clamped to
 SOURCE_DATE_EPOCH when it is set and otherwise to the HEAD commit time.
@@ -75,6 +88,10 @@ INCLUDE_DIRS = (
     "docs",
     "tests",
     "agents",
+    # The installer reads packaging/electrical-ocr.lock.json from the
+    # extracted setup folder. The tests in that folder read the Tesseract
+    # lock and the notices beside it.
+    "packaging",
 )
 INCLUDE_FILES = (
     "pyproject.toml",
@@ -571,6 +588,13 @@ def install_text(version: str) -> str:
         "  or set PANELCAD_INSTALL_QUIET=1\n"
         "The desktop shortcut is still created. Next time, double-click PanelCAD.\n"
         "\n"
+        "Pixel OCR uses the electrical reader in this zip "
+        "(resources\\ocr\\electrical): ONNX Runtime, the wheels it requires, "
+        "and the pinned weights. "
+        "The installer does not download those files, does not change PATH, "
+        "and does not run a separate OCR installer. "
+        "Tesseract in resources\\ocr\\tesseract is only a fallback.\n"
+        "\n"
         "Do not use Drive split archives or Unpack-*.cmd. This zip is the whole release.\n"
         "\n"
         "To publish it for Settings -> Updates, run:\n"
@@ -605,7 +629,116 @@ def add_zip_bytes(
     zf.writestr(info, data)
 
 
-def build_release(root: Path, output_dir: Path, *, public: bool = False) -> tuple[Path, Path]:
+RUNTIME_REQUIRED = (
+    "tesseract.exe",
+    "tessdata/eng.traineddata",
+    "tessdata/configs/tsv",
+    "licenses/NOTICE.md",
+)
+RUNTIME_ZIP_PREFIX = "resources/ocr/tesseract"
+ELECTRICAL_ZIP_PREFIX = "resources/ocr/electrical"
+ELECTRICAL_REQUIRED = (
+    "models/PP-OCRv5_mobile_det_onnx/inference.onnx",
+    "models/en_PP-OCRv5_mobile_rec_onnx/inference.onnx",
+    "models/PP-OCRv6_small_det_onnx/inference.onnx",
+    "models/PP-OCRv6_small_rec_onnx/inference.onnx",
+    "models/PP-LCNet_x1_0_textline_ori_onnx/inference.onnx",
+    "licenses/NOTICE.md",
+    "licenses/paddleocr-Apache-2.0.txt",
+    "licenses/onnxruntime-MIT.txt",
+)
+
+
+def _tesseract_fetch_tools():
+    """Loader for the pin/fetch helper. Patched in tests that skip the download."""
+
+    import importlib.util
+
+    path = Path(__file__).resolve().parent / "fetch_tesseract_runtime.py"
+    spec = importlib.util.spec_from_file_location("_panelcad_tesseract_runtime", path)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f"Missing {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _resolve_tesseract_runtime(
+    root: Path,
+    explicit: Path | None,
+    include: bool,
+) -> Path | None:
+    if explicit is not None:
+        return explicit
+    if not include:
+        return None
+    return _tesseract_fetch_tools().ensure_runtime(root)
+
+
+def _runtime_entries(runtime: Path) -> list[tuple[str, Path]]:
+    files = _tesseract_fetch_tools().iter_runtime_files(runtime)
+    present = {rel for rel, _path in files}
+    missing = [rel for rel in RUNTIME_REQUIRED if rel not in present]
+    if missing:
+        raise SystemExit("Tesseract runtime is missing:\n  " + "\n  ".join(missing))
+    return files
+
+
+def _electrical_fetch_tools():
+    """Loader for the electrical OCR pin/fetch helper. Patched in tests."""
+
+    import importlib.util
+
+    path = Path(__file__).resolve().parent / "fetch_electrical_ocr.py"
+    spec = importlib.util.spec_from_file_location("_panelcad_electrical_ocr", path)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f"Missing {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _resolve_electrical_runtime(
+    root: Path,
+    explicit: Path | None,
+    include: bool,
+) -> Path | None:
+    if explicit is not None:
+        return explicit
+    if not include:
+        return None
+    return _electrical_fetch_tools().ensure_runtime(root)
+
+
+def _electrical_entries(runtime: Path) -> list[tuple[str, Path]]:
+    tools = _electrical_fetch_tools()
+    root = Path(__file__).resolve().parent.parent
+    lock = tools.load_lock(tools.lock_path(root))
+    tools.validate_lock(lock)
+    files = tools.iter_runtime_files(runtime)
+    present = {rel for rel, _path in files}
+    missing = [rel for rel in ELECTRICAL_REQUIRED if rel not in present]
+    for wheel in lock["wheels"]:
+        rel = f"wheels/{wheel['filename']}"
+        if rel not in present:
+            missing.append(rel)
+    if missing:
+        raise SystemExit("Electrical OCR runtime is missing:\n  " + "\n  ".join(missing))
+    return files
+
+
+def build_release(
+    root: Path,
+    output_dir: Path,
+    *,
+    public: bool = False,
+    tesseract_runtime: Path | None = None,
+    include_tesseract: bool = False,
+    electrical_runtime: Path | None = None,
+    include_electrical: bool = False,
+) -> tuple[Path, Path]:
     missing = missing_brand_assets(root)
     if missing:
         raise SystemExit(
@@ -625,6 +758,10 @@ def build_release(root: Path, output_dir: Path, *, public: bool = False) -> tupl
     endpoint_payload = release_endpoint_payload(root, public=public)
     bot_payload = release_bot_payload(root, public=public)
     feed_payload = release_feed_payload(root, public=public)
+    resolved_runtime = _resolve_tesseract_runtime(root, tesseract_runtime, include_tesseract)
+    runtime_files = _runtime_entries(resolved_runtime) if resolved_runtime is not None else []
+    resolved_electrical = _resolve_electrical_runtime(root, electrical_runtime, include_electrical)
+    electrical_files = _electrical_entries(resolved_electrical) if resolved_electrical is not None else []
 
     output_dir.mkdir(parents=True, exist_ok=True)
     archive = output_dir / zip_name(version)
@@ -685,6 +822,22 @@ def build_release(root: Path, output_dir: Path, *, public: bool = False) -> tupl
                 PUBLIC_MARKER_PAYLOAD,
                 0o644,
                 entry_date_time(clock, PUBLIC_MARKER_REL, None),
+            )
+        for rel, path in runtime_files:
+            add_zip_bytes(
+                zf,
+                f"{prefix}/{RUNTIME_ZIP_PREFIX}/{rel}",
+                path.read_bytes(),
+                0o644,
+                entry_date_time(clock, None, None),
+            )
+        for rel, path in electrical_files:
+            add_zip_bytes(
+                zf,
+                f"{prefix}/{ELECTRICAL_ZIP_PREFIX}/{rel}",
+                path.read_bytes(),
+                0o644,
+                entry_date_time(clock, None, None),
             )
 
     if public:
@@ -761,7 +914,13 @@ def main(argv: list[str] | None = None) -> int:
     public = args.public or public_build_requested()
     if not public:
         load_release_env(root)
-    archive, checksum = build_release(root, output_dir, public=public)
+    archive, checksum = build_release(
+        root,
+        output_dir,
+        public=public,
+        include_tesseract=True,
+        include_electrical=True,
+    )
 
     extras = []
     artifacts_dir = args.artifacts_dir or default_artifacts_dir()

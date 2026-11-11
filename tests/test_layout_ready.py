@@ -1,4 +1,4 @@
-"""Shop rule: layout never packs a generic/placeholder size."""
+"""Alex's rule: layout never packs a generic/placeholder size."""
 
 import math
 from pathlib import Path

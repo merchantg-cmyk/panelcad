@@ -202,7 +202,9 @@ def device_ref_layout(
         return None
     cat = (device.category or "").lower()
     token = f"{getattr(device, 'id', '')} {component.library_id}".lower()
-    if "switching" in cat and "coil" in token and "aux" not in token:
+    if "aux" not in token and (
+        ("switching" in cat and "coil" in token) or "relays.cr" in token
+    ):
         return None
     if "timer" in cat and int(component.rotation or 0) in {90, 270}:
         return None

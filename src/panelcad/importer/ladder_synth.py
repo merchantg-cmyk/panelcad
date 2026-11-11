@@ -36,6 +36,7 @@ class ImportDeviceEntry:
     source: str = "import"
     needs_review: bool = False
     role: str = "control"
+    open_stubs: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -51,6 +52,7 @@ class ImportDeviceEntry:
             "source": self.source,
             "needs_review": bool(self.needs_review),
             "role": self.role,
+            "open_stubs": list(self.open_stubs),
         }
 
 
@@ -146,6 +148,7 @@ class ImportFromToSchedule:
                         source=str(raw_d.get("source") or "import"),
                         needs_review=bool(raw_d.get("needs_review", False)),
                         role=str(raw_d.get("role") or "control"),
+                        open_stubs=[str(pin) for pin in (raw_d.get("open_stubs") or []) if str(pin).strip()],
                     )
                 )
         rows: list[ImportFromToRow] = []
@@ -187,6 +190,23 @@ class ImportFromToSchedule:
         )
 
 
+def _printed_power_rails(devices: list[dict[str, Any]], wires: list[dict[str, Any]]) -> set[str]:
+    """L1/L2 (and the other power names) actually printed on the sheet."""
+
+    names = {"L1", "L2", "L3", "L+", "24V", "0V", "N"}
+    found: set[str] = set()
+    for device in devices:
+        tag = str(device.get("tag") or device.get("id") or "").strip().upper().split(".")[0]
+        if tag in names:
+            found.add(tag)
+    for wire in wires:
+        for key in ("from", "to", "number", "from_tag", "to_tag"):
+            token = str(wire.get(key) or "").strip().upper().split(".")[0]
+            if token in names:
+                found.add(token)
+    return found
+
+
 def _norm_sheet_id(page_id: str) -> str:
     text = str(page_id or "page-001").strip()
     return text.replace("_", "-") if text else "page-001"
@@ -213,6 +233,22 @@ def _detect_standard(raw_std: str, devices: list[dict[str, Any]], rails: list[st
         elif lid.startswith("nema.") or re.match(r"^(CB|PB|CR|TR|LT|PL|OL|MTR|SS|LS|DISC|FU)\d*", tag):
             nema_count += 1
     return "IEC" if iec_count > nema_count else "NEMA/ANSI"
+
+
+def _pushbutton_sense(low_type: str, raw_library_id: str) -> str:
+    """``nc`` or ``no`` when the reader said so. Empty when the sense was not read."""
+
+    resolved = (raw_library_id or "").lower()
+    if "pb_nc" in resolved:
+        return "nc"
+    if "pb_no" in resolved:
+        return "no"
+    tokens = set(re.split(r"[^a-z0-9]+", (low_type or "").lower()))
+    if "nc" in tokens:
+        return "nc"
+    if "no" in tokens:
+        return "no"
+    return ""
 
 
 def _classify_device_role_and_library(
@@ -337,11 +373,34 @@ def _classify_device_role_and_library(
         lid = "nema.loads.solenoid" if not is_iec else "iec.contactors.coil"
         return "control_output", lid, ["A1", "A2"]
 
+    # JIC T is a transformer. TR / KT is a timer. A tag the reader already
+    # resolved as a transformer is not rewritten into an on-delay coil.
+    # control_output (not control_block) keeps the rest of the ladder on the
+    # ladder sheet. A control_block forces the whole sheet off the ladder.
+    if "transformer" in low_type or (
+        re.match(r"^T\d+$", up_tag)
+        and "timer" not in low_type
+        and "on_delay" not in low_type
+        and "off_delay" not in low_type
+        and "contact" not in low_type
+    ):
+        lid = (
+            raw_library_id
+            if "transformer" in (raw_library_id or "").lower()
+            else ("iec.power.control_transformer" if is_iec else "nema.power.control_transformer")
+        )
+        try:
+            dev = catalog.get(lid)
+            pins_out = [str(pin.id) for pin in dev.pins]
+        except KeyError:
+            pins_out = ["H1", "H2", "H3", "H4", "X1", "X2"]
+        return "control_output", lid, pins_out
+
     if (
         "timer" in low_type
         or "on_delay" in low_type
         or "off_delay" in low_type
-        or (re.match(r"^(TR|KT|T|ALT)\d+$", up_tag) and "contact" not in low_type and not (pin_set & {"1", "2", "3", "4", "13", "14", "11", "12"}))
+        or (re.match(r"^(TR|KT|ALT)\d+$", up_tag) and "contact" not in low_type and not (pin_set & {"1", "2", "3", "4", "13", "14", "11", "12"}))
     ):
         if "contact" not in low_type:
             lid = f"{prefix}.timers.on_delay"
@@ -392,16 +451,21 @@ def _classify_device_role_and_library(
         return "control_contact", lid, dpins
 
     if "pb_" in low_type or "pushbutton" in low_type or re.match(r"^(PB|S)\d+$", up_tag):
-        is_nc = (
-            "nc" in low_type
-            or bool(pin_set & {"1", "2", "11", "12", "21", "22"})
-            or (up_tag in {"PB1", "S0", "S1"} and "no" not in low_type and not (pin_set & {"3", "4", "13", "14"}))
-        )
-        if is_nc and up_tag != "PB2":
-            lid = f"{prefix}.operators.pb_nc"
+        # A symbol the reader already called NC or NO stays that way. The tag
+        # number is not a contact sense: PB2 is a stop on some sheets and a
+        # start on others.
+        sense = _pushbutton_sense(low_type, raw_library_id)
+        if sense == "nc" or (
+            sense == ""
+            and bool(pin_set & {"1", "2", "11", "12", "21", "22"})
+            and not (pin_set & {"3", "4", "13", "14"})
+        ):
+            resolved = (raw_library_id or "").lower()
+            lid = raw_library_id if "pb_nc" in resolved else f"{prefix}.operators.pb_nc"
             dpins = ["11", "12"] if is_iec else ["1", "2"]
         else:
-            lid = f"{prefix}.operators.pb_no"
+            resolved = (raw_library_id or "").lower()
+            lid = raw_library_id if "pb_no" in resolved else f"{prefix}.operators.pb_no"
             dpins = ["13", "14"] if is_iec else ["3", "4"]
         return "control_contact", lid, dpins
 
@@ -500,6 +564,11 @@ def _project_to_facts_dict(project: Project, catalog: Catalog) -> dict[str, Any]
             props = comp.properties or {}
             tag = str(props.get("print_tag") or props.get("device_tag") or comp.id)
             conf = float(props.get("print_import_confidence", 0.92))
+            stubs = [
+                part.strip()
+                for part in str(props.get("print_open_stubs") or "").split(",")
+                if part.strip()
+            ]
             devices.append(
                 {
                     "tag": comp.id,
@@ -508,11 +577,12 @@ def _project_to_facts_dict(project: Project, catalog: Catalog) -> dict[str, Any]
                     "type": comp.library_id,
                     "symbol": comp.library_id,
                     "description": str(props.get("description") or getattr(comp, "description", "") or ""),
-                    "x": float(comp.x),
-                    "y": float(comp.y),
+                    "x": float(props.get("print_import_x") or comp.x),
+                    "y": float(props.get("print_import_y") or comp.y),
                     "page_id": sheet.id,
                     "confidence": conf,
                     "source": str(props.get("print_import_source") or "project"),
+                    "open_stubs": stubs,
                 }
             )
         for wire in sheet.wires:
@@ -611,6 +681,7 @@ def extract_import_from_to(
 
     raw_devices: list[dict[str, Any]] = []
     raw_wires: list[dict[str, Any]] = []
+    page_width_by_sheet: dict[str, float] = {}
     sheets_list = [s for s in (facts.get("sheets") or facts.get("pages") or []) if isinstance(s, dict)]
     if sheets_list:
         for sh in sheets_list:
@@ -618,6 +689,14 @@ def extract_import_from_to(
             if kind not in {"schematic", "io", ""}:
                 continue
             sid_sh = _norm_sheet_id(str(sh.get("id") or sh.get("page_id") or "page-001"))
+            w_mm = float(sh.get("width_mm") or 0.0)
+            if w_mm <= 0.0 and sh.get("width") and sh.get("dpi"):
+                try:
+                    w_mm = float(sh["width"]) / float(sh["dpi"]) * 25.4
+                except (TypeError, ValueError, ZeroDivisionError):
+                    w_mm = 0.0
+            if w_mm > 0.0:
+                page_width_by_sheet[sid_sh] = w_mm
             for d in sh.get("devices") or []:
                 if isinstance(d, dict) and not d.get("unreadable"):
                     item = dict(d)
@@ -627,11 +706,16 @@ def extract_import_from_to(
                 if isinstance(w, dict) and not w.get("unreadable"):
                     item = dict(w)
                     item["page_id"] = sid_sh
+                    item["_source_wire"] = w
                     raw_wires.append(item)
     if not raw_devices:
         raw_devices = [d for d in (facts.get("devices") or []) if isinstance(d, dict) and not d.get("unreadable")]
     if not raw_wires:
-        raw_wires = [w for w in (facts.get("wires") or []) if isinstance(w, dict) and not w.get("unreadable")]
+        for w in facts.get("wires") or []:
+            if isinstance(w, dict) and not w.get("unreadable"):
+                item = dict(w)
+                item["_source_wire"] = w
+                raw_wires.append(item)
 
     rails_seen: list[str] = []
     if raw_tb.get("rail_hot"):
@@ -649,6 +733,7 @@ def extract_import_from_to(
     default_ret = "0V" if std == "IEC" else "L2"
     rail_hot = str(raw_tb.get("rail_hot") or default_hot).strip() or default_hot
     rail_ret = str(raw_tb.get("rail_return") or default_ret).strip() or default_ret
+    printed_rails = _printed_power_rails(raw_devices, raw_wires)
 
     # Pre-collect pins and wired tags referenced in raw_wires for each (sheet_id, tag)
     from panelcad.importer.symbols import print_tag_placeable
@@ -717,6 +802,10 @@ def extract_import_from_to(
         if raw_tag.upper() in {"L1", "L2", "X1", "X2", "24V", "0V"} and (
             not raw_lid or "needs_info" in raw_lid
         ) and not raw_sym:
+            # X1/X2 on these sheets is the terminal strip. A printed L1/L2
+            # stays the rail; the strip label is not a second rail name.
+            if raw_tag.upper() in {"X1", "X2"} and {"L1", "L2"} & printed_rails:
+                continue
             if raw_tag.upper() in {"X1", "L1", "24V"}:
                 rail_hot = raw_tag.upper()
             elif raw_tag.upper() in {"X2", "L2", "0V"}:
@@ -731,8 +820,16 @@ def extract_import_from_to(
         is_wired_tag = raw_tag in wired_tags_by_sheet.get(sid, set())
         if not is_wired_tag and not raw_lid and not raw_sym and bool(sheet_has_confirmed_lib) and not print_tag_placeable(d):
             continue
+        # An unwired second hit of the same symbol, sitting on the first, is
+        # the same ink read twice. 0.5.26 dropped it. Keeping it made an extra
+        # rung, pushed the seal-in onto a later sheet, and left that sheet
+        # with no wires. A different symbol, and any device the read already
+        # wired, stays.
         if not is_wired_tag and raw_lid and any(
-            prev.sheet_id == sid and prev.library_id == raw_lid and abs(dx - prev.x) < 60.0 and abs(dy - prev.y) < 40.0
+            prev.sheet_id == sid
+            and prev.library_id == raw_lid
+            and abs(dx - prev.x) < 60.0
+            and abs(dy - prev.y) < 40.0
             for prev in devices
         ):
             continue
@@ -809,7 +906,11 @@ def extract_import_from_to(
             symbol=eff_sym or role,
             library_id=lid,
             description=str(d.get("description") or ""),
-            pins=(dpins if role == "control_block" else (list(pins_in) + [p for p in dpins if p not in pins_in] if pins_in else dpins)),
+            pins=(
+                dpins
+                if role == "control_block"
+                else (list(dpins) + [p for p in pins_in if p not in dpins] if dpins else list(pins_in))
+            ),
             sheet_id=sid,
             x=float(d.get("x") if role == "control_block" and d.get("x") is not None else dx),
             y=float(d.get("y") if role == "control_block" and d.get("y") is not None else dy),
@@ -817,6 +918,7 @@ def extract_import_from_to(
             source=src,
             needs_review=needs_rev,
             role=role,
+            open_stubs=[str(pin) for pin in (d.get("open_stubs") or []) if str(pin).strip()],
         )
         devices.append(entry)
         dev_by_sheet_and_tag.setdefault((sid, raw_tag), []).append(entry)
@@ -844,6 +946,10 @@ def extract_import_from_to(
         wnum = str(w.get("number") or w.get("wire_number") or w.get("label") or "").strip()
         conf = float(w.get("confidence", 0.9))
         src = str(w.get("source") or "extracted")
+        # Ambiguous marks an uncertain number, not missing ends. A hop that
+        # already names from/to (M1.A2→OL1.95) must stay a connection so the
+        # coil and overload are not split onto separate rungs; only pinless
+        # ambiguous tokens become unattached labels.
         if frm and to:
             f_tag, f_pin = _split_endpoint(frm)
             t_tag, t_pin = _split_endpoint(to)
@@ -876,7 +982,9 @@ def extract_import_from_to(
                 rung=int(w.get("rung") or 1),
                 confidence=conf,
                 source=src,
-                needs_review=bool(w.get("needs_review", conf < confidence_threshold)),
+                needs_review=bool(
+                    w.get("needs_review", conf < confidence_threshold) or w.get("ambiguous")
+                ),
             )
             from_to_rows.append(row)
             explicit_pairs_by_sheet.setdefault(sid, set()).add(frozenset({f_tag.split("-")[0], t_tag.split("-")[0]}))
@@ -895,6 +1003,7 @@ def extract_import_from_to(
                         "x": float(wx_val),
                         "y": float(wy_val),
                         "confidence": conf,
+                        "_source_wire": w.get("_source_wire"),
                     }
                 )
 
@@ -962,6 +1071,8 @@ def extract_import_from_to(
                         explicit_pairs_by_sheet.setdefault(sid, set()).add(pair_key)
 
             if ctrl_devs:
+                page_w_mm = page_width_by_sheet.get(sid, 0.0)
+                right_rail_x = max(200.0, page_w_mm - 20.0) if page_w_mm > 0.0 else 412.0
                 inferred_rows, sheet_rungs = _infer_sheet_control_rungs(
                     sid=sid,
                     ctrl_devs=ctrl_devs,
@@ -971,6 +1082,7 @@ def extract_import_from_to(
                     rail_ret=rail_ret,
                     rung_band_mm=rung_band_mm,
                     confidence_threshold=confidence_threshold,
+                    right_rail_x=right_rail_x,
                 )
                 from_to_rows.extend(inferred_rows)
                 rungs_meta.extend(sheet_rungs)
@@ -1083,6 +1195,7 @@ def _infer_sheet_control_rungs(
     rail_ret: str,
     rung_band_mm: float,
     confidence_threshold: float,
+    right_rail_x: float = 412.0,
 ) -> tuple[list[ImportFromToRow], list[dict[str, Any]]]:
     """Cluster control devices into horizontal rungs (within rung_band_mm) and infer missing connections."""
     has_blocks = any(d.role == "control_block" for d in ctrl_devs)
@@ -1135,6 +1248,7 @@ def _infer_sheet_control_rungs(
 
     eff_band = min(float(rung_band_mm), 6.5)
     for dev in sorted_by_y:
+        attached_parallel = False
         dy_val = eff_y[dev.tag]
         # First check if any peer in peer_adj is already placed in a rung_cluster
         peer_rung = next(
@@ -1142,10 +1256,22 @@ def _infer_sheet_control_rungs(
             None,
         )
         if peer_rung is not None:
-            peer_rung["members"].append(dev)
-            ys = [eff_y[m.tag] for m in peer_rung["members"]]
-            peer_rung["mean_y"] = sum(ys) / len(ys)
-            continue
+            rung_y = float(peer_rung.get("mean_y") or dy_val)
+            # A contact drawn on the line below is the parallel branch, not
+            # another series device on this rung. A terminal stays with its wire.
+            # An unwired holding contact still falls through and lands under
+            # the start, so it is not left on a later sheet with no wires.
+            stacked = (
+                dev.role == "control_contact"
+                and "terminal" not in str(dev.library_id or "")
+                and dy_val > rung_y + 8.0
+                and bool(peer_adj.get(dev.tag))
+            )
+            if not stacked:
+                peer_rung["members"].append(dev)
+                ys = [eff_y[m.tag] for m in peer_rung["members"]]
+                peer_rung["mean_y"] = sum(ys) / len(ys)
+                continue
 
         best_rung = None
         best_dy = eff_band + 1.0
@@ -1160,7 +1286,6 @@ def _infer_sheet_control_rungs(
             best_rung["mean_y"] = sum(ys) / len(ys)
             continue
 
-        attached_parallel = False
         if dev.role == "control_contact":
             for r in reversed(rung_clusters):
                 if not any(m.role == "control_output" for m in r["members"]):
@@ -1206,9 +1331,14 @@ def _infer_sheet_control_rungs(
     connected_endpoints: set[frozenset[str]] = set()
     device_has_left_wire: set[str] = set()
     device_has_right_wire: set[str] = set()
+    used_pins_by_tag: dict[str, set[str]] = {}
     for row in existing_rows:
         a_base = row.from_tag
         b_base = row.to_tag
+        if a_base and row.from_pin:
+            used_pins_by_tag.setdefault(a_base, set()).add(str(row.from_pin))
+        if b_base and row.to_pin:
+            used_pins_by_tag.setdefault(b_base, set()).add(str(row.to_pin))
         connected_endpoints.add(frozenset({a_base, b_base}))
         if a_base.upper() in (_RAIL_HOT_TOKENS | _RAIL_RET_TOKENS):
             device_has_left_wire.add(b_base)
@@ -1221,22 +1351,41 @@ def _infer_sheet_control_rungs(
     inferred: list[ImportFromToRow] = []
     rungs_meta: list[dict[str, Any]] = []
 
-    def _match_wire_label(y_ref: float, x_left: float, x_right: float, default_num: str) -> tuple[str, float | None]:
+    def _match_wire_label(
+        y_ref: float,
+        x_left: float,
+        x_right: float,
+        default_num: str,
+        *,
+        alt_y: float | None = None,
+    ) -> tuple[str, float | None]:
         best_lbl = None
         best_dist = 999.0
         xm = 0.5 * (x_left + x_right)
+        y_anchors = [y_ref]
+        if alt_y is not None and abs(float(alt_y) - y_ref) > 0.5:
+            y_anchors.append(float(alt_y))
         for wl in wire_labels:
             if wl.get("_used"):
                 continue
             wy = float(wl["y"])
             wx = float(wl["x"])
-            if abs(wy - y_ref) <= max(rung_band_mm, 9.0) and (x_left - 8.0) <= wx <= (x_right + 8.0):
-                dist = abs(wy - y_ref) + 0.15 * abs(wx - xm)
-                if dist < best_dist:
-                    best_dist = dist
-                    best_lbl = wl
+            if not ((x_left - 8.0) <= wx <= (x_right + 8.0)):
+                continue
+            # The number is printed on the rung, below the symbol origin.
+            # A number above this origin belongs to the rung over it.
+            valid_belows = [wy - ya for ya in y_anchors if -4.0 <= (wy - ya) <= 32.0]
+            if not valid_belows:
+                continue
+            dist = min(abs(b - 16.0) for b in valid_belows) + 0.15 * abs(wx - xm)
+            if dist < best_dist:
+                best_dist = dist
+                best_lbl = wl
         if best_lbl is not None:
             best_lbl["_used"] = True
+            src_w = best_lbl.get("_source_wire")
+            if isinstance(src_w, dict):
+                src_w["attached_by_synth"] = True
             return str(best_lbl["number"]), float(best_lbl.get("confidence", 0.72))
         return default_num, None
 
@@ -1289,7 +1438,11 @@ def _infer_sheet_control_rungs(
         )
 
         first_dev = ordered_chain[0]
-        first_in_pin = first_dev.pins[0] if first_dev.pins else "1"
+        first_used = used_pins_by_tag.get(first_dev.tag, set())
+        first_in_pin = next(
+            (p for p in first_dev.pins if p not in first_used),
+            first_dev.pins[0] if first_dev.pins else "1",
+        )
         if (
             frozenset({rail_hot, first_dev.tag}) not in connected_endpoints
             and first_dev.tag not in device_has_left_wire
@@ -1354,13 +1507,28 @@ def _infer_sheet_control_rungs(
             wire_between[(a_dev.tag, b_dev.tag)] = wnum
 
         last_dev = ordered_chain[-1]
-        last_out_pin = last_dev.pins[1] if len(last_dev.pins) >= 2 else (last_dev.pins[0] if last_dev.pins else "2")
+        last_used = used_pins_by_tag.get(last_dev.tag, set())
+        preferred_out = (
+            [last_dev.pins[1], last_dev.pins[0], *last_dev.pins[2:]]
+            if len(last_dev.pins) >= 2
+            else list(last_dev.pins)
+        )
+        last_out_pin = next(
+            (p for p in preferred_out if p not in last_used),
+            last_dev.pins[1] if len(last_dev.pins) >= 2 else (last_dev.pins[0] if last_dev.pins else "2"),
+        )
         if (
             frozenset({last_dev.tag, rail_ret}) not in connected_endpoints
             and last_dev.tag not in device_has_right_wire
             and "offpage" not in last_dev.library_id.lower()
         ):
-            wnum, lconf = _match_wire_label(y_ref, last_dev.x, last_dev.x + 80.0, rail_ret)
+            wnum, lconf = _match_wire_label(
+                y_ref,
+                last_dev.x,
+                max(last_dev.x + 80.0, right_rail_x),
+                rail_ret,
+                alt_y=float(last_dev.y),
+            )
             conf = round(min(last_dev.confidence, lconf if lconf is not None else 0.76), 3)
             inferred.append(
                 ImportFromToRow(
@@ -1420,7 +1588,12 @@ def _infer_sheet_control_rungs(
             else:
                 right_tag, right_pin, right_wnum = rail_ret, "", rail_ret
 
-            if frozenset({par_dev.tag, right_tag}) not in connected_endpoints:
+            # A contact that already leaves to another device is not a seal-in.
+            # Inventing a second landing onto the coil draws two wires on one line.
+            if (
+                frozenset({par_dev.tag, right_tag}) not in connected_endpoints
+                and par_dev.tag not in device_has_right_wire
+            ):
                 inferred.append(
                     ImportFromToRow(
                         wire_number=right_wnum,
@@ -2030,6 +2203,25 @@ def synthesize_imported_ladder(
     from panelcad.core.elementary_layout import scrub_illegal_wire_numbers
 
     scrub_illegal_wire_numbers(session)
+    for sheet in session.project.sheets:
+        wired_by_ref: dict[str, set[str]] = {}
+        for wire in sheet.wires:
+            for endpoint in (str(wire.frm), str(wire.to)):
+                head, dot, pin = endpoint.partition(".")
+                if dot and head and pin:
+                    wired_by_ref.setdefault(head, set()).add(pin)
+        for comp in sheet.components:
+            props = comp.properties if isinstance(comp.properties, dict) else {}
+            raw_stubs = str(props.get("print_open_stubs") or "")
+            if not raw_stubs:
+                continue
+            wired_pins = wired_by_ref.get(comp.id, set())
+            kept_stubs = [p.strip() for p in raw_stubs.split(",") if p.strip() and p.strip() not in wired_pins]
+            if kept_stubs:
+                props["print_open_stubs"] = ",".join(kept_stubs)
+            else:
+                props.pop("print_open_stubs", None)
+            comp.properties = props
     style = str(getattr(session.project.title_block, "drawing_style", "") or "")
     standard = str(getattr(session.project.title_block, "standard", "") or "")
     if standard == "NEMA/ANSI" and style not in {"ladder", "schematic", "freeform"}:
@@ -2098,9 +2290,14 @@ def _build_clean_power_sheet(
                 "print_tag": base_tag,
                 "print_import_confidence": str(round(dev.confidence, 3)),
                 "print_import_source": dev.source,
+                "print_import_x": str(round(float(dev.x), 2)),
+                "print_import_y": str(round(float(dev.y), 2)),
             }
             if dev.tag != base_tag:
                 props["device_tag"] = base_tag
+            stubs = [str(pin) for pin in (dev.open_stubs or []) if str(pin).strip()]
+            if stubs:
+                props["print_open_stubs"] = ",".join(stubs)
             comp = Component(
                 id=dev.tag,
                 library_id=dev.library_id,
@@ -2350,6 +2547,35 @@ def _build_clean_control_ladder_sheets(
         min_y = min((d.y for d in c_devs), default=0.0)
         rung_groups.append((float(min_rung), float(min_y), c_devs, c_rows))
 
+    starts = [dev for dev in ctrl_devs if "pb_no" in (dev.library_id or "") and dev.role == "control_contact"]
+    if len(starts) == 1:
+        holding = {
+            dev.tag
+            for dev in ctrl_devs
+            if dev.tag.upper().endswith("-13")
+            and "aux" in (dev.library_id or "")
+            and not rows_by_dev.get(dev.tag)
+        }
+        if holding:
+            host = next((group for group in rung_groups if any(dev.tag == starts[0].tag for dev in group[2])), None)
+            if host is not None:
+                kept = []
+                held_rows: list[ImportFromToRow] = []
+                for group in rung_groups:
+                    devices = [dev for dev in group[2] if dev.tag not in holding or group is host]
+                    if not devices:
+                        held_rows.extend(group[3])
+                        continue
+                    rows = list(group[3])
+                    if group is host:
+                        devices = list(devices) + [dev_map[tag] for tag in holding if tag not in {dev.tag for dev in devices}]
+                        rows.extend(held_rows)
+                        held_rows = []
+                    kept.append((group[0], group[1], devices, rows))
+                if held_rows and kept:
+                    kept[0] = (kept[0][0], kept[0][1], kept[0][2], list(kept[0][3]) + held_rows)
+                rung_groups = kept
+
     rung_groups.sort(key=lambda item: (item[0], item[1]))
 
     # Paginate at max 5 rungs per sheet so lower rungs never enter the bottom-right title block (y >= 229.0)
@@ -2553,11 +2779,16 @@ def _make_synth_component(dev: ImportDeviceEntry, x: float, y: float, catalog: C
     base_tag = dev.tag.split("-")[0]
     props: dict[str, Any] = {
         "print_tag": base_tag,
+        "print_import_x": str(round(float(dev.x), 2)),
+        "print_import_y": str(round(float(dev.y), 2)),
         "print_import_confidence": str(round(dev.confidence, 3)),
         "print_import_source": dev.source,
     }
     if dev.tag != base_tag:
         props["device_tag"] = base_tag
+    stubs = [str(pin) for pin in (dev.open_stubs or []) if str(pin).strip()]
+    if stubs:
+        props["print_open_stubs"] = ",".join(stubs)
     try:
         lib_dev = catalog.get(dev.library_id)
         valid_pin_ids = [str(p.id) for p in lib_dev.pins]

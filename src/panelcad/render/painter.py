@@ -170,6 +170,8 @@ def is_control_coil(device: Device, library_id: str = "") -> bool:
     token = f"{getattr(device, 'id', '')} {library_id}".lower()
     if "aux" in token:
         return False
+    if "relays.cr" in token:
+        return True
     return "switching" in cat and "coil" in token
 
 

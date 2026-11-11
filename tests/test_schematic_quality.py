@@ -5,6 +5,7 @@ Each case calls Session.cleanup. tidy_schematic_sheet is not the contract.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from panelcad import Session
@@ -620,12 +621,9 @@ def test_cleanup_reflows_an_overlapping_ladder_inside_the_rails():
 
 
 def test_conveyor_sheets_do_not_stack_different_wire_numbers():
-    candidates = [
-        Path("<local-path>"),
-        Path("/home/ubuntu/.cursor/projects<local-path>"),
-    ]
-    path = next((item for item in candidates if item.is_file()), None)
-    if path is None:
+    raw = os.environ.get("PANELCAD_CONVEYOR_FIXTURE", "").strip()
+    path = Path(raw) if raw else None
+    if path is None or not path.is_file():
         return
     session = Session.open(path)
     session.cleanup("main")

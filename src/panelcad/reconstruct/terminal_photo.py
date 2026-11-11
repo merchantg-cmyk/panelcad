@@ -1774,7 +1774,50 @@ def _ocr_blob(bgr: np.ndarray) -> str:
     if float(gray.std()) < 12.0:
         return ""
     up = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
-    return _accepted_ocr(up)
+    heard = _accepted_ocr(up)
+    printed = _print_reader_tag(bgr)
+    # The glyph matcher drops a thin leading 1, so 15 comes back as 5.
+    # The print reader still has both digits. Keep that longer number.
+    if (
+        heard
+        and printed
+        and heard.isdigit()
+        and printed.isdigit()
+        and len(printed) > len(heard)
+        and printed.endswith(heard)
+    ):
+        return printed
+    if heard:
+        return heard
+    return printed
+
+
+def _print_reader_tag(bgr: np.ndarray) -> str:
+    """A nameplate the glyph matcher missed, read by the page engine.
+
+    Wire numbers are short and the glyph matcher already has them. A strip
+    name is wider, and the same matcher turns TB1 into noise. The print
+    reader gets an enlarged RGB crop. Tesseract does not take this pass.
+    """
+
+    from panelcad.ocr.dispatch import tesseract_required
+    from panelcad.ocr.ppocr import read_print
+
+    if tesseract_required():
+        return ""
+    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+    # Six times is large enough to read a strip name and still small enough
+    # that the letters do not fall apart. The print reader wants RGB and a
+    # short side of 900 px, so the rest of the canvas is white.
+    up = cv2.resize(rgb, None, fx=6, fy=6, interpolation=cv2.INTER_CUBIC)
+    height, width = int(up.shape[0]), int(up.shape[1])
+    canvas = np.full((max(height, 900), max(width, 900), 3), 255, np.uint8)
+    canvas[:height, :width] = up
+    for span in read_print(canvas) or []:
+        token = _plausible_tag(span.text)
+        if token:
+            return token
+    return ""
 
 
 def _read_marker(image: np.ndarray, block: BlockHit) -> str:
@@ -1847,21 +1890,26 @@ def _accepted_ocr(image: np.ndarray) -> str:
     A zero confidence score is not agreement. Words that are not tags stay unknown.
     """
 
-    try:
-        from panelcad.importer.raster import configure_tesseract
-        import pytesseract
-    except ImportError:
-        return ""
-    if not configure_tesseract():
-        return ""
+    from panelcad.ocr.dispatch import image_to_data, image_to_string, tesseract_required
+
+    output_type = None
+    if tesseract_required():
+        try:
+            from panelcad.importer.raster import configure_tesseract
+            import pytesseract
+        except ImportError:
+            return ""
+        if not configure_tesseract():
+            return ""
+        output_type = pytesseract.Output.DICT
     config = "--psm {psm} -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-"
 
     def once(psm: int) -> tuple[str, float]:
         try:
-            heard = pytesseract.image_to_string(image, config=config.format(psm=psm))
-            data = pytesseract.image_to_data(
+            heard = image_to_string(image, config=config.format(psm=psm))
+            data = image_to_data(
                 image,
-                output_type=pytesseract.Output.DICT,
+                output_type=output_type,
                 config=config.format(psm=psm),
             )
         except Exception:  # noqa: BLE001

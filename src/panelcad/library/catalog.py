@@ -186,7 +186,7 @@ _JUMPER_SCHEMATIC = {
 
 
 def expand_jumper_tables(data: dict[str, Any]) -> list[dict[str, Any]]:
-    """Turn a compact ``jumpers:`` table into catalog devices you can extend."""
+    """Turn a compact ``jumpers:`` table into catalog devices You can extend."""
 
     rows: list[dict[str, Any]] = []
     for series in data.get("jumpers") or []:

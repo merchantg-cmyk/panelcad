@@ -618,13 +618,9 @@ def test_passed_in_webhook_is_redacted_at_any_path(tmp_path: Path) -> None:
 def test_context_fractions_are_not_sheet_numbers_in_three_fonts() -> None:
     """REV, HP, JOB, and a month/day date must not become the sheet. 12/12 still does."""
 
-    import shutil
-
     import numpy as np
     from PIL import Image, ImageDraw, ImageFont
 
-    if shutil.which("tesseract") is None:
-        pytest.skip("tesseract is not installed")
     faces = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",

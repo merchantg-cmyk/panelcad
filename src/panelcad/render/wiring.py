@@ -69,6 +69,32 @@ def _supply_interiors(sheet: Sheet, catalog: Catalog) -> list[Rect]:
     return boxes
 
 
+def _terminal_end(sheet: Sheet, catalog: Catalog, refs: set[str]) -> bool:
+    """A terminal jumper has to stay straight. A jog is a loop around the row."""
+
+    return _any_category(sheet, catalog, refs, ("terminal",))
+
+
+def _power_lane(sheet: Sheet, catalog: Catalog, refs: set[str]) -> bool:
+    """Phase and starter buses stay on their own straight lane."""
+
+    return _any_category(sheet, catalog, refs, ("load.motor", "protection.overload", "switching.contactor", "connection.offpage"))
+
+
+def _any_category(sheet: Sheet, catalog: Catalog, refs: set[str], prefixes: tuple[str, ...]) -> bool:
+    for comp in sheet.components:
+        if comp.id not in refs:
+            continue
+        try:
+            device = catalog.get(comp.library_id)
+        except KeyError:
+            continue
+        cat = (device.category or "").lower()
+        if any(cat.startswith(prefix) or prefix in cat for prefix in prefixes):
+            return True
+    return False
+
+
 def _is_supply_category(category: str) -> bool:
     """Power supply and control transformer, by library category, not by id text."""
 
@@ -583,15 +609,44 @@ def route_wire(
 
     if is_ladder_sheet(sheet, project) or is_generated_io_sheet(sheet) or is_iec_column_sheet(sheet, project):
         plain = ladder_route(ax, ay, bx, by)
-        # A supply or transformer sitting on a rung must not have the conductor
-        # through its body. Phase lanes stay on the straight ladder route.
+        ends: set[str] = set()
+        for end in (wire.frm, wire.to):
+            try:
+                ref, _pin = parse_pin_ref(end)
+            except ValueError:
+                ref = str(end).split(".")[0]
+            if ref:
+                ends.add(ref)
+        # A supply body on a rung is always walked around. Any other straight
+        # rung that cuts a symbol is walked around too, except a terminal
+        # jumper (a jog is a loop) and a phase lane (it has to stay on its pin).
         blocks = _supply_interiors(sheet, catalog)
-        if blocks and path_hits_obstacles(plain, blocks, skip_ends=True):
+        around = bool(blocks and path_hits_obstacles(plain, blocks, skip_ends=True))
+        walls = sheet_obstacles(sheet, catalog, skip=ends)
+        if (
+            not around
+            and walls
+            and not _terminal_end(sheet, catalog, ends)
+            and not _power_lane(sheet, catalog, ends)
+            and path_hits_obstacles(plain, walls, skip_ends=True)
+        ):
+            around = True
+        if around:
+            # The wire's own symbol is not a wall above, so a far pin can jog
+            # through that body on the way to the rail. Put the body back when
+            # the straight run enters it. The pin stub stays exempt.
+            own_walls: list[Rect] = []
+            for ref in ends:
+                comp = next((item for item in sheet.components if item.id == ref), None)
+                if comp is None:
+                    continue
+                wall = component_obstacle(sheet, catalog, comp)
+                if path_hits_obstacles(plain, [wall], skip_ends=True):
+                    own_walls.append(wall)
             wx, wy, ww, wh = working_rect(sheet)
             bounds = (wx, wy + 4.0, wx + ww, wy + wh - 2.0)
-            walls = sheet_obstacles(sheet, catalog, skip=set())
             return present_route(
-                route_orthogonal(ax, ay, a_side, bx, by, b_side, walls, bounds=bounds)
+                route_orthogonal(ax, ay, a_side, bx, by, b_side, [*walls, *own_walls], bounds=bounds)
             )
         return present_route(plain)
     # Every symbol is an obstacle, including the two this wire lands on.

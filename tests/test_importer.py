@@ -2516,7 +2516,7 @@ def test_cancel_kills_inflight_grok_without_blocking_the_ui(tmp_path: Path, monk
     sleeper.write_text("import time\ntime.sleep(30)\n", encoding="utf-8")
     monkeypatch.setattr("panelcad.importer.grok_build.find_grok", lambda: sleeper)
 
-    def sleeper_argv(self, prompt_path, cwd, session_id):
+    def sleeper_argv(self, prompt_path, cwd, session_id, *, cleanup: bool = False):
         return [sys.executable, str(sleeper)]
 
     monkeypatch.setattr("panelcad.importer.grok_build.GrokBuildVision._argv", sleeper_argv)
@@ -3728,7 +3728,176 @@ def test_png_dpi_is_not_treated_as_a3(tmp_path: Path):
     assert (name, orient) == ("TABLOID", "portrait")
 
 
-def test_text_orientation_undoes_180_and_records_it(tmp_path: Path):
+@pytest.fixture
+def electrical_ocr():
+    """Orientation checks run on the electrical reader, or they are skipped."""
+
+    from panelcad.ocr.backend import ocr_scope, page_engine_ready
+
+    if not page_engine_ready():
+        pytest.skip("electrical OCR weights are not installed; orientation is not accepted from Tesseract alone")
+    with ocr_scope("electrical"):
+        yield
+
+
+def test_recorded_scores_keep_quarter_turns_and_upright_pages() -> None:
+    """Electrical OCR scores a line and its reverse. These vectors are that tie.
+
+    ``[1284, 0, 167, 80]`` is the older phone read. The live phone read is in
+    the cecec57 orientation fixture, and both stay at 0. The other vectors are
+    the either-direction pattern that left 90° and 270° pages unturned, and
+    that reported an upside-down sheet as a quarter turn.
+    """
+
+    from panelcad.importer.imageutil import choose_quarter
+
+    # Phone: upright leads. A side letter score must not turn it.
+    assert choose_quarter([1284.0, 0.0, 167.0, 80.0], 1) == 0
+    # Confident 90° (the letter-shape test). Glyph saying upright loses.
+    assert choose_quarter([20.0, 240.0, 10.0, 30.0], 0) == 1
+    # 270° copy: 90 and 270 both read. Letter shape picks the true one.
+    assert choose_quarter([30.0, 200.0, 30.0, 180.0], 1) == 1
+    # 90° copy.
+    assert choose_quarter([30.0, 180.0, 30.0, 200.0], 3) == 3
+    # Upside down, and the best text score wandered onto a side quarter.
+    assert choose_quarter([100.0, 80.0, 150.0, 220.0], 2) == 2
+    # Upside down, 0 and 180 both read, 180 leads.
+    assert choose_quarter([200.0, 10.0, 220.0, 10.0], 2) == 2
+    # Upright page whose upside-down pass also scores. Stay.
+    assert choose_quarter([280.0, 10.0, 200.0, 10.0], 0) == 0
+
+
+_ORIENTATION_CASES = json.loads(
+    (
+        Path(__file__).resolve().parent / "fixtures" / "orientation" / "orientation-scores-cecec57.json"
+    ).read_text(encoding="utf-8")
+)["records"]
+
+
+def _orientation_ids() -> list[str]:
+    seen: dict[str, int] = {}
+    names: list[str] = []
+    for record in _ORIENTATION_CASES:
+        turn = record["applied_rotation_quarters_ccw"]
+        base = f"{record['image_id']}-t{turn if turn is not None else 'x'}"
+        seen[base] = seen.get(base, 0) + 1
+        names.append(base if seen[base] == 1 else f"{base}-{seen[base]}")
+    return names
+
+
+def test_orientation_fixture_keeps_the_windows_set_and_the_linux_vectors() -> None:
+    """68 Windows scores plus the two Linux review vectors, labeled by platform."""
+
+    linux = [record for record in _ORIENTATION_CASES if record.get("platform") == "linux"]
+    assert len(_ORIENTATION_CASES) == 70
+    assert len(linux) == 2
+    assert {record["image_id"] for record in linux} == {
+        "line_schematic_linux",
+        "hard_page_dol_power_degraded_linux",
+    }
+    assert all(record["platform"] == "linux" for record in linux)
+
+
+@pytest.mark.parametrize("record", _ORIENTATION_CASES, ids=_orientation_ids())
+def test_recorded_orientation_cases_match_the_expected_quarter(record: dict) -> None:
+    """Every recorded orientation case, with no OCR weights.
+
+    The Windows set is the 68 scores from the home PC at cecec57. Two more are
+    the Linux review VM (PR 157, electrical weights): the upright line drawing
+    whose opposite quarters tie, and the hard page whose best quarter leads.
+    ``choose_quarter`` decides every page that has a tag score. Two title-band
+    pages score nothing in any quarter and differ only in the title rule, which
+    is the next step ``auto_rotate`` already takes. A blank page stays undecided.
+    """
+
+    from panelcad.importer.imageutil import choose_quarter
+
+    expected = record["expected_quarters"]
+    chosen = choose_quarter(record["text_scores"], record["glyph_quarter"])
+    if expected is None:
+        assert chosen is None
+        return
+    if max(record["text_scores"]) >= 80.0:
+        assert chosen == expected, record["image_id"]
+        return
+    decided = record["decisive_title_quarter"]
+    if decided is None:
+        decided = record["ink_rotate_quarter"]
+    assert decided == expected, record["image_id"]
+
+
+def test_fixture_glyphs_split_an_either_direction_read() -> None:
+    """The drawings used by the electrical rotation tests, with that reader's tie.
+
+    Scores are high on the true upright quarter and on its reverse, and low
+    on the side quarters. Letter shape has to pick the true one.
+    """
+
+    from panelcad.importer.imageutil import _glyph_quarter, choose_quarter
+
+    pages = [_line_schematic()]
+    wide = Image.new("RGB", (3600, 2400), (255, 255, 255))
+    draw = ImageDraw.Draw(wide)
+    font = _font(48, bold=True)
+    draw.line((40, 70, 3500, 70), fill=(0, 0, 0), width=3)
+    draw.text((400, 900), "MOTOR STARTERS", fill=(0, 0, 0), font=font)
+    draw.text((400, 1000), "K1", fill=(0, 0, 0), font=font)
+    pages.append(wide)
+    for upright in pages:
+        image = upright
+        for turns in range(4):
+            if turns:
+                image = image.transpose(Image.Transpose.ROTATE_270)
+            expected = (4 - turns) % 4
+            glyph = _glyph_quarter(image)
+            scores = [30.0, 30.0, 30.0, 30.0]
+            scores[expected] = 200.0
+            scores[(expected + 2) % 4] = 180.0
+            assert choose_quarter(scores, glyph) == expected
+
+
+def test_phone_photo_stays_landscape() -> None:
+    """The phone scan is already upright. A 90° letter score must not stand it up."""
+
+    from panelcad.importer.imageutil import auto_rotate
+
+    path = Path(__file__).resolve().parent / "fixtures" / "scan_ladder" / "schematic" / "phone.jpg"
+    image = Image.open(path)
+    fixed, quarters = auto_rotate(image)
+    assert quarters == 0
+    assert fixed.size[0] > fixed.size[1]
+
+
+def test_letter_shape_does_not_override_a_confident_quarter(monkeypatch: pytest.MonkeyPatch) -> None:
+    from panelcad.importer import imageutil
+
+    image = Image.new("RGB", (400, 300), (255, 255, 255))
+    monkeypatch.setattr(imageutil, "_osd_reading", lambda _image: (None, 0.0))
+    monkeypatch.setattr(imageutil, "_glyph_quarter", lambda _image: 0)
+    monkeypatch.setattr(imageutil, "_text_scores", lambda _image: [20.0, 240.0, 10.0, 30.0])
+    _fixed, quarters = imageutil.auto_rotate(image)
+    assert quarters == 1
+    monkeypatch.setattr(imageutil, "_glyph_quarter", lambda _image: 2)
+    monkeypatch.setattr(imageutil, "_text_scores", lambda _image: [200.0, 10.0, 220.0, 10.0])
+    _fixed, quarters = imageutil.auto_rotate(image)
+    assert quarters == 2
+
+
+def test_letter_shape_picks_the_upright_quarter() -> None:
+    """A capital is heavier at the top. That signal does not depend on which OCR engine is installed."""
+
+    from panelcad.importer.imageutil import _glyph_quarter
+
+    upright = _line_schematic()
+    assert _glyph_quarter(upright) == 0
+    turned = upright
+    for quarter in (1, 2, 3):
+        turned = turned.transpose(Image.Transpose.ROTATE_270)
+        assert _glyph_quarter(turned) == (4 - quarter) % 4
+    assert _glyph_quarter(Image.new("RGB", (400, 300), (255, 255, 255))) is None
+
+
+def test_text_orientation_undoes_180_and_records_it(tmp_path: Path, electrical_ocr: None):
     from panelcad.importer.imageutil import auto_rotate
     from panelcad.importer.ingest import ingest_paths
     from panelcad.importer.workspace import Workspace
@@ -3771,7 +3940,7 @@ def _line_schematic() -> Image.Image:
     return image
 
 
-def test_line_drawing_rotations_come_back_upright() -> None:
+def test_line_drawing_rotations_come_back_upright(electrical_ocr: None) -> None:
     """A thin schematic turned 90, 180, or 270 is put back upright."""
 
     from panelcad.importer.imageutil import auto_rotate, degrade_scan
@@ -3790,7 +3959,9 @@ def test_line_drawing_rotations_come_back_upright() -> None:
         assert found == (4 - turns) % 4
 
 
-def test_wide_line_drawing_stays_upright_and_rotated_copies_return(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_wide_line_drawing_stays_upright_and_rotated_copies_return(
+    monkeypatch: pytest.MonkeyPatch, electrical_ocr: None
+) -> None:
     """A wide hairline sheet is read at a large probe, not an 800 px thumbnail."""
 
     from panelcad.importer import imageutil
@@ -3830,7 +4001,7 @@ def test_small_scan_with_a_top_rule_stays_upright(monkeypatch: pytest.MonkeyPatc
     assert quarters == 0
 
 
-def test_sample_print_rotations_come_back_upright(tmp_path: Path) -> None:
+def test_sample_print_rotations_come_back_upright(tmp_path: Path, electrical_ocr: None) -> None:
     from panelcad.importer.imageutil import auto_rotate, degrade_scan
     from panelcad.importer.ingest import rasterize_pdf
 
@@ -3860,6 +4031,21 @@ def test_upright_line_drawing_stays_upright_when_a_rule_looks_like_a_title(monke
     assert titled is not None and titled[1] == 2
     _fixed, quarters = imageutil.auto_rotate(image)
     assert quarters == 0
+
+
+def test_an_upright_read_is_not_turned_over(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Electrical OCR reads a line either way up. A page that already reads stays upright."""
+
+    from panelcad.importer import imageutil
+
+    image = Image.new("RGB", (400, 300), (255, 255, 255))
+    monkeypatch.setattr(imageutil, "_osd_reading", lambda _image: (None, 0.0))
+    monkeypatch.setattr(imageutil, "_text_scores", lambda _page: [200.0, 10.0, 280.0, 10.0])
+    _fixed, quarters = imageutil.auto_rotate(image)
+    assert quarters == 0
+    monkeypatch.setattr(imageutil, "_text_scores", lambda _page: [10.0, 0.0, 220.0, 0.0])
+    _fixed, quarters = imageutil.auto_rotate(image)
+    assert quarters == 2
 
 
 def test_text_reading_beats_a_false_title_flip(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -4261,7 +4447,9 @@ def test_import_diagnostics_trace_redacts_keys_and_labels_tag_re(tmp_path: Path,
     assert secret not in cli.stdout
 
 
-def test_sheet_9c_starters_from_a_mocked_vision_reply(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_sheet_9c_starters_from_a_mocked_vision_reply(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, electrical_ocr: None
+):
     """Synthetic 11×17 elementary. Mocked vision builds the nine starters."""
 
     from panelcad.importer.pipeline import EmptyImport

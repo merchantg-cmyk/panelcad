@@ -15,7 +15,8 @@ import cv2
 import numpy as np
 
 _TAG = re.compile(r"[A-Z]{1,4}\d+(?:-[A-Z0-9]+)?")
-_NUMBER = re.compile(r"\d{1,4}")
+# One digit is a screw or a zone mark. A strip wire number has at least two.
+_NUMBER = re.compile(r"\d{2,4}")
 
 
 def read_terminal_strip(
@@ -225,28 +226,61 @@ def _tag_in(gray: np.ndarray, block: dict[str, Any], ppm: float) -> str:
 
 
 def _number_in(gray: np.ndarray, block: dict[str, Any], ppm: float, side: str) -> str:
-    """The wire number above the block or below it. ``?`` when it is not a number."""
+    """The wire number above the block or below it. ``?`` when it is not a number.
 
-    height = max(4, int(round(6.0 * ppm)))
-    x0 = int(block["x"]) + 2
-    x1 = int(block["x"] + block["w"]) - 2
+    The digits are often turned along the block. Both orientations are read.
+    Two different numbers is unreadable, not a guess.
+    """
+
+    span = max(8, int(round(11.0 * ppm)))
+    # A narrow window so the next cell's number is not read as this one.
+    inset = max(1, int(round(0.08 * float(block["w"]))))
+    x0 = int(block["x"]) + inset
+    x1 = int(block["x"] + block["w"]) - inset
+    overlap = max(2, int(round(0.22 * float(block["h"]))))
     if side == "top":
-        y1 = int(block["y"]) - 1
-        y0 = y1 - height
+        y1 = int(block["y"]) + overlap
+        y0 = int(block["y"]) - span
     else:
-        y0 = int(block["y"] + block["h"]) + 1
-        y1 = y0 + height
+        y0 = int(block["y"] + block["h"]) - overlap
+        y1 = int(block["y"] + block["h"]) + span
     y0 = max(0, y0)
     y1 = min(gray.shape[0], y1)
     x0 = max(0, x0)
     x1 = min(gray.shape[1], x1)
-    if y1 <= y0 or x1 <= x0:
+    if y1 - y0 < 4 or x1 - x0 < 4:
         return "?"
-    heard = _ocr(gray[y0:y1, x0:x1], digits=True)
-    token = re.sub(r"\s+", "", heard)
-    if _NUMBER.fullmatch(token):
-        return token
+    crop = _without_rules(gray[y0:y1, x0:x1])
+
+    def _threes(image: np.ndarray) -> list[str]:
+        heard = _ocr(image, digits=True)
+        return re.findall(r"\d{3}", heard)
+
+    upright = _threes(crop)
+    clockwise = _threes(cv2.rotate(crop, cv2.ROTATE_90_CLOCKWISE))
+    counter = _threes(cv2.rotate(crop, cv2.ROTATE_90_COUNTERCLOCKWISE))
+    upside = _threes(cv2.rotate(crop, cv2.ROTATE_180))
+    found = list(dict.fromkeys([*upright, *clockwise, *counter, *upside]))
+    if len(found) == 1:
+        return found[0]
+    # The two quarter-turns read the same glyphs in opposite directions.
+    # Keep the clockwise one. Two unrelated numbers stay unread.
+    if len(clockwise) == 1 and len(counter) == 1 and clockwise[0] == counter[0][::-1]:
+        return clockwise[0]
     return "?"
+
+
+def _without_rules(image: np.ndarray) -> np.ndarray:
+    """Paint out a ruled line that cuts through the digits."""
+
+    if image.size == 0:
+        return image
+    ink = (image < 160).astype(np.uint8) * 255
+    kernel = max(5, image.shape[1] // 3)
+    lines = cv2.morphologyEx(ink, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (kernel, 1)))
+    out = image.copy()
+    out[lines > 0] = 255
+    return out
 
 
 def _crop(gray: np.ndarray, block: dict[str, Any], y0_frac: float, y1_frac: float) -> np.ndarray | None:
@@ -264,20 +298,21 @@ def _crop(gray: np.ndarray, block: dict[str, Any], y0_frac: float, y1_frac: floa
 def _ocr(image: np.ndarray, *, digits: bool = False) -> str:
     if image.size == 0:
         return ""
-    try:
-        import pytesseract
+    from panelcad.ocr.dispatch import image_to_string, tesseract_required
 
-        from panelcad.importer.raster import configure_tesseract
-    except Exception:
-        return ""
-    if not configure_tesseract():
-        return ""
+    if tesseract_required():
+        try:
+            from panelcad.importer.raster import configure_tesseract
+        except Exception:
+            return ""
+        if not configure_tesseract():
+            return ""
     up = cv2.resize(image, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
     up = cv2.copyMakeBorder(up, 16, 16, 16, 16, cv2.BORDER_CONSTANT, value=255)
     whitelist = "0123456789" if digits else "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
     try:
         return str(
-            pytesseract.image_to_string(
+            image_to_string(
                 up,
                 config=f"--psm 7 -c tessedit_char_whitelist={whitelist}",
             )

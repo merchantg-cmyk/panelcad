@@ -407,13 +407,20 @@ def _ocr_tokens(image_path: Path, width_mm: float, height_mm: float) -> tuple[li
     if not image_path.is_file() or width_mm <= 0 or height_mm <= 0:
         return [], "unavailable"
     try:
-        import pytesseract
         from PIL import Image
+
+        from panelcad.ocr.dispatch import image_to_data, tesseract_required
     except ImportError:
         return [], "unavailable"
+    electrical = not tesseract_required()
     try:
         image = Image.open(image_path)
-        data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
+        if electrical:
+            data = image_to_data(image)
+        else:
+            import pytesseract
+
+            data = image_to_data(image, output_type=pytesseract.Output.DICT)
     except Exception:  # noqa: BLE001 — a missing tesseract binary is "no OCR", not a failed prep
         return [], "unavailable"
     px_w = max(1, int(image.width))
@@ -447,7 +454,7 @@ def _ocr_tokens(image_path: Path, width_mm: float, height_mm: float) -> tuple[li
                 "confidence": round(conf / 100.0, 3),
             }
         )
-    return tokens, "tesseract"
+    return tokens, "electrical" if electrical else "tesseract"
 
 
 def _readme(manifest: dict[str, Any]) -> str:

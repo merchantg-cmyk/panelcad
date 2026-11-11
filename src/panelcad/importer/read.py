@@ -1084,6 +1084,23 @@ def label_tokens(
         text = str(tok.get("text") or "").strip()
         if lettered_wire_text(text) or re.fullmatch(r"\d{4,5}", text):
             working.append(dict(tok))
+    # A 3- or 4-digit wire number beside the rail falls inside the zone band.
+    # Zone marks are one or two digits. The title strip is not a wire.
+    seen_xy = {(round(float(tok["x"]), 1), round(float(tok["y"]), 1)) for tok in working}
+    for tok in tokens:
+        key = (round(float(tok["x"]), 1), round(float(tok["y"]), 1))
+        if key in seen_xy:
+            continue
+        text = str(tok.get("text") or "").strip()
+        if not re.fullmatch(r"\d{3,4}", text):
+            continue
+        y = float(tok["y"])
+        if y > float(height_mm) - bottom:
+            continue
+        if not in_sheet_border(float(tok["x"]), y, width_mm, height_mm, insets):
+            continue
+        working.append(dict(tok))
+        seen_xy.add(key)
     parents = sheet_tag_names(working)
     tagish = [
         tok
@@ -2933,8 +2950,8 @@ def _border_grid_token(
     if not in_sheet_border(float(tok["x"]), float(tok["y"]), width_mm, height_mm, insets):
         return False
     text = str(tok["text"] or "").strip().upper()
-    # A 4-digit wire number in the margin is not a zone digit (zones are 01–61).
-    if re.fullmatch(r"\d{1,3}", text):
+    # Zone digits are 01–61. A 3-digit number beside the rail is a wire number.
+    if re.fullmatch(r"\d{1,2}", text):
         return True
     if re.fullmatch(r"\d{1,2}[A-Z]", text):
         return True
