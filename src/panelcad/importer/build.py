@@ -21,7 +21,7 @@ def build_session(
     parts: Any = None,
     name: str = "",
     photo_targets: list[dict[str, Any]] | None = None,
-    layout_mode: str = "preserve",
+    layout_mode: str = "",
     target_standard: str = "auto",
 ) -> tuple[Session, dict[str, Any]]:
     if not isinstance(stitched, dict):
@@ -66,11 +66,20 @@ def build_session(
             fields[key] = block[key]
     session.set_title_block(**fields)
 
-    eff_mode = str(
-        layout_mode
-        if layout_mode and layout_mode != "preserve"
-        else (stitched.get("layout_mode") or layout_mode or "preserve")
-    ).strip().lower()
+    # Callers that omit layout_mode on a stitch without a stamp keep preserve
+    # (vector/PDF). Scan rebuilds pass ladder explicitly or via ImportJob.
+    requested = str(layout_mode or "").strip().lower()
+    stamped = str(stitched.get("layout_mode") or "").strip().lower()
+    if requested in {"ladder", "clean_ladder", "clean"}:
+        eff_mode = "ladder"
+    elif requested == "preserve":
+        eff_mode = "preserve"
+    elif stamped in {"ladder", "clean_ladder", "clean"}:
+        eff_mode = "ladder"
+    elif stamped == "preserve":
+        eff_mode = "preserve"
+    else:
+        eff_mode = "preserve"
     if eff_mode in {"ladder", "clean_ladder", "clean"}:
         from panelcad.importer.ladder_synth import synthesize_imported_ladder
 
@@ -86,8 +95,18 @@ def build_session(
         for sheet in stitched.get("sheets") or []:
             kind = sheet.get("kind") or "schematic"
             if kind in LAYOUT_KINDS and sheet.get("id") not in existing_ids:
-                created = session.add_sheet(sheet["id"], title=sheet.get("title") or sheet["id"], kind=kind)
+                sheet_title = str(sheet.get("title") or "").strip()
+                created = session.add_sheet(
+                    sheet["id"], title=sheet_title or sheet["id"], kind=kind
+                )
+                if not sheet_title:
+                    created.title = ""
                 _apply_page_size(created, sheet)
+                sheet_desc = str(sheet.get("description") or "").strip()
+                if not sheet_desc:
+                    sheet_desc = str(block.get("description") or "").strip()
+                if sheet_desc:
+                    created.description = sheet_desc
                 _place_sheet(session, created.id, sheet, report)
                 existing_ids.add(created.id)
         placed_keys = {(r.get("sheet"), r.get("tag")) for r in report["placed"]}
@@ -129,14 +148,23 @@ def build_session(
         kind = sheet.get("kind") or "schematic"
         if kind not in {"schematic", "panel_layout", "door_layout", "terminal", "network", "io"}:
             kind = "schematic"
-        created = session.add_sheet(sheet["id"], title=sheet.get("title") or sheet["id"], kind=kind)
+        # Prefer the scan title; never fall back to the page id (page_001).
+        # Session.add_sheet substitutes the sheet id when title is empty — clear
+        # that invention so the title block stays blank until OCR provides one.
+        sheet_title = str(sheet.get("title") or "").strip()
+        created = session.add_sheet(sheet["id"], title=sheet_title or sheet["id"], kind=kind)
+        if not sheet_title:
+            created.title = ""
         page_standard = str(sheet.get("standard") or "")
         if page_standard in {"NEMA/ANSI", "IEC"}:
             created.standard = page_standard
         _apply_page_size(created, sheet)
         sheet_ids.append(created.id)
-        if sheet.get("description"):
-            created.description = str(sheet["description"])
+        sheet_desc = str(sheet.get("description") or "").strip()
+        if not sheet_desc:
+            sheet_desc = str(block.get("description") or "").strip()
+        if sheet_desc:
+            created.description = sheet_desc
         if sheet.get("drawing_style"):
             created.drawing_style = sheet["drawing_style"]
         if kind in LAYOUT_KINDS:
@@ -151,6 +179,9 @@ def build_session(
     if sheet_ids:
         session.set_active_sheet(sheet_ids[0])
     _apply_photo_targets(session, stitched, photo_targets or [], report)
+    # Preserve keeps OCR geometry; still close seal-in tips the ladder synth
+    # would land (M1-13.4→PB1.4 as 107) when the scan already supports them.
+    _close_preserve_seal_in_tips(session, stitched, report)
     _stamp_properties(session, stitched, report, layout_mode="preserve", target_standard=target_standard)
     return session, report
 
@@ -351,8 +382,15 @@ def _place_sheet(session: Session, sheet_id: str, sheet: dict[str, Any], report:
             "print_import_x": round(float(x), 2),
             "print_import_y": round(float(y), 2),
         }
+        # Terminal-strip OCR marks (above/below the block). Leftovers ask B→L2
+        # with these numbers; they are not inventable jumpers between blocks.
+        props.update(_strip_mark(device))
+        role = str(device.get("role") or (device.get("properties") or {}).get("role") or "").strip()
+        if role:
+            props["role"] = role
         stubs = [str(pin) for pin in (device.get("open_stubs") or []) if str(pin).strip()]
-        if stubs:
+        # Secondary fuse feeds L1 — never stamp a reader open-stub on that pin.
+        if stubs and role != "secondary_fuse":
             props["print_open_stubs"] = ",".join(stubs)
         if device.get("catalog") and device.get("catalog_matched"):
             props["catalog"] = device["catalog"]
@@ -385,6 +423,57 @@ def _place_sheet(session: Session, sheet_id: str, sheet: dict[str, Any], report:
             if "already exists" in str(exc).lower():
                 existing = _find_component(session, tag)
                 if existing is not None:
+                    from panelcad.reconstruct.placeholder import NEEDS_INFO_LIBRARY_ID
+
+                    # OCR ghost placed first as needs_info must not block the real symbol.
+                    if (
+                        str(existing.library_id or "") == NEEDS_INFO_LIBRARY_ID
+                        and library_id
+                        and library_id != NEEDS_INFO_LIBRARY_ID
+                    ):
+                        try:
+                            session.delete_component(existing.id, sheet_id=sheet_id)
+                        except Exception:  # noqa: BLE001
+                            pass
+                        else:
+                            try:
+                                comp = session.place(
+                                    library_id,
+                                    ref=tag,
+                                    x=x,
+                                    y=y,
+                                    rotation=rotation,
+                                    sheet_id=sheet_id,
+                                    properties=props,
+                                    snap=snap,
+                                    scale=float(device.get("scale") or 1.0),
+                                )
+                            except Exception as retry_exc:  # noqa: BLE001
+                                report["skipped"].append(
+                                    {
+                                        "tag": tag,
+                                        "reason": str(retry_exc),
+                                        "sheet": sheet_id,
+                                        "library_id": library_id,
+                                    }
+                                )
+                                continue
+                            report["placed"].append(
+                                {
+                                    "tag": comp.id,
+                                    "library_id": comp.library_id,
+                                    "sheet": sheet_id,
+                                    "guess": bool(resolved["guess"]),
+                                    "replaced_needs_info": True,
+                                }
+                            )
+                            continue
+                    # Preserve strip OCR marks when a later pass re-sees the block.
+                    existing_props = existing.properties if isinstance(existing.properties, dict) else {}
+                    for key, value in _strip_mark(device).items():
+                        if value and not existing_props.get(key):
+                            existing_props[key] = value
+                    existing.properties = existing_props
                     report["placed"].append(
                         {
                             "tag": existing.id,
@@ -1550,6 +1639,7 @@ def _rung_occurrences(
             "secondary": bool(device.get("secondary")),
             "pin_xy": dict(match.get("pin_xy") or {}) if match else {},
             "pins": set(match.get("pins") or ()) if match else set(),
+            "lib": str((match or {}).get("lib") or device.get("library_id") or "").lower(),
         }
         rows.append(row)
     if rows:
@@ -1623,6 +1713,14 @@ def _placed_at(placed: list[dict[str, Any]], tag: str, x: float, y: float) -> di
     return best
 
 
+def _is_strip_terminal_occ(device: dict[str, Any]) -> bool:
+    """True for a terminal-strip block (X1-* / catalog terminals.*)."""
+
+    tag = str(device.get("tag") or "").upper()
+    lib = str(device.get("lib") or device.get("library_id") or "").lower()
+    return tag.startswith("X1-") or "terminal" in lib
+
+
 def complete_numbered_rungs(wires: list[dict[str, Any]], devices: list[dict[str, Any]]) -> None:
     """Join a wire number that sits in one open gap between two placed devices.
 
@@ -1661,6 +1759,18 @@ def complete_numbered_rungs(wires: list[dict[str, Any]], devices: list[dict[str,
         if not left.get("connectable") or not right.get("connectable"):
             uncertain.append(wire)
             continue
+        # Strip feed-through: B-side / 30x numbers are each block's L2 return,
+        # not a jumper. Shared wire_top (202) is the real A-side panel bond.
+        if _is_strip_terminal_occ(left) and _is_strip_terminal_occ(right):
+            left_top = str((left.get("props") or left.get("properties") or {}).get("wire_top") or left.get("wire_top") or "").strip()
+            right_top = str((right.get("props") or right.get("properties") or {}).get("wire_top") or right.get("wire_top") or "").strip()
+            if not (
+                number.isdigit()
+                and number == left_top
+                and number == right_top
+                and not number.startswith("30")
+            ):
+                continue
         named = {str(wire.get("from_tag") or "").strip(), str(wire.get("to_tag") or "").strip()}
         named.discard("")
         if named and not named <= {left["tag"], right["tag"]}:
@@ -2780,7 +2890,7 @@ def _stamp_properties(
     stitched: dict[str, Any],
     report: dict[str, Any],
     *,
-    layout_mode: str = "preserve",
+    layout_mode: str = "ladder",
     target_standard: str = "auto",
 ) -> None:
     items = []
@@ -2904,6 +3014,123 @@ def _component_wired_pins(sheet: Any, ref: str) -> set[str]:
     return found
 
 
+def _close_preserve_seal_in_tips(
+    session: Session,
+    stitched: dict[str, Any],
+    report: dict[str, Any],
+) -> None:
+    """Land seal-in load pins preserve mode would otherwise leave as open stubs.
+
+    Ladder synth infers ``M1-13.4→PB1.4`` as 107 when OCR already has the hot
+    pin and the start→coil hop. Preserve must do the same from that schedule —
+    never invent a tip the from-to pass did not support.
+    """
+
+    try:
+        from panelcad.importer.ladder_synth import extract_import_from_to
+    except Exception:  # noqa: BLE001
+        return
+    try:
+        schedule = extract_import_from_to(stitched, catalog=session.catalog)
+    except Exception:  # noqa: BLE001
+        return
+
+    def _end(tag: str, pin: str) -> str:
+        return f"{tag}.{pin}" if pin else tag
+
+    existing: set[frozenset[str]] = set()
+    for sheet in session.project.sheets:
+        for wire in sheet.wires:
+            existing.add(frozenset({str(wire.frm), str(wire.to)}))
+
+    for row in schedule.from_to_rows:
+        if str(getattr(row, "source", "") or "") != "rung_inferred":
+            continue
+        from_tag = str(row.from_tag or "").strip()
+        to_tag = str(row.to_tag or "").strip()
+        from_pin = str(row.from_pin or "").strip()
+        to_pin = str(row.to_pin or "").strip()
+        number = str(row.wire_number or "").strip()
+        if not from_tag or not to_tag or not from_pin or not to_pin:
+            continue
+        # Seal-in tip: aux contact load pin ↔ parent start load pin, sharing
+        # the parent→coil number (107). Skip rail invents and fuse parallels.
+        libs = []
+        for tag in (from_tag, to_tag):
+            comp = _find_component(session, tag)
+            libs.append(str(getattr(comp, "library_id", "") or "").lower() if comp else "")
+        if any("fuse" in lib for lib in libs):
+            continue
+        contactish = any("aux" in lib or "contact" in lib for lib in libs)
+        pushbuttonish = any("pb_" in lib or "operators.pb" in lib for lib in libs)
+        if not (contactish and pushbuttonish):
+            continue
+        if from_pin not in {"4", "14", "22", "34"} or to_pin not in {"4", "14", "22", "34"}:
+            continue
+        frm = _end(from_tag, from_pin)
+        to = _end(to_tag, to_pin)
+        edge = frozenset({frm, to})
+        if edge in existing:
+            continue
+        # Parent must already carry this number to the coil — facts only.
+        parent_has_number = False
+        for sheet in session.project.sheets:
+            for wire in sheet.wires:
+                if str(wire.number or "").strip() != number:
+                    continue
+                ends = {str(wire.frm), str(wire.to)}
+                tags = {str(wire.frm).split(".")[0], str(wire.to).split(".")[0]}
+                if to_tag in tags or from_tag in tags:
+                    if any(e.endswith(f".{to_pin}") or e.endswith(f".{from_pin}") for e in ends):
+                        parent_has_number = True
+                        break
+            if parent_has_number:
+                break
+        if number and not parent_has_number:
+            # Still allow when the schedule number matches an existing parent→coil
+            # hop that shares one endpoint tag.
+            for sheet in session.project.sheets:
+                for wire in sheet.wires:
+                    tags = {str(wire.frm).split(".")[0], str(wire.to).split(".")[0]}
+                    if (to_tag in tags or from_tag in tags) and str(wire.number or "").strip() == number:
+                        parent_has_number = True
+                        break
+                if parent_has_number:
+                    break
+        if number and not parent_has_number:
+            continue
+        sheet_id = str(row.sheet_id or "")
+        try:
+            _import_wire(session, frm, to, number=number or None, sheet_id=sheet_id or None)
+        except Exception:  # noqa: BLE001
+            continue
+        existing.add(edge)
+        report["wires"].append(
+            {
+                "number": number,
+                "sheet": sheet_id,
+                "from": frm,
+                "to": to,
+                "source": "seal_in_tip",
+            }
+        )
+        # Clear the reader open-stub that hid this pin from leftovers.
+        for tag, pin in ((from_tag, from_pin), (to_tag, to_pin)):
+            comp = _find_component(session, tag)
+            if comp is None:
+                continue
+            props = comp.properties if isinstance(comp.properties, dict) else {}
+            raw = str(props.get("print_open_stubs") or "")
+            if not raw:
+                continue
+            kept = [p.strip() for p in raw.split(",") if p.strip() and p.strip() != pin]
+            if kept:
+                props["print_open_stubs"] = ",".join(kept)
+            else:
+                props.pop("print_open_stubs", None)
+            comp.properties = props
+
+
 def _stamp_open_stubs(session: Session, stitched: dict[str, Any]) -> None:
     """Copy printed open stubs onto placed components. A wired pin is never one."""
 
@@ -2933,6 +3160,12 @@ def _stamp_open_stubs(session: Session, stitched: dict[str, Any]) -> None:
                 raw = str(props.get("print_open_stubs") or "")
                 stubs = [part.strip() for part in raw.split(",") if part.strip()]
             if not stubs:
+                continue
+            # Secondary fuse rail pin feeds L1 — never keep a reader open-stub
+            # stamp that would suppress the "L1 as 102" leftover.
+            if str(props.get("role") or "") == "secondary_fuse":
+                props.pop("print_open_stubs", None)
+                comp.properties = props
                 continue
             wired = _component_wired_pins(sheet, comp.id)
             kept = [pin for pin in stubs if pin not in wired]

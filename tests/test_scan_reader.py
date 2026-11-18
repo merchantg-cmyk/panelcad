@@ -134,6 +134,41 @@ def test_a_branch_lands_on_the_upstream_pin_and_not_on_the_same_device():
     assert (("PB2", "2"), ("M1-13", "3")) in branched
 
 
+def test_rail_landing_pin_does_not_tee_onto_another_device():
+    """ES1.1→L1 must not invent ES1.1→M1-13.3 (that shorts L1 into the seal-in)."""
+
+    from panelcad.importer.raster import _drop_device_hops_off_rail_landers
+
+    ppm = 4.0
+    mask = np.zeros((400, 500), np.uint8)
+
+    def line(x0: float, y0: float, x1: float, y1: float) -> None:
+        cv2.line(mask, (int(x0 * ppm), int(y0 * ppm)), (int(x1 * ppm), int(y1 * ppm)), 1, 2)
+
+    # L1 ——— ES1.1    plus a spurious vertical ink toward M1-13.
+    line(10, 40, 40, 40)
+    line(40, 40, 40, 68)
+    pins = [
+        ("L1", "L1", 10.0, 40.0),
+        ("ES1", "1", 40.0, 40.0),
+        ("M1-13", "3", 40.0, 68.0),
+    ]
+    links = _pin_links(pins, mask, ppm)
+    tees = _tee_links(links, pins, mask, ppm)
+    branched = {(a, b) for a, b, _p, _q in tees}
+    assert (("ES1", "1"), ("M1-13", "3")) not in branched
+    assert (("M1-13", "3"), ("ES1", "1")) not in branched
+    # Even if a tee/chain already formed the ghost hop, the rail-lander drop removes it.
+    ghost = [
+        (("L1", "L1"), ("ES1", "1"), (10.0, 40.0), (40.0, 40.0)),
+        (("ES1", "1"), ("M1-13", "3"), (40.0, 40.0), (40.0, 68.0)),
+    ]
+    cleaned = _drop_device_hops_off_rail_landers(ghost)
+    pairs = {(a, b) for a, b, _p, _q in cleaned}
+    assert (("L1", "L1"), ("ES1", "1")) in pairs
+    assert (("ES1", "1"), ("M1-13", "3")) not in pairs
+
+
 def test_a_confirmed_nc_stop_and_transformer_are_not_rewritten():
     from panelcad.importer.ladder_synth import _classify_device_role_and_library
 

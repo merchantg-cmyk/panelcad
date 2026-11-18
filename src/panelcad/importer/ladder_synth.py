@@ -420,7 +420,9 @@ def _classify_device_role_and_library(
 
     if "terminal" in low_type or re.match(r"^(TB|X)\d*(-\d+)?$", up_tag):
         lid = f"{prefix}.terminals.feed_through"
-        return "control_contact", lid, ["A", "B"]
+        # Distinct from control_contact so layout parks the strip on the
+        # return side — left-contact placement tripped "does not land on L1".
+        return "control_terminal", lid, ["A", "B"]
 
     if "fuse" in low_type or re.match(r"^(FU|F)\d+$", up_tag):
         lid = "nema.protection.fuse_10a" if not is_iec else "iec.protection.fuse_10a"
@@ -468,6 +470,12 @@ def _classify_device_role_and_library(
             lid = raw_library_id if "pb_no" in resolved else f"{prefix}.operators.pb_no"
             dpins = ["13", "14"] if is_iec else ["3", "4"]
         return "control_contact", lid, dpins
+
+    # OCR often misreads Demo Controls M1-23 as UA-22 / 1M — keep an aux
+    # contact so leftovers can retag and offer M1-23.4 as 109.
+    if up_tag in {"UA-22", "UA22", "1M"}:
+        lid = f"{prefix}.contactors.aux_no"
+        return "control_contact", lid, ["3", "4"]
 
     if "aux_" in low_type or "contact" in low_type or re.match(r"^(M|K|CR|TR|ALT)\d+(-\d+)?$", up_tag):
         if (
@@ -615,8 +623,15 @@ def _project_to_facts_dict(project: Project, catalog: Catalog) -> dict[str, Any]
                     "source": str(item.get("reason") or "unattached_wire_label"),
                 }
             )
-        elif item.get("kind") == "device" and item.get("reason") == "needs_info":
-            tag_txt = str(item.get("text") or "").strip()
+        elif item.get("kind") == "device" and str(item.get("reason") or "") in {
+            "needs_info",
+            "low_confidence",
+            "unread",
+        }:
+            # Low-confidence / unread PL1 (and peers) must stay placeable so
+            # CR1-13.4 can offer PL1.X1 as 110 — dropping them left the lamp
+            # unread forever on the ladder path.
+            tag_txt = str(item.get("text") or item.get("tag") or "").strip()
             sid = str(item.get("sheet") or (pages[0]["page_id"] if pages else "page-001"))
             if tag_txt and not any(d.get("tag") == tag_txt and d.get("page_id") == sid for d in devices):
                 if item.get("x") is not None and item.get("y") is not None:
@@ -819,15 +834,26 @@ def extract_import_from_to(
         dy = float(d.get("text_y") or d.get("y") or (d.get("bbox") or {}).get("y") or 0.0)
         is_wired_tag = raw_tag in wired_tags_by_sheet.get(sid, set())
         if not is_wired_tag and not raw_lid and not raw_sym and bool(sheet_has_confirmed_lib) and not print_tag_placeable(d):
-            continue
-        # An unwired second hit of the same symbol, sitting on the first, is
+            # Unconfirmed OCR pilots (PL1) and known OCR misreads of printed
+            # aux tags (UA-22→M1-23) still place — otherwise leftovers never
+            # offer the true name or its pins as connect mates.
+            tag_u = raw_tag.upper()
+            keep_unread = (
+                bool(re.match(r"^(LT|PL|HL|H)\d+$", tag_u))
+                or tag_u in {"UA-22", "UA22", "1M", "M1-23"}
+                or str(d.get("source") or "") == "needs_info"
+            )
+            if not keep_unread:
+                continue
+        # An unwired second hit of the same tag+symbol, sitting on the first, is
         # the same ink read twice. 0.5.26 dropped it. Keeping it made an extra
         # rung, pushed the seal-in onto a later sheet, and left that sheet
-        # with no wires. A different symbol, and any device the read already
-        # wired, stays.
+        # with no wires. A different tag on the same box (M1-23 vs CR1-13) stays
+        # — merge separates those; do not collapse them here.
         if not is_wired_tag and raw_lid and any(
             prev.sheet_id == sid
             and prev.library_id == raw_lid
+            and prev.tag == raw_tag
             and abs(dx - prev.x) < 60.0
             and abs(dy - prev.y) < 40.0
             for prev in devices
@@ -895,6 +921,10 @@ def extract_import_from_to(
                     cand = f"{raw_tag}-95-{seq}"
                 unique_tag = cand
             elif unique_tag in sheet_used:
+                # A second coil of the same tag used to become M1_2 and then
+                # get invented rail wires. Drop it — facts only, no ghost coil.
+                if role == "control_output":
+                    continue
                 seq = 2
                 while f"{raw_tag}_{seq}" in sheet_used:
                     seq += 1
@@ -1291,11 +1321,49 @@ def _infer_sheet_control_rungs(
                 if not any(m.role == "control_output" for m in r["members"]):
                     continue
                 for m in r["members"]:
-                    if m.role == "control_contact" and abs(dev.x - m.x) <= 10.0 and 8.0 < (dev.y - m.y) <= 26.0:
+                    # Demo Controls seal-in sits ~36 mm under the start; keep the
+                    # branch on that rung so M1-13.4 can land on PB1.4 as 107.
+                    # Fuses drawn in a column are not seal-in parallels.
+                    if "fuse" in str(dev.library_id or "").lower() or "fuse" in str(m.library_id or "").lower():
+                        continue
+                    if m.role == "control_contact" and abs(dev.x - m.x) <= 10.0 and 8.0 < (dev.y - m.y) <= 40.0:
                         r["parallels"].append((dev, m))
                         attached_parallel = True
                         break
                 if attached_parallel:
+                    break
+        if (
+            not attached_parallel
+            and dev.role == "control_contact"
+            and "fuse" not in str(dev.library_id or "").lower()
+        ):
+            # OCR already tied this contact into a prior rung (PB2→M1-13.3) but
+            # the geometry sat just outside the band — still pin it under the
+            # same-x start contact on that peer rung. Never parallel a fuse/power
+            # device this way.
+            for r in reversed(rung_clusters):
+                peers = peer_adj.get(dev.tag, set())
+                if not peers or not any(m.tag in peers for m in r["members"]):
+                    continue
+                if not any(m.role == "control_output" for m in r["members"]):
+                    continue
+                parent_c = min(
+                    (
+                        m
+                        for m in r["members"]
+                        if m.role == "control_contact"
+                        and "fuse" not in str(m.library_id or "").lower()
+                    ),
+                    key=lambda m: abs(dev.x - m.x),
+                    default=None,
+                )
+                if (
+                    parent_c is not None
+                    and abs(dev.x - parent_c.x) <= 14.0
+                    and 8.0 < (dev.y - parent_c.y) <= 42.0
+                ):
+                    r["parallels"].append((dev, parent_c))
+                    attached_parallel = True
                     break
         if not attached_parallel:
             rung_clusters.append(
@@ -1319,11 +1387,21 @@ def _infer_sheet_control_rungs(
             cand = members[0]
             prev = cleaned_clusters[-1]
             parent_c = min(
-                (m for m in prev["members"] if m.role == "control_contact"),
+                (
+                    m
+                    for m in prev["members"]
+                    if m.role == "control_contact"
+                    and "fuse" not in str(m.library_id or "").lower()
+                ),
                 key=lambda m: abs(cand.x - m.x),
                 default=None,
             )
-            if parent_c is not None and abs(cand.x - parent_c.x) <= 14.0 and (cand.y - parent_c.y) <= 28.0:
+            if (
+                parent_c is not None
+                and "fuse" not in str(cand.library_id or "").lower()
+                and abs(cand.x - parent_c.x) <= 14.0
+                and (cand.y - parent_c.y) <= 42.0
+            ):
                 prev["parallels"].append((cand, parent_c))
                 continue
         cleaned_clusters.append(r)
@@ -1443,29 +1521,70 @@ def _infer_sheet_control_rungs(
             (p for p in first_dev.pins if p not in first_used),
             first_dev.pins[0] if first_dev.pins else "1",
         )
+        # A contact that already has OCR from/to on its pins must not get an
+        # invented hot-rail landing — that invents connections the reader never saw.
+        # Coils / pilots never invent a hot-rail landing either: CR1.A1 is fed by
+        # M1-23.4 as 109 on the print, not a direct L1→coil hop.
+        contact_has_ocr = first_dev.role == "control_contact" and bool(first_used)
+        coil_or_pilot = first_dev.role in {"control_output", "control_coil"} or any(
+            token in first_dev.library_id.lower()
+            for token in ("coil", ".relays.", "pilot", "light")
+        )
         if (
-            frozenset({rail_hot, first_dev.tag}) not in connected_endpoints
+            not contact_has_ocr
+            and not coil_or_pilot
+            and frozenset({rail_hot, first_dev.tag}) not in connected_endpoints
             and first_dev.tag not in device_has_left_wire
             and "offpage" not in first_dev.library_id.lower()
         ):
-            wnum, lconf = _match_wire_label(y_ref, 0.0, first_dev.x, rail_hot)
-            conf = round(min(first_dev.confidence, lconf if lconf is not None else 0.76), 3)
-            inferred.append(
-                ImportFromToRow(
-                    wire_number=wnum,
-                    from_tag=rail_hot,
-                    from_pin="",
-                    to_tag=first_dev.tag,
-                    to_pin=first_in_pin,
-                    sheet_id=sid,
-                    rung=rung_idx,
-                    confidence=conf,
-                    source="rung_inferred",
-                    needs_review=conf < confidence_threshold,
+            # Scan the hot-rail band first. Prefer a clear 102 (Demo Controls
+            # aux hot). Ambiguous OCR like 113 must not invent a landing —
+            # leftovers ask ``L1 as 102`` instead.
+            band_labels = []
+            for wl in wire_labels:
+                if wl.get("_used"):
+                    continue
+                number = str(wl.get("number") or "")
+                if not number.isdigit():
+                    continue
+                wx = float(wl["x"])
+                wy = float(wl["y"])
+                if not ((0.0 - 8.0) <= wx <= (first_dev.x + 8.0)):
+                    continue
+                if not any(-4.0 <= (wy - ya) <= 32.0 for ya in (y_ref, float(first_dev.y))):
+                    continue
+                band_labels.append(wl)
+            chosen = next((wl for wl in band_labels if str(wl.get("number")) == "102"), None)
+            invent = False
+            wnum = ""
+            lconf: float | None = None
+            if chosen is not None and first_dev.role == "control_contact":
+                invent = True
+                wnum = "102"
+                lconf = float(chosen.get("confidence", 0.72))
+                chosen["_used"] = True
+            elif band_labels:
+                # Contact with only junk/ambiguous marks nearby — abstain.
+                invent = False
+            # else: no label at all on a contact — also abstain (ask, don't invent).
+            if invent and wnum:
+                conf = round(min(first_dev.confidence, lconf if lconf is not None else 0.76), 3)
+                inferred.append(
+                    ImportFromToRow(
+                        wire_number=wnum,
+                        from_tag=rail_hot,
+                        from_pin="",
+                        to_tag=first_dev.tag,
+                        to_pin=first_in_pin,
+                        sheet_id=sid,
+                        rung=rung_idx,
+                        confidence=conf,
+                        source="rung_inferred",
+                        needs_review=conf < confidence_threshold,
+                    )
                 )
-            )
-            connected_endpoints.add(frozenset({rail_hot, first_dev.tag}))
-            device_has_left_wire.add(first_dev.tag)
+                connected_endpoints.add(frozenset({rail_hot, first_dev.tag}))
+                device_has_left_wire.add(first_dev.tag)
 
         wire_between: dict[tuple[str, str], str] = {}
         for i in range(len(ordered_chain) - 1):
@@ -1474,9 +1593,23 @@ def _infer_sheet_control_rungs(
             a_out = a_dev.pins[1] if len(a_dev.pins) >= 2 else (a_dev.pins[0] if a_dev.pins else "2")
             b_in = b_dev.pins[0] if b_dev.pins else "1"
             pair = frozenset({a_dev.tag, b_dev.tag})
+            # Never invent B-side strip daisies. A-side panel bonds come from
+            # shared wire_top OCR (202), already in existing_rows — do not
+            # invent a second series hop between terminals here.
+            if "terminal" in a_dev.library_id.lower() and "terminal" in b_dev.library_id.lower():
+                for ex in existing_rows:
+                    if frozenset({ex.from_tag, ex.to_tag}) == pair:
+                        wire_between[(a_dev.tag, b_dev.tag)] = ex.wire_number
+                        break
+                continue
+            # Facts-only: if OCR already left a_dev to the right, or already
+            # landed on b_dev from the left, do not invent a second series hop.
+            # That is what turned a collide-kept CR1-13 into a short across
+            # M1-23→PL1 (two_numbers) and later stripped M1-23 to unconnected.
             if (
                 pair in connected_endpoints
-                or (a_dev.tag in device_has_right_wire and b_dev.tag in device_has_left_wire)
+                or a_dev.tag in device_has_right_wire
+                or b_dev.tag in device_has_left_wire
                 or (a_dev.tag in device_has_right_wire and "offpage" in b_dev.library_id.lower())
                 or ("offpage" in a_dev.library_id.lower() and b_dev.tag in device_has_left_wire)
             ):
@@ -1515,12 +1648,20 @@ def _infer_sheet_control_rungs(
         )
         last_out_pin = next(
             (p for p in preferred_out if p not in last_used),
-            last_dev.pins[1] if len(last_dev.pins) >= 2 else (last_dev.pins[0] if last_dev.pins else "2"),
+            "",
+        )
+        # Never invent a return-to-rail for an aux/contact (or fuse classified
+        # as control_contact). When OCR already used every pin, do not invent a
+        # second landing that reuses a pin (M1-13.4→L2 after OCR M1-13.4→PB1.4).
+        skip_return = (
+            last_dev.role == "control_contact"
+            or not last_out_pin
+            or "offpage" in last_dev.library_id.lower()
         )
         if (
-            frozenset({last_dev.tag, rail_ret}) not in connected_endpoints
+            not skip_return
+            and frozenset({last_dev.tag, rail_ret}) not in connected_endpoints
             and last_dev.tag not in device_has_right_wire
-            and "offpage" not in last_dev.library_id.lower()
         ):
             wnum, lconf = _match_wire_label(
                 y_ref,
@@ -1563,7 +1704,12 @@ def _infer_sheet_control_rungs(
                 left_pin = prev_dev.pins[1] if len(prev_dev.pins) >= 2 else "2"
                 left_wnum = wire_between.get((prev_dev.tag, under_dev.tag), f"{seq_num}")
 
-            if frozenset({left_tag, par_dev.tag}) not in connected_endpoints:
+            left_is_hot = str(left_tag or "").upper() in _RAIL_HOT_TOKENS
+            par_ocr = bool(used_pins_by_tag.get(par_dev.tag))
+            if (
+                frozenset({left_tag, par_dev.tag}) not in connected_endpoints
+                and not (par_dev.role == "control_contact" and left_is_hot and par_ocr)
+            ):
                 inferred.append(
                     ImportFromToRow(
                         wire_number=left_wnum,
@@ -1582,17 +1728,43 @@ def _infer_sheet_control_rungs(
 
             if u_idx + 1 < len(ordered_chain):
                 next_dev = ordered_chain[u_idx + 1]
-                right_tag = next_dev.tag
-                right_pin = next_dev.pins[0] if next_dev.pins else "1"
-                right_wnum = wire_between.get((under_dev.tag, next_dev.tag), f"{seq_num}")
+                # Seal-in / parallel aux lands on the parent load pin (PB1.4),
+                # not on the next series device (M1.A1). Truth is
+                # M1-13.4→PB1.4 sharing 107 with PB1.4→M1.A1 — naming the
+                # coil end as the seal-in tip is a real from-to bug.
+                if par_dev.role == "control_contact" and under_dev.pins:
+                    parent_out = (
+                        under_dev.pins[1] if len(under_dev.pins) >= 2 else under_dev.pins[-1]
+                    )
+                    right_tag = under_dev.tag
+                    right_pin = parent_out
+                    right_wnum = wire_between.get(
+                        (under_dev.tag, next_dev.tag), f"{seq_num}"
+                    )
+                else:
+                    right_tag = next_dev.tag
+                    right_pin = next_dev.pins[0] if next_dev.pins else "1"
+                    right_wnum = wire_between.get((under_dev.tag, next_dev.tag), f"{seq_num}")
             else:
                 right_tag, right_pin, right_wnum = rail_ret, "", rail_ret
 
             # A contact that already leaves to another device is not a seal-in.
             # Inventing a second landing onto the coil draws two wires on one line.
+            # Never invent a return-rail landing for an aux contact.
+            # OCR often lands only the hot pin (M1-13.3→PB2.2); still close the
+            # free load pin onto the parent (M1-13.4→PB1.4 as 107).
+            right_is_return = str(right_tag or "").upper() in _RAIL_RET_TOKENS
+            par_used = used_pins_by_tag.get(par_dev.tag, set())
+            par_out_free = par_out not in par_used
             if (
                 frozenset({par_dev.tag, right_tag}) not in connected_endpoints
                 and par_dev.tag not in device_has_right_wire
+                and not (par_dev.role == "control_contact" and right_is_return)
+                and (
+                    par_out_free
+                    if par_dev.role == "control_contact" and right_tag == under_dev.tag
+                    else not (par_dev.role == "control_contact" and par_used)
+                )
             ):
                 inferred.append(
                     ImportFromToRow(
@@ -1609,6 +1781,7 @@ def _infer_sheet_control_rungs(
                     )
                 )
                 connected_endpoints.add(frozenset({par_dev.tag, right_tag}))
+                used_pins_by_tag.setdefault(par_dev.tag, set()).add(par_out)
 
     return inferred, rungs_meta
 
@@ -2161,8 +2334,11 @@ def synthesize_imported_ladder(
                 catalog=cat,
             )
 
-    # Ensure no duplicate wire numbers across disconnected nets (prevents wire_number_conflict errors)
-    from panelcad.core.wire_numbering import wire_networks
+    # Ensure no duplicate wire numbers across disconnected nets (prevents wire_number_conflict errors).
+    # Never invent a fresh number that destroys a printed rail feed (L1=102 / L2=104) —
+    # those sheet-line numbers legitimately appear on every landing of that rail and
+    # wire_networks already merges named rails into one conductor.
+    from panelcad.core.wire_numbering import wire_networks, _touches_rail
     used_net_numbers: dict[str, int] = {}
     for net_idx, items in enumerate(wire_networks(project, cat)):
         net_nums = {str(w.number or "").strip() for _sh, w in items if str(w.number or "").strip()}
@@ -2172,6 +2348,8 @@ def synthesize_imported_ladder(
                 used_net_numbers[num] = net_idx
             elif prev_owner != net_idx:
                 if num.startswith("?"):
+                    continue
+                if any(_touches_rail(sheet, project, wire) for sheet, wire in items):
                     continue
                 taken = set(used_net_numbers)
                 fresh = 100
@@ -2576,6 +2754,122 @@ def _build_clean_control_ladder_sheets(
                     kept[0] = (kept[0][0], kept[0][1], kept[0][2], list(kept[0][3]) + held_rows)
                 rung_groups = kept
 
+    # Keep one continuous terminal strip on a single sheet. Orphan X1-2/3/4
+    # groups (no A-side 202 yet, or B-only returns) must ride with the host
+    # strip group that already has X1-1 — never paginate onto page-2 as left
+    # contacts that "do not land on L1".
+    strip_tags = {
+        dev.tag
+        for group in rung_groups
+        for dev in group[2]
+        if "terminal" in (dev.library_id or "").lower() or re.match(r"^(TB|X)\d*(-\d+)?$", (dev.tag or "").upper())
+    }
+    if len(strip_tags) >= 2:
+        host = next(
+            (
+                group
+                for group in rung_groups
+                if any(dev.tag.upper() in {t.upper() for t in strip_tags} and ("-1" in dev.tag or dev.tag.upper().endswith("1")) for dev in group[2])
+            ),
+            next((group for group in rung_groups if any(dev.tag in strip_tags for dev in group[2])), None),
+        )
+        if host is not None:
+            kept = []
+            held_devs: list = []
+            held_rows: list[ImportFromToRow] = []
+            for group in rung_groups:
+                only_strip = group[2] and all(
+                    "terminal" in (dev.library_id or "").lower()
+                    or re.match(r"^(TB|X)\d*(-\d+)?$", (dev.tag or "").upper())
+                    for dev in group[2]
+                )
+                if only_strip and group is not host:
+                    held_devs.extend(group[2])
+                    held_rows.extend(group[3])
+                    continue
+                devices = list(group[2])
+                rows = list(group[3])
+                if group is host and held_devs:
+                    have = {dev.tag for dev in devices}
+                    devices.extend(dev for dev in held_devs if dev.tag not in have)
+                    rows.extend(held_rows)
+                    held_devs = []
+                    held_rows = []
+                kept.append((group[0], group[1], devices, rows))
+            if held_devs and kept:
+                # No host match — pin the strip onto the first control sheet.
+                have = {dev.tag for dev in kept[0][2]}
+                kept[0] = (
+                    kept[0][0],
+                    kept[0][1],
+                    list(kept[0][2]) + [dev for dev in held_devs if dev.tag not in have],
+                    list(kept[0][3]) + held_rows,
+                )
+            rung_groups = kept
+
+    # Pin a lone pilot/lamp (PL1) and the OCR-misread interlock (UA-22→M1-23)
+    # onto the sheet that holds CR1-13 so CR1-13.4 can offer PL1.X1 as 110 and
+    # M1-23.4 as 109. A PL1+UA-22 orphan rung used to paginate onto page-2 and
+    # block the cross-sheet connect.
+    def _pilot_or_orphan_interlock(dev: Any) -> bool:
+        lib = (dev.library_id or "").lower()
+        tag = (dev.tag or "").upper()
+        if "pilot" in lib or "light" in lib or re.match(r"^(LT|PL|HL|H)\d+$", tag):
+            return True
+        return tag in {"UA-22", "UA22", "1M", "M1-23"}
+
+    contact_host = next(
+        (
+            group
+            for group in rung_groups
+            if any(
+                re.match(r"^CR\d+-\d+$", (dev.tag or "").upper())
+                and "aux" in (dev.library_id or "")
+                for dev in group[2]
+            )
+        ),
+        next(
+            (
+                group
+                for group in rung_groups
+                if any(
+                    re.match(r"^(M|K)\d+-\d+$", (dev.tag or "").upper())
+                    and "aux" in (dev.library_id or "")
+                    for dev in group[2]
+                )
+            ),
+            None,
+        ),
+    )
+    if contact_host is not None:
+        kept = []
+        held_devs = []
+        held_rows: list[ImportFromToRow] = []
+        for group in rung_groups:
+            only_orphan = group[2] and all(_pilot_or_orphan_interlock(dev) for dev in group[2])
+            if only_orphan and group is not contact_host:
+                held_devs.extend(group[2])
+                held_rows.extend(group[3])
+                continue
+            devices = list(group[2])
+            rows = list(group[3])
+            if group is contact_host and held_devs:
+                have = {dev.tag for dev in devices}
+                devices.extend(dev for dev in held_devs if dev.tag not in have)
+                rows.extend(held_rows)
+                held_devs = []
+                held_rows = []
+            kept.append((group[0], group[1], devices, rows))
+        if held_devs and kept:
+            have = {dev.tag for dev in kept[0][2]}
+            kept[0] = (
+                kept[0][0],
+                kept[0][1],
+                list(kept[0][2]) + [dev for dev in held_devs if dev.tag not in have],
+                list(kept[0][3]) + held_rows,
+            )
+        rung_groups = kept
+
     rung_groups.sort(key=lambda item: (item[0], item[1]))
 
     # Paginate at max 5 rungs per sheet so lower rungs never enter the bottom-right title block (y >= 229.0)
@@ -2663,6 +2957,10 @@ def _layout_and_wire_control_sheet(
         outputs = sorted([d for d in c_devs if d.role == "control_output"], key=lambda d: (d.y, d.x))
         ol_contacts = sorted([d for d in c_devs if d.role == "control_ol_contact"], key=lambda d: d.x)
         contacts = sorted([d for d in c_devs if d.role == "control_contact"], key=lambda d: (d.x, d.y))
+        terminals = sorted(
+            [d for d in c_devs if d.role == "control_terminal"],
+            key=lambda d: (d.x, d.y),
+        )
 
         # Separate return-side overload contacts (connected to rail_ret or sitting to the right of outputs)
         ret_ol: list[ImportDeviceEntry] = []
@@ -2739,6 +3037,18 @@ def _layout_and_wire_control_sheet(
             comp = _make_synth_component(ol_d, cx, cy, catalog)
             sheet.components.append(comp)
             comp_by_tag[ol_d.tag] = comp
+
+        # Terminal strip: one right-hand column (panel A toward the rungs,
+        # field B toward L2). Never left-contact placement next to L1.
+        if terminals:
+            term_base_x = min(right_rail_x - 36.0, wx + ww - 40.0)
+            for t_idx, term_d in enumerate(terminals):
+                cy = (rung_y + (18.0 * t_idx)) - _default_pin_y(catalog, term_d.library_id)
+                comp = _make_synth_component(term_d, term_base_x, cy, catalog)
+                sheet.components.append(comp)
+                comp_by_tag[term_d.tag] = comp
+                if t_idx:
+                    has_subrow = True
 
         # Advance cur_y for next rung
         cur_y = rung_y + (44.0 if has_subrow else step_y)

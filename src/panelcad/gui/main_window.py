@@ -582,6 +582,7 @@ class MainWindow(QMainWindow):
         self.import_review.rerun_requested.connect(self._import_rerun)
         self.import_review.from_to_edited.connect(self._import_from_to_edited)
         self.import_review.rebuild_clean_ladder_requested.connect(self._import_rebuild_clean_ladder)
+        self.import_review.leftover_answer_requested.connect(self._import_leftover_answer)
         self._import_job = None
         # Print review stays closed until an import. Its crop panes are tall
         # enough to squeeze the sheet when the dock opens on an empty project.
@@ -3287,24 +3288,85 @@ class MainWindow(QMainWindow):
 
     def print_sheet(self) -> None:
         self.canvas.sync_positions()
-        from PySide6.QtPrintSupport import QPrintPreviewDialog, QPrinter
+        from PySide6.QtGui import QAction
+        from PySide6.QtPrintSupport import QPrintDialog, QPrintPreviewDialog, QPrinter
 
-        from panelcad.render.page import paint_project_on_device
+        from panelcad.render.page import (
+            apply_sheet_orientation,
+            configure_sheet_printer,
+            paint_project_on_device,
+            print_dialog_options,
+            sync_preview_orientation,
+        )
 
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+        n = len(self.session.project.sheets)
+        current = self.session.sheet_index() + 1
+        configure_sheet_printer(printer, n, current_page=current)
+        # Preview locks its page buffer from the printer before paintRequested.
+        # Set landscape/portrait from the first sheet up front so the buffer
+        # matches; otherwise fit math and the bitmap disagree and the sheet clips.
+        first = self.session.project.sheets[0]
+        fw, fh = first.page.dimensions()
+        apply_sheet_orientation(printer, fw, fh)
 
         def _paint(device) -> None:
+            # Fit each sheet into the printer page (paper, orientation, margins).
+            # Honor PageRange / CurrentPage from the print dialog.
             paint_project_on_device(
                 device,
                 self.session.project,
                 self.session.catalog,
                 base_dir=self.session.path.parent if self.session.path else None,
+                fit_to_page=True,
+                current_index=max(0, current - 1),
             )
 
-        n = len(self.session.project.sheets)
+        from panelcad.gui.screen_fit import fit_print_dialog
+
         preview = QPrintPreviewDialog(printer, self)
         preview.setWindowTitle(f"Print — {n} sheet{'s' if n != 1 else ''} with title blocks")
+        sync_preview_orientation(preview, fw, fh)
         preview.paintRequested.connect(_paint)
+        fit_print_dialog(preview)
+
+        def _polish_preview() -> None:
+            try:
+                from PySide6.QtPrintSupport import QPrintPreviewWidget
+
+                sync_preview_orientation(preview, fw, fh)
+                for widget in preview.findChildren(QPrintPreviewWidget):
+                    widget.setSinglePageViewMode()
+                    if hasattr(widget, "fitInView"):
+                        widget.fitInView()
+                    elif hasattr(widget, "fitToWidth"):
+                        widget.fitToWidth()
+            except Exception:
+                pass
+
+        from PySide6.QtCore import QTimer
+
+        QTimer.singleShot(0, _polish_preview)
+
+        def _print_with_range() -> None:
+            dialog = QPrintDialog(printer, preview)
+            dialog.setWindowTitle(preview.windowTitle())
+            dialog.setOptions(print_dialog_options())
+            dialog.setMinMax(1, n)
+            fit_print_dialog(dialog)
+            if dialog.exec() != QPrintDialog.DialogCode.Accepted:
+                return
+            _paint(printer)
+            preview.accept()
+
+        for action in preview.findChildren(QAction):
+            if action.text().replace("&", "").strip().lower() != "print":
+                continue
+            try:
+                action.triggered.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            action.triggered.connect(_print_with_range)
         preview.exec()
         self.canvas.refresh_frame()
         self.canvas.fit_page()
@@ -4267,6 +4329,7 @@ class MainWindow(QMainWindow):
                 self.import_review.set_from_to_schedule(job.from_to_schedule())
         except Exception:  # noqa: BLE001
             pass
+        self._refresh_leftover_questions()
 
     def _import_decision(self, item_id: str, action: str, text: str) -> None:
         job = getattr(self, "_import_job", None)
@@ -4334,10 +4397,53 @@ class MainWindow(QMainWindow):
                     pi = (self.session.project.properties or {}).get("print_import") or {}
                     if isinstance(pi.get("from_to_schedule"), dict):
                         self.import_review.set_from_to_schedule(pi["from_to_schedule"])
+                    self._refresh_leftover_questions()
         except Exception as exc:  # noqa: BLE001
             self._status(str(exc))
             return
         self._status("rebuilt clean ladder")
+
+    def _refresh_leftover_questions(self, *, status: str = "") -> None:
+        from panelcad.importer import leftover_questions as leftover
+
+        if self.session is None:
+            self.import_review.set_leftover_questions([], status=status)
+            return
+        try:
+            rows = leftover.questions_for(self.session)
+        except Exception as exc:  # noqa: BLE001
+            self.import_review.set_leftover_questions([], status=str(exc))
+            return
+        self.import_review.set_leftover_questions(rows, status=status)
+
+    def _import_leftover_answer(self, question_id: str, value: str) -> None:
+        from panelcad.importer import leftover_questions as leftover
+
+        if self.session is None:
+            self._status("no project is open")
+            return
+        try:
+            result = leftover.apply_answer(self.session, question_id, value)
+        except Exception as exc:  # noqa: BLE001
+            self._status(str(exc))
+            return
+        if self.session.path:
+            try:
+                self.session.save(self.session.path)
+            except Exception:  # noqa: BLE001
+                pass
+        self.canvas.reload()
+        self.bom.refresh()
+        self._check_runner.schedule()
+        status = ""
+        if result.get("error"):
+            status = str(result["error"])
+        elif result.get("issued"):
+            status = "Sheet issued after leftover answer."
+        elif result.get("reason"):
+            status = str(result["reason"])
+        self._refresh_leftover_questions(status=status)
+        self._status(f"leftover answer {question_id}")
 
     def import_any(self) -> None:
         path, _ = QFileDialog.getOpenFileName(

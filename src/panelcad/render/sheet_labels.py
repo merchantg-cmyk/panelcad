@@ -260,8 +260,59 @@ def _place_device_tags(
         layout = device_ref_layout(device, comp, ref_align=align)
         if layout is not None:
             layouts[comp.id] = layout
+
+    def _flip_aux_off_conductors(
+        current: dict[str, tuple[float, float, str, float]],
+    ) -> dict[str, tuple[float, float, str, float]]:
+        """Park aux tags under the body; flip above when that seat hits a conductor.
+
+        Ladder returns early below, so this must run before that return — otherwise
+        wire 109 through the below-body "M1-13" tag is never corrected.
+        """
+
+        try:
+            geom = [box for _name, box in sheet_conductor_boxes(sheet, catalog, project)]
+        except (KeyError, ValueError, IndexError):
+            return current
+        if not geom:
+            return current
+        for comp in sheet.components:
+            layout = current.get(comp.id)
+            if layout is None:
+                continue
+            if not (is_aux_library(comp.library_id) or comp.properties.get("tag_below")):
+                continue
+            label = comp.id
+            if project is not None:
+                from panelcad.core.panels import schematic_tag_text
+
+                label = schematic_tag_text(project, sheet, comp)
+            box = text_box(layout[0], layout[1], label, layout[3], layout[2])
+            if box is None:
+                continue
+            if not any(boxes_overlap(box, obstacle, pad=TAG_SIZE) for obstacle in geom):
+                continue
+            device = devices.get(comp.id)
+            if device is None:
+                continue
+            scale = comp.visual_scale()
+            size = float(layout[3])
+            above = (
+                comp.x + float(device.schematic_width) * scale * 0.5,
+                float(comp.y) - 2.5 * scale,
+                "middle",
+                size,
+            )
+            above_box = text_box(above[0], above[1], label, size, "middle")
+            if above_box is None:
+                continue
+            if any(boxes_overlap(above_box, obstacle, pad=TAG_SIZE) for obstacle in geom):
+                continue
+            current[comp.id] = above
+        return current
+
     if ladder or sheet.kind != "schematic":
-        return layouts
+        return _flip_aux_off_conductors(layouts)
 
     try:
         routes = route_sheet_wires(sheet, catalog, project=project)
@@ -378,11 +429,35 @@ def _place_device_tags(
     for comp in order:
         label = _label(comp)
         layout = layouts.get(comp.id)
-        if layout is None or layout[2] != "start":
-            if layout is not None:
-                box = text_box(layout[0], layout[1], label, layout[3], layout[2])
-                if box is not None:
-                    taken.append(box)
+        if layout is None:
+            continue
+        # Aux / tag_below parks under the body. When that seat sits on a
+        # conductor (109 through M1-13), flip the tag above the symbol.
+        if layout[2] != "start":
+            box = text_box(layout[0], layout[1], label, layout[3], layout[2])
+            if box is not None and (
+                is_aux_library(comp.library_id) or comp.properties.get("tag_below")
+            ):
+                hits_wire = any(boxes_overlap(box, obstacle, pad=TAG_SIZE) for obstacle in geom)
+                if hits_wire:
+                    device = devices.get(comp.id)
+                    scale = comp.visual_scale()
+                    size = float(layout[3])
+                    if device is not None:
+                        above = (
+                            comp.x + float(device.schematic_width) * scale * 0.5,
+                            float(comp.y) - 2.5 * scale,
+                            "middle",
+                            size,
+                        )
+                        above_box = text_box(above[0], above[1], label, size, "middle")
+                        if above_box is not None and not any(
+                            boxes_overlap(above_box, obstacle, pad=TAG_SIZE) for obstacle in geom
+                        ):
+                            layouts[comp.id] = above
+                            box = above_box
+            if box is not None:
+                taken.append(box)
             continue
         if int(comp.rotation or 0) % 360 != 0 or comp.mirror:
             box = text_box(layout[0], layout[1], label, layout[3], layout[2])

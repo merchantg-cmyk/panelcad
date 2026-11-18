@@ -10,7 +10,10 @@ from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -19,6 +22,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSplitter,
     QTableWidget,
@@ -100,11 +104,15 @@ class ImportReviewPanel(QWidget):
     rerun_requested = Signal(str, str)
     from_to_edited = Signal(list)
     rebuild_clean_ladder_requested = Signal(str)
+    leftover_answer_requested = Signal(str, str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._items: list[dict] = []
         self._index = -1
+        self._leftovers: list[dict] = []
+        self._leftover_index = -1
+        self._leftover_choice_buttons: list[QPushButton] = []
 
         self.caption = QLabel("Print review")
         self.caption.setStyleSheet("font-weight: 600;")
@@ -227,8 +235,10 @@ class ImportReviewPanel(QWidget):
 
         self.layout_mode_combo = QComboBox()
         self.layout_mode_combo.setObjectName("importLayoutModeCombo")
-        self.layout_mode_combo.addItem("Preserve Scan Positions", "preserve")
+        # Ladder is the scan default; preserve stays selectable but cannot issue.
         self.layout_mode_combo.addItem("Clean NEMA Ladder", "ladder")
+        self.layout_mode_combo.addItem("Preserve Scan Positions", "preserve")
+        self.layout_mode_combo.setCurrentIndex(0)
         self.rebuild_clean_ladder_button = QPushButton("Rebuild Clean Ladder")
         self.rebuild_clean_ladder_button.setObjectName("rebuildCleanLadderButton")
         self.rebuild_clean_ladder_button.clicked.connect(self._on_rebuild_clean_ladder_clicked)
@@ -277,10 +287,104 @@ class ImportReviewPanel(QWidget):
         ft_lay.addWidget(self.from_to_table, 1)
         ft_lay.addWidget(ft_btn_row, 0)
 
+        self.leftover_list = QListWidget()
+        self.leftover_list.setObjectName("leftoverQuestionsList")
+        self.leftover_list.setTextElideMode(Qt.TextElideMode.ElideNone)
+        self.leftover_list.setWordWrap(True)
+        self.leftover_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.leftover_list.setMinimumHeight(56)
+        self.leftover_list.setMaximumHeight(84)
+        self.leftover_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.leftover_list.currentRowChanged.connect(self._show_leftover)
+        self.leftover_list.itemDoubleClicked.connect(lambda *_: self._open_leftover_dialog())
+        self.leftover_kind = QLabel("")
+        self.leftover_kind.setObjectName("leftoverQuestionKind")
+        self.leftover_kind.setWordWrap(True)
+        self.leftover_detail = QLabel("No leftover questions. Rebuild a scan to list blockers.")
+        self.leftover_detail.setObjectName("leftoverQuestionDetail")
+        self.leftover_detail.setWordWrap(True)
+        self.leftover_detail.setMinimumWidth(280)
+        self.leftover_status = QLabel("")
+        self.leftover_status.setObjectName("leftoverQuestionStatus")
+        self.leftover_status.setWordWrap(True)
+        self.leftover_choices = QWidget()
+        self.leftover_choices.setObjectName("leftoverChoiceButtons")
+        self.leftover_choices_lay = QGridLayout(self.leftover_choices)
+        self.leftover_choices_lay.setContentsMargins(0, 0, 0, 0)
+        self.leftover_choices_lay.setHorizontalSpacing(8)
+        self.leftover_choices_lay.setVerticalSpacing(8)
+        self.leftover_edit = QLineEdit()
+        self.leftover_edit.setObjectName("leftoverTypedAnswer")
+        self.leftover_edit.setPlaceholderText("Typed value (fallback)")
+        self.leftover_edit.setMinimumHeight(32)
+        self.leftover_apply = QPushButton("Apply typed answer")
+        self.leftover_apply.setObjectName("leftoverApplyTyped")
+        self.leftover_apply.setMinimumHeight(36)
+        self.leftover_apply.clicked.connect(self._apply_leftover_typed)
+        self.leftover_open = QPushButton("Answer in dialog…")
+        self.leftover_open.setObjectName("leftoverOpenDialog")
+        self.leftover_open.setMinimumHeight(36)
+        self.leftover_open.clicked.connect(self._open_leftover_dialog)
+        typed_row = QHBoxLayout()
+        typed_row.addWidget(self.leftover_edit, 1)
+        typed_row.addWidget(self.leftover_apply)
+        typed_row.addWidget(self.leftover_open)
+        self.leftover_scan = QLabel("No scan crop")
+        self.leftover_scan.setObjectName("leftoverScanCrop")
+        self.leftover_scan.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.leftover_scan.setMinimumSize(220, 120)
+        self.leftover_scan.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.leftover_sheet = QLabel("No sheet crop")
+        self.leftover_sheet.setObjectName("leftoverSheetCrop")
+        self.leftover_sheet.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.leftover_sheet.setMinimumSize(220, 120)
+        self.leftover_sheet.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        leftover_pics = QHBoxLayout()
+        scan_col = QWidget()
+        scan_lay = QVBoxLayout(scan_col)
+        scan_lay.setContentsMargins(0, 0, 0, 0)
+        scan_lay.addWidget(QLabel("Original scan crop"))
+        scan_lay.addWidget(self.leftover_scan, stretch=1)
+        sheet_col = QWidget()
+        sheet_lay = QVBoxLayout(sheet_col)
+        sheet_lay.setContentsMargins(0, 0, 0, 0)
+        sheet_lay.addWidget(QLabel("Rebuilt sheet highlight"))
+        sheet_lay.addWidget(self.leftover_sheet, stretch=1)
+        leftover_pics.addWidget(scan_col, stretch=1)
+        leftover_pics.addWidget(sheet_col, stretch=1)
+        detail_body = QWidget()
+        detail_lay = QVBoxLayout(detail_body)
+        detail_lay.setContentsMargins(4, 4, 4, 4)
+        detail_lay.setSpacing(8)
+        detail_lay.addWidget(self.leftover_kind)
+        detail_lay.addWidget(self.leftover_detail)
+        # Crops before the choice grid so evidence stays above the fold.
+        detail_lay.addLayout(leftover_pics, stretch=1)
+        detail_lay.addWidget(self.leftover_choices)
+        detail_lay.addLayout(typed_row)
+        detail_lay.addWidget(self.leftover_status)
+        leftover_scroll = QScrollArea()
+        leftover_scroll.setObjectName("leftoverQuestionsScroll")
+        leftover_scroll.setWidgetResizable(True)
+        leftover_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        leftover_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        leftover_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        leftover_scroll.setWidget(detail_body)
+        leftover_scroll.setMinimumHeight(160)
+        self.leftover_tab = QWidget()
+        self.leftover_tab.setObjectName("leftoverQuestionsTab")
+        leftover_tab_lay = QVBoxLayout(self.leftover_tab)
+        leftover_tab_lay.setContentsMargins(4, 4, 4, 4)
+        leftover_tab_lay.setSpacing(4)
+        leftover_tab_lay.addWidget(self.leftover_list, 0)
+        leftover_tab_lay.addWidget(leftover_scroll, 1)
+
         self.tabs = QTabWidget()
         self.tabs.addTab(review, "Review")
         self.tabs.addTab(self.from_to_tab, "From-To Wire Schedule")
+        self.tabs.addTab(self.leftover_tab, "Leftover questions (0)")
         self.tabs.addTab(diagnostics, "Diagnostics")
+        self._leftover_tab_index = 2
         self._diag: dict = {}
         self._diag_items: list[dict] = []
 
@@ -306,6 +410,16 @@ class ImportReviewPanel(QWidget):
         )
         self.diag_crop.setStyleSheet(
             f"background: {panel}; color: {text}; border: 1px solid {border};"
+        )
+        self.leftover_scan.setStyleSheet(
+            f"background: {panel}; color: {text}; border: 1px solid {border};"
+        )
+        self.leftover_sheet.setStyleSheet(
+            f"background: {field}; color: {text}; border: 1px solid {border};"
+        )
+        self._leftover_btn_style = (
+            f"QPushButton {{ color: {text}; background: {field}; border: 1px solid {border}; "
+            f"padding: 8px 14px; min-height: 36px; }}"
         )
 
     def set_items(self, items: list[dict]) -> None:
@@ -604,7 +718,7 @@ class ImportReviewPanel(QWidget):
 
     def layout_mode(self) -> str:
         data = self.layout_mode_combo.currentData()
-        return str(data or "preserve")
+        return str(data or "ladder")
 
     def set_layout_mode(self, mode: str) -> None:
         norm = "ladder" if str(mode or "").strip().lower() in {"ladder", "clean_ladder", "clean"} else "preserve"
@@ -813,3 +927,189 @@ class ImportReviewPanel(QWidget):
         if rows:
             self.from_to_edited.emit(rows)
         self.rebuild_clean_ladder_requested.emit("ladder")
+
+    def set_leftover_questions(self, rows: list[dict] | None, *, status: str = "") -> None:
+        """Populate the leftover-questions tab after cleanup / challenge."""
+
+        from panelcad.importer.leftover_questions import kind_label
+
+        self._leftovers = [dict(row) for row in (rows or []) if isinstance(row, dict)]
+        self.leftover_list.clear()
+        for row in self._leftovers:
+            label_kind = str(row.get("kind_label") or kind_label(str(row.get("kind") or "")))
+            ref = str(row.get("ref") or row.get("tag") or row.get("wire_id") or "").strip()
+            question = str(row.get("question") or "").strip()
+            title = f"{label_kind}" + (f" — {ref}" if ref else "")
+            item = QListWidgetItem(title)
+            item.setToolTip(question or title)
+            self.leftover_list.addItem(item)
+        title = f"Leftover questions ({len(self._leftovers)})"
+        self.tabs.setTabText(self._leftover_tab_index, title)
+        if status:
+            self.leftover_status.setText(status)
+        elif not self._leftovers:
+            self.leftover_status.setText("No open leftover questions.")
+            self.leftover_kind.setText("")
+            self.leftover_detail.setText("No leftover questions. Rebuild a scan to list blockers.")
+            self.leftover_scan.setPixmap(QPixmap())
+            self.leftover_scan.setText("No scan crop")
+            self.leftover_sheet.setPixmap(QPixmap())
+            self.leftover_sheet.setText("No sheet crop")
+            self._clear_leftover_choices()
+        if self._leftovers:
+            self.leftover_list.setCurrentRow(0)
+            self.tabs.setCurrentIndex(self._leftover_tab_index)
+
+    def leftover_questions(self) -> list[dict]:
+        return list(self._leftovers)
+
+    def _show_leftover(self, row: int) -> None:
+        from panelcad.importer.leftover_questions import kind_label
+
+        self._leftover_index = row
+        self._clear_leftover_choices()
+        self.leftover_edit.clear()
+        if row < 0 or row >= len(self._leftovers):
+            self.leftover_kind.setText("")
+            return
+        item = self._leftovers[row]
+        label_kind = str(item.get("kind_label") or kind_label(str(item.get("kind") or "")))
+        self.leftover_kind.setText(label_kind)
+        self.leftover_detail.setText(str(item.get("question") or ""))
+        self._set_crop_label(self.leftover_scan, str(item.get("scan_crop") or ""), "No scan crop")
+        self._set_crop_label(self.leftover_sheet, str(item.get("sheet_crop") or ""), "No sheet crop")
+        self._fill_leftover_choice_grid(item.get("choices") or [], self.leftover_choices_lay)
+
+    def _fill_leftover_choice_grid(self, choices: list, layout: QGridLayout) -> None:
+        columns = 3
+        for index, choice in enumerate(choices):
+            text = str(choice)
+            button = QPushButton(text)
+            button.setMinimumHeight(40)
+            button.setMinimumWidth(max(96, 10 * len(text) + 24))
+            button.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
+            button.setObjectName("leftoverChoice")
+            if getattr(self, "_leftover_btn_style", ""):
+                button.setStyleSheet(self._leftover_btn_style)
+            button.clicked.connect(lambda _checked=False, value=text: self._emit_leftover(value))
+            layout.addWidget(button, index // columns, index % columns)
+            self._leftover_choice_buttons.append(button)
+
+    def _clear_leftover_choices(self) -> None:
+        while self.leftover_choices_lay.count():
+            taken = self.leftover_choices_lay.takeAt(0)
+            widget = taken.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self._leftover_choice_buttons = []
+
+    def _set_crop_label(self, label: QLabel, path: str, empty: str) -> None:
+        if path and Path(path).is_file():
+            pix = QPixmap(path)
+            if not pix.isNull():
+                target_w = max(220, label.width() or 280)
+                target_h = max(120, label.height() or 160)
+                label.setPixmap(
+                    pix.scaled(
+                        target_w,
+                        target_h,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                )
+                label.setText("")
+                return
+        label.setPixmap(QPixmap())
+        label.setText(empty)
+
+    def _emit_leftover(self, value: str) -> None:
+        if self._leftover_index < 0 or self._leftover_index >= len(self._leftovers):
+            return
+        question_id = str(self._leftovers[self._leftover_index].get("id") or "")
+        if question_id and value:
+            self.leftover_answer_requested.emit(question_id, value)
+
+    def _apply_leftover_typed(self) -> None:
+        text = self.leftover_edit.text().strip()
+        if text:
+            self._emit_leftover(text)
+
+    def _open_leftover_dialog(self) -> None:
+        """Full-size answer dialog when the Print review dock is too short."""
+
+        from panelcad.importer.leftover_questions import kind_label
+
+        if self._leftover_index < 0 or self._leftover_index >= len(self._leftovers):
+            return
+        item = self._leftovers[self._leftover_index]
+        dialog = QDialog(self)
+        dialog.setObjectName("leftoverAnswerDialog")
+        dialog.setWindowTitle("Leftover question")
+        dialog.resize(720, 520)
+        root = QVBoxLayout(dialog)
+        kind = QLabel(str(item.get("kind_label") or kind_label(str(item.get("kind") or ""))))
+        kind.setWordWrap(True)
+        question = QLabel(str(item.get("question") or ""))
+        question.setObjectName("leftoverDialogQuestion")
+        question.setWordWrap(True)
+        root.addWidget(kind)
+        root.addWidget(question)
+        choices_host = QWidget()
+        choices_lay = QGridLayout(choices_host)
+        choices_lay.setHorizontalSpacing(8)
+        choices_lay.setVerticalSpacing(8)
+        chosen: list[str] = []
+
+        def pick(value: str) -> None:
+            chosen.append(value)
+            dialog.accept()
+
+        columns = 3
+        for index, choice in enumerate(item.get("choices") or []):
+            text = str(choice)
+            button = QPushButton(text)
+            button.setObjectName("leftoverChoice")
+            button.setMinimumHeight(40)
+            button.setMinimumWidth(max(96, 10 * len(text) + 24))
+            if getattr(self, "_leftover_btn_style", ""):
+                button.setStyleSheet(self._leftover_btn_style)
+            button.clicked.connect(lambda _checked=False, value=text: pick(value))
+            choices_lay.addWidget(button, index // columns, index % columns)
+        root.addWidget(choices_host)
+        typed = QLineEdit()
+        typed.setObjectName("leftoverTypedAnswer")
+        typed.setPlaceholderText("Typed value (fallback)")
+        typed.setMinimumHeight(32)
+        root.addWidget(typed)
+        pics = QHBoxLayout()
+        scan = QLabel("No scan crop")
+        scan.setObjectName("leftoverScanCrop")
+        scan.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        scan.setMinimumSize(280, 160)
+        sheet = QLabel("No sheet crop")
+        sheet.setObjectName("leftoverSheetCrop")
+        sheet.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sheet.setMinimumSize(280, 160)
+        if getattr(self, "_leftover_btn_style", ""):
+            # Reuse crop border colours from the panel theme.
+            scan.setStyleSheet(self.leftover_scan.styleSheet())
+            sheet.setStyleSheet(self.leftover_sheet.styleSheet())
+        self._set_crop_label(scan, str(item.get("scan_crop") or ""), "No scan crop")
+        self._set_crop_label(sheet, str(item.get("sheet_crop") or ""), "No sheet crop")
+        scan_box = QVBoxLayout()
+        scan_box.addWidget(QLabel("Original scan crop"))
+        scan_box.addWidget(scan, stretch=1)
+        sheet_box = QVBoxLayout()
+        sheet_box.addWidget(QLabel("Rebuilt sheet highlight"))
+        sheet_box.addWidget(sheet, stretch=1)
+        pics.addLayout(scan_box, 1)
+        pics.addLayout(sheet_box, 1)
+        root.addLayout(pics, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Ok)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        root.addWidget(buttons)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            value = chosen[0] if chosen else typed.text().strip()
+            if value:
+                self._emit_leftover(value)

@@ -777,6 +777,11 @@ def is_device_tag(text: str, catalog: Any = None) -> bool:
         return False
     if is_nema_line_ref(token) or is_cross_ref(token) or LEAD_WIRE_RE.match(token) or BUS_WIRE_RE.match(token):
         return False
+    # Bare X1/X2 on a transformer secondary are pin callouts, not device tags.
+    # Do not reject H1–H4 here — those are legitimate heater/lamp tags (DOL H1/H2).
+    # ``X1-1`` stays a terminal tag via contact_tag_parts below.
+    if re.fullmatch(r"X[12]", token):
+        return False
     if token in _BARE_DEVICE_TAGS or is_plc_address(token):
         return True
     # 221MM is a dimension, not a device.

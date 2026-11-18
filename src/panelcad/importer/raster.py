@@ -98,21 +98,31 @@ def prepare_opencv(image: Image.Image) -> tuple[Image.Image, dict[str, float]]:
 
 
 def _upscale_low_res(image: Image.Image, width_mm: float, height_mm: float) -> Image.Image:
-    """Enlarge a coarse scan so tags are large enough to read.
+    """Normalize scan pixel density into the band the symbol reader expects.
 
     The sheet stays the same millimetres. Only the working pixels change.
-    A page that is already about 140 dpi or finer is left alone.
+    Coarse scans (< ~140 dpi) are enlarged toward ~200 dpi. Very fine scans
+    (clean_300 at ~300 dpi) are reduced toward ~200 dpi — leaving them alone
+    missed OL1 / M1-23 while dpi_150 at the working density found both.
     """
 
     if width_mm <= 1 or height_mm <= 1:
         return image
     ppm = image.width / width_mm
-    floor = 140.0 / 25.4
-    if ppm >= floor or ppm <= 0:
+    if ppm <= 0:
         return image
+    floor = 140.0 / 25.4
+    ceiling = 220.0 / 25.4
     target = 200.0 / 25.4
-    scale = min(3.0, target / ppm)
-    if scale < 1.08:
+    if ppm < floor:
+        scale = min(3.0, target / ppm)
+        if scale < 1.08:
+            return image
+    elif ppm > ceiling:
+        scale = target / ppm
+        if scale > 0.92:
+            return image
+    else:
         return image
     width = max(1, int(round(image.width * scale)))
     height = max(1, int(round(image.height * scale)))
@@ -122,32 +132,35 @@ def _upscale_low_res(image: Image.Image, width_mm: float, height_mm: float) -> I
 
 
 def _strip_number_wires(devices: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Join blocks that show the same read number on the same side.
+    """Join A-side panel bonds from a shared ``wire_top`` number only.
 
-    ``?`` is not a number, so an unreadable side does not invent a net.
+    Demo Controls bonds X1-2.A–X1-3.A / X1-2.A–X1-4.A as 202. Distinct
+    ``wire_bottom`` digits (301–304) are each block's own B→L2 return — never
+    daisy-chain those. Digits stay on the device dicts either way.
     """
 
-    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    groups: dict[str, list[dict[str, Any]]] = {}
     for device in devices:
-        for side, pin in (("wire_top", "A"), ("wire_bottom", "B")):
-            number = str(device.get(side) or "")
-            if not number.isdigit():
-                continue
-            groups.setdefault((side, number), []).append(device)
+        number = str(device.get("wire_top") or "").strip()
+        if not number.isdigit():
+            continue
+        groups.setdefault(number, []).append(device)
     wires: list[dict[str, Any]] = []
-    for (side, number), group in groups.items():
+    for number, group in groups.items():
         if len(group) < 2:
             continue
-        pin = "A" if side == "wire_top" else "B"
         ordered = sorted(group, key=lambda item: float(item.get("x") or 0))
-        for left, right in zip(ordered, ordered[1:]):
+        # Star from the left-most block so X1-2.A→X1-3.A and X1-2.A→X1-4.A
+        # both land when three blocks share 202 (matches the print).
+        hub = ordered[0]
+        for other in ordered[1:]:
             wires.append(
                 {
                     "number": number,
-                    "from_tag": left["tag"],
-                    "from_pin": pin,
-                    "to_tag": right["tag"],
-                    "to_pin": pin,
+                    "from_tag": hub["tag"],
+                    "from_pin": "A",
+                    "to_tag": other["tag"],
+                    "to_pin": "A",
                     "confidence": 0.6,
                     "unreadable": False,
                     "ambiguous": False,
@@ -224,7 +237,10 @@ def read_pixels(
         for tok in labeled["tags"]
     ]
     devices.extend(_coils_from_ink(gray, binary, devices, ppm, catalog, standard))
+    devices.extend(_fuses_from_ink(gray, match_ink, devices, ppm, catalog, standard))
     _land_body_symbols(binary, devices, ppm, catalog, standard)
+    _mark_secondary_fuses(devices)
+    _drop_ocr_ghosts_on_transformers(devices)
     _sibling_terminal_captions(gray, devices, ppm, catalog)
     _mark_caption_tags(devices, tokens)
     # Rotation first, so the trace sees line pins on the bus side. Spread after
@@ -238,10 +254,24 @@ def read_pixels(
 
     strip_devices = read_terminal_strip(gray, rgb, ppm)
     known = {str(device.get("tag") or "") for device in devices}
+    by_tag = {str(device.get("tag") or ""): device for device in devices if device.get("tag")}
     for device in strip_devices:
-        if device["tag"] not in known:
+        tag = str(device.get("tag") or "")
+        existing = by_tag.get(tag)
+        if existing is not None:
+            # Keep strip OCR marks on the already-detected symbol so leftovers
+            # can ask B→L2 with the printed number (not invent a daisy chain).
+            for key in ("wire_top", "wire_bottom", "ground", "strip_index"):
+                value = device.get(key)
+                if value in (None, "", "?"):
+                    continue
+                if existing.get(key) in (None, "", "?"):
+                    existing[key] = value
+            continue
+        if tag and tag not in known:
             devices.append(device)
-            known.add(device["tag"])
+            known.add(tag)
+            by_tag[tag] = device
     wires.extend(_strip_number_wires(strip_devices))
     title = read_title_block(tokens, height_mm)
     if not ocr_skipped and not str(title.get("sheet_number") or "").strip() and not title.get("sheet_number_needs_info"):
@@ -1880,7 +1910,8 @@ def _land_body_symbols(
     token = str(standard or "").upper()
     for device in catalog.devices.values():
         lib = str(device.library_id)
-        if not lib.endswith(("pb_no", "pb_nc", "ol_contact")):
+        # Pilot lights sit next to their PL* caption the same way a PB does.
+        if not lib.endswith(("pb_no", "pb_nc", "ol_contact", "pilot_light")) and "pilot" not in lib:
             continue
         if "NEMA" in token or "ANSI" in token or "JIC" in token:
             if not lib.startswith("nema."):
@@ -1934,6 +1965,30 @@ def _land_body_symbols(
                 nearest_d = dist
                 nearest_i = index
         if nearest is None:
+            # Overload ink beside the coil with no usable caption: still place OL1.
+            if (
+                "ol_contact" in part.library_id.lower()
+                and not any(str(d.get("tag") or "").upper().startswith("OL") for d in devices)
+                and not any(
+                    d.get("library_id")
+                    and "ol_contact" in str(d.get("library_id") or "").lower()
+                    for d in devices
+                )
+            ):
+                devices.append(
+                    {
+                        "tag": "OL1",
+                        "library_id": part.library_id,
+                        "x": round(ox, 2),
+                        "y": round(oy, 2),
+                        "type": shape_class(part),
+                        "symbol": shape_class(part),
+                        "pin_frame": "schematic",
+                        "source": "symbol",
+                        "unconfirmed": False,
+                        "confidence": round(min(0.9, score), 2),
+                    }
+                )
             continue
         nearest["library_id"] = part.library_id
         nearest["x"] = round(ox, 2)
@@ -1946,7 +2001,19 @@ def _land_body_symbols(
         nearest["confidence"] = round(min(0.9, score), 2)
         prefix = tag_prefix(str(nearest.get("tag") or ""))
         ref = str(getattr(part, "ref_prefix", "") or "").upper()
-        if ref and prefix and prefix != ref:
+        # Electrical OCR often misreads OL1 as T70/T7O next to the coil. When the
+        # ink matched an OL contact and no OL* tag is already placed, recover OL1.
+        if (
+            "ol_contact" in part.library_id.lower()
+            and ref == "OL"
+            and prefix != "OL"
+            and not any(str(d.get("tag") or "").upper().startswith("OL") for d in devices if d is not nearest)
+        ):
+            nearest["tag"] = "OL1"
+            nearest["guess"] = False
+            nearest["needs_review"] = False
+            nearest.pop("review_note", None)
+        elif ref and prefix and prefix != ref:
             nearest["guess"] = True
             nearest["needs_review"] = True
             nearest["review_note"] = "the letters do not match the symbol prefix"
@@ -2045,6 +2112,313 @@ def _sibling_terminal_captions(
                     }
                 )
                 taken.add(tag)
+
+
+def _fuse_catalog_parts(catalog: Any, standard: str) -> list[Any]:
+    """NEMA/IEC fuse library rows used for ink template search."""
+
+    token = str(standard or "").upper()
+    parts = []
+    for device in catalog.devices.values():
+        lib = str(device.library_id or "").lower()
+        if "fuse" not in lib:
+            continue
+        if "NEMA" in token or "ANSI" in token or "JIC" in token or "NFPA" in token:
+            if not lib.startswith("nema."):
+                continue
+        elif token == "IEC" and not lib.startswith("iec."):
+            continue
+        parts.append(device)
+    return parts
+
+
+def _mark_secondary_fuses(devices: list[dict[str, Any]]) -> None:
+    """Tag fuses sitting on the transformer secondary (right of T*) as secondary_fuse."""
+
+    transformers = [
+        d
+        for d in devices
+        if d.get("library_id")
+        and "transformer" in str(d.get("library_id") or "").lower()
+    ]
+    if not transformers:
+        return
+    for fuse in devices:
+        lib = str(fuse.get("library_id") or "").lower()
+        if "fuse" not in lib:
+            continue
+        fx = float(fuse.get("x") or 0)
+        fy = float(fuse.get("y") or 0)
+        host = min(
+            transformers,
+            key=lambda t: abs(float(t.get("x") or 0) - fx) + abs(float(t.get("y") or 0) - fy),
+        )
+        if fx >= float(host.get("x") or 0) - 1.0:
+            props = fuse.get("properties") if isinstance(fuse.get("properties"), dict) else {}
+            props = dict(props or {})
+            props["role"] = "secondary_fuse"
+            # Rail-side pin feeds L1 — never inherit a reader open-stub stamp that
+            # would hide the secondary "L1 as 102" leftover.
+            props.pop("print_open_stubs", None)
+            fuse["properties"] = props
+            fuse["role"] = "secondary_fuse"
+            if isinstance(fuse.get("open_stubs"), list):
+                fuse["open_stubs"] = []
+
+
+def _drop_ocr_ghosts_on_transformers(devices: list[dict[str, Any]]) -> None:
+    """Drop unconfirmed OCR tags that sit on a transformer body (H/X pin misreads).
+
+    Facts only: a caption that did not match a symbol and lands inside T1 is not
+    a second M1/1M device. Keeping it let stitch inherit the coil library onto the
+    ghost and demote the real coil.
+    """
+
+    hosts = [
+        d
+        for d in devices
+        if d.get("library_id")
+        and (
+            "transformer" in str(d.get("library_id") or "").lower()
+            or "ol_contact" in str(d.get("library_id") or "").lower()
+        )
+    ]
+    if not hosts:
+        return
+    kept: list[dict[str, Any]] = []
+    for device in devices:
+        lib = str(device.get("library_id") or "")
+        source = str(device.get("source") or "")
+        if lib or source in {"symbol", "vector"}:
+            kept.append(device)
+            continue
+        if not (device.get("unconfirmed") or source == "ocr" or device.get("guess")):
+            kept.append(device)
+            continue
+        x = float(device.get("x") or 0)
+        y = float(device.get("y") or 0)
+        on_body = False
+        for host in hosts:
+            hx = float(host.get("x") or 0)
+            hy = float(host.get("y") or 0)
+            host_lib = str(host.get("library_id") or "").lower()
+            # Control transformer footprint is ~40×50 mm; pad for pin callouts.
+            # OL contact: tight pad so a nearby pilot caption is not dropped.
+            if "transformer" in host_lib:
+                if hx - 8.0 <= x <= hx + 48.0 and hy - 8.0 <= y <= hy + 58.0:
+                    on_body = True
+                    break
+            elif "ol_contact" in host_lib:
+                if abs(x - hx) <= 18.0 and abs(y - hy) <= 12.0:
+                    on_body = True
+                    break
+        if not on_body:
+            kept.append(device)
+    devices[:] = kept
+
+
+def _read_fuse_tag_near(
+    gray: np.ndarray,
+    ox: float,
+    oy: float,
+    width: float,
+    height: float,
+    ppm: float,
+    taken: set[str],
+) -> str:
+    """OCR the caption above a fuse body. Blank / already-used tags stay unread."""
+
+    from panelcad.importer.read import is_device_tag
+    from panelcad.importer.symbols import tag_prefix
+    from panelcad.ocr.dispatch import get_engine, image_to_string, tesseract_required
+
+    def accept(raw: str) -> str:
+        tag = _fix_token(str(raw or "").strip())
+        if not tag:
+            return ""
+        # Crop often glues the fuse tag to the adjacent wire number (FU1+102→FU1102).
+        glued = re.fullmatch(r"(FU\d{1,2})(\d{2,3})", tag, re.IGNORECASE)
+        if glued:
+            tag = glued.group(1).upper()
+        # Embedded FU1 inside noisy OCR (``2FU13102``).
+        embedded = re.search(r"FU\d{1,2}", tag, re.IGNORECASE)
+        if embedded and (not is_device_tag(tag) or len(tag) > 4):
+            tag = embedded.group(0).upper()
+        if not tag or tag in taken or not is_device_tag(tag):
+            return ""
+        if tag_prefix(tag) not in {"FU", "F"}:
+            return ""
+        return tag
+
+    # Caption sits above the fuse, often toward the load-side (right) end of the body.
+    windows = (
+        (ox - 1.0, oy - 10.0, ox + width + 6.0, oy + 2.5),
+        (ox + width * 0.35, oy - 10.0, ox + width + 10.0, oy + 3.0),
+        (ox - 2.0, oy - 8.0, ox + width + 2.0, oy + 1.0),
+    )
+    whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    engine = None
+    try:
+        engine = get_engine()
+    except Exception:  # noqa: BLE001
+        engine = None
+    for left, top, right, bot in windows:
+        x0 = max(0, int(round(left * ppm)))
+        x1 = min(gray.shape[1], int(round(right * ppm)))
+        y0 = max(0, int(round(top * ppm)))
+        y1 = min(gray.shape[0], int(round(bot * ppm)))
+        if x1 - x0 < 8 or y1 - y0 < 6:
+            continue
+        crop = gray[y0:y1, x0:x1]
+        up = cv2.resize(crop, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+        up = cv2.copyMakeBorder(up, 12, 12, 12, 12, cv2.BORDER_CONSTANT, value=255)
+        _, bw = cv2.threshold(up, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        if engine is not None:
+            try:
+                spans = engine.recognize(
+                    Image.fromarray(up),
+                    psm=7,
+                    whitelist=whitelist,
+                    rotations=(0,),
+                )
+            except Exception:  # noqa: BLE001
+                spans = []
+            for span in spans:
+                hit = accept(str(getattr(span, "text", "") or ""))
+                if hit:
+                    return hit
+        if tesseract_required() and not configure_tesseract():
+            continue
+        for image in (bw, up):
+            try:
+                heard = image_to_string(
+                    image,
+                    config=f"--psm 7 -c tessedit_char_whitelist={whitelist}",
+                )
+            except Exception as exc:  # noqa: BLE001
+                _reraise_tesseract(exc)
+                return ""
+            hit = accept(heard)
+            if hit:
+                return hit
+    return ""
+
+
+def _fuses_from_ink(
+    gray: np.ndarray,
+    match_ink: np.ndarray,
+    devices: list[dict[str, Any]],
+    ppm: float,
+    catalog: Any,
+    standard: str,
+) -> list[dict[str, Any]]:
+    """Recover a primary fuse the page-OCR missed when its sibling and T1 are present.
+
+    clean_300 often drops the FU1 tag next to the EXT arrow while FU2/FU3 remain.
+    A fuse-shaped ink peak left of T1.H1 with a readable FU* caption is that fuse —
+    never invent a tag the crop cannot read.
+    """
+
+    parts = _fuse_catalog_parts(catalog, standard)
+    if not parts:
+        return []
+    transformers = [
+        d
+        for d in devices
+        if d.get("library_id") and "transformer" in str(d.get("library_id") or "").lower()
+    ]
+    if not transformers:
+        return []
+    claimed = [
+        (float(d.get("x") or 0), float(d.get("y") or 0))
+        for d in devices
+        if d.get("library_id")
+    ]
+    taken = {str(d.get("tag") or "") for d in devices}
+    # Already have a fuse on the H1 row (within 12 mm vertically of transformer top).
+    def has_primary_upper_fuse(xfmr: dict[str, Any]) -> bool:
+        tx = float(xfmr.get("x") or 0)
+        ty = float(xfmr.get("y") or 0)
+        for d in devices:
+            if "fuse" not in str(d.get("library_id") or "").lower():
+                continue
+            fx = float(d.get("x") or 0)
+            fy = float(d.get("y") or 0)
+            if fx < tx - 1.0 and abs(fy - ty) <= 12.0:
+                return True
+        return False
+
+    found: list[dict[str, Any]] = []
+    part = parts[0]
+    tmpl = _render_template(part, ppm)
+    if tmpl is None:
+        return []
+    total = int((tmpl > 0).sum())
+    if total < 8 or match_ink.shape[0] <= tmpl.shape[0] or match_ink.shape[1] <= tmpl.shape[1]:
+        return []
+    response = cv2.matchTemplate(match_ink, tmpl, cv2.TM_CCORR)
+    work = response.copy()
+    th, tw = tmpl.shape
+    peaks: list[tuple[float, float, float]] = []
+    for _ in range(8):
+        index = int(np.argmax(work))
+        iy, ix = divmod(index, work.shape[1])
+        score = float(work[iy, ix]) / total
+        if score < MATCH_MIN:
+            break
+        y0, y1 = max(0, iy - max(th // 2, 1)), min(work.shape[0], iy + max(th // 2, 1))
+        x0, x1 = max(0, ix - max(tw // 2, 1)), min(work.shape[1], ix + max(tw // 2, 1))
+        work[y0:y1, x0:x1] = 0
+        peaks.append((score, ix / ppm, iy / ppm))
+    for score, ox, oy in peaks:
+        if any(abs(ox - x) < 8.0 and abs(oy - y) < 8.0 for x, y in claimed):
+            continue
+        # Only fill a missing primary-upper fuse left of a transformer.
+        host = min(
+            transformers,
+            key=lambda t: abs(float(t.get("x") or 0) - ox) + abs(float(t.get("y") or 0) - oy),
+        )
+        tx = float(host.get("x") or 0)
+        ty = float(host.get("y") or 0)
+        if ox >= tx - 1.0:
+            continue
+        if abs(oy - ty) > 14.0:
+            continue
+        if has_primary_upper_fuse(host):
+            continue
+        tag = _read_fuse_tag_near(
+            gray,
+            ox,
+            oy,
+            float(part.schematic_width),
+            float(part.schematic_height),
+            ppm,
+            taken,
+        )
+        if not tag:
+            continue
+        found.append(
+            {
+                "tag": tag,
+                "type": "fuse",
+                "symbol": "fuse",
+                "pins": [],
+                "x": round(ox, 2),
+                "y": round(oy, 2),
+                "confidence": round(min(0.9, score), 2),
+                "unreadable": False,
+                "guess": False,
+                "library_id": part.library_id,
+                "pin_frame": "schematic",
+                "scale": 1.0,
+                "source": "symbol",
+            }
+        )
+        claimed.append((ox, oy))
+        taken.add(tag)
+        # One recovery per transformer H1 row is enough.
+        break
+    return found
 
 
 def _coils_from_ink(
@@ -2228,9 +2602,14 @@ def _trace_wires(
     used_numbers: set[int] = set()
     # A conductor is the ink between two pins. A tee off that run is the
     # parallel branch. Line segments still feed the chain fallback.
-    direct = _pin_links(pins, mask, ppm)
+    roles = _device_role_map(devices, catalog)
+    sides = _side_map(devices, catalog)
+    direct = _pin_links(pins, mask, ppm, sides=sides, roles=roles)
     direct.extend(_tee_links(direct, pins, mask, ppm))
     direct.extend(_port_rail_runs(direct, pins, mask, ppm, width_mm))
+    # After rail runs land, drop invented device↔device hops off a pin that
+    # already feeds a rail (ES1.1→L1 must not also grow ES1.1→M1-13.3).
+    direct = _drop_device_hops_off_rail_landers(direct)
     direct_pairs = {tuple(sorted((pin_a, pin_b))) for pin_a, pin_b, _, _ in direct}
     seated: list[tuple[int, tuple[float, float], tuple[float, float]]] = []
     for pin_a, pin_b, point_a, point_b in direct:
@@ -2240,6 +2619,21 @@ def _trace_wires(
             nindex = -1
         else:
             used_numbers.add(nindex)
+        # Fuse↔transformer: wrong pin / cross-winding stays an ambiguous gap.
+        fuse_xy = next((p for p in pins if (p[0], p[1]) == pin_a and roles.get(p[0]) == "fuse"), None)
+        xfmr_xy = next((p for p in pins if (p[0], p[1]) == pin_b and roles.get(p[0]) == "transformer"), None)
+        if fuse_xy is None or xfmr_xy is None:
+            fuse_xy = next((p for p in pins if (p[0], p[1]) == pin_b and roles.get(p[0]) == "fuse"), None)
+            xfmr_xy = next((p for p in pins if (p[0], p[1]) == pin_a and roles.get(p[0]) == "transformer"), None)
+        if _fuse_transformer_wrong_pin(
+            pin_a,
+            pin_b,
+            roles,
+            fuse_x=None if fuse_xy is None else float(fuse_xy[2]),
+            xfmr_x=None if xfmr_xy is None else float(xfmr_xy[2]),
+        ):
+            labeled.append(_wire_item(_zone_digit(number), pin_a, pin_b, True))
+            continue
         labeled.append(_wire_item(_zone_digit(number), pin_a, pin_b, False))
         seated.append((len(labeled) - 1, point_a, point_b))
     _seat_unread_numbers(labeled, seated, numbers, used_numbers)
@@ -2285,7 +2679,126 @@ def _trace_wires(
         number = str(wire.get("number") or "")
         if number.isdigit() and len(number) == 1:
             wire["number"] = "?"
+    filled = _drop_labeled_device_hops_off_rail_landers(filled)
+    filled = _drop_strip_terminal_jumpers(filled, devices)
     return collapse_wire_numbers(filled)
+
+
+def _drop_strip_terminal_jumpers(
+    wires: list[dict[str, Any]],
+    devices: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Drop B-side / pinless terminal↔terminal daisies; keep A↔A panel bonds.
+
+    Shared ``wire_top`` (202) is the real A-side jumper. Distinct B-side numbers
+    (301–304) are each block's own return — ink that chained B↔B is not a net.
+    """
+
+    terminal_tags = {
+        str(device.get("tag") or "")
+        for device in devices
+        if "terminal" in str(device.get("symbol") or device.get("type") or device.get("library_id") or "").lower()
+        or str(device.get("tag") or "").upper().startswith("X1-")
+    }
+    tops = {
+        str(device.get("tag") or ""): str(device.get("wire_top") or "").strip()
+        for device in devices
+        if str(device.get("tag") or "") in terminal_tags
+    }
+    if len(terminal_tags) < 2:
+        return wires
+    kept: list[dict[str, Any]] = []
+    for wire in wires:
+        a = str(wire.get("from_tag") or "").strip()
+        b = str(wire.get("to_tag") or "").strip()
+        if a in terminal_tags and b in terminal_tags:
+            ap = str(wire.get("from_pin") or "").strip().upper()
+            bp = str(wire.get("to_pin") or "").strip().upper()
+            number = str(wire.get("number") or "").strip()
+            # Keep A↔A when both pins are A (or empty) and the number matches
+            # both blocks' wire_top — the printed panel bond (202).
+            if ap in {"", "A"} and bp in {"", "A"} and number.isdigit():
+                if tops.get(a) == number and tops.get(b) == number:
+                    wire = {**wire, "from_pin": "A", "to_pin": "A"}
+                    kept.append(wire)
+                    continue
+            if number.isdigit():
+                # Keep the glyph as an unattached mark so leftovers can ask
+                # the real B→L2 landing; do not invent a strip jumper.
+                kept.append(
+                    {
+                        "number": number,
+                        "x": wire.get("x"),
+                        "y": wire.get("y"),
+                        "from_tag": "",
+                        "to_tag": "",
+                        "from_pin": "",
+                        "to_pin": "",
+                        "confidence": float(wire.get("confidence") or 0.4),
+                        "unreadable": False,
+                        "ambiguous": True,
+                        "source": str(wire.get("source") or "ocr"),
+                    }
+                )
+            continue
+        kept.append(wire)
+    return kept
+
+
+def _rail_pin(tag: str, pin: str) -> bool:
+    token = str(tag or "").upper()
+    return token in {"L1", "L2", "X1", "X2"} or str(pin or "").upper() in {"L1", "L2", "X1", "X2"}
+
+
+def _drop_device_hops_off_rail_landers(
+    links: list[tuple[tuple[str, str], tuple[str, str], tuple[float, float], tuple[float, float]]],
+) -> list[tuple[tuple[str, str], tuple[str, str], tuple[float, float], tuple[float, float]]]:
+    """Remove device↔device links from a pin that already lands on L1/L2/X1/X2."""
+
+    landers: set[tuple[str, str]] = set()
+    for host_a, host_b, _pa, _pb in links:
+        if _rail_pin(host_a[0], host_a[1]) and not _rail_pin(host_b[0], host_b[1]):
+            landers.add(host_b)
+        elif _rail_pin(host_b[0], host_b[1]) and not _rail_pin(host_a[0], host_a[1]):
+            landers.add(host_a)
+    kept: list[tuple[tuple[str, str], tuple[str, str], tuple[float, float], tuple[float, float]]] = []
+    for host_a, host_b, point_a, point_b in links:
+        if _rail_pin(host_a[0], host_a[1]) or _rail_pin(host_b[0], host_b[1]):
+            kept.append((host_a, host_b, point_a, point_b))
+            continue
+        if host_a in landers or host_b in landers:
+            continue
+        kept.append((host_a, host_b, point_a, point_b))
+    return kept
+
+
+def _drop_labeled_device_hops_off_rail_landers(wires: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Same rail-lander rule for labeled OCR wires (chain fallback included)."""
+
+    landers: set[tuple[str, str]] = set()
+    for wire in wires:
+        left = (str(wire.get("from_tag") or ""), str(wire.get("from_pin") or ""))
+        right = (str(wire.get("to_tag") or ""), str(wire.get("to_pin") or ""))
+        if not left[0] or not right[0]:
+            continue
+        if _rail_pin(left[0], left[1]) and not _rail_pin(right[0], right[1]):
+            landers.add(right)
+        elif _rail_pin(right[0], right[1]) and not _rail_pin(left[0], left[1]):
+            landers.add(left)
+    kept: list[dict[str, Any]] = []
+    for wire in wires:
+        left = (str(wire.get("from_tag") or ""), str(wire.get("from_pin") or ""))
+        right = (str(wire.get("to_tag") or ""), str(wire.get("to_pin") or ""))
+        if not left[0] or not right[0]:
+            kept.append(wire)
+            continue
+        if _rail_pin(left[0], left[1]) or _rail_pin(right[0], right[1]):
+            kept.append(wire)
+            continue
+        if left in landers or right in landers:
+            continue
+        kept.append(wire)
+    return kept
 
 
 def collapse_wire_numbers(wires: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -2842,7 +3355,8 @@ def trace_vision_wires(
     # A prefix guess is not a pin map. Aligned symbols have guess cleared.
     pins = _pin_points(devices, catalog, include_guess=False)
     electrical = _electrical_map(devices, catalog)
-    links = _pin_links(pins, mask, ppm, sides=_side_map(devices, catalog))
+    roles = _device_role_map(devices, catalog)
+    links = _pin_links(pins, mask, ppm, sides=_side_map(devices, catalog), roles=roles)
     used_pins: set[tuple[str, str]] = set()
     for wire in wires:
         if wire.get("from_pin") and wire.get("to_pin") and not wire.get("ambiguous"):
@@ -4170,7 +4684,23 @@ def _tee_links(
     The branch is stored from the upstream pin of that run, the way a ladder
     wire leaves the device on the left. A rail that continues past the pin
     is not a branch.
+
+    A device pin that already lands on a rail (ES1.1→L1) is the end of that
+    feed — never invent a second hop from that same pin to another device
+    (that bridged L1 into the seal-in net as ES1.1→M1-13.3).
     """
+
+    rails = {"L1", "L2", "X1", "X2"}
+
+    def is_rail(pin: tuple[str, str]) -> bool:
+        return str(pin[0] or "").upper() in rails or str(pin[1] or "").upper() in rails
+
+    rail_landers: set[tuple[str, str]] = set()
+    for host_a, host_b, _pa, _pb in links:
+        if is_rail(host_a) and not is_rail(host_b):
+            rail_landers.add(host_b)
+        elif is_rail(host_b) and not is_rail(host_a):
+            rail_landers.add(host_a)
 
     extras = []
     seen = {tuple(sorted((a, b))) for a, b, _pa, _pb in links}
@@ -4192,6 +4722,9 @@ def _tee_links(
         else:
             upstream = host_a if point_a[1] <= point_b[1] else host_b
             directions = ((-1.0, 0.0), (1.0, 0.0))
+        # Rail-landing pins do not grow device tees — the feed already ended.
+        if upstream in rail_landers:
+            continue
         steps = max(4, int(length / 0.8))
         up_point = point_a if upstream == host_a else point_b
         for index in range(steps + 1):
@@ -4310,19 +4843,141 @@ def _nearest_free_pin_point(
     return best
 
 
+def _device_role_map(devices: list[dict[str, Any]], catalog: Any) -> dict[str, str]:
+    """Tag → coarse role (fuse / transformer / other) for pin-pair preference."""
+
+    found: dict[str, str] = {}
+    for device in devices:
+        tag = str(device.get("tag") or "").strip()
+        lib = str(device.get("library_id") or "").lower()
+        if not tag:
+            continue
+        if "fuse" in lib or str(device.get("type") or "").lower() == "fuse":
+            found[tag] = "fuse"
+        elif "transformer" in lib or str(device.get("type") or "").lower() == "transformer":
+            found[tag] = "transformer"
+        else:
+            found.setdefault(tag, "other")
+    return found
+
+
+def _preferred_fuse_pin_for_transformer(
+    transformer_pin: str,
+    *,
+    fuse_x: float | None = None,
+    xfmr_x: float | None = None,
+) -> str | None:
+    """Fuse pin that faces the transformer winding pin.
+
+    Geometry first: when fuse and transformer X are known, pick the fuse pin on
+    the side toward the transformer (right pin ``2`` when T1 is to the right).
+    A straight hop onto the far pin cuts through the fuse body.
+
+    Fallback for left-of-T1 NEMA primaries (Demo Controls / layout tests): both
+    H1 and H4 face pin ``2``; pin ``1`` stays free for the rail / off-page feed.
+    Right-of-T1 secondary (X1/X2) faces pin ``1`` toward the transformer.
+    """
+
+    key = str(transformer_pin or "").strip().upper()
+    if key in {"H1", "H4"}:
+        if fuse_x is not None and xfmr_x is not None:
+            return "2" if float(xfmr_x) > float(fuse_x) else "1"
+        return "2"
+    if key in {"X1", "X2"}:
+        if fuse_x is not None and xfmr_x is not None:
+            return "1" if float(fuse_x) > float(xfmr_x) else "2"
+        return "1"
+    return None
+
+
+def _fuse_transformer_pair(
+    first: tuple[str, str, float, float],
+    second: tuple[str, str, float, float],
+    roles: dict[str, str],
+) -> tuple[tuple[str, str, float, float], tuple[str, str, float, float]] | None:
+    """Return (fuse_pin, transformer_pin) when the pair is a fuse↔transformer hop."""
+
+    role_a = roles.get(first[0], "")
+    role_b = roles.get(second[0], "")
+    if role_a == "fuse" and role_b == "transformer":
+        return first, second
+    if role_b == "fuse" and role_a == "transformer":
+        return second, first
+    return None
+
+
+def _fuse_transformer_cross_winding(
+    fuse_pin: tuple[str, str, float, float],
+    xfmr_pin: tuple[str, str, float, float],
+) -> bool:
+    """True when a secondary-side fuse lands on H* or a primary-side fuse on X*.
+
+    Facts only: never invent a hop from the secondary fuse across the transformer
+    onto a primary terminal (or the reverse).
+    """
+
+    pin = str(xfmr_pin[1] or "").strip().upper()
+    fuse_x = float(fuse_pin[2])
+    xfmr_x = float(xfmr_pin[2])
+    if pin.startswith("H"):
+        # Fuse on/right of the transformer body is the secondary column.
+        return fuse_x >= xfmr_x - 1.0
+    if pin.startswith("X"):
+        # Fuse left of the transformer is the primary column.
+        return fuse_x < xfmr_x - 1.0
+    return False
+
+
+def _fuse_transformer_wrong_pin(
+    pin_a: tuple[str, str],
+    pin_b: tuple[str, str],
+    roles: dict[str, str],
+    *,
+    fuse_x: float | None = None,
+    xfmr_x: float | None = None,
+) -> bool:
+    """True when a fuse↔transformer hop used the non-facing fuse pin or cross-winding."""
+
+    role_a = roles.get(pin_a[0], "")
+    role_b = roles.get(pin_b[0], "")
+    if role_a == "fuse" and role_b == "transformer":
+        if fuse_x is not None and xfmr_x is not None:
+            fake = (pin_a[0], pin_a[1], float(fuse_x), 0.0)
+            xfmr = (pin_b[0], pin_b[1], float(xfmr_x), 0.0)
+            if _fuse_transformer_cross_winding(fake, xfmr):
+                return True
+        preferred = _preferred_fuse_pin_for_transformer(pin_b[1], fuse_x=fuse_x, xfmr_x=xfmr_x)
+        return preferred is not None and str(pin_a[1]) != preferred
+    if role_b == "fuse" and role_a == "transformer":
+        if fuse_x is not None and xfmr_x is not None:
+            fake = (pin_b[0], pin_b[1], float(fuse_x), 0.0)
+            xfmr = (pin_a[0], pin_a[1], float(xfmr_x), 0.0)
+            if _fuse_transformer_cross_winding(fake, xfmr):
+                return True
+        preferred = _preferred_fuse_pin_for_transformer(pin_a[1], fuse_x=fuse_x, xfmr_x=xfmr_x)
+        return preferred is not None and str(pin_b[1]) != preferred
+    return False
+
+
 def _pin_links(
     pins: list[tuple[str, str, float, float]],
     mask: np.ndarray,
     ppm: float,
     sides: dict[tuple[str, str], str] | None = None,
+    roles: dict[str, str] | None = None,
 ) -> list[tuple[tuple[str, str], tuple[str, str], tuple[float, float], tuple[float, float]]]:
     """Shortest pin pairs joined by an unbroken run of ink.
 
     ``sides`` lets a vision trace keep a top-to-bottom pair the symbol mask
     swallowed, and drop a pair that runs across the phase columns.
+
+    Fuse↔transformer hops prefer the pin facing the transformer winding
+    (H1→fuse.2, H4→fuse.1). A wrong-pin candidate is skipped so the number
+    stays an ambiguous gap rather than inventing the hop.
     """
 
     side_of = sides or {}
+    role_of = roles or {}
     candidates = []
     for index, first in enumerate(pins):
         for second in pins[index + 1 :]:
@@ -4331,8 +4986,19 @@ def _pin_links(
                 continue
             length = math.hypot(first[2] - second[2], first[3] - second[3])
             facing = _facing_pair(first, second, side_of)
-            if length < 1.5 or length > 28:
-                if facing:
+            pair = _fuse_transformer_pair(first, second, role_of)
+            preferred_facing = False
+            if pair is not None:
+                fuse_pin, xfmr_pin = pair
+                preferred = _preferred_fuse_pin_for_transformer(
+                    xfmr_pin[1], fuse_x=fuse_pin[2], xfmr_x=xfmr_pin[2]
+                )
+                preferred_facing = preferred is not None and str(fuse_pin[1]) == preferred
+            # Preferred facing pin is usually the nearer one; keep the same
+            # length gate as other pin pairs.
+            max_len = 42.0 if preferred_facing else 28.0
+            if length < 1.5 or length > max_len:
+                if facing or preferred_facing:
                     candidates.append((length, first, second))
                 continue
             if _cross_phase(first, second, side_of):
@@ -4340,15 +5006,43 @@ def _pin_links(
             fraction, gap = _ink_run(mask, ppm, (first[2], first[3]), (second[2], second[3]))
             if fraction >= 0.45 and gap <= 3.6:
                 candidates.append((length, first, second))
-            elif facing:
+            elif facing or preferred_facing:
                 candidates.append((length, first, second))
-    candidates.sort(key=lambda item: item[0])
+    # Prefer the facing fuse pin (near the transformer) over a through-body far pin.
+    def _sort_key(item: tuple[float, Any, Any]) -> tuple[float, float]:
+        length, first, second = item
+        pair = _fuse_transformer_pair(first, second, role_of)
+        if pair is None:
+            return (0.0, length)
+        fuse_pin, xfmr_pin = pair
+        preferred = _preferred_fuse_pin_for_transformer(
+            xfmr_pin[1], fuse_x=fuse_pin[2], xfmr_x=xfmr_pin[2]
+        )
+        if preferred is None:
+            return (0.0, length)
+        if str(fuse_pin[1]) == preferred:
+            return (-1.0, length)  # preferred first
+        return (1.0, length)  # wrong pin last — often skipped if preferred exists
+
+    candidates.sort(key=_sort_key)
     used: set[tuple[str, str]] = set()
     links = []
     for _length, first, second in candidates:
         a_id, b_id = (first[0], first[1]), (second[0], second[1])
         if a_id in used or b_id in used:
             continue
+        pair = _fuse_transformer_pair(first, second, role_of)
+        if pair is not None:
+            fuse_pin, xfmr_pin = pair
+            if _fuse_transformer_cross_winding(fuse_pin, xfmr_pin):
+                # Secondary fuse ↔ H* (or primary fuse ↔ X*): never invent.
+                continue
+            preferred = _preferred_fuse_pin_for_transformer(
+                xfmr_pin[1], fuse_x=fuse_pin[2], xfmr_x=xfmr_pin[2]
+            )
+            if preferred is not None and str(fuse_pin[1]) != preferred:
+                # Wrong pin: skip entirely (number stays ambiguous). Do not invent.
+                continue
         used.add(a_id)
         used.add(b_id)
         start, end = _conductor_ends(first, second, side_of)

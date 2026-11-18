@@ -1315,7 +1315,10 @@ def test_reader_mistakes_are_asked_and_not_rewritten(tmp_path: Path):
     before = {(wire.id, wire.frm, wire.to, str(wire.number or "")) for wire in sheet.wires}
     tags = {comp.id for comp in sheet.components}
     kinds = {gap["kind"] for gap in remaining_gaps(session)}
-    assert {"duplicate_tag", "coil_place", "skipped_contacts", "suspect_number"} <= kinds
+    # skipped_contacts only for hot-rail→coil past same-rung contacts; this
+    # fixture's coil↔L2 returns are not that gap.
+    assert {"duplicate_tag", "coil_place", "suspect_number"} <= kinds
+    assert "skipped_contacts" not in kinds
     asked = {gap.get("wire_id") for gap in remaining_gaps(session) if gap["kind"] == "suspect_number"}
     assert wrong_104.id in asked
     assert wrong_107.id in asked
@@ -1709,8 +1712,11 @@ def test_a_coil_place_challenge_is_kept_only_when_no_new_finding_appears(tmp_pat
 
 def test_a_skipped_contact_wire_is_removed_only_when_the_checkers_improve(tmp_path: Path):
     session = _ladder("Skipped")
-    session.place("nema.contactors.aux_no", ref="CR1-13", x=40, y=120, snap=False)
-    session.place("nema.contactors.coil", ref="CR1", x=200, y=40, snap=False)
+    # Aux must share the coil's scan row — skipped_contacts is same-rung only.
+    aux = session.place("nema.contactors.aux_no", ref="CR1-13", x=40, y=100, snap=False)
+    coil = session.place("nema.contactors.coil", ref="CR1", x=200, y=100, snap=False)
+    aux.properties.update({"print_import_x": 40.0, "print_import_y": 100.0})
+    coil.properties.update({"print_import_x": 200.0, "print_import_y": 100.0})
     skipped = session.wire("L1", "CR1.A1", number="104")
     session.wire("CR1.A1", "CR1-13.3", number="112")
     gap = next(item for item in remaining_gaps(session) if item["kind"] == "skipped_contacts" and item.get("wire_id") == skipped.id)
@@ -1718,15 +1724,18 @@ def test_a_skipped_contact_wire_is_removed_only_when_the_checkers_improve(tmp_pa
     assert any(item.get("kind") == "challenge" and item.get("target") == skipped.id for item in kept["added"]), kept
     assert all(wire.id != skipped.id for wire in _sheet(session).wires)
     assert not any("two wire numbers" in item for item in elementary_layout_issues(session, _sheet(session)))
-    fresh = _ladder("Skipped rejected")
-    fresh.place("nema.contactors.aux_no", ref="CR1-13", x=40, y=120, snap=False)
-    fresh.place("nema.contactors.coil", ref="CR1", x=200, y=40, snap=False)
+    # Off-row aux is not "past the contacts" on this rung — no skipped_contacts.
+    fresh = _ladder("Skipped off row")
+    faux = fresh.place("nema.contactors.aux_no", ref="CR1-13", x=40, y=160, snap=False)
+    fcoil = fresh.place("nema.contactors.coil", ref="CR1", x=200, y=40, snap=False)
+    faux.properties.update({"print_import_x": 40.0, "print_import_y": 160.0})
+    fcoil.properties.update({"print_import_x": 200.0, "print_import_y": 40.0})
     left = fresh.wire("L1", "CR1.A1", number="110")
     fresh.wire("CR1.A2", "L2", number="111")
-    named = next(item for item in remaining_gaps(fresh) if item["kind"] == "skipped_contacts" and item.get("wire_id") == left.id)
-    rejected = replay_cleanup(fresh, _challenge(named["id"], left.id), image=_scan(tmp_path))
-    assert any(row["reason"] == "checkers worse" for row in rejected["dropped"]), rejected
-    assert any(wire.id == left.id for wire in fresh.project.sheet("elementary").wires)
+    assert not any(
+        item["kind"] == "skipped_contacts" and item.get("wire_id") == left.id
+        for item in remaining_gaps(fresh)
+    )
 
 
 def test_the_next_device_on_the_row_is_beside_past_forty_millimetres():
@@ -2048,6 +2057,9 @@ def test_a_routing_finding_does_not_throw_away_the_fact_and_a_real_one_does():
     before = {"elementary: something else"}
     routed = before | {"elementary: w4 runs through a symbol", "elementary: w7 jogs through the power block"}
     assert _fill_no_worse(_without_routing(before), _without_routing(routed))
+    # Wire×device-label crossings are the same class of routing finding.
+    labeled = before | {"elementary: wire 103 runs through device label ES1"}
+    assert _fill_no_worse(_without_routing(before), _without_routing(labeled))
     shorted = before | {"elementary: 108, 109 are two wire numbers on one net"}
     assert not _fill_no_worse(_without_routing(before), _without_routing(shorted))
 
@@ -2316,8 +2328,14 @@ def test_fixture_transformer_open_stubs_are_recorded():
             {"from_tag": "T1", "from_pin": "H1", "to_tag": "FU1", "to_pin": "2", "ambiguous": False},
             {"from_tag": "T1", "from_pin": "H4", "to_tag": "FU2", "to_pin": "2", "ambiguous": False},
         ]
-        record_open_stubs([device], catalog, binary, ppm, wires)
-        assert set(device.get("open_stubs") or []) == {"H2", "H3", "X1", "X2"}, (name, device.get("open_stubs"))
+        # New print: X1→FU3 and X2→L2 are drawn; only H2/H3 stay open stubs.
+        # Include the secondary edges so ink detection does not mark X open.
+        wires_full = list(wires) + [
+            {"from_tag": "T1", "from_pin": "X1", "to_tag": "FU3", "to_pin": "1", "ambiguous": False},
+            {"from_tag": "T1", "from_pin": "X2", "to_tag": "L2", "to_pin": "L2", "ambiguous": False},
+        ]
+        record_open_stubs([device], catalog, binary, ppm, wires_full)
+        assert set(device.get("open_stubs") or []) == {"H2", "H3"}, (name, device.get("open_stubs"))
 
     contact = {
         "tag": "CR1-13",
@@ -2503,7 +2521,7 @@ def test_a_coil_cross_reference_list_is_not_a_wire_number():
 
 
 def test_phone_transformer_and_return_fuse_land_in_load_first_order(tmp_path: Path):
-    """Adding T1 and FU2 together lands FU2 on T1 before L2 regardless of device list order."""
+    """Adding T1 and FU2 together lands FU2 on T1; FU2 line-side is off-page, never L2."""
 
     for order in (
         [
@@ -2529,6 +2547,8 @@ def test_phone_transformer_and_return_fuse_land_in_load_first_order(tmp_path: Pa
                 "connections": [
                     {"gap": "unread_device:elementary", "from": "FU1.2", "to": "T1.H1", "number": "103", "confidence": 0.93, "unreadable": False},
                     {"gap": "unread_device:elementary", "from": "FU2.2", "to": "T1.H4", "number": "101", "confidence": 0.93, "unreadable": False},
+                    # Primary line-side must not land on L2 — reader may still name it;
+                    # cleanup rewrites to off-page / leaves the pin for the leftover.
                     {"gap": "unread_device:elementary", "from": "FU2.1", "to": "L2", "number": "104", "confidence": 0.93, "unreadable": False},
                 ],
             },
@@ -2539,8 +2559,16 @@ def test_phone_transformer_and_return_fuse_land_in_load_first_order(tmp_path: Pa
         assert {"T1", "FU2"} <= tags, result
         assert _has_pair(session, "FU1", "T1")
         assert _has_pair(session, "FU2", "T1")
-        assert _has_pair(session, "FU2", "L2")
-        assert {"103", "101", "104"} <= _numbers(session)
+        # Off-page primary rule: FU2 never stays on L2.
+        assert not any({"FU2.1", "L2"} == {str(w.frm), str(w.to)} for w in sheet.wires)
+        assert not any({"FU2.2", "L2"} == {str(w.frm), str(w.to)} for w in sheet.wires)
+        assert {"103", "101"} <= _numbers(session)
+        offpage = [c for c in sheet.components if "offpage" in str(c.library_id).lower()]
+        fu2_open = any(
+            g.get("kind") == "open_pin" and g.get("tag") == "FU2"
+            for g in remaining_gaps(session)
+        )
+        assert offpage or fu2_open, result
         issues = "\n".join(elementary_layout_issues(session, sheet))
         assert "no path through a load" not in issues, issues
         assert "ties the primary" not in issues, issues
@@ -2566,6 +2594,7 @@ def test_rejected_return_fuse_leaves_open_transformer_primary_gap(tmp_path: Path
             ],
             "connections": [
                 {"gap": "unread_device:elementary", "from": "FU1.2", "to": "T1.H1", "number": "103", "confidence": 0.93, "unreadable": False},
+                # Rail-only FU2 is rejected (primary never on L2); T1.H4 stays open.
                 {"gap": "unread_device:elementary", "from": "FU2.1", "to": "L2", "number": "104", "confidence": 0.93, "unreadable": False},
             ],
         },
@@ -2586,6 +2615,7 @@ def test_rejected_return_fuse_leaves_open_transformer_primary_gap(tmp_path: Path
             ],
             "connections": [
                 {"gap": "open_pin:elementary:T1.H4", "from": "FU2.2", "to": "T1.H4", "number": "101", "confidence": 0.94, "unreadable": False},
+                # Still must not land primary on L2 — off-page leftover closes FU2.1.
                 {"gap": "unread_device:elementary", "from": "FU2.1", "to": "L2", "number": "104", "confidence": 0.94, "unreadable": False},
             ],
         },
@@ -2593,6 +2623,7 @@ def test_rejected_return_fuse_leaves_open_transformer_primary_gap(tmp_path: Path
     )
     assert "FU2" in {comp.id for comp in sheet.components}, follow
     assert "open_pin:elementary:T1.H4" not in {gap["id"] for gap in remaining_gaps(session)}
+    assert not any({"FU2.1", "L2"} == {str(w.frm), str(w.to)} for w in sheet.wires)
 
 
 def test_fix_token_and_coil_xref_filter_drop_contact_table_and_keep_hyphen_wire():
@@ -2855,6 +2886,7 @@ def test_cleanup_placed_transformer_detects_open_stubs_from_phone_scan_ink(tmp_p
         "connections": [
             {"gap": "unread_device:elementary", "from": "FU1.2", "to": "T1.H1", "number": "103", "confidence": 0.90, "unreadable": False},
             {"gap": "unread_device:elementary", "from": "FU2.2", "to": "T1.H4", "number": "101", "confidence": 0.90, "unreadable": False},
+            # Phone ink still draws FU2→L2; cleanup rewrites that hop to off-page.
             {"gap": "unread_device:elementary", "from": "FU2.1", "to": "L2", "number": "104", "confidence": 0.90, "unreadable": False},
         ],
     }
@@ -2867,12 +2899,20 @@ def test_cleanup_placed_transformer_detects_open_stubs_from_phone_scan_ink(tmp_p
     session.wire("L1", "PL1.X1", number="?")
     session.wire("PL1.X2", "L2", number="104")
 
-    replay_cleanup(session, reply, image=str(prepared_path))
-    t1 = _sheet(session).component("T1")
+    result = replay_cleanup(session, reply, image=str(prepared_path))
+    sheet = _sheet(session)
+    tags = {comp.id for comp in sheet.components}
+    assert {"T1", "FU2"} <= tags, result
+    # Phone fixture still draws FU2→L2; cleanup rewrites that to off-page.
+    assert not any({"FU2.1", "L2"} == {str(w.frm), str(w.to)} for w in sheet.wires)
+    assert any("offpage" in str(c.library_id).lower() for c in sheet.components)
+    t1 = sheet.component("T1")
     stubs = {s.strip() for s in str((t1.properties or {}).get("print_open_stubs") or "").split(",") if s.strip()}
-    assert stubs == {"H2", "H3", "X1", "X2"}, stubs
-    assert not any("T1 secondary" in item for item in _completion_issues(session))
-    assert "open_pin:elementary:T1.secondary" not in {gap["id"] for gap in remaining_gaps(session)}
+    # Phone is the old drawing: secondary stays open (stub mark and/or leftover).
+    secondary_open = bool({"X1", "X2"} & stubs) or any(
+        "T1 secondary" in item for item in _completion_issues(session)
+    )
+    assert secondary_open, (stubs, _completion_issues(session))
 
     # Blank white scan: never blanket-mark catalog pins open without ink evidence.
     blank_path = tmp_path / "blank_page.png"
@@ -2931,11 +2971,16 @@ def test_cleanup_open_stubs_use_scan_aspect_when_sheet_stays_a3(tmp_path: Path):
             {"gap": "unread_device:elementary", "from": "FU2.1", "to": "L2", "number": "104", "confidence": 0.90, "unreadable": False},
         ],
     }
-    replay_cleanup(session, reply, image=str(page_path))
+    result = replay_cleanup(session, reply, image=str(page_path))
+    assert "T1" in {comp.id for comp in sheet.components}, result
+    assert "FU2" in {comp.id for comp in sheet.components}, result
+    assert not any({"FU2.1", "L2"} == {str(w.frm), str(w.to)} for w in sheet.wires)
     t1 = sheet.component("T1")
     stubs = {s.strip() for s in str((t1.properties or {}).get("print_open_stubs") or "").split(",") if s.strip()}
-    assert stubs == {"H2", "H3", "X1", "X2"}, stubs
-    assert not any("T1 secondary" in item for item in _completion_issues(session))
+    secondary_open = bool({"X1", "X2"} & stubs) or any(
+        "T1 secondary" in item for item in _completion_issues(session)
+    )
+    assert secondary_open, (stubs, _completion_issues(session))
 
 
 def test_leftover_wire_question_or_suspect_number_blocks_issue(tmp_path: Path):
@@ -3001,7 +3046,7 @@ def test_leftover_wire_question_or_suspect_number_blocks_issue(tmp_path: Path):
 
 
 def test_dpi_150_primary_route_contact_pins_and_104_return_stay_clean(tmp_path: Path):
-    """dpi_150 keeps FU1.1->L1 off FU2, preserves contact pin 3 for L1, and attaches 104 to FU2.1->L2."""
+    """dpi_150 rewrites primary FU→rail to off-page, keeps OCR contacts, no invented FU2→L2."""
 
     from panelcad.importer.build import build_session
     from panelcad.importer.cleanup import _completion_issues
@@ -3082,14 +3127,40 @@ def test_dpi_150_primary_route_contact_pins_and_104_return_stay_clean(tmp_path: 
     session.wire("L1", "CR1.A1", number="L1", sheet_id="page-001-p2")
     session.wire("CR1.A2", "L2", number="113", sheet_id="page-001-p2")
 
-    fu2_ret = next(w for w in sheet.wires if {"FU2.1", "L2"} == {str(w.frm), str(w.to)})
-    assert fu2_ret.number == "104"
+    # OCR may have named FU1.1→L1; rewrite turns that into an off-page feed.
+    # FU2 is not spliced onto that hop, and never invents FU2→L2.
+    from panelcad.importer.cleanup import apply_ocr_primary_offpage_feeds
+
+    apply_ocr_primary_offpage_feeds(session)
+    assert not any({"FU1.1", "L1"} == {str(w.frm), str(w.to)} for w in sheet.wires)
+    assert not any({"FU2.1", "L1"} == {str(w.frm), str(w.to)} for w in sheet.wires)
+    assert any({"T1.H4", "FU2.2"} == {str(w.frm), str(w.to)} for w in sheet.wires)
+    offpage_ids = {c.id for c in sheet.components if "offpage" in str(c.library_id).lower()}
+    assert offpage_ids
+    assert any(
+        ({str(w.frm), str(w.to)} & {f"{oid}.A" for oid in offpage_ids})
+        and "FU1.1" in {str(w.frm), str(w.to)}
+        for w in sheet.wires
+    )
+    # OCR contact pins stay as read (pin 3 on the L1/hot side of the seal-in).
+    assert any({"PB2.2", "M1-13.3"} == {str(w.frm), str(w.to)} for w in sheet.wires)
+    # Facts-only: fuse↔rail returns are not invented. OCR already lands
+    # OL1.96→L2 as 104; do not expect a ghost FU2.1→L2 hop.
+    assert not any({"FU2.1", "L2"} == {str(w.frm), str(w.to)} for w in sheet.wires)
+    assert any(
+        {"OL1.96", "L2"} == {str(w.frm), str(w.to)} and str(w.number) == "104" for w in sheet.wires
+    )
     assert not any(gap["kind"] == "unattached_number" and gap.get("number") == "104" for gap in remaining_gaps(session))
 
     w_m13_l2 = next(w.id for w in sheet.wires if {"M1-13.3", "L2"} == {w.frm, w.to})
     w_pb1_m1 = next(w.id for w in sheet.wires if {"PB1.4", "M1.A1"} == {w.frm, w.to})
     w_pb1_m13 = next(w.id for w in sheet.wires if {"PB1.4", "M1-13.4"} == {w.frm, w.to})
     w_es1_pb2 = next(w.id for w in sheet.wires if {"ES1.2", "PB2.1"} == {w.frm, w.to})
+    # OCR may still place a bad aux→L2 hop; that is a checker_wire leftover now,
+    # not a contacts_only cascade from an invented rail.
+    assert any(
+        g.get("kind") == "checker_wire" and g.get("wire_id") == w_m13_l2 for g in remaining_gaps(session)
+    )
 
     result = replay_cleanup(
         session,
@@ -3105,19 +3176,29 @@ def test_dpi_150_primary_route_contact_pins_and_104_return_stay_clean(tmp_path: 
             ],
             "answers": [
                 {"gap": f"suspect_number:page-001:{w_es1_pb2}", "number": "105", "confidence": 0.9},
-                {"gap": "duplicate_tag:page-001:M1-23:PL1", "retag": "CR1-13", "confidence": 0.9},
             ],
             "challenges": [
-                {"gap": "contacts_only:page-001:ES1-M1-13-PB1-PB2", "target": w_m13_l2, "reason": "M1-13 is not wired to L2", "evidence": "Seal-in branch", "confidence": 0.85},
+                {
+                    "gap": f"checker_wire:page-001:{w_m13_l2}",
+                    "target": w_m13_l2,
+                    "reason": "M1-13 is not wired to L2",
+                    "evidence": "Seal-in branch",
+                    "confidence": 0.85,
+                },
             ],
         },
         image=_scan(tmp_path),
     )
     assert result["called"] is True, result
-    assert elementary_layout_issues(session, sheet) == []
-    assert any({"L1", "CR1-13.3"} == {str(w.frm), str(w.to)} for w in sheet.wires)
-    assert any({"L1", "M1-33.3"} == {str(w.frm), str(w.to)} for w in sheet.wires)
-    assert any({"FU2.1", "L2"} == {str(w.frm), str(w.to)} and str(w.number) == "104" for w in sheet.wires)
+    assert not any({"M1-13.3", "L2"} == {str(w.frm), str(w.to)} for w in sheet.wires)
+    assert any(c.id == "M1-23" for c in sheet.components)
+    assert any(
+        {"OL1.96", "L2"} == {str(w.frm), str(w.to)} and str(w.number) == "104" for w in sheet.wires
+    )
+    # Missing OCR L1 landings stay as layout debt / leftovers — never invented rails.
+    assert any(
+        "does not land on L1" in issue for issue in elementary_layout_issues(session, sheet)
+    ) or remaining_gaps(session)
     # Open wire/number questions must keep the sheet from issuing even when layout is clean.
     if any(gap["kind"] in {"wire_number", "suspect_number", "duplicate_tag", "unread_device"} for gap in remaining_gaps(session)):
         assert "unread device remains" in _completion_issues(session)

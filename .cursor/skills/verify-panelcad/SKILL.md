@@ -33,7 +33,7 @@ This checks that `panelcad` imports from this repo's `src/` (not from an editabl
 
 ## Drive
 
-`scripts/drive.py <feature>` (always called through `launch.sh`). Implemented: `print-package`. Every feature in `features/` lists its menu path and widget handles. Add a new journey as a `feature_<name>(app, win)` function and register it in `FEATURES` with its sample.
+`scripts/drive.py <feature>` (always called through `launch.sh`). Implemented: `print-package`, `print-dialog`. Every feature in `features/` lists its menu path and widget handles. Add a new journey as a `feature_<name>(app, win)` function and register it in `FEATURES` with its sample.
 
 Handles to use, in order of preference:
 - **Menu actions:** use `menu_action(win, "File", "Print Package…")`, which matches the visible text with `&` stripped. Menus are `&File`, `&Edit`, `&View`, `&Insert`, `&Tools`, `&Reports` and Help.

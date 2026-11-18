@@ -332,7 +332,7 @@ def test_import_review_panel_from_to_and_rebuild_clean_ladder(tmp_path: Path) ->
 
     initial_rows = panel.from_to_rows()
     assert len(initial_rows) == len(sched.from_to_rows)
-    assert panel.layout_mode() == "preserve"
+    assert panel.layout_mode() == "ladder"
 
     # Switch to the From-To Wire Schedule tab and add a new pilot light rung via GUI controls
     panel.tabs.setCurrentWidget(panel.from_to_tab)
@@ -396,3 +396,244 @@ def test_import_review_panel_from_to_and_rebuild_clean_ladder(tmp_path: Path) ->
     for sh in win.session.project.sheets:
         assert check_converted_sheet_layout(sh) == []
     win.close()
+
+
+def test_no_inferred_rail_return_for_ocr_wired_aux_contact() -> None:
+    """M1-13 with OCR on both pins must not get an invented M1-13.4→L2 return."""
+
+    from panelcad.importer.ladder_synth import _infer_sheet_control_rungs
+
+    m113 = ImportDeviceEntry(
+        tag="M1-13",
+        library_id="nema.contactors.aux_no",
+        pins=["3", "4"],
+        sheet_id="elementary",
+        x=120.0,
+        y=117.0,
+        role="control_contact",
+        confidence=0.85,
+    )
+    existing = [
+        ImportFromToRow(
+            wire_number="106",
+            from_tag="PB2",
+            from_pin="2",
+            to_tag="M1-13",
+            to_pin="3",
+            sheet_id="elementary",
+            source="ocr",
+            confidence=0.9,
+        ),
+        ImportFromToRow(
+            wire_number="107",
+            from_tag="PB1",
+            from_pin="4",
+            to_tag="M1-13",
+            to_pin="4",
+            sheet_id="elementary",
+            source="ocr",
+            confidence=0.9,
+        ),
+    ]
+    inferred, _meta = _infer_sheet_control_rungs(
+        sid="elementary",
+        ctrl_devs=[m113],
+        existing_rows=existing,
+        wire_labels=[{"number": "104", "x": 200.0, "y": 120.0, "confidence": 0.5}],
+        rail_hot="L1",
+        rail_ret="L2",
+        rung_band_mm=12.0,
+        confidence_threshold=0.75,
+    )
+    bad = [
+        row
+        for row in inferred
+        if row.source == "rung_inferred"
+        and {row.from_tag, row.to_tag} & {"M1-13"}
+        and ({row.from_tag, row.to_tag} & {"L1", "L2"})
+    ]
+    assert bad == [], [r.to_dict() for r in bad]
+
+
+def test_seal_in_parallel_lands_on_parent_load_pin_not_coil() -> None:
+    """Seal-in M1-13.4 must land on PB1.4 (107), not invent M1.A1 as the tip."""
+
+    from panelcad.importer.ladder_synth import _infer_sheet_control_rungs
+
+    pb2 = ImportDeviceEntry(
+        tag="PB2",
+        library_id="nema.operators.pb_nc",
+        pins=["1", "2"],
+        sheet_id="elementary",
+        x=40.0,
+        y=100.0,
+        role="control_contact",
+        confidence=0.9,
+    )
+    pb1 = ImportDeviceEntry(
+        tag="PB1",
+        library_id="nema.operators.pb_no",
+        pins=["3", "4"],
+        sheet_id="elementary",
+        x=80.0,
+        y=100.0,
+        role="control_contact",
+        confidence=0.9,
+    )
+    coil = ImportDeviceEntry(
+        tag="M1",
+        library_id="nema.contactors.coil",
+        pins=["A1", "A2"],
+        sheet_id="elementary",
+        x=140.0,
+        y=100.0,
+        role="control_output",
+        confidence=0.9,
+    )
+    seal = ImportDeviceEntry(
+        tag="M1-13",
+        library_id="nema.contactors.aux_no",
+        pins=["3", "4"],
+        sheet_id="elementary",
+        x=80.0,
+        y=118.0,
+        role="control_contact",
+        confidence=0.85,
+    )
+    existing = [
+        ImportFromToRow(
+            wire_number="106",
+            from_tag="PB2",
+            from_pin="2",
+            to_tag="PB1",
+            to_pin="3",
+            sheet_id="elementary",
+            source="ocr",
+            confidence=0.9,
+        ),
+        ImportFromToRow(
+            wire_number="106",
+            from_tag="PB2",
+            from_pin="2",
+            to_tag="M1-13",
+            to_pin="3",
+            sheet_id="elementary",
+            source="ocr",
+            confidence=0.9,
+        ),
+        ImportFromToRow(
+            wire_number="107",
+            from_tag="PB1",
+            from_pin="4",
+            to_tag="M1",
+            to_pin="A1",
+            sheet_id="elementary",
+            source="ocr",
+            confidence=0.9,
+        ),
+    ]
+    inferred, meta = _infer_sheet_control_rungs(
+        sid="elementary",
+        ctrl_devs=[pb2, pb1, coil, seal],
+        existing_rows=existing,
+        wire_labels=[{"number": "107", "x": 100.0, "y": 110.0, "confidence": 0.8}],
+        rail_hot="L1",
+        rail_ret="L2",
+        rung_band_mm=12.0,
+        confidence_threshold=0.75,
+    )
+    del meta
+    seal_rows = [
+        row
+        for row in inferred
+        if row.source == "rung_inferred" and {row.from_tag, row.to_tag} == {"M1-13", "PB1"}
+    ]
+    assert seal_rows, [r.to_dict() for r in inferred if "M1-13" in {r.from_tag, r.to_tag}]
+    assert all(
+        {row.from_pin, row.to_pin} == {"4", "4"} or "4" in {row.from_pin, row.to_pin}
+        for row in seal_rows
+    ), [r.to_dict() for r in seal_rows]
+    bad_coil = [
+        row
+        for row in inferred
+        if row.source == "rung_inferred"
+        and {row.from_tag, row.to_tag} == {"M1-13", "M1"}
+    ]
+    assert bad_coil == [], [r.to_dict() for r in bad_coil]
+
+
+def test_second_coil_same_tag_is_dropped_not_m1_2() -> None:
+    """A second M1 coil must not uniquify to M1_2 and get invented rails."""
+
+    from panelcad.importer.ladder_synth import extract_import_from_to
+
+    facts = {
+        "standard": "NEMA",
+        "devices": [
+            {
+                "tag": "M1",
+                "library_id": "nema.contactors.coil",
+                "type": "coil",
+                "symbol": "coil",
+                "x": 200.0,
+                "y": 80.0,
+                "page_id": "page-001",
+                "confidence": 0.9,
+                "pins": ["A1", "A2"],
+            },
+            {
+                "tag": "M1",
+                "library_id": "nema.contactors.coil",
+                "type": "coil",
+                "symbol": "coil",
+                "x": 150.0,
+                "y": 91.0,
+                "page_id": "page-001",
+                "confidence": 0.85,
+                "pins": ["A1", "A2"],
+            },
+            {
+                "tag": "ES1",
+                "library_id": "nema.operators.estop",
+                "type": "estop",
+                "symbol": "estop",
+                "x": 40.0,
+                "y": 80.0,
+                "page_id": "page-001",
+                "confidence": 0.85,
+                "pins": ["1", "2"],
+            },
+        ],
+        "wires": [
+            {
+                "number": "102",
+                "from_tag": "ES1",
+                "from_pin": "1",
+                "to_tag": "L1",
+                "to_pin": "",
+                "page_id": "page-001",
+                "confidence": 0.9,
+                "source": "ocr",
+            },
+            {
+                "number": "105",
+                "from_tag": "ES1",
+                "from_pin": "2",
+                "to_tag": "M1",
+                "to_pin": "A1",
+                "page_id": "page-001",
+                "confidence": 0.9,
+                "source": "ocr",
+            },
+        ],
+    }
+    sched = extract_import_from_to(facts)
+    tags = {d.tag for d in sched.devices}
+    assert "M1_2" not in tags
+    assert "M1" in tags
+    invented_ghost = [
+        row
+        for row in sched.from_to_rows
+        if row.source == "rung_inferred" and "M1_2" in {row.from_tag, row.to_tag}
+    ]
+    assert invented_ghost == []

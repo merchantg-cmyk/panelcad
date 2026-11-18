@@ -52,8 +52,9 @@ def build_scan_ladder_demo(name: str = "Demo motor control") -> Session:
     session.project.sheet("strip").page.size = "TABLOID"
     session.project.sheet("strip").page.orientation = "landscape"
 
-    _clear_numbers(session)
-    session.number_wires(overwrite=True)
+    # Wire numbers are locked in _elementary_facts (seal-in 105–110, M1.A2→OL1.95
+    # stays 108). Only fill any unlocked blank; never renumber the print.
+    session.number_wires(overwrite=False)
     _split_terminal_numbers(session)
     return session
 
@@ -67,6 +68,8 @@ def _elementary_facts(session: Session) -> None:
     add("nema.protection.fuse_10a", "FU1")
     add("nema.power.control_transformer", "T1")
     add("nema.protection.fuse_10a", "FU2")
+    # Secondary fuse between X1 and L1 — never a direct X1→L1 hop.
+    add("nema.protection.fuse_10a", "FU3")
     add("nema.operators.estop", "ES1")
     add("nema.operators.pb_nc", "PB2")
     add("nema.operators.pb_no", "PB1")
@@ -81,33 +84,62 @@ def _elementary_facts(session: Session) -> None:
     for tag in ("X1-1", "X1-2", "X1-3", "X1-4"):
         add("iec.terminals.phoenix_ut_2p5", tag, **({"type": "PE"} if tag == "X1-4" else {}))
 
-    session.wire("L1", "FU1.1")
-    session.wire("FU1.2", "T1.H1")
-    session.wire("T1.H4", "FU2.1")
-    session.wire("FU2.2", "L2")
-    session.wire("L1", "ES1.1")
-    session.wire("ES1.2", "PB2.1")
-    session.wire("PB2.2", "PB1.3")
-    session.wire("PB1.4", "M1.A1")
-    session.wire("M1.A2", "OL1.95")
-    session.wire("OL1.96", "L2")
+    # Primary (H) fuse line-side is off-page/external — never this sheet's L1/L2.
+    # Secondary: X1→FU3→L1 as 102, X2→L2 as 104. Seal-in numbers stay 105–110.
+    session.place(
+        "iec.connection.offpage_ref",
+        ref="OFF1",
+        x=40,
+        y=40,
+        snap=False,
+        properties={"role": "primary_feed", "hide_tag": True, "callout": "EXT", "tag": "EXT"},
+    )
+    session.place(
+        "iec.connection.offpage_ref",
+        ref="OFF2",
+        x=40,
+        y=60,
+        snap=False,
+        properties={"role": "primary_feed", "hide_tag": True, "callout": "EXT", "tag": "EXT"},
+    )
+
+    def _locked(frm: str, to: str, number: str = "") -> None:
+        wire = session.wire(frm, to, number=number or None)
+        wire.number = str(number or "")
+        wire.number_locked = True
+
+    _locked("OFF1.A", "FU1.1", "")
+    _locked("FU1.2", "T1.H1", "103")
+    # Facing pin toward T1 (left-of-T1 fuse); line-side is the off-page feed.
+    _locked("T1.H4", "FU2.2", "101")
+    _locked("OFF2.A", "FU2.1", "")
+    # Facing: FU3 right of T1 → pin 1 toward X1, pin 2 continues toward the rail feed.
+    _locked("T1.X1", "FU3.1", "100")
+    _locked("FU3.2", "L1", "102")
+    _locked("T1.X2", "L2", "104")
+    _locked("L1", "ES1.1", "102")
+    _locked("ES1.2", "PB2.1", "105")
+    _locked("PB2.2", "PB1.3", "106")
+    _locked("PB1.4", "M1.A1", "107")
+    _locked("M1.A2", "OL1.95", "108")
+    _locked("OL1.96", "L2", "104")
     # Seal-in parallels the start button.
-    session.wire("PB2.2", "M1-13.3")
-    session.wire("M1-13.4", "PB1.4")
-    session.wire("L1", "M1-23.3")
-    session.wire("M1-23.4", "CR1.A1")
-    session.wire("CR1.A2", "L2")
-    session.wire("L1", "CR1-13.3")
-    session.wire("CR1-13.4", "PL1.X1")
-    session.wire("PL1.X2", "L2")
-    session.wire("L1", "M1-33.3")
-    session.wire("M1-33.4", "X1-1.A")
-    session.wire("X1-1.B", "L2")
-    session.wire("X1-2.A", "X1-3.A")
-    session.wire("X1-2.B", "L2")
-    session.wire("X1-3.B", "L2")
-    session.wire("X1-4.A", "X1-2.A")
-    session.wire("X1-4.B", "L2")
+    _locked("PB2.2", "M1-13.3", "106")
+    _locked("M1-13.4", "PB1.4", "107")
+    _locked("L1", "M1-23.3", "102")
+    _locked("M1-23.4", "CR1.A1", "109")
+    _locked("CR1.A2", "L2", "104")
+    _locked("L1", "CR1-13.3", "102")
+    _locked("CR1-13.4", "PL1.X1", "110")
+    _locked("PL1.X2", "L2", "104")
+    _locked("L1", "M1-33.3", "102")
+    _locked("M1-33.4", "X1-1.A", "201")
+    _locked("X1-1.B", "L2", "301")
+    _locked("X1-2.A", "X1-3.A", "202")
+    _locked("X1-2.B", "L2", "302")
+    _locked("X1-3.B", "L2", "303")
+    _locked("X1-4.A", "X1-2.A", "202")
+    _locked("X1-4.B", "L2", "304")
 
 
 def _split_terminal_numbers(session: Session) -> None:
@@ -117,7 +149,8 @@ def _split_terminal_numbers(session: Session) -> None:
     shows the panel number above the tag and the field number below it.
     """
 
-    panel = {"X1-1.A": "201", "X1-2.A": "202", "X1-3.A": "202", "X1-4.A": "204"}
+    # X1-4.A bonds onto the X1-2.A net — same sheet number (202), not a second mark.
+    panel = {"X1-1.A": "201", "X1-2.A": "202", "X1-3.A": "202", "X1-4.A": "202"}
     field = {"X1-1.B": "301", "X1-2.B": "302", "X1-3.B": "303", "X1-4.B": "304"}
     wanted = {pin.upper(): number for pin, number in {**panel, **field}.items()}
     for wire in session.project.sheet("elementary").wires:

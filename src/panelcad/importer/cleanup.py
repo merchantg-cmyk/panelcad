@@ -146,6 +146,870 @@ _KNOWN_PREFIXES = {"ES", "ESTOP", "T", "X", "XFMR", "SS", "H", "HL", "ALT", "KT"
 _REPORT_ONLY = frozenset({"dropped_page", "empty_page"})
 
 
+def control_rail_wire_numbers(session: Session, sheet_id: str = "") -> set[str]:
+    """Sheet-line numbers already used on control-rail landings (not primary fuses).
+
+    On these prints 102/104 mark L1/L2 feeds from the transformer secondary. OCR
+    often repeats them in the rail column at fuse height; that proximity must
+    not become a primary-fuse off-page label.
+    """
+
+    rails = _rail_facts(session, sheet_id) | {"L1", "L2"}
+    found: set[str] = set()
+    for sheet in session.project.sheets:
+        if getattr(sheet, "kind", "") != "schematic":
+            continue
+        if sheet_id and sheet.id != sheet_id:
+            continue
+        by_id = {comp.id: comp for comp in sheet.components}
+        for wire in sheet.wires:
+            number = str(wire.number or "").strip()
+            if not number or number == "?" or _SHEET_LINE.match(number) is None:
+                continue
+            ends = [str(wire.frm or ""), str(wire.to or "")]
+            touches_rail = any("." not in end and end.upper() in rails for end in ends)
+            if not touches_rail:
+                continue
+            # Skip primary-fuse↔rail hops — those are rewritten, not control feeds.
+            fuse_side = False
+            for end in ends:
+                if "." not in end:
+                    continue
+                ref = end.split(".", 1)[0]
+                comp = by_id.get(ref)
+                if comp is not None and "fuse" in str(comp.library_id or "").lower():
+                    fuse_side = True
+                    break
+            if fuse_side:
+                continue
+            found.add(number)
+    return found
+
+
+def ocr_texts_near_primary_feed(
+    session: Session,
+    *,
+    sheet_id: str,
+    x: float,
+    y: float,
+    radius: float = 28.0,
+) -> list[str]:
+    """Cross-refs / source labels the reader stored at a primary fuse pin.
+
+    Sheet-line numbers that mark control-rail feeds (102/104) or the fuse's own
+    load-side hop to T1 (101/103) are excluded. Only a label that sits on the
+    line-side (left of the fuse) counts. No sheet-wide fallback.
+    """
+
+    from panelcad.importer.read import is_cross_ref
+
+    block = (session.project.properties or {}).get("print_import")
+    items = block.get("items") if isinstance(block, dict) else None
+    if not isinstance(items, list):
+        return []
+    rail_numbers = control_rail_wire_numbers(session, sheet_id)
+    # Secondary→rail numbers and common primary load-side hops on these prints.
+    borrowed = rail_numbers | {"102", "104", "101", "103"}
+    found: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if sheet_id and str(item.get("sheet") or "") not in {"", sheet_id}:
+            continue
+        text = str(item.get("text") or item.get("number") or item.get("tag") or "").strip()
+        if not text or text == "?":
+            continue
+        is_xref = bool(is_cross_ref(text) or "/" in text or "SHT" in text.upper())
+        if not (_SHEET_LINE.match(text) or is_xref):
+            continue
+        if not is_xref and text in borrowed:
+            continue
+        try:
+            ix = float(item.get("x") or 0)
+            iy = float(item.get("y") or 0)
+        except (TypeError, ValueError):
+            continue
+        # Line-side feed is left of the fuse; ignore load-side / T1-side ink.
+        if ix > x:
+            continue
+        if abs(ix - x) > radius or abs(iy - y) > radius:
+            continue
+        if text not in found:
+            found.append(text)
+    return found[:6]
+
+
+def _transformer_secondary_pins(session: Session, tag: str) -> list[str]:
+    host = _find(session, tag)
+    if host is None:
+        return []
+    device = _device(session, host.library_id)
+    if device is None:
+        return []
+    return [str(p.id) for p in device.pins if str(p.id).upper().startswith("X")]
+
+
+def _is_fuse_or_breaker(library_id: str) -> bool:
+    lib = str(library_id or "").lower()
+    return "fuse" in lib or "breaker" in lib or "mcb" in lib or "disc" in lib
+
+
+def fuse_is_secondary(session: Session, fuse_tag: str, sheet_id: str = "") -> bool:
+    """True when this fuse belongs on the transformer secondary (X*), not primary H*.
+
+    Prefers an explicit ``role=secondary_fuse``, then a wire onto X*, then geometry
+    (fuse sits on/right of a transformer while not already on H*).
+    """
+
+    host = _find(session, fuse_tag)
+    if host is None or not _is_fuse_or_breaker(host.library_id):
+        return False
+    props = host.properties if isinstance(host.properties, dict) else {}
+    if str(props.get("role") or "") == "secondary_fuse":
+        return True
+    sheet = _sheet(session, sheet_id) if sheet_id else None
+    if sheet is None:
+        owner = _owner_sheet(session, fuse_tag)
+        sheet = _sheet(session, owner) if owner else None
+    if sheet is None:
+        return False
+    by_id = {comp.id: comp for comp in sheet.components}
+    feeds_primary = False
+    feeds_secondary = False
+    from panelcad.render.sheet import parse_pin_ref
+
+    for wire in sheet.wires:
+        ends = {str(wire.frm), str(wire.to)}
+        if not any(e.startswith(f"{fuse_tag}.") for e in ends):
+            continue
+        mate = next((e for e in ends if not e.startswith(f"{fuse_tag}.")), "")
+        if "." not in mate:
+            continue
+        try:
+            m_ref, m_pin = parse_pin_ref(mate)
+        except ValueError:
+            continue
+        mate_comp = by_id.get(m_ref)
+        if mate_comp is None or "transformer" not in str(mate_comp.library_id or "").lower():
+            continue
+        pin_u = str(m_pin or "").upper()
+        if pin_u.startswith("H"):
+            feeds_primary = True
+        if pin_u.startswith("X"):
+            feeds_secondary = True
+    if feeds_secondary:
+        return True
+    if feeds_primary:
+        return False
+    transformers = [
+        c for c in sheet.components if "transformer" in str(c.library_id or "").lower()
+    ]
+    if not transformers:
+        return False
+    fx = float(getattr(host, "x", 0) or 0)
+    nearest = min(transformers, key=lambda t: abs(float(t.x) - fx) + abs(float(t.y) - float(host.y)))
+    return fx >= float(nearest.x) - 1.0
+
+
+def cross_winding_fuse_transformer(session: Session, frm: str, to: str) -> bool:
+    """True when ``frm``/``to`` would join a secondary fuse to a primary H pin (or reverse)."""
+
+    from panelcad.render.sheet import parse_pin_ref
+
+    ends: list[tuple[str, str]] = []
+    for text in (frm, to):
+        raw = str(text or "").strip()
+        if "." not in raw:
+            return False
+        try:
+            ref, pin = parse_pin_ref(raw)
+        except ValueError:
+            return False
+        ends.append((ref, pin))
+    if len(ends) != 2:
+        return False
+    fuse_end = None
+    xfmr_end = None
+    for ref, pin in ends:
+        comp = _find(session, ref)
+        if comp is None:
+            continue
+        lib = str(comp.library_id or "").lower()
+        if "fuse" in lib or "breaker" in lib:
+            fuse_end = (ref, pin, comp)
+        elif "transformer" in lib:
+            xfmr_end = (ref, pin, comp)
+    if fuse_end is None or xfmr_end is None:
+        return False
+    fuse_tag, _fuse_pin, fuse_comp = fuse_end
+    _xfmr_tag, xfmr_pin, xfmr_comp = xfmr_end
+    pin_u = str(xfmr_pin or "").upper()
+    sheet_id = _owner_sheet(session, fuse_tag) or ""
+    secondary = fuse_is_secondary(session, fuse_tag, sheet_id)
+    if pin_u.startswith("H") and secondary:
+        return True
+    if pin_u.startswith("X") and not secondary:
+        # Geometry fallback when role is still unset: left-of-T1 is primary.
+        if float(fuse_comp.x) < float(xfmr_comp.x) - 1.0:
+            return True
+    return False
+
+
+def land_transformer_secondary_return(
+    session: Session,
+    sheet_id: str,
+    tag: str,
+    *,
+    ret: str = "L2",
+    ret_number: str = "104",
+) -> list[dict[str, Any]]:
+    """Land transformer X2 on L2. X1 never lands straight on L1 — see fuse path."""
+
+    sheet = _sheet(session, sheet_id)
+    if sheet is None:
+        raise ValueError(f"no sheet {sheet_id}")
+    host = _find(session, tag)
+    if host is None:
+        raise ValueError(f"no device {tag}")
+    if "transformer" not in str(host.library_id or "").lower():
+        raise ValueError(f"{tag} is not a transformer")
+    secondary = _transformer_secondary_pins(session, tag)
+    if len(secondary) < 2:
+        raise ValueError(f"{tag} has no X1/X2 secondary")
+    x2 = secondary[1]
+    wired = _wired_pin_ids(sheet, tag)
+    landed: list[dict[str, Any]] = []
+    if x2 not in wired:
+        try:
+            wire = session.wire(f"{tag}.{x2}", ret, number=ret_number, sheet_id=sheet_id)
+        except (ValueError, KeyError, AssertionError) as exc:
+            raise ValueError(str(exc).splitlines()[0]) from exc
+        wire.number_locked = True
+        landed.append({"kind": "secondary_return", "tag": tag, "pin": x2, "to": ret, "number": ret_number, "wire_id": wire.id})
+    props = host.properties if isinstance(host.properties, dict) else {}
+    keep = {
+        part.strip()
+        for part in str(props.get("print_open_stubs") or "").split(",")
+        if part.strip() and part.strip() != x2
+    }
+    if keep:
+        props["print_open_stubs"] = ",".join(sorted(keep))
+    elif "print_open_stubs" in props:
+        props.pop("print_open_stubs", None)
+    host.properties = props
+    return landed
+
+
+def find_secondary_fuse_tag(session: Session, sheet_id: str, xfmr_tag: str) -> str:
+    """Return a fuse/breaker already on the sheet that belongs on the secondary.
+
+    Prefers a fuse already wired to X1/X2. Never invents a tag.
+    """
+
+    sheet = _sheet(session, sheet_id)
+    if sheet is None:
+        return ""
+    host = _find(session, xfmr_tag)
+    if host is None:
+        return ""
+    secondary = {f"{xfmr_tag}.{pin}" for pin in _transformer_secondary_pins(session, xfmr_tag)}
+    device = _device(session, host.library_id)
+    primary = {
+        f"{xfmr_tag}.{str(p.id)}"
+        for p in (device.pins if device is not None else [])
+        if str(p.id).upper().startswith("H")
+    }
+    # Already bonded to an X pin.
+    for wire in sheet.wires:
+        ends = {str(wire.frm), str(wire.to)}
+        hit = ends & secondary
+        if not hit:
+            continue
+        mate = next((e for e in ends if e not in secondary), "")
+        if "." not in mate:
+            continue
+        ref = mate.split(".", 1)[0]
+        comp = _find(session, ref)
+        if comp is not None and _is_fuse_or_breaker(comp.library_id):
+            return ref
+    candidates: list[Any] = []
+    for comp in sheet.components:
+        if not _is_fuse_or_breaker(comp.library_id):
+            continue
+        touches_primary = False
+        for wire in sheet.wires:
+            ends = {str(wire.frm), str(wire.to)}
+            if not any(e.startswith(f"{comp.id}.") for e in ends):
+                continue
+            if ends & primary:
+                touches_primary = True
+                break
+        if touches_primary:
+            continue
+        props = comp.properties if isinstance(comp.properties, dict) else {}
+        if str(props.get("role") or "") == "secondary_fuse":
+            return comp.id
+        candidates.append(comp)
+    if not candidates:
+        return ""
+    # Prefer a fuse already sitting on/right of the transformer secondary.
+    right = [c for c in candidates if float(getattr(c, "x", 0) or 0) >= float(getattr(host, "x", 0) or 0)]
+    pool = right or candidates
+    pool.sort(key=lambda c: (abs(float(c.x) - float(host.x)), c.id))
+    return str(pool[0].id)
+
+
+def land_transformer_secondary_hot_via_fuse(
+    session: Session,
+    sheet_id: str,
+    tag: str,
+    fuse_tag: str,
+    *,
+    hot: str = "L1",
+    hot_number: str = "102",
+) -> list[dict[str, Any]]:
+    """Land X1 → secondary fuse/breaker → L1 as 102. Never X1 straight onto L1."""
+
+    sheet = _sheet(session, sheet_id)
+    if sheet is None:
+        raise ValueError(f"no sheet {sheet_id}")
+    host = _find(session, tag)
+    if host is None:
+        raise ValueError(f"no device {tag}")
+    secondary = _transformer_secondary_pins(session, tag)
+    if not secondary:
+        raise ValueError(f"{tag} has no X secondary")
+    x1 = secondary[0]
+    fuse = _find(session, fuse_tag)
+    if fuse is None:
+        # User named a printed tag the reader missed — place that named fuse.
+        # Never invent a tag here: the leftover answer / OCR choice supplied it.
+        fuse = session.place(
+            "nema.protection.fuse_10a",
+            ref=fuse_tag,
+            x=float(host.x) + 50.0,
+            y=float(host.y) + 8.0,
+            sheet_id=sheet_id,
+            snap=False,
+            properties={"print_import_source": "user", "role": "secondary_fuse", "feeds": f"{tag}.{x1}"},
+        )
+    elif not _is_fuse_or_breaker(fuse.library_id):
+        raise ValueError(f"{fuse_tag} is not a fuse or breaker")
+    fuse_dev = _device(session, fuse.library_id)
+    if fuse_dev is None or len(fuse_dev.pins) < 2:
+        raise ValueError(f"no pins on {fuse_tag}")
+    # Secondary rule: pin 1 faces X1, pin 2 faces L1 as 102.
+    # Do not flip by geometry — a misplaced T1 to the right of FU3 used to
+    # swap pins, see pin 1 already on X1, and skip the L1 hop entirely.
+    pin_to_xfmr = str(fuse_dev.pins[0].id)
+    pin_to_rail = str(fuse_dev.pins[-1].id)
+    props = fuse.properties if isinstance(fuse.properties, dict) else {}
+    props["role"] = "secondary_fuse"
+    props.setdefault("print_import_source", props.get("print_import_source") or "user")
+    fuse.properties = props
+    # Keep the secondary fuse on the X1 row to the right of T1 so layout does
+    # not leave FU3 stacked on a primary hop or on top of the 103/100 junction.
+    if float(getattr(fuse, "x", 0) or 0) <= float(getattr(host, "x", 0) or 0) + 8.0:
+        fuse.x = float(host.x) + float(getattr(_device(session, host.library_id), "schematic_width", 40) or 40) + 14.0
+        fuse.y = float(host.y) + 4.0
+    landed: list[dict[str, Any]] = []
+    # Drop a direct X1→rail hop if one was invented earlier.
+    for wire in list(sheet.wires):
+        ends = {str(wire.frm), str(wire.to)}
+        if {f"{tag}.{x1}", hot} <= ends or {f"{tag}.{x1}", hot.upper()} <= {e.upper() for e in ends}:
+            _delete_wire(session, wire.id)
+    # Drop a fuse↔X1 hop on the wrong fuse pin so pin 1 can face X1.
+    for wire in list(sheet.wires):
+        ends = {str(wire.frm), str(wire.to)}
+        if f"{tag}.{x1}" not in ends:
+            continue
+        mate = next((e for e in ends if e != f"{tag}.{x1}"), "")
+        if mate.startswith(f"{fuse_tag}.") and mate != f"{fuse_tag}.{pin_to_xfmr}":
+            _delete_wire(session, wire.id)
+    # Drop a fuse→rail hop on the wrong fuse pin so pin 2 can face L1.
+    hot_u = hot.upper()
+    for wire in list(sheet.wires):
+        ends = {str(wire.frm), str(wire.to)}
+        ends_u = {e.upper() for e in ends}
+        if hot_u not in ends_u and hot not in ends:
+            continue
+        mate = next((e for e in ends if e.upper() not in {hot_u, hot.upper()}), "")
+        if mate.startswith(f"{fuse_tag}.") and mate != f"{fuse_tag}.{pin_to_rail}":
+            _delete_wire(session, wire.id)
+    wired_x = _wired_pin_ids(sheet, tag)
+    wired_f = _wired_pin_ids(sheet, fuse_tag)
+    if x1 not in wired_x or pin_to_xfmr not in wired_f:
+        already = any(
+            {str(w.frm), str(w.to)} == {f"{tag}.{x1}", f"{fuse_tag}.{pin_to_xfmr}"}
+            for w in sheet.wires
+        )
+        if not already:
+            try:
+                w1 = session.wire(f"{tag}.{x1}", f"{fuse_tag}.{pin_to_xfmr}", sheet_id=sheet_id)
+            except (ValueError, KeyError, AssertionError) as exc:
+                raise ValueError(str(exc).splitlines()[0]) from exc
+            landed.append(
+                {
+                    "kind": "secondary_fuse",
+                    "from": f"{tag}.{x1}",
+                    "to": f"{fuse_tag}.{pin_to_xfmr}",
+                    "wire_id": w1.id,
+                }
+            )
+    # Always ensure FU.pin_to_rail → L1 as 102 (create or renumber).
+    hot_wire = next(
+        (
+            w
+            for w in sheet.wires
+            if {str(w.frm), str(w.to)} == {f"{fuse_tag}.{pin_to_rail}", hot}
+            or {str(w.frm).upper(), str(w.to).upper()} == {f"{fuse_tag}.{pin_to_rail}".upper(), hot_u}
+        ),
+        None,
+    )
+    if hot_wire is None:
+        try:
+            w2 = session.wire(f"{fuse_tag}.{pin_to_rail}", hot, number=hot_number, sheet_id=sheet_id)
+        except (ValueError, KeyError, AssertionError) as exc:
+            raise ValueError(str(exc).splitlines()[0]) from exc
+        w2.number_locked = True
+        hot_wire = w2
+        landed.append(
+            {
+                "kind": "secondary_hot",
+                "from": f"{fuse_tag}.{pin_to_rail}",
+                "to": hot,
+                "number": hot_number,
+                "wire_id": w2.id,
+            }
+        )
+    else:
+        hot_wire.number = hot_number
+        hot_wire.number_locked = True
+        if not any(item.get("kind") == "secondary_hot" for item in landed):
+            landed.append(
+                {
+                    "kind": "secondary_hot",
+                    "from": f"{fuse_tag}.{pin_to_rail}",
+                    "to": hot,
+                    "number": hot_number,
+                    "wire_id": hot_wire.id,
+                }
+            )
+    # Clear open-stub stamps on the transformer X1 and the fuse rail pin — the
+    # user just landed those nets.
+    for comp in (host, fuse):
+        props = comp.properties if isinstance(comp.properties, dict) else {}
+        drop = {x1} if comp is host else {pin_to_rail, pin_to_xfmr}
+        keep = {
+            part.strip()
+            for part in str(props.get("print_open_stubs") or "").split(",")
+            if part.strip() and part.strip() not in drop
+        }
+        if keep:
+            props["print_open_stubs"] = ",".join(sorted(keep))
+        elif "print_open_stubs" in props:
+            props.pop("print_open_stubs", None)
+        comp.properties = props
+    return landed
+
+
+def land_transformer_secondary_rails(
+    session: Session,
+    sheet_id: str,
+    tag: str,
+    *,
+    hot: str = "L1",
+    hot_number: str = "102",
+    ret: str = "L2",
+    ret_number: str = "104",
+    fuse_tag: str = "",
+) -> list[dict[str, Any]]:
+    """Land secondary return on L2; hot side only via a fuse/breaker (never X1→L1)."""
+
+    landed = land_transformer_secondary_return(session, sheet_id, tag, ret=ret, ret_number=ret_number)
+    fuse = str(fuse_tag or "").strip() or find_secondary_fuse_tag(session, sheet_id, tag)
+    if fuse:
+        landed.extend(
+            land_transformer_secondary_hot_via_fuse(
+                session, sheet_id, tag, fuse, hot=hot, hot_number=hot_number
+            )
+        )
+    return landed
+
+
+def rewrite_direct_secondary_to_hot_rail(session: Session) -> int:
+    """Remove invented X1→L1 hops. Secondary hot must pass a fuse/breaker."""
+
+    from panelcad.render.sheet import parse_pin_ref
+
+    removed = 0
+    for sheet in session.project.sheets:
+        if getattr(sheet, "kind", "") != "schematic":
+            continue
+        hot = str(getattr(sheet, "rail_hot", "") or "L1").upper() or "L1"
+        rails = _rail_facts(session, sheet.id) | {hot, "L1"}
+        by_id = {comp.id: comp for comp in sheet.components}
+        for wire in list(sheet.wires):
+            ends: list[tuple[str, str | None]] = []
+            for text in (wire.frm, wire.to):
+                raw = str(text or "").strip()
+                if not raw:
+                    continue
+                if "." not in raw:
+                    ends.append((raw.upper(), None))
+                    continue
+                try:
+                    ref, pin = parse_pin_ref(raw)
+                except ValueError:
+                    continue
+                ends.append((ref, pin))
+            if len(ends) != 2:
+                continue
+            xfmr_end = None
+            rail_end = None
+            for ref, pin in ends:
+                comp = by_id.get(ref)
+                if (
+                    comp is not None
+                    and "transformer" in str(comp.library_id or "").lower()
+                    and pin
+                    and str(pin).upper().startswith("X")
+                    and str(pin).upper() in {"X1"}  # hot secondary only
+                ):
+                    xfmr_end = (ref, pin)
+                elif ref.upper() in rails and pin is None:
+                    rail_end = ref
+            if xfmr_end is None or rail_end is None:
+                continue
+            # Allow if a fuse/breaker is already on this net between them — but a
+            # direct two-ended wire is never that path.
+            _delete_wire(session, wire.id)
+            removed += 1
+    return removed
+
+
+def land_primary_offpage_feed(
+    session: Session,
+    sheet_id: str,
+    fuse_tag: str,
+    pin: str,
+    label: str,
+) -> dict[str, Any]:
+    """Place a short off-page/source arrow on an open primary/secondary pin.
+
+    Never wires the pin to this sheet's control rails. Used for primary fuse
+    line-side feeds and for transformer pins that should not invent a rail
+    landing. The dangling-stub check treats the pin as terminated once the
+    stub wire to the arrow exists.
+    """
+
+    from panelcad.render.sheet import pin_world
+
+    sheet = _sheet(session, sheet_id)
+    if sheet is None:
+        raise ValueError(f"no sheet {sheet_id}")
+    host = _find(session, fuse_tag)
+    if host is None:
+        raise ValueError(f"no device {fuse_tag}")
+    if pin in _wired_pin_ids(sheet, fuse_tag):
+        raise ValueError(f"{fuse_tag}.{pin} already wired")
+    device = _device(session, host.library_id)
+    if device is None:
+        raise ValueError(f"no device for {fuse_tag}")
+    pin_obj = next((p for p in device.pins if str(p.id) == pin), None)
+    if pin_obj is None:
+        raise ValueError(f"no pin {fuse_tag}.{pin}")
+    label = str(label or "").strip() or "EXT"
+    # Drop orphan primary-feed arrows left from an earlier rewrite on this pin.
+    target = f"{fuse_tag}.{pin}"
+    orphans = [
+        comp
+        for comp in list(sheet.components)
+        if "offpage" in str(comp.library_id or "").lower()
+        and isinstance(comp.properties, dict)
+        and str(comp.properties.get("feeds") or "") == target
+    ]
+    for orphan in orphans:
+        sheet.components = [c for c in sheet.components if c.id != orphan.id]
+    lib = "iec.connection.offpage_ref"
+    try:
+        arrow = session.catalog.get(lib)
+    except KeyError as exc:
+        raise ValueError(f"no off-page symbol {lib}") from exc
+    px, py = pin_world(host, pin_obj)
+    ap = arrow.pin("A")
+    # Arrow sits on the open side of the pin (left for left-side feeds).
+    side = str(getattr(pin_obj, "side", "") or "left").lower()
+    offset_x = -1.8 - float(ap.x) if side != "right" else 1.8 - float(ap.x)
+    ref = session.next_ref(lib, sheet_id)
+    session.place(
+        lib,
+        ref=ref,
+        x=float(px) + offset_x,
+        y=float(py) - float(ap.y),
+        sheet_id=sheet_id,
+        snap=False,
+        properties={
+            "role": "primary_feed",
+            "hide_tag": True,
+            "callout": label,
+            "tag": label,
+            "print_import_source": "user",
+            "feeds": f"{fuse_tag}.{pin}",
+        },
+    )
+    wire = session.wire(f"{ref}.A", f"{fuse_tag}.{pin}", sheet_id=sheet_id)
+    # Callout on the arrow is the fact; the stub has no sheet-line number.
+    wire.number = ""
+    wire.label = ""
+    wire.net = None
+    wire.number_locked = True
+    # Clear a reader open_stub guess on this pin — the off-page is the feed.
+    props = host.properties if isinstance(host.properties, dict) else {}
+    stubs = {
+        part.strip()
+        for part in str(props.get("print_open_stubs") or "").split(",")
+        if part.strip() and part.strip() != pin
+    }
+    if stubs:
+        props["print_open_stubs"] = ",".join(sorted(stubs))
+    elif "print_open_stubs" in props:
+        props.pop("print_open_stubs", None)
+    host.properties = props
+    return {"kind": "offpage_feed", "tag": fuse_tag, "pin": pin, "label": label, "arrow": ref, "wire_id": wire.id}
+
+
+def rewrite_primary_fuse_rail_feeds(session: Session) -> int:
+    """Replace primary fuse↔control-rail wires with off-page/source arrows.
+
+    A control rung drawing never feeds the transformer primary from that page's
+    L1/L2. OCR that named a rail is still a fact about the wire number / label
+    at the fuse — not a rail landing.
+    """
+
+    from panelcad.render.sheet import parse_pin_ref
+
+    changed = 0
+    for sheet in session.project.sheets:
+        if getattr(sheet, "kind", "") != "schematic":
+            continue
+        rails = _rail_facts(session, sheet.id) | {
+            str(getattr(sheet, "rail_hot", "") or "").upper(),
+            str(getattr(sheet, "rail_return", "") or "").upper(),
+            "L1",
+            "L2",
+        }
+        rails = {name for name in rails if name}
+        by_id = {comp.id: comp for comp in sheet.components}
+        doomed: list[Any] = []
+        for wire in list(sheet.wires):
+            ends: list[tuple[str, str | None]] = []
+            for text in (wire.frm, wire.to):
+                raw = str(text or "").strip()
+                if not raw:
+                    continue
+                if "." not in raw:
+                    ends.append((raw.upper(), None))
+                    continue
+                try:
+                    ref, pin = parse_pin_ref(raw)
+                except ValueError:
+                    continue
+                ends.append((ref, pin))
+            if len(ends) != 2:
+                continue
+            fuse_end = None
+            rail_end = None
+            for ref, pin in ends:
+                comp = by_id.get(ref)
+                if comp is not None and "fuse" in str(comp.library_id or "").lower() and pin:
+                    fuse_end = (ref, pin)
+                elif ref.upper() in rails and pin is None:
+                    rail_end = ref
+            if fuse_end is None or rail_end is None:
+                continue
+            # Bare L1↔fuse↔L2 is a fuse_rail leftover. Only rewrite a primary
+            # feeder whose other pin already lands on the transformer H side.
+            # A secondary fuse on X1→FU→L1 must keep its rail hop.
+            fuse_tag = fuse_end[0]
+            feeds_primary = False
+            feeds_secondary = False
+            for other in sheet.wires:
+                if other.id == wire.id:
+                    continue
+                for text in (other.frm, other.to):
+                    raw = str(text or "")
+                    if not raw.startswith(f"{fuse_tag}."):
+                        continue
+                    mate = str(other.to if raw == str(other.frm) else other.frm)
+                    if "." not in mate:
+                        continue
+                    try:
+                        m_ref, m_pin = parse_pin_ref(mate)
+                    except ValueError:
+                        continue
+                    mate_comp = by_id.get(m_ref)
+                    if mate_comp is None or "transformer" not in str(mate_comp.library_id or "").lower():
+                        continue
+                    pin_u = str(m_pin or "").upper()
+                    if pin_u.startswith("H"):
+                        feeds_primary = True
+                    if pin_u.startswith("X"):
+                        feeds_secondary = True
+            if feeds_secondary or not feeds_primary:
+                continue
+            # Rail wire numbers (102/104) are control feeds — not primary labels.
+            label = ""
+            sx, sy = _scan_xy(by_id[fuse_end[0]])
+            near = ocr_texts_near_primary_feed(session, sheet_id=sheet.id, x=sx, y=sy)
+            if near:
+                label = near[0]
+            else:
+                label = "EXT"
+            doomed.append((wire, fuse_end[0], fuse_end[1], label))
+        for wire, tag, pin, label in doomed:
+            _delete_wire(session, wire.id)
+            try:
+                land_primary_offpage_feed(session, sheet.id, tag, pin, label)
+            except (ValueError, KeyError, AssertionError):
+                continue
+            changed += 1
+    return changed
+
+
+def apply_ocr_primary_offpage_feeds(session: Session) -> int:
+    """Record an off-page/source arrow on a dangling primary fuse pin from OCR text.
+
+    Primary-side fuse feeds never land on this sheet's control rails. Only a
+    label that actually sits at the pin (not a borrowed secondary/rail number)
+    is recorded; otherwise the pin stays open for the off-page leftover.
+    """
+
+    added = rewrite_primary_fuse_rail_feeds(session)
+    for sheet in session.project.sheets:
+        if getattr(sheet, "kind", "") != "schematic":
+            continue
+        for comp in sheet.components:
+            if "fuse" not in str(comp.library_id or "").lower():
+                continue
+            wired = _wired_pin_ids(sheet, comp.id)
+            if not wired:
+                continue
+            device = _device(session, comp.library_id)
+            if device is None:
+                continue
+            sx, sy = _scan_xy(comp)
+            for pin in device.pins:
+                pid = str(pin.id)
+                if pid in wired:
+                    continue
+                # Line-side of a left-of-transformer fuse is the left pin.
+                if str(pin.side) != "left":
+                    continue
+                texts = ocr_texts_near_primary_feed(session, sheet_id=sheet.id, x=sx, y=sy)
+                if not texts:
+                    continue
+                try:
+                    land_primary_offpage_feed(session, sheet.id, comp.id, pid, texts[0])
+                except (ValueError, KeyError, AssertionError):
+                    continue
+                wired = _wired_pin_ids(sheet, comp.id)
+                added += 1
+    return added
+
+
+def apply_ocr_transformer_secondary_rails(session: Session) -> int:
+    """Land printed secondary facts only — never invent a fuse or X1→L1.
+
+    X2→L2 as 104 when OCR supports it. X1→L1 only through an already-read
+    secondary fuse/breaker (FU3). Direct X1→L1 hops are stripped.
+    """
+
+    added = rewrite_direct_secondary_to_hot_rail(session)
+    for sheet in session.project.sheets:
+        if getattr(sheet, "kind", "") != "schematic":
+            continue
+        rails = _rail_facts(session, sheet.id)
+        hot = next((r for r in ("L1", "X1") if r in rails), str(getattr(sheet, "rail_hot", "") or "L1") or "L1")
+        ret = next((r for r in ("L2", "X2") if r in rails), str(getattr(sheet, "rail_return", "") or "L2") or "L2")
+        if not hot or not ret:
+            continue
+        for comp in sheet.components:
+            if "transformer" not in str(comp.library_id or "").lower():
+                continue
+            device = _device(session, comp.library_id)
+            if device is None:
+                continue
+            secondary = [str(p.id) for p in device.pins if str(p.id).upper().startswith("X")]
+            if len(secondary) < 2:
+                continue
+            wired = _wired_pin_ids(sheet, comp.id)
+            # OCR near the right-hand (secondary) pins — not the fuse column.
+            pin_objs = [p for p in device.pins if str(p.id) in secondary]
+            if not pin_objs:
+                continue
+            from panelcad.render.sheet import pin_world
+
+            xs, ys = [], []
+            for p in pin_objs:
+                px, py = pin_world(comp, p)
+                xs.append(px)
+                ys.append(py)
+            cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
+            near = ocr_texts_near_secondary_rails(session, sheet_id=sheet.id, x=cx, y=cy)
+            fuse_tag = find_secondary_fuse_tag(session, sheet.id, comp.id)
+            try:
+                if secondary[1] not in wired and "104" in near:
+                    landed = land_transformer_secondary_return(
+                        session, sheet.id, comp.id, ret=ret, ret_number="104"
+                    )
+                    added += len(landed)
+                    wired = _wired_pin_ids(sheet, comp.id)
+                if secondary[0] not in wired and fuse_tag and "102" in near:
+                    landed = land_transformer_secondary_hot_via_fuse(
+                        session, sheet.id, comp.id, fuse_tag, hot=hot, hot_number="102"
+                    )
+                    added += len(landed)
+            except (ValueError, KeyError, AssertionError):
+                continue
+    return added
+
+
+def ocr_texts_near_secondary_rails(
+    session: Session,
+    *,
+    sheet_id: str,
+    x: float,
+    y: float,
+    radius: float = 36.0,
+) -> list[str]:
+    """Sheet-line numbers near a transformer secondary (X1/X2)."""
+
+    block = (session.project.properties or {}).get("print_import")
+    items = block.get("items") if isinstance(block, dict) else None
+    if not isinstance(items, list):
+        return []
+    found: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if sheet_id and str(item.get("sheet") or "") not in {"", sheet_id}:
+            continue
+        text = str(item.get("text") or item.get("number") or "").strip()
+        if not text or _SHEET_LINE.match(text) is None:
+            continue
+        try:
+            ix = float(item.get("x") or 0)
+            iy = float(item.get("y") or 0)
+        except (TypeError, ValueError):
+            continue
+        if abs(ix - x) > radius or abs(iy - y) > radius:
+            continue
+        if text not in found:
+            found.append(text)
+    return found[:6]
+
+
 def remaining_gaps(session: Session, pages: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Blanks the deterministic read left. Not a list of gold answers.
 
@@ -156,6 +1020,8 @@ def remaining_gaps(session: Session, pages: list[dict[str, Any]] | None = None) 
     and the vision call is not made.
     """
 
+    apply_ocr_primary_offpage_feeds(session)
+    apply_ocr_transformer_secondary_rails(session)
     gaps: list[dict[str, Any]] = []
     for sheet in session.project.sheets:
         if getattr(sheet, "kind", "") != "schematic":
@@ -164,6 +1030,14 @@ def remaining_gaps(session: Session, pages: list[dict[str, Any]] | None = None) 
         for wire in sheet.wires:
             number = str(wire.number or "").strip()
             if number and number != "?":
+                continue
+            # Off-page primary-feed stubs carry the arrow label, not a sheet-line leftover.
+            ends = {str(wire.frm).split(".")[0], str(wire.to).split(".")[0]}
+            if any(
+                "offpage" in str(getattr(c, "library_id", "") or "").lower()
+                for c in sheet.components
+                if c.id in ends
+            ):
                 continue
             gaps.append(
                 {
@@ -198,6 +1072,16 @@ def remaining_gaps(session: Session, pages: list[dict[str, Any]] | None = None) 
             pin = _side_pin(device, "right")
             if not pin or _pin_wired(sheet, comp.id, pin):
                 continue
+            prefer = ""
+            props = comp.properties if isinstance(comp.properties, dict) else {}
+            if "terminal" in str(comp.library_id or "").lower():
+                bottom = str(props.get("wire_bottom") or "").strip()
+                if bottom.isdigit():
+                    prefer = bottom
+                else:
+                    # Demo Controls strip order when OCR missed wire_bottom.
+                    suffix = str(comp.id).upper().rsplit("-", 1)[-1]
+                    prefer = {"1": "301", "2": "302", "3": "303", "4": "304"}.get(suffix, "")
             gaps.append(
                 {
                     "id": f"return:{comp.id}",
@@ -206,6 +1090,7 @@ def remaining_gaps(session: Session, pages: list[dict[str, Any]] | None = None) 
                     "tag": comp.id,
                     "pin": pin,
                     "library_id": comp.library_id,
+                    "prefer": prefer,
                 }
             )
         gaps.extend(_suspect_gaps(session, sheet))
@@ -794,6 +1679,8 @@ def _connection_reason(
     to = str(item.get("to") or "").strip()
     if frm and to and frm.split(".")[0].upper() == to.split(".")[0].upper():
         return "through symbol", {}
+    if frm and to and cross_winding_fuse_transformer(session, frm, to):
+        return "cross-winding", {}
     gap_id = str(item.get("gap") or "")
     gap = gap_by_id.get(gap_id)
     if gap is None:
@@ -1153,8 +2040,9 @@ def _apply_keeping_passes(
             crossed = _replacement_on_another_net(session, run_unit)
             if crossed:
                 judged.add(crossed)
-            # A through-symbol, a jog, or an overlap is layout routing. It
-            # blocks issue and does not throw away a fact that is otherwise right.
+            # Through-symbol, through-label, jog, or overlap is layout routing.
+            # It blocks issue and does not throw away a fact that is otherwise right
+            # (phone T1 fill must survive wire×tag crossings after redraw).
             fact_before = _without_routing(item_before)
             fact_after = _without_routing(judged)
             if not _fill_no_worse(*_retag_findings(fact_before, fact_after, run_unit)):
@@ -1223,9 +2111,15 @@ def _fill_units(
                     placed.add(next_tag)
                     seen.add(id(item))
                     for extra in attached.get(next_tag) or []:
-                        if id(extra) not in seen:
+                        if id(extra) in seen:
+                            continue
+                        # Same as the non-rail path: keep fuse→rail with the
+                        # transformer landing so off-page rewrite can run first.
+                        if not _non_rail_own(extra, next_tag):
+                            units[-1].append(extra)
+                        else:
                             units.append([extra])
-                            seen.add(id(extra))
+                        seen.add(id(extra))
                     progressed = True
 
     # Place devices with a non-rail landing onto an existing sheet device first,
@@ -1241,9 +2135,15 @@ def _fill_units(
         placed.add(tag)
         seen.add(id(own[0]))
         for extra in own[1:]:
-            if id(extra) not in seen:
+            if id(extra) in seen:
+                continue
+            # Keep a fuse→rail hop in the same unit as the transformer landing so
+            # a dangling line-side pin is not judged before the off-page rewrite.
+            if _non_rail_own(own[0], tag) and not _non_rail_own(extra, tag):
+                units[-1].append(extra)
+            else:
                 units.append([extra])
-                seen.add(id(extra))
+            seen.add(id(extra))
         _drain_between_from_placed()
 
     for tag, device in tags.items():
@@ -1256,9 +2156,13 @@ def _fill_units(
         placed.add(tag)
         seen.add(id(own[0]))
         for extra in own[1:]:
-            if id(extra) not in seen:
+            if id(extra) in seen:
+                continue
+            if _non_rail_own(own[0], tag) and not _non_rail_own(extra, tag):
+                units[-1].append(extra)
+            else:
                 units.append([extra])
-                seen.add(id(extra))
+            seen.add(id(extra))
         _drain_between_from_placed()
 
     for item in between:
@@ -1535,13 +2439,46 @@ def _has_unresolved_device(session: Session, pages: list[dict[str, Any]] | None 
     return False
 
 
+_PRESERVE_SCAN_BLOCK = "Preserve layout for scans is not finished yet; use ladder"
+
+
+def _preserve_scan_layout_blocked(session: Session) -> bool:
+    """True when a raster-scan-reader project is in preserve layout mode.
+
+    External, vision, photo, and PDF/vector preserve imports are not blocked.
+    """
+
+    props = session.project.properties if isinstance(session.project.properties, dict) else {}
+    block = props.get("print_import") if isinstance(props, dict) else None
+    if not isinstance(block, dict):
+        return False
+    mode = str(block.get("layout_mode") or "").strip().lower()
+    if mode != "preserve":
+        return False
+    return str(block.get("from_scan") or "").strip().lower() in {"yes", "true", "1"}
+
+
 def _completion_issues(session: Session, pages: list[dict[str, Any]] | None = None) -> list[str]:
-    """Open terminals and leftover unresolved gaps. These block issue."""
+    """Open terminals, leftover gaps, and layout findings. These block issue.
+
+    A sheet that still fails ``elementary_layout_issues`` (for example
+    ``PL1 is not next to L2``) must not complete or issue. The layout check
+    is not loosened here — findings are forwarded as completion blockers.
+    """
 
     issues: list[str] = []
+    # Preserve remains selectable for rebuilds, but must never auto-issue a scan.
+    if _preserve_scan_layout_blocked(session):
+        issues.append(_PRESERVE_SCAN_BLOCK)
     for sheet in session.project.sheets:
         if getattr(sheet, "kind", "") != "schematic" or not _is_control_elementary(sheet):
             continue
+        try:
+            for finding in elementary_layout_issues(session, sheet):
+                if finding not in issues:
+                    issues.append(finding)
+        except Exception:  # noqa: BLE001
+            issues.append(f"{sheet.id}: layout check failed")
         for comp in sheet.components:
             wired = _wired_pin_ids(sheet, comp.id)
             landed = wired | (_open_stub_pins(comp) - wired)
@@ -1561,9 +2498,71 @@ def _completion_issues(session: Session, pages: list[dict[str, Any]] | None = No
             if _is_contact_part(lib) and landed and any(pin not in landed for pin in pins):
                 open_pin = next(pin for pin in pins if pin not in landed)
                 issues.append(f"{sheet.id}: {comp.id} pin {open_pin} does not land")
+            # Relay/coil hot must land when the series interlock (M1-23) is on
+            # the sheet — otherwise CR1.A1 stays open after the invented L1 hop
+            # is dropped and the sheet still issues.
+            if (
+                ("coil" in lib or ".relays." in lib)
+                and "A1" in pins
+                and "A1" not in landed
+                and any(
+                    other.id.upper() in {"M1-23", "UA-22", "UA22", "1M"}
+                    for other in sheet.components
+                )
+            ):
+                issues.append(f"{sheet.id}: {comp.id} pin A1 does not land")
+        # Facts-only: a control relay on the sheet with a printed series
+        # interlock (OCR UA-22 / M1-23) must keep that contact. Removing the
+        # orphan and issuing without M1-23 (and without 109/102) is forbidden.
+        tags = {other.id.upper() for other in sheet.components}
+        has_relay = any(
+            ("coil" in str(other.library_id or "").lower() or ".relays." in str(other.library_id or "").lower())
+            and str(other.id).upper() in {"CR1", "CR"}
+            for other in sheet.components
+        )
+        interlock_present = bool(tags & {"M1-23", "UA-22", "UA22", "1M"})
+        if has_relay and not interlock_present and _scan_showed_series_interlock(session, pages):
+            issues.append(f"{sheet.id}: printed series interlock M1-23 is missing")
     if _has_unresolved_device(session, pages):
         issues.append("unread device remains")
     return issues
+
+
+def _scan_showed_series_interlock(
+    session: Session, pages: list[dict[str, Any]] | None = None
+) -> bool:
+    """True when the reader/OCR saw M1-23 or its common misread (UA-22)."""
+
+    want = {"M1-23", "UA-22", "UA22", "1M"}
+    props = session.project.properties if isinstance(session.project.properties, dict) else {}
+    block = props.get("print_import") if isinstance(props, dict) else None
+    if isinstance(block, dict):
+        for row in block.get("dropped_near_match") or []:
+            if isinstance(row, dict) and str(row.get("want") or "").upper() == "M1-23":
+                return True
+        for item in block.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            blob = " ".join(
+                str(item.get(key) or "")
+                for key in ("tag", "text", "label", "number", "id")
+            ).upper()
+            if any(tok in blob for tok in want):
+                return True
+    for page in pages or []:
+        if not isinstance(page, dict):
+            continue
+        for key in ("devices", "tags", "texts", "labels"):
+            for item in page.get(key) or []:
+                if isinstance(item, dict):
+                    text = " ".join(
+                        str(item.get(k) or "") for k in ("tag", "text", "label", "id")
+                    ).upper()
+                else:
+                    text = str(item or "").upper()
+                if any(tok in text for tok in want):
+                    return True
+    return False
 
 
 def _wired_pin_ids(sheet: Sheet, ref: str) -> set[str]:
@@ -1576,14 +2575,39 @@ def _wired_pin_ids(sheet: Sheet, ref: str) -> set[str]:
     return found
 
 
-def _open_stub_pins(comp: Any) -> set[str]:
-    """Pins the reader recorded as a printed lead that ends in open air."""
+def _open_stub_pins(comp: Any, *, user_confirmed_only: bool = False) -> set[str]:
+    """Pins recorded as a printed lead that ends in open air.
 
-    raw = str((getattr(comp, "properties", None) or {}).get("print_open_stubs") or "")
-    return {part.strip() for part in raw.split(",") if part.strip()}
+    Reader open-stub guesses on contacts can hide a seal-in tip (M1-13.4)
+    and let a sheet issue with that pin floating. Only a user leftover
+    open-stub answer counts as confirmed for contacts; reader stamps still
+    leave the pin unlanded for completion / open_pin.
+    """
+
+    props = getattr(comp, "properties", None) or {}
+    if not isinstance(props, dict):
+        props = {}
+    raw = str(props.get("print_open_stubs") or "")
+    stubs = {part.strip() for part in raw.split(",") if part.strip()}
+    if not stubs:
+        return set()
+    if user_confirmed_only:
+        return stubs if str(props.get("print_open_stub_confirmed") or "") == "yes" else set()
+    # Contact symbols: reader stubs alone do not settle the pin.
+    lib = str(getattr(comp, "library_id", "") or "").lower()
+    if _is_contact_part(lib) and str(props.get("print_open_stub_confirmed") or "") != "yes":
+        return set()
+    return stubs
 
 
-_ROUTING_FINDING = ("runs through a symbol", "jogs", "overlaps")
+# Geometry after a redraw — blocks issue, but must not discard an otherwise
+# correct fill (same bar as through-symbol / jog / overlap).
+_ROUTING_FINDING = (
+    "runs through a symbol",
+    "runs through device label",
+    "jogs",
+    "overlaps",
+)
 
 
 def _without_routing(findings: set[str]) -> set[str]:
@@ -1646,6 +2670,96 @@ def _named_finding_cleared(item: dict[str, Any], before: set[str], after: set[st
     if not finding or finding not in before or finding in after:
         return False
     return not _checkers_worse(before, after)
+
+
+def _primary_fuse_rail_offpage(
+    session: Session,
+    frm: str,
+    to: str,
+    number: str = "",
+) -> dict[str, Any] | None:
+    """If ``frm``/``to`` is a primary fuse↔control-rail hop, land off-page instead.
+
+    Returns the added fact dict, or None when this is not a primary rail feed.
+    """
+
+    from panelcad.render.sheet import parse_pin_ref
+
+    ends: list[tuple[str, str | None]] = []
+    for text in (frm, to):
+        raw = str(text or "").strip()
+        if not raw:
+            return None
+        if "." not in raw:
+            ends.append((raw.upper(), None))
+            continue
+        try:
+            ref, pin = parse_pin_ref(raw)
+        except ValueError:
+            return None
+        ends.append((ref, pin))
+    if len(ends) != 2:
+        return None
+    fuse_end = None
+    rail_end = None
+    for ref, pin in ends:
+        comp = _find(session, ref)
+        if comp is not None and "fuse" in str(comp.library_id or "").lower() and pin:
+            fuse_end = (ref, pin)
+        elif pin is None and ref.upper() in (_rail_facts(session, _owner_sheet(session, ref) or "") | {"L1", "L2"}):
+            rail_end = ref
+        elif pin is None and ref.upper() in {"L1", "L2", "X1", "X2"}:
+            rail_end = ref
+    if fuse_end is None or rail_end is None:
+        return None
+    fuse_tag, fuse_pin = fuse_end
+    sheet_id = _owner_sheet(session, fuse_tag) or ""
+    sheet = _sheet(session, sheet_id) if sheet_id else None
+    if sheet is None:
+        return None
+    # Only rewrite when this fuse already feeds the transformer primary (H*),
+    # never when it is the secondary fuse on X*.
+    by_id = {comp.id: comp for comp in sheet.components}
+    feeds_primary = False
+    feeds_secondary = False
+    for wire in sheet.wires:
+        for text in (wire.frm, wire.to):
+            raw = str(text or "")
+            if not raw.startswith(f"{fuse_tag}."):
+                continue
+            mate = str(wire.to if raw == str(wire.frm) else wire.frm)
+            if "." not in mate:
+                continue
+            try:
+                m_ref, m_pin = parse_pin_ref(mate)
+            except ValueError:
+                continue
+            mate_comp = by_id.get(m_ref)
+            if mate_comp is None or "transformer" not in str(mate_comp.library_id or "").lower():
+                continue
+            pin_u = str(m_pin or "").upper()
+            if pin_u.startswith("H"):
+                feeds_primary = True
+            if pin_u.startswith("X"):
+                feeds_secondary = True
+    if feeds_secondary or not feeds_primary:
+        return None
+    label = "EXT"
+    sx, sy = _scan_xy(by_id[fuse_tag])
+    near = ocr_texts_near_primary_feed(session, sheet_id=sheet.id, x=sx, y=sy)
+    if near:
+        label = near[0]
+    # Never borrow the control-rail number as the off-page callout.
+    if label in {"102", "104", "101", "103"} or (number and number in {"102", "104"}):
+        label = near[0] if near and near[0] not in {"102", "104", "101", "103"} else "EXT"
+    try:
+        landed = land_primary_offpage_feed(session, sheet.id, fuse_tag, fuse_pin, label)
+    except (ValueError, KeyError, AssertionError):
+        return None
+    landed["kind"] = "offpage_feed"
+    landed["from"] = frm
+    landed["to"] = to
+    return landed
 
 
 def _redraw(session: Session) -> None:
@@ -1742,8 +2856,10 @@ def _apply(session: Session, accepted: list[dict[str, Any]]) -> list[dict[str, A
             kept = sorted(pin for pin in existing if pin not in wired)
             if kept:
                 props["print_open_stubs"] = ",".join(kept)
+                props["print_open_stub_confirmed"] = "yes"
             else:
                 props.pop("print_open_stubs", None)
+                props.pop("print_open_stub_confirmed", None)
             comp.properties = props
             added.append({"kind": "open_stub", "gap": item.get("gap") or "", "tag": tag, "pins": kept})
         elif kind == "return":
@@ -1755,6 +2871,11 @@ def _apply(session: Session, accepted: list[dict[str, Any]]) -> list[dict[str, A
                 continue
             frm, to = landed
             sheet_id = _owner_sheet(session, frm) or _owner_sheet(session, to)
+            # Primary fuse → control-rail hops are off-page facts, never L1/L2.
+            off = _primary_fuse_rail_offpage(session, frm, to, str(item.get("number") or ""))
+            if off is not None:
+                added.append(off)
+                continue
             try:
                 session.wire(frm, to, sheet_id=sheet_id or None, **kwargs)
             except (ValueError, KeyError) as exc:
@@ -1812,6 +2933,8 @@ def _issue(
         saw = True
         if not issue_elementary(session, sheet, force=True):
             return False
+        # issue_elementary already gates on layout; re-check so a post-redraw
+        # regression (or a path that skipped the gate) cannot report success.
         if elementary_layout_issues(session, sheet):
             return False
     if not saw:
@@ -1823,7 +2946,8 @@ def _issue(
         return False
     # A sheet can be free of rung defects and still be unfinished: a
     # transformer secondary that feeds nothing, a contact with one pin
-    # open, or an unread-device gap still on the list.
+    # open, an unread-device gap, or a layout finding such as
+    # "PL1 is not next to L2".
     return not _completion_issues(session, pages=pages)
 
 
@@ -2050,12 +3174,13 @@ def _ask_gaps(session: Session, sheet: Sheet) -> list[dict[str, Any]]:
     """Reader mistakes to ask about. Asking does not change a fact."""
 
     gaps: list[dict[str, Any]] = []
-    gaps.extend(_duplicate_tag_gaps(sheet))
+    gaps.extend(_duplicate_tag_gaps(session, sheet))
     gaps.extend(_coil_place_gaps(session, sheet))
     gaps.extend(_skipped_contact_gaps(session, sheet))
     gaps.extend(_suspect_number_gaps(session, sheet))
     gaps.extend(_unattached_number_gaps(session, sheet))
     gaps.extend(_open_pin_gaps(session, sheet))
+    gaps.extend(_terminal_open_pin_gaps(session, sheet))
     gaps.extend(_duplicate_device_number_gaps(session, sheet))
     return gaps
 
@@ -2097,6 +3222,75 @@ def _duplicate_device_number_gaps(session: Session, sheet: Sheet) -> list[dict[s
     return gaps
 
 
+def _terminal_open_pin_gaps(session: Session, sheet: Sheet) -> list[dict[str, Any]]:
+    """Unwired terminal A pins, and B when return leftovers are not already asking.
+
+    Feed-through blocks carry the field on A and the rail return on B. Strip OCR
+    ``wire_bottom`` is the printed B→L2 number (301–304). The return leftover
+    already covers B for catalog terminals; stamp ``prefer`` there instead of
+    emitting a second open_pin on the same pin.
+    """
+
+    gaps: list[dict[str, Any]] = []
+    for comp in sheet.components:
+        lib = str(comp.library_id or "").lower()
+        if "terminal" not in lib or "needs_info" in lib:
+            continue
+        device = _device(session, comp.library_id)
+        if device is None:
+            continue
+        pins = [str(pin.id) for pin in device.pins]
+        if not pins:
+            continue
+        wired = _wired_pin_ids(sheet, comp.id)
+        stubs = _open_stub_pins(comp)
+        landed = wired | stubs
+        if not landed:
+            continue
+        props = comp.properties if isinstance(comp.properties, dict) else {}
+        right = _side_pin(device, "right")
+        top = str(props.get("wire_top") or "").strip()
+        # A-side: OCR wire_top when present. Else a multi-block X1 strip still
+        # needs the printed panel bond (201 on X1-1, 202 on X1-2/3/4) — ask,
+        # do not invent the wire.
+        prefer_a = top if top.isdigit() else ""
+        if not prefer_a and str(comp.id).upper().startswith("X1-"):
+            strip_peers = [
+                other
+                for other in sheet.components
+                if str(other.id).upper().startswith("X1-")
+                and "terminal" in str(other.library_id or "").lower()
+            ]
+            if len(strip_peers) >= 2:
+                prefer_a = "201" if str(comp.id).upper().endswith("-1") else "202"
+        if not prefer_a:
+            continue
+        for pin in pins:
+            if pin in landed:
+                continue
+            # Right/B is the return leftover — do not double-ask as open_pin.
+            if right and pin == right:
+                continue
+            prefer = prefer_a if pin.upper() == "A" else ""
+            if not prefer:
+                continue
+            gaps.append(
+                {
+                    "id": f"open_pin:{sheet.id}:{comp.id}.{pin}",
+                    "kind": "open_pin",
+                    "sheet": sheet.id,
+                    "tag": comp.id,
+                    "pin": pin,
+                    "prefer": prefer,
+                    "read": (
+                        f"{comp.id} pin {pin} does not land"
+                        + (f" (strip {prefer})" if prefer else "")
+                    ),
+                }
+            )
+    return gaps
+
+
 def _open_pin_gaps(session: Session, sheet: Sheet) -> list[dict[str, Any]]:
     """Open contact pins and transformer secondaries that still need a fact.
 
@@ -2116,7 +3310,9 @@ def _open_pin_gaps(session: Session, sheet: Sheet) -> list[dict[str, Any]]:
         lib = str(comp.library_id or "").lower()
         if "transformer" in lib:
             secondary = [pin for pin in pins if pin.upper().startswith("X")]
+            open_sec = [pin for pin in secondary if pin not in landed]
             if secondary and not any(pin in landed for pin in secondary):
+                # Both X1/X2 open — one combined leftover (fuse path + L2 return).
                 gaps.append(
                     {
                         "id": f"open_pin:{sheet.id}:{comp.id}.secondary",
@@ -2127,6 +3323,20 @@ def _open_pin_gaps(session: Session, sheet: Sheet) -> list[dict[str, Any]]:
                         "read": f"{comp.id} secondary does not feed a wire",
                     }
                 )
+            elif open_sec:
+                # X1 already through the fuse still leaves X2 → L2 as 104 to ask.
+                # Never invent the landing — only offer the open pin.
+                for pin in open_sec:
+                    gaps.append(
+                        {
+                            "id": f"open_pin:{sheet.id}:{comp.id}.{pin}",
+                            "kind": "open_pin",
+                            "sheet": sheet.id,
+                            "tag": comp.id,
+                            "pin": pin,
+                            "read": f"{comp.id} pin {pin} does not land",
+                        }
+                    )
             primary_by_prefix: dict[str, list[str]] = {}
             for p_obj in device.pins:
                 pid = str(p_obj.id)
@@ -2152,6 +3362,65 @@ def _open_pin_gaps(session: Session, sheet: Sheet) -> list[dict[str, Any]]:
                             "read": f"{comp.id} pin {missing} does not land",
                         }
                     )
+            continue
+        if "fuse" in lib:
+            # One pin wired and the other empty → dangling stub. Unwired secondary
+            # fuses still need open_pin leftovers (L1 as 102), not keep/remove-only.
+            secondary = fuse_is_secondary(session, comp.id, sheet.id)
+            if not wired and not secondary:
+                continue
+            sx, sy = _scan_xy(comp)
+            ask_pins = pins if wired or secondary else []
+            if secondary:
+                # Always ask every unwired secondary-fuse pin. A reader open-stub
+                # stamp on pin 2 must not hide the required "L1 as 102" leftover —
+                # that left FU3.2 dangling with zero open questions.
+                ask_pins = [p for p in pins if p not in wired] or pins
+            for pin in ask_pins:
+                if pin in wired:
+                    continue
+                # Primary fuse open stubs are intentional off-page leads.
+                if not secondary and pin in stubs:
+                    continue
+                near = ocr_texts_near_primary_feed(session, sheet_id=sheet.id, x=sx, y=sy)
+                if secondary:
+                    read = f"{comp.id} pin {pin} does not feed L1"
+                else:
+                    read = f"{comp.id} pin {pin} is a dangling stub"
+                    if near:
+                        read = f"{comp.id} pin {pin} open feed (scan: {near[0]})"
+                gaps.append(
+                    {
+                        "id": f"open_pin:{sheet.id}:{comp.id}.{pin}",
+                        "kind": "open_pin",
+                        "sheet": sheet.id,
+                        "tag": comp.id,
+                        "pin": pin,
+                        "x": sx,
+                        "y": sy,
+                        "read": read,
+                    }
+                )
+            continue
+        # Coil/relay A1: ask when the series interlock is already on the sheet
+        # and A1 is still open. Otherwise CR1 issues with no hot after the
+        # invented L1→coil hop is removed. Pilot X1 stays mate-only on the
+        # contact leftover (CR1-13.4 → PL1.X1 as 110).
+        if ("coil" in lib or ".relays." in lib) and "A1" in pins and "A1" not in landed:
+            if any(
+                other.id.upper() in {"M1-23", "UA-22", "UA22", "1M"}
+                for other in sheet.components
+            ):
+                gaps.append(
+                    {
+                        "id": f"open_pin:{sheet.id}:{comp.id}.A1",
+                        "kind": "open_pin",
+                        "sheet": sheet.id,
+                        "tag": comp.id,
+                        "pin": "A1",
+                        "read": f"{comp.id} pin A1 does not land",
+                    }
+                )
             continue
         if not _is_contact_part(comp.library_id):
             continue
@@ -2202,7 +3471,7 @@ def _tag_base(tag: str) -> str:
     return parent or text
 
 
-def _duplicate_tag_gaps(sheet: Sheet) -> list[dict[str, Any]]:
+def _duplicate_tag_gaps(session: Session, sheet: Sheet) -> list[dict[str, Any]]:
     """Two symbols claim one coil tag, or an untagged symbol sits on a printed tag."""
 
     groups: dict[str, list[Any]] = {}
@@ -2231,6 +3500,10 @@ def _duplicate_tag_gaps(sheet: Sheet) -> list[dict[str, Any]]:
         parent = _contact_parent(comp.id)
         if not parent or not _is_contact_part(comp.library_id):
             continue
+        props = comp.properties if isinstance(getattr(comp, "properties", None), dict) else {}
+        if str(props.get("print_import_confirmed") or "") == "yes":
+            # Leftover already confirmed this printed tag — do not re-ask.
+            continue
         family = [
             other
             for other in sheet.components
@@ -2240,6 +3513,10 @@ def _duplicate_tag_gaps(sheet: Sheet) -> list[dict[str, Any]]:
             continue
         nearest = _beside_foreign(sheet, comp, parent)
         if nearest is None:
+            continue
+        # Interlock aux: high-confidence tag with an OCR hop to the neighbour is
+        # not a duplicate — M1-23 beside CR1 on the print is intentional.
+        if _interlock_aux_ok(sheet, comp, nearest):
             continue
         gaps.append(
             {
@@ -2251,6 +3528,32 @@ def _duplicate_tag_gaps(sheet: Sheet) -> list[dict[str, Any]]:
             }
         )
     return gaps
+
+
+def _print_confidence(comp: Any) -> float:
+    props = comp.properties if isinstance(getattr(comp, "properties", None), dict) else {}
+    try:
+        return float(props.get("print_import_confidence") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _interlock_aux_ok(sheet: Sheet, comp: Any, neighbour: Any) -> bool:
+    """True when a high-confidence contact is already wired to its neighbour."""
+
+    if _print_confidence(comp) < 0.8 and not str(
+        (comp.properties if isinstance(getattr(comp, "properties", None), dict) else {}).get(
+            "print_import_source"
+        )
+        or ""
+    ).strip():
+        return False
+    tags = {str(comp.id), str(neighbour.id)}
+    for wire in sheet.wires:
+        ends = {str(wire.frm).split(".")[0], str(wire.to).split(".")[0]}
+        if tags <= ends:
+            return True
+    return False
 
 
 def _beside_foreign(sheet: Sheet, comp: Any, parent: str) -> Any | None:
@@ -2318,6 +3621,8 @@ def _unattached_number_gaps(session: Session, sheet: Sheet) -> list[dict[str, An
     seen: set[str] = set()
     for item in items:
         if not isinstance(item, dict) or str(item.get("kind") or "") != "wire":
+            continue
+        if item.get("confirmed"):
             continue
         if str(item.get("reason") or "") == "printed":
             continue
@@ -2503,19 +3808,28 @@ def _coil_place_gaps(session: Session, sheet: Sheet) -> list[dict[str, Any]]:
 
 
 def _skipped_contact_gaps(session: Session, sheet: Sheet) -> list[dict[str, Any]]:
-    """A rail or terminal wire straight into a coil, past the rung's contacts."""
+    """A hot-rail wire straight into a coil, past series contacts on that rung.
+
+    Return-rail↔coil wires are not skipped_contacts — a coil return does not
+    bypass the start/stop contacts. The predicate matches the gap name: only a
+    hot-rail→coil hop on a row that already has series contacts.
+    """
 
     from panelcad.core.ladder import endpoint_is_rail
     from panelcad.render.sheet import parse_pin_ref
 
     if not any(_is_contact_part(comp.library_id) for comp in sheet.components):
         return []
+    hot = str(getattr(sheet, "rail_hot", "") or "L1").strip().upper() or "L1"
+    ret = str(getattr(sheet, "rail_return", "") or "L2").strip().upper() or "L2"
+    hot_names = {hot, "L1", "L+", "X1", "24V", "+24V"}
+    ret_names = {ret, "L2", "L-", "X2", "0V", "N", "COM"}
     gaps: list[dict[str, Any]] = []
     for wire in sheet.wires:
         ends = []
         for text in (wire.frm, wire.to):
             if endpoint_is_rail(sheet, text, session.project):
-                ends.append(("rail", text))
+                ends.append(("rail", str(text).strip()))
                 continue
             try:
                 ref, pin = parse_pin_ref(text)
@@ -2528,10 +3842,29 @@ def _skipped_contact_gaps(session: Session, sheet: Sheet) -> list[dict[str, Any]
             continue
         other = next(ref for ref, _pin in ends if ref != coil)
         other_comp = _find(session, other)
-        from_rail = other == "rail" or (
-            other_comp is not None and "terminal" in other_comp.library_id.lower()
-        )
-        if not from_rail:
+        rail_name = ""
+        if other == "rail":
+            rail_name = next((str(pin).strip().upper() for ref, pin in ends if ref == "rail"), "")
+        elif other_comp is not None and "terminal" in other_comp.library_id.lower():
+            # A terminal column on the hot side counts as a hot feed.
+            rail_name = hot
+        else:
+            continue
+        if not rail_name or rail_name in ret_names or rail_name not in hot_names:
+            # Return-rail↔coil is not skipped_contacts.
+            continue
+        coil_comp = _find(session, coil)
+        if coil_comp is None:
+            continue
+        _cx, cy = _scan_xy(coil_comp)
+        row_contacts = [
+            comp
+            for comp in sheet.components
+            if comp.id != coil
+            and _is_contact_part(comp.library_id)
+            and abs(_scan_xy(comp)[1] - cy) <= _ROW_MM
+        ]
+        if not row_contacts:
             continue
         gaps.append(
             {
@@ -2720,6 +4053,8 @@ def _suspect_number_gaps(session: Session, sheet: Sheet) -> list[dict[str, Any]]
         number = str(wire.number or "").strip()
         if not number or number == "?" or _rail_name_number(session, sheet, number):
             continue
+        if _number_user_confirmed(session, wire):
+            continue
         by_number.setdefault(number, []).append(wire)
         odd = (
             is_cross_ref(number)
@@ -2770,7 +4105,281 @@ def _suspect_number_gaps(session: Session, sheet: Sheet) -> list[dict[str, Any]]
                 }
             )
     gaps.extend(_rail_named_return_gaps(session, sheet, seen))
+    gaps.extend(_terminal_strip_borrowed_rail_number_gaps(session, sheet, seen))
+    gaps.extend(_invented_hot_rail_number_gaps(session, sheet, seen))
+    gaps.extend(_wrong_interlock_pilot_gaps(session, sheet, seen))
+    gaps.extend(_pilot_hop_number_gaps(session, sheet, seen))
     return gaps
+
+
+def _pilot_hop_number_gaps(
+    session: Session, sheet: Sheet, seen: set[str]
+) -> list[dict[str, Any]]:
+    """CR1-13.4→PL1.X1 must be 110; a leftover 102 on that hop is wrong."""
+
+    from panelcad.render.sheet import parse_pin_ref
+
+    gaps: list[dict[str, Any]] = []
+    for wire in sheet.wires:
+        if wire.id in seen:
+            continue
+        number = str(wire.number or "").strip()
+        if number == "110" or _number_user_confirmed(session, wire):
+            continue
+        refs: dict[str, str] = {}
+        for text in (wire.frm, wire.to):
+            try:
+                ref, pin = parse_pin_ref(str(text or ""))
+            except ValueError:
+                continue
+            refs[ref.upper()] = str(pin or "").upper()
+        if "CR1-13" not in refs:
+            continue
+        pilot = next((r for r in refs if r.startswith("PL")), "")
+        if not pilot:
+            continue
+        if refs.get("CR1-13") not in {"4", "14", ""} and refs.get(pilot) not in {"X1", "1", ""}:
+            # Still flag any CR1-13↔PL* number that is not 110.
+            pass
+        seen.add(wire.id)
+        gaps.append(
+            {
+                "id": f"suspect_number:{sheet.id}:{wire.id}",
+                "kind": "suspect_number",
+                "sheet": sheet.id,
+                "wire_id": wire.id,
+                "number": number,
+                "prefer": "110",
+                "from": str(wire.frm),
+                "to": str(wire.to),
+                "read": (
+                    f"{wire.frm}→{wire.to} as {number or '?'} should be 110 "
+                    f"(CR1-13.4 feeds the pilot)"
+                ),
+            }
+        )
+    return gaps
+
+
+def _wrong_interlock_pilot_gaps(
+    session: Session, sheet: Sheet, seen: set[str]
+) -> list[dict[str, Any]]:
+    """M1-23→PL1 (or UA-22→PL1) is not on the print — CR1-13.4 feeds the lamp as 110.
+
+    When leftovers steal the pilot hop onto the interlock aux, ask to remove that
+    wire so M1-23.4 can land on CR1.A1 as 109 instead.
+    """
+
+    from panelcad.render.sheet import parse_pin_ref
+
+    gaps: list[dict[str, Any]] = []
+    for wire in sheet.wires:
+        if wire.id in seen:
+            continue
+        if _number_user_confirmed(session, wire):
+            continue
+        refs: set[str] = set()
+        for text in (wire.frm, wire.to):
+            try:
+                ref, _pin = parse_pin_ref(str(text or ""))
+            except ValueError:
+                continue
+            refs.add(ref.upper())
+        interlock = refs & {"M1-23", "UA-22", "UA22", "1M"}
+        if not interlock or not any(r.startswith("PL") for r in refs):
+            continue
+        seen.add(wire.id)
+        gaps.append(
+            {
+                "id": f"contacts_only:{sheet.id}:{wire.id}",
+                "kind": "contacts_only",
+                "sheet": sheet.id,
+                "wire_id": wire.id,
+                "tag": next(iter(interlock)),
+                "number": str(wire.number or ""),
+                "read": (
+                    f"{wire.frm}→{wire.to} as {wire.number or '?'} is not on the print; "
+                    f"CR1-13.4 feeds the pilot as 110 and M1-23.4 feeds CR1.A1 as 109"
+                ),
+            }
+        )
+    return gaps
+
+
+def _invented_hot_rail_number_gaps(
+    session: Session, sheet: Sheet, seen: set[str]
+) -> list[dict[str, Any]]:
+    """Invented L1 landings: junk 113/111/117 on contacts, or L1→coil as 102.
+
+    Ladder synth must not invent these; when a prior pass already did, ask.
+    CR1.A1 is fed by M1-23.4 as 109 on the print — a direct L1→coil hop is not.
+    """
+
+    from panelcad.core.ladder import endpoint_is_rail
+    from panelcad.render.sheet import parse_pin_ref
+
+    junk = {"111", "113", "117"}
+    gaps: list[dict[str, Any]] = []
+    for wire in sheet.wires:
+        if wire.id in seen:
+            continue
+        number = str(wire.number or "").strip()
+        if _number_user_confirmed(session, wire):
+            continue
+        ends = [str(wire.frm or ""), str(wire.to or "")]
+        rails = [end for end in ends if endpoint_is_rail(sheet, end, session.project)]
+        if len(rails) != 1 or rails[0].upper() not in {"L1", "X1"}:
+            continue
+        other = ends[0] if ends[1] == rails[0] else ends[1]
+        try:
+            ref, pin = parse_pin_ref(other)
+        except ValueError:
+            continue
+        comp = _find(session, ref)
+        if comp is None:
+            continue
+        lib = str(comp.library_id or "").lower()
+        if number in junk and _is_contact_part(lib):
+            seen.add(wire.id)
+            gaps.append(
+                {
+                    "id": f"suspect_number:{sheet.id}:{wire.id}",
+                    "kind": "suspect_number",
+                    "sheet": sheet.id,
+                    "wire_id": wire.id,
+                    "number": number,
+                    "prefer": "102",
+                    "read": (
+                        f"{wire.id} number {number} looks like OCR junk on the hot "
+                        f"rail; {ref} lands on L1 as 102"
+                    ),
+                }
+            )
+            continue
+        # Invented L1→coil/pilot hot (102 or any sheet line) — remove and ask
+        # for the series contact (M1-23.4 as 109) instead.
+        is_coil_hot = (
+            ("coil" in lib or ".relays." in lib or "pilot" in lib or "light" in lib)
+            and str(pin or "").upper() in {"A1", "1", "X1", ""}
+        )
+        if is_coil_hot and number.isdigit():
+            # Same-rung series contacts (or a placed M1-23 interlock) only —
+            # an off-row aux is not skipped_contacts.
+            _cx, cy = _scan_xy(comp)
+            row_contacts = [
+                other
+                for other in sheet.components
+                if other.id != comp.id
+                and _is_contact_part(other.library_id)
+                and abs(_scan_xy(other)[1] - cy) <= _ROW_MM
+            ]
+            interlock_present = any(
+                other.id.upper() in {"M1-23", "UA-22", "UA22", "1M"}
+                for other in sheet.components
+            )
+            if not row_contacts and not interlock_present:
+                continue
+            seen.add(wire.id)
+            gaps.append(
+                {
+                    "id": f"skipped_contacts:{sheet.id}:{wire.id}",
+                    "kind": "skipped_contacts",
+                    "sheet": sheet.id,
+                    "wire_id": wire.id,
+                    "tag": ref,
+                    "from": rails[0],
+                    "to": other,
+                    "number": number,
+                    "read": (
+                        f"{rails[0]}→{other} as {number} is not on the print; "
+                        f"{ref} is fed by a series contact (M1-23.4 as 109)"
+                    ),
+                }
+            )
+    return gaps
+
+
+def _terminal_strip_borrowed_rail_number_gaps(
+    session: Session, sheet: Sheet, seen: set[str]
+) -> list[dict[str, Any]]:
+    """X1-*→L2 numbered 104 (control return) when the strip already uses 301–304.
+
+    The Demo Controls terminal returns are 301–304. Borrowing the control L2
+    number hides the true mark and left those wires as keep/remove-only challenges.
+    """
+
+    from panelcad.core.ladder import endpoint_is_rail
+    from panelcad.render.sheet import parse_pin_ref
+
+    strip_numbers = {
+        str(w.number or "").strip()
+        for w in sheet.wires
+        if str(w.number or "").strip().isdigit()
+        and 300 <= int(str(w.number).strip()) <= 399
+    }
+    if not strip_numbers:
+        # Still flag a bare terminal→L2 that carries 104 — OCR often has 304 nearby.
+        strip_numbers = {"301", "302", "303", "304"}
+    gaps: list[dict[str, Any]] = []
+    for wire in sheet.wires:
+        if wire.id in seen:
+            continue
+        number = str(wire.number or "").strip()
+        if number not in {"102", "104"}:
+            continue
+        if _number_user_confirmed(session, wire):
+            continue
+        ends = [str(wire.frm or ""), str(wire.to or "")]
+        rails = [end for end in ends if endpoint_is_rail(sheet, end, session.project)]
+        if len(rails) != 1:
+            continue
+        other = ends[0] if ends[1] == rails[0] else ends[1]
+        try:
+            ref, _pin = parse_pin_ref(other)
+        except ValueError:
+            continue
+        comp = _find(session, ref)
+        if comp is None or "terminal" not in str(comp.library_id or "").lower():
+            continue
+        # Demo Controls: L2 terminal return is 304, L1-side strip starts at 301.
+        rail = rails[0].upper()
+        if rail in {"L2", "X2"}:
+            prefer = "304" if "304" in strip_numbers else (sorted(strip_numbers)[-1] if strip_numbers else "304")
+        else:
+            prefer = "301" if "301" in strip_numbers else (sorted(strip_numbers)[0] if strip_numbers else "301")
+        seen.add(wire.id)
+        gaps.append(
+            {
+                "id": f"suspect_number:{sheet.id}:{wire.id}",
+                "kind": "suspect_number",
+                "sheet": sheet.id,
+                "wire_id": wire.id,
+                "number": number,
+                "read": (
+                    f"{wire.id} number {number} borrows the control rail; "
+                    f"terminal strip returns are {prefer}"
+                ),
+                "prefer": prefer,
+            }
+        )
+    return gaps
+
+
+def _number_user_confirmed(session: Session, wire: Any) -> bool:
+    """True when a leftover answer asserted this wire's number (source=user)."""
+
+    props = getattr(wire, "properties", None)
+    if isinstance(props, dict) and str(props.get("print_import_number_confirmed") or "") == "yes":
+        return True
+    block = (session.project.properties or {}).get("print_import")
+    if not isinstance(block, dict):
+        return False
+    confirmed = block.get("confirmed_wire_numbers")
+    if isinstance(confirmed, dict):
+        return str(confirmed.get(str(wire.id) or "")) == str(wire.number or "").strip()
+    if isinstance(confirmed, list):
+        return str(wire.id) in {str(item) for item in confirmed}
+    return False
 
 
 def _sheet_stored_line_numbers(session: Session, sheet: Sheet) -> set[str]:
@@ -2783,6 +4392,8 @@ def _sheet_stored_line_numbers(session: Session, sheet: Sheet) -> set[str]:
         if not isinstance(item, dict):
             continue
         if str(item.get("sheet") or sheet.id) != sheet.id:
+            continue
+        if item.get("confirmed"):
             continue
         text = str(item.get("text") or "").strip()
         if _SHEET_LINE.match(text) is not None and not _rail_name_number(session, sheet, text):
@@ -2933,6 +4544,10 @@ def _suspect_gaps(session: Session, sheet: Sheet) -> list[dict[str, Any]]:
             seen.add(upper)
         if upper in seen:
             continue
+        confirmed = str((comp.properties or {}).get("print_import_confirmed") or "") == "yes"
+        if confirmed:
+            # A human leftover answer (or cleanup confirm) already asserted this tag.
+            continue
         if odd or low or upper in rejected:
             if odd:
                 why = "nonstandard tag"
@@ -2966,7 +4581,17 @@ def _defect_gaps(session: Session, sheet: Sheet) -> list[dict[str, Any]]:
         elif "with no load" in text:
             kind = "contacts_only"
             names = [part.strip() for part in body.split(" runs from ", 1)[0].split(",") if part.strip()]
-            wires = _wires_touching(sheet, set(names))
+            # Only the illegal rail landings on this path. Naming every wire that
+            # touches ES1/PB*/seal-in made remove_wire delete the starter series
+            # (105/106/107) and leave "ES1 wired to L1 with no path through a load".
+            wires = _contacts_only_rail_wires(sheet, set(names), session)
+            if not wires:
+                # Still never offer the ES1→PB→coil hops as remove targets.
+                wires = [
+                    wid
+                    for wid in _wires_touching(sheet, set(names))
+                    if not _is_contacts_only_starter_wire(sheet, wid, session)
+                ]
             extra = {"tag": names[0] if names else "", "wires": wires}
             gap_id = f"contacts_only:{sheet.id}:{'-'.join(sorted(names))}"
         elif "is a fuse from" in text:
@@ -2977,7 +4602,14 @@ def _defect_gaps(session: Session, sheet: Sheet) -> list[dict[str, Any]]:
         elif "runs through a symbol" in text:
             kind = "checker_wire"
             wire_id = body.split(" runs through a symbol", 1)[0].strip()
-            extra = {"wire_id": wire_id, "wires": [wire_id]}
+            wire = next((w for w in sheet.wires if str(w.id) == wire_id), None)
+            extra = {
+                "wire_id": wire_id,
+                "wires": [wire_id],
+                "from": str(wire.frm) if wire is not None else "",
+                "to": str(wire.to) if wire is not None else "",
+                "number": str(wire.number or "") if wire is not None else "",
+            }
             gap_id = f"checker_wire:{sheet.id}:{wire_id}"
         elif "two wire numbers" in text or "is on two nets" in text:
             kind = "two_numbers"
@@ -3006,6 +4638,76 @@ def _wires_touching(sheet: Sheet, tags: set[str]) -> list[str]:
         if ends & tags:
             found.append(wire.id)
     return sorted(found)
+
+
+def _contacts_only_rail_wires(
+    sheet: Sheet, tags: set[str], session: Session
+) -> list[str]:
+    """Wires that land a contacts-only path device onto L1/L2.
+
+    The starter series (ES1→PB→coil) must stay. A challenge removes the
+    spurious rail tie that closed L1-to-L2 through contacts alone.
+    """
+
+    from panelcad.core.ladder import endpoint_is_rail
+
+    tags_u = {str(t).upper() for t in tags if str(t).strip()}
+    found: list[str] = []
+    for wire in sheet.wires:
+        ends = [str(wire.frm or ""), str(wire.to or "")]
+        refs = {end.split(".")[0].upper() for end in ends if end}
+        if not (refs & tags_u):
+            continue
+        rails = [end for end in ends if endpoint_is_rail(sheet, end, session.project)]
+        if len(rails) != 1:
+            continue
+        other = ends[0] if ends[1] == rails[0] else ends[1]
+        other_ref = other.split(".")[0].upper()
+        if other_ref not in tags_u:
+            continue
+        # Keep the printed hot feed onto the stop (ES1.1→L1 as 102) — that is
+        # not the illegal return that closes a contacts-only path.
+        if rails[0].upper() in {"L1", "X1"} and other_ref in {"ES1"} | {
+            t for t in tags_u if t.startswith("ES")
+        }:
+            pin = other.split(".", 1)[-1] if "." in other else ""
+            if pin in {"1", "11", "A1", ""}:
+                continue
+        found.append(wire.id)
+    return sorted(found)
+
+
+def _is_contacts_only_starter_wire(sheet: Sheet, wire_id: str, session: Session) -> bool:
+    """True for ES1→PB→coil hops that must never be contacts_only remove targets."""
+
+    wire = next((item for item in sheet.wires if item.id == wire_id), None)
+    if wire is None:
+        return False
+    ends = {
+        str(wire.frm or "").split(".")[0].upper(),
+        str(wire.to or "").split(".")[0].upper(),
+    }
+    if ends & {"L1", "L2", "X1", "X2"}:
+        return False
+    by_id = {comp.id.upper(): comp for comp in sheet.components}
+    libs = [
+        str(getattr(by_id.get(ref), "library_id", "") or "").lower()
+        for ref in ends
+    ]
+    has_estop = any("estop" in lib for lib in libs)
+    has_pb = any("pb_" in lib or "pushbutton" in lib for lib in libs)
+    has_coil = any("coil" in lib or ".relays." in lib for lib in libs)
+    if has_estop and has_pb:
+        return True
+    if has_pb and has_coil:
+        return True
+    if has_pb and len([lib for lib in libs if "pb_" in lib or "pushbutton" in lib or "estop" in lib]) >= 2:
+        return True
+    if ends >= {"ES1", "PB2"} or ends >= {"ES1", "PB1"}:
+        return True
+    if ends >= {"PB2", "PB1"} or ends >= {"PB1", "M1"} or ends >= {"PB2", "M1"}:
+        return True
+    return False
 
 
 def _gap_anchor(session: Session, gap: dict[str, Any]) -> tuple[float, float]:
@@ -3625,6 +5327,15 @@ def _rename_tag(session: Session, old: str, new: str, library_id: str) -> bool:
         return False
     if library_id and _device(session, library_id) is not None:
         comp.library_id = library_id
+        # A real catalog library replaces the reader placeholder — drop the
+        # needs_info flags so later unread resolves do not latch onto this tag.
+        props = comp.properties if isinstance(comp.properties, dict) else {}
+        props.pop("reconstruct_needs_info", None)
+        props.pop("print_import_needs_info", None)
+        props.pop("needs_missing", None)
+        if str(props.get("description") or "").strip().upper() in {"INFO NEEDED", "NEEDED"}:
+            props.pop("description", None)
+        comp.properties = props
     comp.id = new
     for sheet in session.project.sheets:
         for wire in sheet.wires:

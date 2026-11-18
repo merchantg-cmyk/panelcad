@@ -469,8 +469,9 @@ def _center_box(
     _outline(painter, x, y, w, h, FILL)
     row = h / 5.0
     _info_row(painter, x, y + 0 * row, w, row, "PROJECT", project.name)
-    _info_row(painter, x, y + 1 * row, w, row, "TITLE", sheet.title or sheet.id)
-    _info_row(painter, x, y + 2 * row, w, row, "DESCRIPTION", sheet.description)
+    # Blank when the scan gave no title — do not invent the sheet id (page_001).
+    _info_row(painter, x, y + 1 * row, w, row, "TITLE", sheet.title or "")
+    _info_row(painter, x, y + 2 * row, w, row, "DESCRIPTION", sheet.description or "")
     half = w / 2.0
     # The standard name is kept whole. A narrow sheet gives that cell the room,
     # and the letters shrink instead of being cut to an ellipsis.

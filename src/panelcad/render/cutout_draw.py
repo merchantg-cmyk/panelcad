@@ -240,24 +240,55 @@ def write_cutout_pdf(path: Path | str, drawings: list[SurfaceDrawing], project: 
 
 
 def paint_cutouts_on_printer(printer, drawings: list[SurfaceDrawing], project: Project | None = None) -> None:
-    """Paint every surface into a QPrinter (print preview or a real printer)."""
+    """Paint every surface into a QPrinter (print preview or a real printer).
+
+    Fits each cutout sheet into the printer's paint rect (same fit-to-page rule as
+    File → Print) and honors QPrinter page ranges when present.
+    """
 
     from PySide6.QtGui import QPainter
 
-    from panelcad.render.page import configure_full_page
+    from panelcad.render.page import (
+        apply_sheet_orientation,
+        fit_sheet_to_rect,
+        paint_rect_mm,
+    )
 
     if not drawings:
         return
-    configure_full_page(printer, drawings[0].page_width_mm, drawings[0].page_height_mm)
+    pages = list(drawings)
+    if hasattr(printer, "printRange"):
+        try:
+            from PySide6.QtPrintSupport import QPrinter
+
+            rng = printer.printRange()
+            n = len(pages)
+            if rng == QPrinter.PrintRange.PageRange:
+                start = max(1, int(printer.fromPage() or 1))
+                end = min(n, max(start, int(printer.toPage() or n)))
+                pages = pages[start - 1 : end]
+            elif rng in (QPrinter.PrintRange.CurrentPage, QPrinter.PrintRange.Selection):
+                pages = pages[:1]
+        except Exception:
+            pass
+    if not pages:
+        return
+    # One orientation for the whole job (first surface), same rule as File → Print.
+    apply_sheet_orientation(printer, pages[0].page_width_mm, pages[0].page_height_mm)
     painter = QPainter(printer)
     try:
-        for index, drawing in enumerate(drawings):
+        for index, drawing in enumerate(pages):
             if index:
-                configure_full_page(printer, drawing.page_width_mm, drawing.page_height_mm)
                 printer.newPage()
             dpi = float(printer.logicalDpiX() or 72)
             painter.resetTransform()
             painter.scale(dpi / 25.4, dpi / 25.4)
+            fit_sheet_to_rect(
+                painter,
+                drawing.page_width_mm,
+                drawing.page_height_mm,
+                paint_rect_mm(printer, painter),
+            )
             paint_cutout(QtPainter(painter, print_paper=True), drawing, project)
     finally:
         if painter.isActive():

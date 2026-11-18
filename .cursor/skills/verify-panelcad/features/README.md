@@ -5,6 +5,7 @@ One file per user-facing feature. Each lists its sub-features, how a user reache
 | Feature | File | Driver journey | Status |
 | --- | --- | --- | --- |
 | Print package export with sheet selection | [print-package.md](print-package.md) | `print-package` | Proven (Linux offscreen, run proof-2) |
+| File → Print dialog (fit-to-page + page range) | [print-dialog.md](print-dialog.md) | `print-dialog` | Proven when `launch.sh print-dialog` passes |
 | New project and sheet editing | [new-project-sheets.md](new-project-sheets.md) | none yet | Mapped |
 | Ladder wiring, wires landing on pins | [ladder-wiring.md](ladder-wiring.md) | none yet | Mapped |
 | IEC-to-NEMA conversion with the From-To check | [iec-to-nema-convert.md](iec-to-nema-convert.md) | `iec-to-nema-convert` | Proven |

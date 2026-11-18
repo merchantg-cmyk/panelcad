@@ -633,6 +633,15 @@ def _fit_dialog_to_box(widget: QWidget, avail: QRect) -> None:
 def _ensure_dialog_scroll(dialog: QDialog) -> None:
     if dialog.property("_pc_scrolled"):
         return
+    # Print dialogs size themselves (see screen_fit.fit_print_dialog). Wrapping
+    # them hides Print/Cancel behind a scroll area on short laptop screens.
+    try:
+        from PySide6.QtPrintSupport import QPrintDialog, QPrintPreviewDialog
+
+        if isinstance(dialog, (QPrintDialog, QPrintPreviewDialog)):
+            return
+    except Exception:
+        pass
     layout = dialog.layout()
     if layout is None:
         return

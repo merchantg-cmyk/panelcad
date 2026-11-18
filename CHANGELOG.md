@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.5.28 — 2026-11-17
+
+- Scan rebuilds default to ladder layout.
+- Preserve layout for scans is blocked from issuing for now.
+- Leftover-question step.
+- Print fit/page range.
+- After scan cleanup and challenge, leftover completion blockers become **Leftover questions**: each open gate reason is listed with one-click choices from OCR candidates, neighbouring numbers, keep as `?`, or remove (reader-produced wires/devices only), plus a typed fallback. Answers are recorded as user-asserted facts (`source=user` with timestamp), persist on the project, appear in revision notes, and never loosen checkers — the sheet issues only when the fact is known and the existing gate passes. GUI: Print review tab `Leftover questions (N)` with plain-language kind labels, word-wrapped question text, full-size choice buttons, typed fallback, scan and rebuilt crops, scroll when the dock is short, and an Answer-in-dialog path. CLI: `panelcad import leftovers PROJECT` and `--answers FILE`. Live scan-fixture e2e (`clean_300` / `dpi_150` / `phone`) skips when electrical OCR weights are not installed. A pinless `reconstruct.needs_info` placeholder no longer crashes issue/`_pin_named` — it blocks as an unread gap. Challenge-only leftovers (`skipped_contacts`, `checker_wire`, …) offer only keep/remove. Open-pin and return leftovers can offer `M1.A2 as 108` when a mate pin and printed number exist. An unread-device leftover accepts a printed tag or remove of the reader symbol.
+
 ## 0.5.27 — 2026-11-11
 
 - The M1.A2 to OL1.95 wire numbered 108 can still read as '?' on some scans.

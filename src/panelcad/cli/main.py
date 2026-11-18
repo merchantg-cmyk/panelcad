@@ -642,7 +642,7 @@ def import_cmd(
     answers: Optional[Path] = typer.Option(
         None,
         "--answers",
-        help="With `import answer`, a JSON file of {id, value} rows, or a map of id to value.",
+        help="With `import answer` or `import leftovers`, a JSON file of {id, value} rows, or a map of id to value.",
     ),
     ocr_backend: Optional[str] = typer.Option(
         None,
@@ -657,6 +657,8 @@ def import_cmd(
     `panelcad import apply RESPONSE.json --out PROJECT` checks that JSON and builds
     the project. `panelcad import answer PROJECT QUESTION VALUE` applies a human's
     answer and prints the questions still open.
+    `panelcad import leftovers PROJECT` lists leftover scan questions as JSON.
+    `panelcad import leftovers PROJECT --answers FILE` applies user leftover answers.
     """
     from panelcad.ocr.backend import normalize_backend
 
@@ -665,7 +667,7 @@ def import_cmd(
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from None
     paths = list(sources or [])
-    if paths and paths[0].name in {"prep", "apply", "answer"} and not paths[0].exists():
+    if paths and paths[0].name in {"prep", "apply", "answer", "leftovers"} and not paths[0].exists():
         _import_agent_command(
             paths,
             out=out,
@@ -754,7 +756,7 @@ def _import_agent_command(
     extra: Optional[list[str]] = None,
     ocr_backend: Optional[str] = None,
 ) -> None:
-    """`import prep`, `import apply`, and `import answer` share the existing import command."""
+    """`import prep`, `import apply`, `import answer`, and `import leftovers` share the import command."""
 
     from panelcad.ocr.backend import ocr_scope
 
@@ -784,6 +786,9 @@ def _import_agent_command_body(
     rest = paths[1:]
     if verb == "answer":
         _import_answer(rest, answers, extra or [])
+        return
+    if verb == "leftovers":
+        _import_leftovers(rest, answers)
         return
     if verb == "prep":
         if out is None:
@@ -828,6 +833,53 @@ def _import_answer(rest: list[Path], answers: Optional[Path], extra: list[str]) 
     typer.echo(json.dumps(payload, indent=2, default=str))
     if not payload.get("applied"):
         raise typer.Exit(code=1)
+
+
+def _import_leftovers(rest: list[Path], answers: Optional[Path]) -> None:
+    """List or apply leftover scan questions after cleanup and challenge.
+
+    ``panelcad import leftovers PROJECT`` prints open questions as JSON.
+    ``panelcad import leftovers PROJECT --answers FILE`` applies user answers
+    (source=user) and re-checks the strict completion gate.
+    """
+
+    from panelcad.importer import leftover_questions as leftover
+
+    if not rest:
+        raise typer.BadParameter("panelcad import leftovers PROJECT [--answers FILE]")
+    session = Session.open(rest[0])
+    if answers is not None:
+        payload = leftover.apply_answers(session, leftover.load_answers(answers))
+        # apply_answers persists post-issue geometry; save again if the project
+        # path was rebound or the batch left unsaved answers only.
+        if session.path:
+            session.save(session.path)
+        typer.echo(json.dumps(payload, indent=2, default=str))
+        if not payload.get("applied"):
+            raise typer.Exit(code=1)
+        # Preserve-mode scans are blocked from issuing. Exit nonzero on every
+        # fixture so callers do not treat a blocked sheet as success (dpi_150
+        # used to exit 0 while clean_300 exited 1).
+        from panelcad.importer.cleanup import _PRESERVE_SCAN_BLOCK
+
+        completion = payload.get("completion") or []
+        if any(_PRESERVE_SCAN_BLOCK in str(item) for item in completion):
+            raise typer.Exit(code=1)
+        return
+    rows = leftover.questions_for(session)
+    typer.echo(
+        json.dumps(
+            {
+                "ok": True,
+                "open": len(rows),
+                "questions": rows,
+                "answers": leftover.recorded_answers(session),
+                "revision_notes": leftover.revision_notes(session),
+            },
+            indent=2,
+            default=str,
+        )
+    )
 
 
 def _is_print_source(path: Path) -> bool:

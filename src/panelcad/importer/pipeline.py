@@ -612,7 +612,7 @@ class ImportJob:
         *,
         out: Path | str | None = None,
         name: str = "",
-        layout_mode: str = "preserve",
+        layout_mode: str = "",
         target_standard: str = "auto",
     ) -> Session:
         self._relocate_page_images()
@@ -636,11 +636,29 @@ class ImportJob:
                 if prior["from_to_schedule"].get("user_edited"):
                     stitched["from_to_schedule"] = prior["from_to_schedule"]
                     break
-        eff_layout = str(
-            layout_mode
-            if layout_mode and layout_mode != "preserve"
-            else (self.manifest.get("layout_mode") or layout_mode or "preserve")
+        # Ladder is the default only for the raster scan reader (backend
+        # raster / auto / empty) on non-vector pages. PDF/vector input keeps
+        # preserve even when backend=raster. External, vision, and photo
+        # imports keep preserve. Preserve-mode scan-reader sheets cannot issue.
+        requested = str(layout_mode or "").strip().lower()
+        stamped = str(self.manifest.get("layout_mode") or stitched.get("layout_mode") or "").strip().lower()
+        backend = str(self.manifest.get("backend") or self.backend_name or "").strip().lower()
+        non_vector = bool(pages) and any(
+            not page.get("vector") and not _page_is_svg(page) for page in pages
         )
+        scan_reader = backend in {"raster", "auto", ""} and non_vector
+        if requested in {"ladder", "clean_ladder", "clean"}:
+            eff_layout = "ladder"
+        elif requested == "preserve":
+            eff_layout = "preserve"
+        elif stamped in {"ladder", "clean_ladder", "clean"}:
+            eff_layout = "ladder"
+        elif stamped == "preserve":
+            eff_layout = "preserve"
+        elif scan_reader:
+            eff_layout = "ladder"
+        else:
+            eff_layout = "preserve"
         eff_target_std = str(
             target_standard
             if target_standard and target_standard != "auto"
@@ -663,10 +681,15 @@ class ImportJob:
         if eff_layout in {"ladder", "clean_ladder", "clean"}:
             _wrap_up_built_scan(self, session)
         pi = (session.project.properties or {}).get("print_import")
-        if isinstance(pi, dict) and isinstance(pi.get("from_to_schedule"), dict):
-            stitched["from_to_schedule"] = pi["from_to_schedule"]
+        if isinstance(pi, dict):
+            # Stamp scan-reader imports so the preserve issue block stays
+            # raster-reader-only (not external / vision / photo / vector PDF).
+            pi["from_scan"] = "yes" if scan_reader else "no"
+            if isinstance(pi.get("from_to_schedule"), dict):
+                stitched["from_to_schedule"] = pi["from_to_schedule"]
         self.manifest["layout_mode"] = eff_layout
         self.manifest["target_standard"] = eff_target_std
+        self.manifest["from_scan"] = "yes" if scan_reader else "no"
         self._publish_diagnostics(session, report)
         self.ws.write_json(stitched, "stitch.json")
         self.ws.write_json(report, "build.json")

@@ -73,6 +73,13 @@ sheets:
     rotation: 0
     mirror: false
     properties: {}
+  - id: FU3
+    library_id: nema.protection.fuse_10a
+    x: 155.0
+    y: 24.0
+    rotation: 0
+    mirror: false
+    properties: {}
   - id: ES1
     library_id: nema.operators.estop
     x: 41.0
@@ -231,146 +238,200 @@ sheets:
     properties:
       type: PE
       ref_side: left
+  - id: OFF1
+    library_id: iec.connection.offpage_ref
+    x: 47.8
+    y: 28.5
+    rotation: 0
+    mirror: false
+    properties:
+      role: primary_feed
+      hide_tag: true
+      callout: EXT
+      tag: EXT
+  - id: OFF2
+    library_id: iec.connection.offpage_ref
+    x: 47.8
+    y: 66.5
+    rotation: 0
+    mirror: false
+    properties:
+      role: primary_feed
+      hide_tag: true
+      callout: EXT
+      tag: EXT
   wires:
   - id: w1
-    from: L1
+    from: OFF1.A
     to: FU1.1
-    number: '102'
-    points:
-    - x: 59.0
-      y: 77.0
-    - x: 23.0
-      y: 77.0
+    number_locked: true
+    points: []
   - id: w2
     from: FU1.2
     to: T1.H1
     number: '103'
+    number_locked: true
     points: []
   - id: w3
     from: T1.H4
-    to: FU2.1
+    to: FU2.2
     number: '101'
+    number_locked: true
     points: []
   - id: w4
-    from: FU2.2
+    from: OFF2.A
+    to: FU2.1
+    number_locked: true
+    points: []
+  - id: w5
+    from: T1.X1
+    to: FU3.1
+    number: '100'
+    number_locked: true
+    points: []
+  - id: w6
+    from: FU3.2
+    to: L1
+    number: '102'
+    number_locked: true
+    points:
+    - x: 183.0
+      y: 14.2
+    - x: 23.0
+      y: 14.2
+  - id: w7
+    from: T1.X2
     to: L2
     number: '104'
-    points:
-    - x: 87.0
-      y: 77.0
-    - x: 408.8
-      y: 77.0
-  - id: w5
+    number_locked: true
+    points: []
+  - id: w8
     from: L1
     to: ES1.1
     number: '102'
+    number_locked: true
     points: []
-  - id: w6
+  - id: w9
     from: ES1.2
     to: PB2.1
     number: '105'
+    number_locked: true
     points: []
-  - id: w7
+  - id: w10
     from: PB2.2
     to: PB1.3
     number: '106'
+    number_locked: true
     points: []
-  - id: w8
+  - id: w11
     from: PB1.4
     to: M1.A1
     number: '107'
+    number_locked: true
     points: []
-  - id: w9
+  - id: w12
     from: M1.A2
     to: OL1.95
     number: '108'
+    number_locked: true
     points: []
-  - id: w10
+  - id: w13
     from: OL1.96
     to: L2
     number: '104'
+    number_locked: true
     points: []
-  - id: w11
+  - id: w14
     from: PB2.2
     to: M1-13.3
     number: '106'
+    number_locked: true
     points: []
-  - id: w12
+  - id: w15
     from: M1-13.4
     to: PB1.4
     number: '107'
-    points: []
-  - id: w13
-    from: L1
-    to: M1-23.3
-    number: '102'
-    points: []
-  - id: w14
-    from: M1-23.4
-    to: CR1.A1
-    number: '109'
-    points: []
-  - id: w15
-    from: CR1.A2
-    to: L2
-    number: '104'
+    number_locked: true
     points: []
   - id: w16
     from: L1
-    to: CR1-13.3
+    to: M1-23.3
     number: '102'
+    number_locked: true
     points: []
   - id: w17
-    from: CR1-13.4
-    to: PL1.X1
-    number: '110'
+    from: M1-23.4
+    to: CR1.A1
+    number: '109'
+    number_locked: true
     points: []
   - id: w18
-    from: PL1.X2
+    from: CR1.A2
     to: L2
     number: '104'
+    number_locked: true
     points: []
   - id: w19
     from: L1
-    to: M1-33.3
+    to: CR1-13.3
     number: '102'
+    number_locked: true
     points: []
   - id: w20
+    from: CR1-13.4
+    to: PL1.X1
+    number: '110'
+    number_locked: true
+    points: []
+  - id: w21
+    from: PL1.X2
+    to: L2
+    number: '104'
+    number_locked: true
+    points: []
+  - id: w22
+    from: L1
+    to: M1-33.3
+    number: '102'
+    number_locked: true
+    points: []
+  - id: w23
     from: M1-33.4
     to: X1-1.A
     number: '201'
     number_locked: true
     points: []
-  - id: w21
+  - id: w24
     from: X1-1.B
     to: L2
     number: '301'
     number_locked: true
     points: []
-  - id: w22
+  - id: w25
     from: X1-2.A
     to: X1-3.A
     number: '202'
     number_locked: true
     points: []
-  - id: w23
+  - id: w26
     from: X1-2.B
     to: L2
     number: '302'
     number_locked: true
     points: []
-  - id: w24
+  - id: w27
     from: X1-3.B
     to: L2
     number: '303'
     number_locked: true
     points: []
-  - id: w25
+  - id: w28
     from: X1-4.A
     to: X1-2.A
-    number: '104'
+    number: '202'
+    number_locked: true
     points: []
-  - id: w26
+  - id: w29
     from: X1-4.B
     to: L2
     number: '304'
@@ -620,10 +681,10 @@ sheets:
 last_saved:
   user: ubuntu
   host: cursor
-  time: '2026-11-07T01:15:50'
+  time: '2026-11-11T20:33:19'
   summary: saved
 activity:
 - user: ubuntu
   host: cursor
-  time: '2026-11-07T01:15:50'
+  time: '2026-11-11T20:33:19'
   summary: saved

@@ -2604,7 +2604,15 @@ class Agent:
 
     def op_import_build(self, msg: dict[str, Any]) -> dict[str, Any]:
         job = self._import_job()
-        session = job.build(out=msg.get("path"), name=str(msg.get("name") or ""))
+        # Omit layout_mode when unset so ImportJob.build picks ladder for the
+        # raster scan reader and preserve for PDF/vector, external, and vision.
+        build_kw: dict[str, Any] = {
+            "out": msg.get("path"),
+            "name": str(msg.get("name") or ""),
+        }
+        if msg.get("layout_mode"):
+            build_kw["layout_mode"] = str(msg.get("layout_mode"))
+        session = job.build(**build_kw)
         self.session = session
         return {
             "path": job.manifest.get("project"),

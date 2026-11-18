@@ -229,6 +229,7 @@ def merge_extractions(parts: list[dict[str, Any]]) -> dict[str, Any]:
         for text in part.get("texts") or []:
             texts.append(text)
     _absorb_pinless_labels(wires)
+    _separate_colliding_tags(devices)
     return {
         "devices": devices,
         "wires": wires,
@@ -236,6 +237,32 @@ def merge_extractions(parts: list[dict[str, Any]]) -> dict[str, Any]:
         "texts": texts,
         "spatial_drops": spatial_drops,
     }
+
+
+def _separate_colliding_tags(devices: list[dict[str, Any]]) -> None:
+    """Two different tags on an identical box must not collapse.
+
+    Keep both. Nudge the weaker read by a sub-millimetre offset so later stages
+    see two symbols, and mark it needs_info. Never invent a connection; never
+    drop a differently tagged device because it shares a box.
+    """
+
+    by_xy: dict[tuple[float, float], list[dict[str, Any]]] = {}
+    for device in devices:
+        key = (round(float(device.get("x") or 0), 2), round(float(device.get("y") or 0), 2))
+        by_xy.setdefault(key, []).append(device)
+    for group in by_xy.values():
+        tags = {device_tag_key(str(device.get("tag") or "")) for device in group}
+        tags.discard("")
+        if len(tags) < 2:
+            continue
+        ordered = sorted(group, key=lambda device: float(device.get("confidence") or 0), reverse=True)
+        for index, weak in enumerate(ordered[1:], start=1):
+            weak["x"] = round(float(weak.get("x") or 0) + 0.01 * index, 4)
+            weak["y"] = round(float(weak.get("y") or 0) + 0.01 * index, 4)
+            weak["needs_info"] = True
+            weak["needs_review"] = True
+            weak["reconstruct_needs_info"] = True
 
 
 def device_tag_key(tag: str) -> str:
@@ -258,6 +285,23 @@ def _device_keep_score(device: dict[str, Any]) -> tuple[int, int, float]:
     return (1 if rank >= 3 else 0, rank, float(device.get("confidence") or 0))
 
 
+def _occurrence_quality(device: dict[str, Any]) -> int:
+    """How strongly a read owns its tag. Confirmed ink beats OCR ghosts."""
+
+    if device.get("unconfirmed") or device.get("inherited"):
+        return 0
+    source = str(device.get("source") or "")
+    if source == "symbol":
+        return 4
+    if source == "vector":
+        return 3
+    if device.get("library_id") and not device.get("guess") and source != "ocr":
+        return 2
+    if source == "ocr":
+        return 1
+    return 1 if device.get("library_id") else 0
+
+
 def _prefer_incoming(current: dict[str, Any], device: dict[str, Any]) -> bool:
     """True when ``device`` is the reading to keep for a tag already seen."""
 
@@ -265,6 +309,11 @@ def _prefer_incoming(current: dict[str, Any], device: dict[str, Any]) -> bool:
         return False
     if current.get("recovered") and not device.get("recovered"):
         return True
+    # A confirmed coil/contact must not lose to an OCR ghost that inherited its library.
+    incoming_q = _occurrence_quality(device)
+    current_q = _occurrence_quality(current)
+    if incoming_q != current_q:
+        return incoming_q > current_q
     return _device_keep_score(device) > _device_keep_score(current)
 
 
@@ -624,7 +673,9 @@ def _reject_spatial_duplicate(
 ) -> bool:
     """Drop the lower-confidence device when two tiles read one symbol twice.
 
-    The tags can differ. 10M read as a motor on top of 10G is that misread.
+    The tags can differ for a true double-read (10M on top of 10G). Exact same
+    box with two different tags is not a drop — ``_separate_colliding_tags``
+    keeps both and marks the weaker needs_info.
     True when ``device`` is the one that was dropped.
     """
 
@@ -633,11 +684,22 @@ def _reject_spatial_duplicate(
     tile = str(device.get("tile_id") or "")
     if not symbol or box is None or not tile:
         return False
+    incoming_tag = device_tag_key(str(device.get("tag") or ""))
     incoming_conf = float(device.get("confidence") or 0)
     weaker: list[dict[str, Any]] = []
     stronger = False
     for current in devices:
         if not _spatial_pair(current, device, symbol, box, tile):
+            continue
+        current_tag = device_tag_key(str(current.get("tag") or ""))
+        # Identical centres with different tags: keep both (needs_info later).
+        if (
+            incoming_tag
+            and current_tag
+            and incoming_tag != current_tag
+            and round(float(current.get("x") or 0), 2) == round(float(device.get("x") or 0), 2)
+            and round(float(current.get("y") or 0), 2) == round(float(device.get("y") or 0), 2)
+        ):
             continue
         current_conf = float(current.get("confidence") or 0)
         if incoming_conf < current_conf:

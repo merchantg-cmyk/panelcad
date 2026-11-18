@@ -1,6 +1,6 @@
 {
   "commit": "cecec574d99ab72ee4981c9ff231e67ce654723d",
-  "folder": "C:\\Users\\Ada\\panelcad-test\\pr152-cecec57-20261110",
+  "folder": "tests/fixtures/orientation/record-root",
   "recorded_zone": "America/New_York",
   "backend": "electrical",
   "note": "Scores were produced by wrapping imageutil._text_score / choose_quarter / _glyph_quarter / auto_rotate without editing src. Word lists use the same filters as _text_score (confidence >= 40 and _TAG_LIKE or _TITLE_WORD).",
@@ -2640,7 +2640,7 @@
     {
       "test": "test_recorded_scores_keep_quarter_turns_and_upright_pages",
       "image_id": "confident_90_glyph_0_loses",
-      "description": "Confident 90\u00b0. Glyph saying upright loses.",
+      "description": "Confident 90°. Glyph saying upright loses.",
       "applied_rotation_quarters_ccw": null,
       "applied_rotation_degrees_ccw": null,
       "expected_quarters": 1,
@@ -2690,7 +2690,7 @@
     {
       "test": "test_recorded_scores_keep_quarter_turns_and_upright_pages",
       "image_id": "270_copy_tie_glyph_1",
-      "description": "270\u00b0 copy: 90 and 270 both read. Letter shape picks the true one.",
+      "description": "270° copy: 90 and 270 both read. Letter shape picks the true one.",
       "applied_rotation_quarters_ccw": null,
       "applied_rotation_degrees_ccw": null,
       "expected_quarters": 1,
@@ -2740,7 +2740,7 @@
     {
       "test": "test_recorded_scores_keep_quarter_turns_and_upright_pages",
       "image_id": "90_copy_tie_glyph_3",
-      "description": "90\u00b0 copy.",
+      "description": "90° copy.",
       "applied_rotation_quarters_ccw": null,
       "applied_rotation_degrees_ccw": null,
       "expected_quarters": 3,
@@ -4733,7 +4733,7 @@
       ],
       "image_landscape": true,
       "extra": {
-        "path": "C:\\Users\\Ada\\panelcad-test\\pr152-cecec57-20261110\\src\\tests\\fixtures\\scan_ladder\\schematic\\phone.jpg",
+        "path": "tests/fixtures/scan_ladder/schematic/phone.jpg",
         "source_size": [
           4012,
           2684
@@ -6362,7 +6362,7 @@
       ],
       "image_landscape": false,
       "extra": {
-        "path": "C:\\Users\\Ada\\panelcad-test\\pr152-cecec57-20261110\\tmp\\orient-record\\turned.png",
+        "path": "tmp/orient-record/turned.png",
         "dpi": 80
       },
       "text_scores": [
@@ -6660,7 +6660,7 @@
     {
       "test": "test_text_orientation_undoes_180_and_records_it",
       "image_id": "upside_down_starters_dpi80_unturned_family",
-      "description": "The same generated starters sheet at other quarter turns (the test only feeds the 180\u00b0 copy).",
+      "description": "The same generated starters sheet at other quarter turns (the test only feeds the 180° copy).",
       "applied_rotation_quarters_ccw": 0,
       "applied_rotation_degrees_ccw": 0,
       "expected_quarters": 0,
@@ -6971,7 +6971,7 @@
     {
       "test": "test_text_orientation_undoes_180_and_records_it",
       "image_id": "upside_down_starters_dpi80_unturned_family",
-      "description": "The same generated starters sheet at other quarter turns (the test only feeds the 180\u00b0 copy).",
+      "description": "The same generated starters sheet at other quarter turns (the test only feeds the 180° copy).",
       "applied_rotation_quarters_ccw": 1,
       "applied_rotation_degrees_ccw": 90,
       "expected_quarters": 3,
@@ -7282,7 +7282,7 @@
     {
       "test": "test_text_orientation_undoes_180_and_records_it",
       "image_id": "upside_down_starters_dpi80_unturned_family",
-      "description": "The same generated starters sheet at other quarter turns (the test only feeds the 180\u00b0 copy).",
+      "description": "The same generated starters sheet at other quarter turns (the test only feeds the 180° copy).",
       "applied_rotation_quarters_ccw": 3,
       "applied_rotation_degrees_ccw": 270,
       "expected_quarters": 1,
@@ -12385,7 +12385,7 @@
     {
       "test": "test_upright_line_drawing_stays_upright_when_a_rule_looks_like_a_title",
       "image_id": "upright_line_drawing_top_rule",
-      "description": "1700x2200 line drawing with a top rule that scores as a 180\u00b0 title band, plus MOTOR STARTERS / K1. Test asserts _decisive_title is 2 and auto_rotate stays 0.",
+      "description": "1700x2200 line drawing with a top rule that scores as a 180° title band, plus MOTOR STARTERS / K1. Test asserts _decisive_title is 2 and auto_rotate stays 0.",
       "applied_rotation_quarters_ccw": 0,
       "applied_rotation_degrees_ccw": 0,
       "expected_quarters": 0,
@@ -13274,7 +13274,7 @@
       ],
       "image_landscape": true,
       "extra": {
-        "path": "C:\\Users\\Ada\\panelcad-test\\pr152-cecec57-20261110\\src\\tests\\fixtures\\scan_ladder\\schematic\\clean_300.png",
+        "path": "tests/fixtures/scan_ladder/schematic/clean_300.png",
         "source_size": [
           5100,
           3300
@@ -13864,7 +13864,7 @@
       ],
       "image_landscape": false,
       "extra": {
-        "path": "C:\\Users\\Ada\\panelcad-test\\pr152-cecec57-20261110\\src\\tests\\fixtures\\scan_ladder\\schematic\\clean_300.png",
+        "path": "tests/fixtures/scan_ladder/schematic/clean_300.png",
         "source_size": [
           5100,
           3300
@@ -14454,7 +14454,7 @@
       ],
       "image_landscape": true,
       "extra": {
-        "path": "C:\\Users\\Ada\\panelcad-test\\pr152-cecec57-20261110\\src\\tests\\fixtures\\scan_ladder\\schematic\\clean_300.png",
+        "path": "tests/fixtures/scan_ladder/schematic/clean_300.png",
         "source_size": [
           5100,
           3300
@@ -15044,7 +15044,7 @@
       ],
       "image_landscape": false,
       "extra": {
-        "path": "C:\\Users\\Ada\\panelcad-test\\pr152-cecec57-20261110\\src\\tests\\fixtures\\scan_ladder\\schematic\\clean_300.png",
+        "path": "tests/fixtures/scan_ladder/schematic/clean_300.png",
         "source_size": [
           5100,
           3300
@@ -15634,7 +15634,7 @@
       ],
       "image_landscape": true,
       "extra": {
-        "path": "C:\\Users\\Ada\\panelcad-test\\pr152-cecec57-20261110\\src\\tests\\fixtures\\scan_ladder\\schematic\\dpi_150.png",
+        "path": "tests/fixtures/scan_ladder/schematic/dpi_150.png",
         "source_size": [
           2550,
           1650
@@ -16220,7 +16220,7 @@
       ],
       "image_landscape": false,
       "extra": {
-        "path": "C:\\Users\\Ada\\panelcad-test\\pr152-cecec57-20261110\\src\\tests\\fixtures\\scan_ladder\\schematic\\dpi_150.png",
+        "path": "tests/fixtures/scan_ladder/schematic/dpi_150.png",
         "source_size": [
           2550,
           1650
@@ -16806,7 +16806,7 @@
       ],
       "image_landscape": true,
       "extra": {
-        "path": "C:\\Users\\Ada\\panelcad-test\\pr152-cecec57-20261110\\src\\tests\\fixtures\\scan_ladder\\schematic\\dpi_150.png",
+        "path": "tests/fixtures/scan_ladder/schematic/dpi_150.png",
         "source_size": [
           2550,
           1650
@@ -17392,7 +17392,7 @@
       ],
       "image_landscape": false,
       "extra": {
-        "path": "C:\\Users\\Ada\\panelcad-test\\pr152-cecec57-20261110\\src\\tests\\fixtures\\scan_ladder\\schematic\\dpi_150.png",
+        "path": "tests/fixtures/scan_ladder/schematic/dpi_150.png",
         "source_size": [
           2550,
           1650
@@ -17978,7 +17978,7 @@
       ],
       "image_landscape": true,
       "extra": {
-        "path": "C:\\Users\\Ada\\panelcad-test\\pr152-cecec57-20261110\\src\\tests\\fixtures\\scan_ladder\\schematic\\phone.jpg",
+        "path": "tests/fixtures/scan_ladder/schematic/phone.jpg",
         "source_size": [
           4012,
           2684
@@ -18570,7 +18570,12 @@
       "expected_quarters": 0,
       "monkeypatched": false,
       "degraded": false,
-      "text_scores": [299.9, 200.0, 299.7, 200.0],
+      "text_scores": [
+        299.9,
+        200.0,
+        299.7,
+        200.0
+      ],
       "glyph_quarter": 0,
       "source": "PR 157 Linux VM"
     },
@@ -18584,7 +18589,12 @@
       "expected_quarters": 3,
       "monkeypatched": false,
       "degraded": true,
-      "text_scores": [331.7, 508.3, 406.5, 977.2],
+      "text_scores": [
+        331.7,
+        508.3,
+        406.5,
+        977.2
+      ],
       "glyph_quarter": 0,
       "source": "PR 157 Linux VM"
     }

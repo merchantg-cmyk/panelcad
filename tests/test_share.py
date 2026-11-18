@@ -93,7 +93,7 @@ def test_synced_folder_detection(tmp_path: Path) -> None:
     assert folder_is_shared(_shared(tmp_path, "My Drive")) is True
     assert folder_is_shared(_shared(tmp_path, "OneDrive - Shop")) is True
     assert folder_is_shared(_shared(tmp_path, "Dropbox")) is True
-    assert folder_is_shared(_shared(tmp_path, "GoogleDrive-alex@shop.com")) is True
+    assert folder_is_shared(_shared(tmp_path, "GoogleDrive-george@shop.com")) is True
     assert folder_is_shared(r"G:\Jobs\line.pcad.yaml") is True
     assert folder_is_shared("G:/Jobs/line.pcad.yaml") is True
     marked = tmp_path / "custom" / "line.pcad.yaml"

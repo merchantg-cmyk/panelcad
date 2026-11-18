@@ -440,7 +440,7 @@ def test_a_terminal_on_a_foreign_rung_fails():
 
 
 def test_a_far_fuse_pin_to_the_return_rail_draws_outside_the_body():
-    """Phone T1/FU2: FU2.1 faces the transformer and the wire still reaches L2.
+    """Phone T1/FU2: FU2.2 faces the transformer; FU2.1 reaches L2 outside the body.
 
     The channel leaves the pin on its open side and runs under the block.
     """
@@ -463,6 +463,50 @@ def test_a_far_fuse_pin_to_the_return_rail_draws_outside_the_body():
     assert not any("runs through a symbol" in item or "jogs through" in item for item in issues), issues
     ends = {(wire.frm, wire.to) for wire in sheet.wires}
     assert ("FU2.1", "L2") in ends or ("L2", "FU2.1") in ends
+
+
+def test_transformer_to_far_fuse_pin_runs_through_symbol_and_is_retargeted():
+    """Pack geometry: T1.H4→FU2.1 with fuses left of T1 cuts through the fuse body.
+
+    The checker must flag the through-body hop, and layout must retarget onto
+    facing FU2.2 (pin 1 stays free for the rail return).
+    """
+
+    session = Session.create("Through fuse", sheet_id="elementary", title="Elementary")
+    session.set_title_block(standard="NEMA/ANSI", drawing_style="ladder", coil_style="circle", drawn_by="Demo")
+    sheet = session.project.sheet("elementary")
+    sheet.page.size = "TABLOID"
+    sheet.page.orientation = "landscape"
+    sheet.drawing_style = "ladder"
+    # Pack-like positions: fuses at x=61, T1 far right.
+    session.place("nema.protection.fuse_10a", ref="FU1", x=61, y=42, snap=False)
+    session.place("nema.protection.fuse_10a", ref="FU2", x=61, y=62, snap=False)
+    session.place("nema.power.control_transformer", ref="T1", x=347, y=37, snap=False)
+    session.wire("L1", "FU1.1", number="102")
+    session.wire("FU1.2", "T1.H1", number="103")
+    bad = session.wire("T1.H4", "FU2.1", number="101")
+    # Before layout repair: through-body must be visible to the checker.
+    from panelcad.render.wiring import route_sheet_wires
+    from panelcad.core.elementary_layout import _crosses_own_body
+
+    routes = route_sheet_wires(sheet, session.catalog, project=session.project)
+    pts = routes.get(bad.id) or []
+    assert pts, "expected a routed path for the through-body hop"
+    assert _crosses_own_body(sheet, session.catalog, bad, pts), "T1.H4→FU2.1 must cross FU2"
+    assert any("runs through a symbol" in item for item in elementary_layout_issues(session, sheet))
+
+    layout_elementary(session, sheet)
+    ends = {(str(w.frm), str(w.to)) for w in sheet.wires} | {(str(w.to), str(w.frm)) for w in sheet.wires}
+    assert ("T1.H4", "FU2.2") in ends, ends
+    assert ("T1.H4", "FU2.1") not in ends
+    # Facing pin alone still leaves the rail-side stub — must not issue.
+    assert any("dangling stub" in item for item in elementary_layout_issues(session, sheet))
+    # Rail return on the far pin still draws cleanly outside the body.
+    session.wire("FU2.1", "L2", number="104")
+    layout_elementary(session, sheet)
+    issues = elementary_layout_issues(session, sheet)
+    assert not any("runs through a symbol" in item for item in issues), issues
+    assert not any("dangling stub" in item for item in issues), issues
 
 
 def test_a_seal_in_that_lands_on_the_coil_sits_under_the_start():
@@ -495,6 +539,81 @@ def test_a_seal_in_that_lands_on_the_coil_sits_under_the_start():
     issues = elementary_layout_issues(session, sheet)
     assert not any("runs through a symbol" in item for item in issues), issues
     assert abs(sheet.component("M1-13").x - sheet.component("PB1").x) < 1.0
+
+
+def test_seal_in_stays_on_coil_rung_clear_of_pilot():
+    """M1-13 under PB1 must not pack onto the CR1-13→PL1 rung after squeeze."""
+
+    session = _facts()
+    sheet = session.project.sheet("elementary")
+    for comp in sheet.components:
+        comp.x, comp.y = 6.0, 6.0
+    layout_elementary(session, sheet)
+    assert elementary_layout_issues(session, sheet) == []
+    pb1 = sheet.component("PB1")
+    m13 = sheet.component("M1-13")
+    cr13 = sheet.component("CR1-13")
+    pl1 = sheet.component("PL1")
+    m13_dev = session.catalog.get(m13.library_id)
+    # Parallel with the start on the M1 rung.
+    assert abs(m13.x - pb1.x) < 1.0
+    assert _pin(session, sheet, "M1-13")[1] > _pin(session, sheet, "PB1")[1]
+    assert abs(_pin(session, sheet, "M1-13")[1] - _pin(session, sheet, "M1")[1]) <= 36.0
+    # Body clears the pilot series — not visually on CR1-13→PL1.
+    m13_bottom = float(m13.y) + float(m13_dev.schematic_height)
+    assert float(cr13.y) >= m13_bottom + 3.5, (m13.y, cr13.y, pl1.y)
+    assert float(pl1.y) >= m13_bottom + 3.5, (m13.y, cr13.y, pl1.y)
+    assert _pin(session, sheet, "CR1-13")[1] > _pin(session, sheet, "M1-13")[1] + 8.0
+    # Wire 109 must not run through the "M1-13" tag (preserve squeeze regression).
+    assert not any("runs through device label" in item for item in elementary_layout_issues(session, sheet))
+
+
+def test_wire_through_device_label_is_flagged(monkeypatch):
+    """A conductor that crosses another device's tag text must fail the layout gate."""
+
+    from panelcad.core.elementary_layout import _wires_cross_device_labels
+    from panelcad.core.ink import text_box
+    from panelcad.core.ladder import is_ladder_sheet
+    from panelcad.core.models import Point
+    from panelcad.render.sheet_labels import place_device_tags
+    from panelcad.render import wiring as wiring_mod
+
+    session = _facts()
+    sheet = session.project.sheet("elementary")
+    layout_elementary(session, sheet)
+    assert not any(
+        "runs through device label" in item for item in elementary_layout_issues(session, sheet)
+    )
+    layouts = place_device_tags(
+        sheet,
+        session.catalog,
+        ladder=is_ladder_sheet(sheet, session.project),
+        project=session.project,
+        sheet_no=1,
+    )
+    layout = layouts["M1-13"]
+    box = text_box(layout[0], layout[1], "M1-13", layout[3], layout[2])
+    assert box is not None
+    left, top, right, bottom = box
+    mid_y = 0.5 * (top + bottom)
+    real = wiring_mod.route_sheet_wires
+
+    def _forced(sheet_arg, catalog, project=None):
+        routes_map = dict(real(sheet_arg, catalog, project=project))
+        # Synthetic hop that is not incident on M1-13 — must still flag the tag hit.
+        routes_map["w_label_hit"] = [
+            Point(x=left - 4.0, y=mid_y),
+            Point(x=right + 4.0, y=mid_y),
+        ]
+        return routes_map
+
+    monkeypatch.setattr(wiring_mod, "route_sheet_wires", _forced)
+    # Ensure the synthetic wire id exists so the checker iterates it.
+    from panelcad.core.models import Wire
+
+    sheet.wires.append(Wire(id="w_label_hit", frm="L1", to="L2", number="999"))
+    issues = _wires_cross_device_labels(session, sheet, session.catalog)
+    assert any("runs through device label M1-13" in item for item in issues), issues
 
 
 def test_a_fuse_wired_only_to_the_rail_is_not_a_clean_sheet():

@@ -325,14 +325,50 @@ class CutoutDialog(QDialog):
         drawings = self._persist_and_drawings()
         if not drawings:
             return
-        from PySide6.QtPrintSupport import QPrintPreviewDialog, QPrinter
+        from PySide6.QtGui import QAction
+        from PySide6.QtPrintSupport import QPrintDialog, QPrintPreviewDialog, QPrinter
 
         from panelcad.render.cutout_draw import paint_cutouts_on_printer
+        from panelcad.render.page import (
+            apply_sheet_orientation,
+            configure_sheet_printer,
+            print_dialog_options,
+            sync_preview_orientation,
+        )
 
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+        configure_sheet_printer(printer, len(drawings), current_page=1)
+        from panelcad.gui.screen_fit import fit_print_dialog
+
+        first = drawings[0]
+        apply_sheet_orientation(printer, first.page_width_mm, first.page_height_mm)
         preview = QPrintPreviewDialog(printer, self)
         preview.setWindowTitle("Print cutout drawings")
-        preview.paintRequested.connect(lambda device: paint_cutouts_on_printer(device, drawings, self.session.project))
+        sync_preview_orientation(preview, first.page_width_mm, first.page_height_mm)
+        preview.paintRequested.connect(
+            lambda device: paint_cutouts_on_printer(device, drawings, self.session.project)
+        )
+        fit_print_dialog(preview)
+
+        def _print_with_range() -> None:
+            dialog = QPrintDialog(printer, preview)
+            dialog.setWindowTitle(preview.windowTitle())
+            dialog.setOptions(print_dialog_options())
+            dialog.setMinMax(1, len(drawings))
+            fit_print_dialog(dialog)
+            if dialog.exec() != QPrintDialog.DialogCode.Accepted:
+                return
+            paint_cutouts_on_printer(printer, drawings, self.session.project)
+            preview.accept()
+
+        for action in preview.findChildren(QAction):
+            if action.text().replace("&", "").strip().lower() != "print":
+                continue
+            try:
+                action.triggered.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            action.triggered.connect(_print_with_range)
         preview.exec()
 
     def export_pdf(self) -> None:

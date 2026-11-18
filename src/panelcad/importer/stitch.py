@@ -63,8 +63,14 @@ def stitch_pages(
         if kind == "other" and not devices and not unreadable:
             continue
         sheet_kind = DRAWING_KINDS.get(kind, "schematic")
-        title = str((page.get("classification") or {}).get("title") or page["id"])
-        sheet_id = _unique_slug(title if title and title.lower() != page["id"] else page["id"], [s["id"] for s in sheets])
+        # Use the scan's title/description when OCR read them. Never invent the
+        # page slug (page_001) as the title-block TITLE — leave blank instead.
+        title = str((page.get("classification") or {}).get("title") or "").strip()
+        description = str((page.get("classification") or {}).get("description") or "").strip()
+        sheet_id = _unique_slug(
+            title if title and title.lower() != str(page["id"]).lower() else page["id"],
+            [s["id"] for s in sheets],
+        )
         style = "ladder" if kind == "schematic_ladder" or (standard == "NEMA/ANSI" and sheet_kind == "schematic" and kind != "schematic_control") else ""
         if kind in {"schematic_power", "schematic_control"} and standard == "IEC":
             style = "schematic"
@@ -94,7 +100,7 @@ def stitch_pages(
             {
                 "id": sheet_id,
                 "title": title,
-                "description": str(info.get("description") or ""),
+                "description": description,
                 "sheet_number": str(info.get("sheet_number") or ""),
                 "sheet_number_needs_info": bool(info.get("sheet_number_needs_info")),
                 "kind": sheet_kind,
@@ -152,6 +158,7 @@ def _title_block(pages: list[dict[str, Any]]) -> dict[str, str]:
     fields = (
         "title",
         "project",
+        "description",
         "company",
         "address",
         "customer",
@@ -174,13 +181,33 @@ def _title_block(pages: list[dict[str, Any]]) -> dict[str, str]:
 
 
 def _share_symbols(sheets: list[dict[str, Any]], devices_global: dict[str, dict[str, Any]]) -> None:
-    """A footprint or node that only shows the tag keeps the symbol identified on the schematic."""
+    """A footprint or node that only shows the tag keeps the symbol identified on the schematic.
+
+    Inheritance is for another sheet (layout / terminal) that only printed the
+    tag. A same-sheet OCR ghost must not inherit the coil or contact library —
+    that made the ghost the placed part and demoted the real symbol to secondary.
+    """
 
     for sheet in sheets:
+        confirmed_on_sheet = {
+            str(device.get("tag") or "")
+            for device in sheet["devices"]
+            if device.get("library_id")
+            and not device.get("guess")
+            and not device.get("unconfirmed")
+            and str(device.get("source") or "") in {"symbol", "vector"}
+        }
         for device in sheet["devices"]:
             if device.get("library_id") and not device.get("guess"):
                 continue
-            known = devices_global.get(str(device.get("tag") or ""))
+            tag = str(device.get("tag") or "")
+            # Same-sheet confirmed symbol already owns this tag — leave the ghost alone.
+            if tag in confirmed_on_sheet:
+                continue
+            # Unconfirmed OCR on this schematic is not a layout footprint.
+            if device.get("unconfirmed") or str(device.get("source") or "") == "ocr":
+                continue
+            known = devices_global.get(tag)
             if not known or not known.get("library_id"):
                 continue
             device["library_id"] = known["library_id"]

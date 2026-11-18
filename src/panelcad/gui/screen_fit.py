@@ -95,3 +95,43 @@ def fit_when_shown(dialog: QDialog) -> None:
             fit_dialog_to_work_area(dialog)
 
     QTimer.singleShot(0, dialog, _again)
+
+
+def fit_print_dialog(dialog: QDialog) -> None:
+    """Open a print / print-preview dialog at content size, still on-screen.
+
+    File → Print uses ``QPrintPreviewDialog`` then ``QPrintDialog``. Qt often
+    opens them smaller than ``sizeHint``, and the theme dialog clamp can wrap
+    a tall print dialog in a scroll area so Print/Cancel sit below the fold
+    (observed on a 1366×768 laptop). Opt out of that wrap, grow
+    to the content hint, and cap to the work area. The dialog stays resizable.
+    """
+
+    dialog.setProperty("_pc_own_fit", True)
+    # Clear a stale maximum from an earlier theme clamp so the dialog can grow.
+    dialog.setMaximumSize(16777215, 16777215)
+    layout = dialog.layout()
+    if layout is not None:
+        layout.activate()
+    dialog.adjustSize()
+    hint = dialog.sizeHint()
+    min_hint = dialog.minimumSizeHint()
+    # Prefer the larger of sizeHint and the current size so expanded Options
+    # (page range / current page) are not clipped.
+    target_w = max(dialog.width(), hint.width(), min_hint.width(), dialog.minimumWidth())
+    target_h = max(dialog.height(), hint.height(), min_hint.height(), dialog.minimumHeight())
+    avail = available_work_area(dialog)
+    margin = 16
+    chrome_h = 40  # title bar reserve before the frame is known
+    chrome_w = 16
+    max_w = max(320, avail.width() - chrome_w - 2 * margin)
+    max_h = max(240, avail.height() - chrome_h - 2 * margin)
+    width = min(target_w, max_w)
+    height = min(target_h, max_h)
+    # Keep a usable floor on short laptop screens without forcing scroll.
+    width = max(width, min(420, max_w))
+    height = max(height, min(320, max_h))
+    dialog.resize(int(width), int(height))
+    # Soft minimum so the user can shrink a little, but not to a stub.
+    dialog.setMinimumSize(min(360, width), min(280, height))
+    fit_when_shown(dialog)
