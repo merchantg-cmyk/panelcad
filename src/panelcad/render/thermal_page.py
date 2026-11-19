@@ -331,10 +331,8 @@ def _paint_summary(qp, report: dict[str, Any], y: float, page_w: float) -> float
 def write_thermal_pdf(session: Any, path: Path | str, report: dict[str, Any] | None = None) -> dict[str, Any]:
     """Standalone letter PDF of the thermal report."""
 
-    from PySide6.QtGui import QPainter, QPdfWriter
-
     from panelcad.core.thermal import compute_heat_load
-    from panelcad.render.page import configure_full_page
+    from panelcad.render.pdf import atomic_pdf_writer
     from panelcad.render.print_package import PAPER_SIZES_MM
     from panelcad.render.qt_painter import QtPainter
 
@@ -343,15 +341,14 @@ def write_thermal_pdf(session: Any, path: Path | str, report: dict[str, Any] | N
     page_w, page_h = PAPER_SIZES_MM["letter"]
     spans = thermal_spans(report, page_w, page_h)
     dest = Path(path)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    writer = QPdfWriter(str(dest))
-    writer.setResolution(300)
-    writer.setTitle(f"{session.project.name or 'PanelCAD'} enclosure thermal")
-    if hasattr(writer, "setCreator"):
-        writer.setCreator(f"PanelCAD {__version__}")
-    configure_full_page(writer, page_w, page_h)
-    painter = QPainter(writer)
-    try:
+    with atomic_pdf_writer(
+        dest,
+        resolution=300,
+        title=f"{session.project.name or 'PanelCAD'} enclosure thermal",
+        creator=f"PanelCAD {__version__}",
+        width_mm=page_w,
+        height_mm=page_h,
+    ) as (writer, painter):
         for index, (start, count) in enumerate(spans):
             if index:
                 writer.newPage()
@@ -376,9 +373,6 @@ def write_thermal_pdf(session: Any, path: Path | str, report: dict[str, Any] | N
                 row_start=start,
                 row_count=count,
             )
-    finally:
-        if painter.isActive():
-            painter.end()
     out = dict(report)
     out["path"] = str(dest)
     out["pages"] = len(spans)

@@ -1557,28 +1557,6 @@ def _text_height(token: dict[str, Any]) -> float:
     return max(box["h"], 1.0)
 
 
-def _cluster_seeds(seeds: list[dict[str, Any]], limit: float) -> list[list[dict[str, Any]]]:
-    groups: list[list[dict[str, Any]]] = []
-    for token in seeds:
-        box = _as_box(token)
-        if box is None:
-            continue
-        joined = [
-            group
-            for group in groups
-            if any(_box_gap(box, other) <= limit for other in (_as_box(item) for item in group) if other is not None)
-        ]
-        if not joined:
-            groups.append([token])
-            continue
-        host = joined[0]
-        host.append(token)
-        for extra in joined[1:]:
-            host.extend(extra)
-            groups.remove(extra)
-    return groups
-
-
 def _cluster_label_blocks(labels: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
     """Labels in one column, or on one row, are one block even when no box is drawn."""
 
@@ -1694,35 +1672,6 @@ def _label_pitch(group: list[dict[str, Any]], vertical: bool) -> float:
         return 0.0
     gaps.sort()
     return gaps[len(gaps) // 2]
-
-
-def _chain_tokens(
-    seeds: list[dict[str, Any]],
-    tokens: list[dict[str, Any]],
-    limit: float | None = None,
-    lines: list[dict[str, Any]] | None = None,
-    page: dict[str, Any] | None = None,
-) -> list[dict[str, Any]]:
-    """Tokens within one title row of the labels. Stops at a rung and at a device."""
-
-    cluster = [token for token in seeds if _as_box(token) is not None]
-    if not cluster:
-        return []
-    if limit is None:
-        limit = max(_text_height(token) for token in cluster) * _TITLE_ROW_HEIGHTS
-    pending = [token for token in tokens if token not in cluster and _as_box(token) is not None]
-    changed = True
-    while changed and pending:
-        changed = False
-        still: list[dict[str, Any]] = []
-        for token in pending:
-            if _title_token_blocked(token, cluster, lines or [], page or {}, limit):
-                still.append(token)
-                continue
-            cluster.append(token)
-            changed = True
-        pending = still
-    return cluster
 
 
 def _title_token_blocked(
@@ -2062,14 +2011,6 @@ def _span_covers(spans: list[tuple[float, float, float]], pos: float, start: flo
     return False
 
 
-def _union_box(left: dict[str, float], right: dict[str, float]) -> dict[str, float]:
-    x0 = min(left["x"], right["x"])
-    y0 = min(left["y"], right["y"])
-    x1 = max(left["x"] + left["w"], right["x"] + right["w"])
-    y1 = max(left["y"] + left["h"], right["y"] + right["h"])
-    return {"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0}
-
-
 def _extend_title_box(bounds: dict[str, float], text_h: float, width: float, height: float) -> dict[str, float]:
     """Snap a label row out to a page edge it already touches. Do not climb into the drawing."""
 
@@ -2120,13 +2061,6 @@ def _title_block_identifiers(page: dict[str, Any]) -> set[str]:
                 if word.isdigit():
                     found.add(word)
     return found
-
-
-def _token_size(token: dict[str, Any]) -> float:
-    box = _as_box(token)
-    if box is None:
-        return 0.0
-    return max(box["w"], box["h"], 1.0)
 
 
 def _token_bounds(tokens: list[dict[str, Any]]) -> dict[str, float] | None:

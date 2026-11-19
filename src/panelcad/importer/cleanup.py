@@ -498,7 +498,7 @@ def land_transformer_secondary_hot_via_fuse(
     fuse_dev = _device(session, fuse.library_id)
     if fuse_dev is None or len(fuse_dev.pins) < 2:
         raise ValueError(f"no pins on {fuse_tag}")
-    # Secondary rule: pin 1 faces X1, pin 2 faces L1 as 102.
+    # George's secondary rule: pin 1 faces X1, pin 2 faces L1 as 102.
     # Do not flip by geometry — a misplaced T1 to the right of FU3 used to
     # swap pins, see pin 1 already on X1, and skip the L1 hop entirely.
     pin_to_xfmr = str(fuse_dev.pins[0].id)

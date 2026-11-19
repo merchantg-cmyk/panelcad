@@ -22,9 +22,6 @@ from panelcad.reconstruct.layout import (
 )
 from panelcad.reconstruct.match import catalog_dimension_mm, match_catalog
 from panelcad.reconstruct.models import (
-    ENVELOPE_MAX_MM,
-    ENVELOPE_MIN_MM,
-    ENVELOPE_MOUNTS,
     PHONE_EXPORT_EXTS,
     PHOTO_ROLES,
     ObservedItem,
@@ -789,19 +786,6 @@ def place_needs_info(session: Any, photo_id: str | None = None) -> dict[str, Any
         placed.append({"id": item.id, "ref": ref, "sheet": sheet.id, "x": xy[0], "y": xy[1]})
     rebuild_checklist(store)
     return {"placed": placed, "skipped": skipped}
-
-
-def _envelope_mm(value: float | None, name: str) -> float:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        raise ValueError(f"envelope {name} must be a number in millimetres") from None
-    if number < ENVELOPE_MIN_MM or number > ENVELOPE_MAX_MM:
-        raise ValueError(
-            f"envelope {name} {number:g} mm is not a sane panel-scale size "
-            f"({ENVELOPE_MIN_MM:g}–{ENVELOPE_MAX_MM:g} mm)"
-        )
-    return number
 
 
 def _resolve_placeholder_component(session: Any, item: ObservedItem) -> None:

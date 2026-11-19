@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Undo: a sheet switch or Escape mid-drag no longer leaves the undo command open, so later edits push again. Resize commits drop wire routes inside the same undo step. A clean disk reload still starts with an empty stack.
+
 ## 0.5.28 — 2026-11-17
 
 - Scan rebuilds default to ladder layout.

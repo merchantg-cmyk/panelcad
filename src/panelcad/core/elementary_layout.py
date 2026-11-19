@@ -32,7 +32,7 @@ def _repair_conductors(session: Session, sheet: Sheet) -> None:
     """
 
     from panelcad.core.ladder import endpoint_is_rail, rail_names
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
     from panelcad.render.wiring import clear_route_cache
 
     hot, ret = rail_names(sheet, session.project)
@@ -84,7 +84,7 @@ def _separate_crossings(session: Session, sheet: Sheet) -> None:
     A wire that already uses the near pin stays.
     """
 
-    from panelcad.render.sheet import parse_pin_ref, pin_world
+    from panelcad.core.pin_geometry import parse_pin_ref, pin_world
     from panelcad.render.wiring import clear_route_cache
 
     by_id = {comp.id: comp for comp in sheet.components}
@@ -225,7 +225,7 @@ def _park_primary_offpage_feeds(session: Session, sheet: Sheet) -> None:
     sit on the far side of the body and look like a through-body hop.
     """
 
-    from panelcad.render.sheet import parse_pin_ref, pin_world
+    from panelcad.core.pin_geometry import parse_pin_ref, pin_world
     from panelcad.render.wiring import clear_route_cache
 
     by_id = {comp.id: comp for comp in sheet.components}
@@ -421,7 +421,7 @@ def _place_power(sheet, session, by_id, devices, placed) -> int:
         return 0
     device = devices[transformer.id]
     from panelcad.core.zones import rung_y
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     y = rung_y(sheet, 1, project=session.project)
     # Tag sits above the body (baseline = body.y - TAG_DY). Keep the whole
@@ -656,7 +656,7 @@ def _path_order(nodes: set[str], adj, by_id, output: str, sheet: Sheet | None = 
 def _touches_rail(sheet: Sheet | None, ref: str, rail: str) -> bool:
     if sheet is None:
         return False
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     def end_ref(text: str) -> str:
         try:
@@ -850,7 +850,7 @@ def _squeeze_control_rows(
     def device_pin_y(ref: str) -> float:
         """Representative pin world-Y so series mates match despite body offsets."""
 
-        from panelcad.render.sheet import pin_world
+        from panelcad.core.pin_geometry import pin_world
 
         comp = by_id[ref]
         device = devices[ref]
@@ -1046,7 +1046,7 @@ def _place_terminals(
     loose.sort(key=lambda comp: comp.id)
     if not loose:
         return 0
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
     from panelcad.render.titleblock import working_rect
 
     sample = devices[loose[0].id]
@@ -1157,7 +1157,7 @@ def _place_terminals(
                 clear_route_cache()
                 clear_y = _recompute_clear()
             if clear_y > limit + 0.2:
-                from panelcad.render.sheet import pin_world as _pin_world
+                from panelcad.core.pin_geometry import pin_world as _pin_world
 
                 def _band_key(ref: str) -> float:
                     pins = list(getattr(devices[ref], "pins", None) or [])
@@ -1242,78 +1242,6 @@ def _place_terminals(
     return moved
 
 
-def _spare_row_y(rung_ys: list[float], half: float, limit: float) -> float:
-    """The gap wide enough for a terminal body between two rung wires."""
-
-    best = rung_ys[-1] + half + 8.0 if rung_ys else half + 40.0
-    best_room = -1.0
-    for left, right in zip(rung_ys, rung_ys[1:], strict=False):
-        room = right - left
-        if room <= best_room:
-            continue
-        mid = (left + right) / 2.0
-        if mid - half < left + 4.0 or mid + half > right - 4.0 or mid > limit:
-            continue
-        best, best_room = mid, room
-    return min(best, limit)
-
-
-def _dress_terminal_wires(session, sheet, by_id, devices) -> None:
-    """One jumper bar above a spare row, and one bus below it to L2."""
-
-    from panelcad.core.models import Point
-    from panelcad.render.sheet import parse_pin_ref
-    from panelcad.render.wiring import wire_ends
-
-    terminals = [comp for comp in by_id.values() if _role(comp.library_id) == "terminal"]
-    if len(terminals) < 2:
-        return
-    rows: dict[float, list[Component]] = {}
-    for comp in terminals:
-        key = round(_pin_y(comp, devices[comp.id]), 1)
-        rows.setdefault(key, []).append(comp)
-    for group in rows.values():
-        if len(group) < 2:
-            continue
-        group.sort(key=lambda comp: comp.x)
-        top = min(float(comp.y) for comp in group)
-        bot = max(float(comp.y) + float(devices[comp.id].schematic_height) for comp in group)
-        bar = top - 4.0
-        bus = bot + 4.0
-        rightmost = group[-1].id
-        pin_x = {}
-        for comp in group:
-            pin = _pin_named(devices[comp.id], "A", "left")
-            if pin is None:
-                continue
-            from panelcad.render.sheet import pin_world
-
-            pin_x[comp.id] = pin_world(comp, pin)[0]
-        for wire in sheet.wires:
-            try:
-                a_ref, _pa = parse_pin_ref(wire.frm)
-            except ValueError:
-                a_ref = str(wire.frm).split(".")[0]
-            try:
-                b_ref, _pb = parse_pin_ref(wire.to)
-            except ValueError:
-                b_ref = str(wire.to).split(".")[0]
-            ends = {a_ref, b_ref}
-            if not ends & {comp.id for comp in group}:
-                continue
-            ax, ay, _aside, bx, by, _bside = wire_ends(sheet, session.catalog, wire, session.project)
-            both = a_ref in pin_x and b_ref in pin_x
-            if both and abs(pin_x[a_ref] - pin_x[b_ref]) > float(devices[a_ref].schematic_width) + 14.0:
-                wire.points = [Point(x=ax, y=bar), Point(x=bx, y=bar)]
-                continue
-            to_rail = a_ref not in pin_x or b_ref not in pin_x
-            device = a_ref if a_ref in pin_x else b_ref
-            if to_rail and device != rightmost and device in pin_x:
-                device_x = ax if a_ref == device else bx
-                rail_x = bx if a_ref == device else ax
-                wire.points = [Point(x=device_x, y=bus), Point(x=rail_x, y=bus)]
-
-
 def _route_primary_return(session, sheet, by_id, devices) -> float | None:
     """Channel under the transformer for fuse↔rail hops (primary L2 or secondary L1).
 
@@ -1323,7 +1251,7 @@ def _route_primary_return(session, sheet, by_id, devices) -> float | None:
     """
 
     from panelcad.core.models import Point
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
     from panelcad.render.wiring import wire_ends
 
     transformer = next((comp for comp in by_id.values() if _role(comp.library_id) == "transformer"), None)
@@ -1369,7 +1297,7 @@ def _arch_blocked_wires(session, sheet, by_id) -> None:
 
     from panelcad.core.models import Point
     from panelcad.core.route import path_hits_obstacles
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
     from panelcad.render.wiring import component_obstacle, wire_ends
 
     boxes = [(comp.id, component_obstacle(sheet, session.catalog, comp)) for comp in by_id.values()]
@@ -1424,7 +1352,7 @@ def _lands_on_rail(sheet: Sheet, ref: str, rail: str) -> bool:
 
 
 def _pin_side_wired(sheet: Sheet, ref: str, device, side: str) -> bool:
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     pins = {str(pin.id): str(pin.side) for pin in device.pins}
     for wire in sheet.wires:
@@ -1441,7 +1369,7 @@ def _pin_side_wired(sheet: Sheet, ref: str, device, side: str) -> bool:
 def _wired_to_right_pin(sheet: Sheet, ref: str, by_id, devices) -> bool:
     """True when ``ref`` is tied to another load's right-hand port."""
 
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     for wire in sheet.wires:
         try:
@@ -1610,7 +1538,7 @@ def _tag_floor(comp: Component, device: Any) -> float:
 
 
 def _pin_y(comp: Component, device: Any) -> float:
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
 
     pin = _pin_named(device, "", "left")
     if pin is None:
@@ -1634,7 +1562,7 @@ def _drop(under, aux) -> float:
 
 
 def _graph(sheet: Sheet, by_id: dict[str, Component]) -> dict[str, set[str]]:
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     adj: dict[str, set[str]] = {ref: set() for ref in by_id}
     for wire in sheet.wires:
@@ -1713,7 +1641,7 @@ def _output_rank(library_id: str) -> int:
 
 
 def _off_rung(sheet: Sheet, catalog: Catalog) -> list[str]:
-    from panelcad.render.sheet import parse_pin_ref, pin_world
+    from panelcad.core.pin_geometry import parse_pin_ref, pin_world
 
     issues: list[str] = []
     by_id = {comp.id: comp for comp in sheet.components}
@@ -1750,7 +1678,7 @@ def _off_rung(sheet: Sheet, catalog: Catalog) -> list[str]:
 
 
 def _bad_routes(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
     from panelcad.render.wiring import route_sheet_wires
 
     issues: list[str] = []
@@ -1803,7 +1731,6 @@ def _bad_routes(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
         if kind == "power" and _power_jog(pts):
             issues.append(f"{sheet.id}: {wire.id} jogs through the power block")
     from panelcad.core.route import path_hits_obstacles
-    from panelcad.render.sheet import parse_pin_ref
     from panelcad.render.wiring import sheet_obstacles
 
     for wire in sheet.wires:
@@ -1850,7 +1777,7 @@ def _crosses_own_body(sheet: Sheet, catalog: Catalog, wire, pts) -> bool:
 
     from panelcad.core.ladder import endpoint_is_rail, rail_names
     from panelcad.core.route import path_hits_obstacles
-    from panelcad.render.sheet import parse_pin_ref, pin_world
+    from panelcad.core.pin_geometry import parse_pin_ref, pin_world
     from panelcad.render.wiring import component_obstacle
 
     def parsed(text: str) -> tuple[str, str]:
@@ -1949,7 +1876,7 @@ def _straight_terminal_jumper(sheet: Sheet, catalog: Catalog, pts) -> bool:
     """A jumper that stays on the terminal pin line is the rung, not a loop."""
 
     from panelcad.core.route import path_hits_obstacles
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
     from panelcad.render.wiring import component_obstacle
 
     ys = [float(point.y) for point in pts]
@@ -2089,7 +2016,7 @@ def _segment_hits_box(
 
 def _body_problems(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
     from panelcad.core.route import component_aabb
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
     from panelcad.render.titleblock import working_rect
 
     issues: list[str] = []
@@ -2144,7 +2071,7 @@ def _body_problems(session: Session, sheet: Sheet, catalog: Catalog) -> list[str
                 issues.append(f"{sheet.id}: {a} and {b} terminals are cramped")
                 return issues
     wired: dict[str, set[str]] = {}
-    from panelcad.render.sheet import parse_pin_ref as _parse
+    from panelcad.core.pin_geometry import parse_pin_ref as _parse
 
     for wire in sheet.wires:
         try:
@@ -2177,7 +2104,7 @@ def _body_problems(session: Session, sheet: Sheet, catalog: Catalog) -> list[str
 def _terminal_gate(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
     """Reject a jumper nest and terminals parked in the gap between rungs."""
 
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
     from panelcad.render.sheet_labels import place_device_tags
 
     issues: list[str] = []
@@ -2218,7 +2145,7 @@ def _own_pin_wires(sheet: Sheet) -> list[str]:
     """A wire between a device's own pins bypasses that device. It must not be issued."""
 
     from panelcad.core.ladder import rail_names
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     hot, ret = rail_names(sheet, None)
     rails = {hot, ret, "L1", "L2", "L3", "N", "X1", "X2"}
@@ -2243,7 +2170,7 @@ def _fuse_dangling_pins(sheet: Sheet, catalog: Catalog) -> list[str]:
     empty pin when layout parks the fuse outside the rail column.
     """
 
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     issues: list[str] = []
     for comp in sheet.components:
@@ -2273,7 +2200,7 @@ def _fuse_dangling_pins(sheet: Sheet, catalog: Catalog) -> list[str]:
 def _fuse_across_rails(sheet: Sheet) -> list[str]:
     """A fuse whose only path runs from one rail to the other is not a feeder."""
 
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     hot = str(getattr(sheet, "rail_hot", "") or "L1")
     ret = str(getattr(sheet, "rail_return", "") or "L2")
@@ -2329,7 +2256,7 @@ def _rail_without_a_load(sheet: Sheet) -> list[str]:
     same kind of load. The checker still owns that. Nothing is redrawn away.
     """
 
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     hot = str(getattr(sheet, "rail_hot", "") or "L1")
     ret = str(getattr(sheet, "rail_return", "") or "L2")
@@ -2406,7 +2333,7 @@ def _rail_without_a_load(sheet: Sheet) -> list[str]:
 def _contacts_only_rungs(sheet: Sheet) -> list[str]:
     """An L1-to-L2 path of only contacts is not a rung. It must not be issued."""
 
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     hot = str(getattr(sheet, "rail_hot", "") or "L1")
     ret = str(getattr(sheet, "rail_return", "") or "L2")
@@ -2474,7 +2401,7 @@ def _shorted_numbers(session: Session, sheet: Sheet) -> list[str]:
 
     from panelcad.core.ansi_drafting import _SHEET_LINE
     from panelcad.core.ladder import endpoint_is_rail, rail_names
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     _hot, ret = rail_names(sheet, session.project)
     parent: dict[str, str] = {}
@@ -2558,7 +2485,7 @@ def _rail_gaps(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
     """A pin drawn in the rail column with no wire to that rail is not a landing."""
 
     from panelcad.core.ladder import endpoint_is_rail, rail_names, rail_xs
-    from panelcad.render.sheet import parse_pin_ref, pin_world
+    from panelcad.core.pin_geometry import parse_pin_ref, pin_world
 
     hot, ret = rail_names(sheet, session.project)
     left, right = rail_xs(sheet)
@@ -2620,7 +2547,7 @@ def _loads_on_the_right(session: Session, sheet: Sheet, catalog: Catalog) -> lis
     """A coil, overload, or pilot belongs just left of L2, not mid-sheet."""
 
     from panelcad.core.ladder import rail_xs
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
 
     _left, right = rail_xs(sheet)
     issues: list[str] = []

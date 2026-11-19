@@ -40,7 +40,6 @@ CARDS.update({
     "help": "List allowed ops.",
     "open": "Open a drawing. Args: path.",
     "list_sheets": "Pages: id, title, kind, counts.",
-    "set_active_sheet": "Args: sheet_id",
     "inspect": "Snapshot of one sheet. Args: sheet?",
     "list_components": "Devices and pin ids. Args: sheet?",
     "list_wires": "Wires on a sheet. Args: sheet?",

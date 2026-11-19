@@ -387,7 +387,7 @@ def _wire_pin_x(sheet: Sheet, catalog: Catalog | None, wire: Wire) -> float:
             pdef = device.pin(pin)
         except KeyError:
             return float(comp.x)
-        from panelcad.render.sheet import pin_world
+        from panelcad.core.pin_geometry import pin_world
 
         return float(pin_world(comp, pdef)[0])
     return 0.0

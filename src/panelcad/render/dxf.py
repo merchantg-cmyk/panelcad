@@ -94,7 +94,7 @@ def _rgb(color: str) -> tuple[int, int, int]:
 
 def _lineweight(width_mm: float) -> int:
     hundredths = max(5, int(round(max(0.05, float(width_mm)) * 100.0)))
-    return min(_LINEWEIGHTS, key=lambda value: abs(value - hundredths))
+    return min(_LINEWEIGHTS, key=lambda value: (abs(value - hundredths), -value))
 
 
 def _is_fill(color: str | None) -> bool:

@@ -68,14 +68,6 @@ def _safe(name: str) -> str:
     return text or "item"
 
 
-def _jsonish(value: Any) -> Any:
-    try:
-        json.dumps(value)
-    except (TypeError, ValueError):
-        return str(value)[:500]
-    return value
-
-
 def _pins_of(row: dict[str, Any]) -> list[str]:
     left_tag = str(row.get("from_tag") or "").strip()
     right_tag = str(row.get("to_tag") or "").strip()

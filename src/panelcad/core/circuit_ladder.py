@@ -503,7 +503,7 @@ def _route_seal_u(
 ) -> None:
     """One vertical at each start-button pin: 203 down to the seal, 204 back up."""
 
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
 
     page = session.sheet(sheet_id)
     try:
@@ -537,7 +537,7 @@ def _route_drop_across(
 ) -> None:
     """Drop from the selector output, then run across into the Auto contact."""
 
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
 
     page = session.sheet(sheet_id)
     try:
@@ -566,7 +566,7 @@ def _route_join_tee(
 ) -> None:
     """Rise to the join pin on one vertical so Auto does not redraw the coil feed."""
 
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
 
     page = session.sheet(sheet_id)
     try:
@@ -614,7 +614,7 @@ def _route_supply_clear_of_body(session: Any, sheet_id: str, supply: _Part, plus
     """+24V leaves the right-hand output and hops *over* the PSU to the left rail."""
 
     from panelcad.core.ladder import rail_xs
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
     from panelcad.render.titleblock import working_rect
 
     page = session.sheet(sheet_id)
@@ -664,7 +664,7 @@ def _route_iec_supply(
     """Plus rises to L+ on one X. Minus drops to 0V on another. Never the same line."""
 
     from panelcad.core.geometry import Point
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
     from panelcad.render.wiring import clear_route_cache
 
     page = session.sheet(sheet_id)
@@ -775,7 +775,7 @@ def _offpage_to_rail(
 
     from panelcad.core.cleanup import sheet_number
     from panelcad.core.ladder import is_iec_column_sheet
-    from panelcad.render.sheet import parse_pin_ref, pin_world
+    from panelcad.core.pin_geometry import parse_pin_ref, pin_world
 
     link = f"{home}:{pin_ref}|{dest_sheet}:{rail}"
     for page in session.project.sheets:
@@ -959,7 +959,7 @@ def _link_ladder_feeds(
 def _ref_pin_y(session: Any, sheet: Any, pin_ref: str) -> float | None:
     if "." not in str(pin_ref):
         return None
-    from panelcad.render.sheet import parse_pin_ref, pin_world
+    from panelcad.core.pin_geometry import parse_pin_ref, pin_world
 
     try:
         cid, pid = parse_pin_ref(pin_ref)
@@ -973,7 +973,7 @@ def _ref_pin_y(session: Any, sheet: Any, pin_ref: str) -> float | None:
 def _fan_rail(session: Any, sheet: Any, pin_ref: str, hot: str, ret: str) -> str:
     """The rail on the same side of the sheet as this shared contact."""
 
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     wx, _wy, ww, _wh = working_rect(sheet)
     try:
@@ -1031,7 +1031,7 @@ def _link_fan_pair(
 
     from panelcad.core.cleanup import sheet_number
     from panelcad.core.geometry import Point
-    from panelcad.render.sheet import parse_pin_ref, pin_world
+    from panelcad.core.pin_geometry import parse_pin_ref, pin_world
 
     src_no = sheet_number(session.project.sheets, source.id) or 1
     dst_no = sheet_number(session.project.sheets, dest.id) or 1
@@ -1109,7 +1109,7 @@ def _place_rail_arrow(
 
     from panelcad.core.geometry import Point
     from panelcad.core.ladder import rail_xs
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
 
     symbol = session.catalog.get(library_id)
     width = float(symbol.schematic_width or 32.0)
@@ -1597,7 +1597,7 @@ def route_rail_captions(session: Any, sheet_id: str | None) -> None:
 
     from panelcad.core.geometry import Point
     from panelcad.core.ladder import is_iec_column_sheet, rail_names, rail_point
-    from panelcad.render.sheet import pin_side_world, pin_world
+    from panelcad.core.pin_geometry import pin_side_world, pin_world
     from panelcad.render.titleblock import working_rect
     from panelcad.render.wiring import clear_route_cache
 

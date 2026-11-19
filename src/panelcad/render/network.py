@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from panelcad.core.geometry import Point, rotate_point
+from panelcad.core.geometry import rotate_point
 from panelcad.core.models import CommPort, Component, Device, Sheet
 from panelcad.library.catalog import Catalog
 from panelcad.library.ports import effective_ports, network_node_caption
 from panelcad.render.painter import Painter
-from panelcad.render.sheet import iter_wire_points, parse_pin_ref
+from panelcad.render.sheet import parse_pin_ref
 
 NODE_W = 72.0
 NODE_H = 42.0

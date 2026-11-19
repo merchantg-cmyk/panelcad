@@ -15,7 +15,7 @@ from panelcad.gui.canvas import LIBRARY_MIME
 from panelcad.gui.main_window import MainWindow
 from panelcad.gui.reconstruct_wizard import ReconstructWizard
 from panelcad.reconstruct.fixtures import write_backpanel_photo
-from panelcad.reconstruct.geometry import mm_per_px, photo_to_mm
+from panelcad.reconstruct.geometry import photo_to_mm
 from panelcad.reconstruct.vision import FakeVision
 
 

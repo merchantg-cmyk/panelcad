@@ -1462,7 +1462,6 @@ def test_overlap_tolerance_ignores_a_rounding_hair():
 def test_first_din_module_starts_on_the_rail():
     from panelcad.core.layout import (
         TRAY_TO_RAIL_X_MM,
-        _opening_between_side_ducts,
         clip_offset,
         footprint_size,
         tray_aabb,

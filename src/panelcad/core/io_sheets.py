@@ -825,15 +825,6 @@ def _hot_bus_x(card_x: float) -> float:
     return card_x - HOT_FROM_CARD
 
 
-def _margin_x(sheet: Any) -> float:
-    """0 V column beside the left rail, clear of the fuse and the terminal leads."""
-
-    from panelcad.core.ladder import rail_xs
-
-    left, _right = rail_xs(sheet)
-    return left + 11.0
-
-
 def _card_x(left: float, columns: int, column: int, field_left: bool) -> float:
     if field_left:
         offsets = [156.0, 378.0] if columns == 2 else [200.0]
@@ -1306,7 +1297,7 @@ def _feed_hot(session: Any, sheet: Any, top: str, owner: str, use_fuses: bool) -
     # Fuse the +24 V feed. A sourcing input keeps 0 V on the left rail; that wire stays unfused.
     if use_fuses and not _positive(hot):
         use_fuses = False
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
 
     junction = sheet.component(top)
     device = session.catalog.get(junction.library_id)
@@ -1416,7 +1407,7 @@ def _commons(
     inside the module and does not bond them to the 24 V return.
     """
 
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
 
     pins = []
     for item in module.power:
@@ -1520,7 +1511,7 @@ def _to_rail(
 
 
 def _supply(session: Any, sheet: Any, module_comp: Any, module: IoModule, owner: str, use_fuses: bool, bus: dict[str, Any]) -> None:
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
 
     device = session.catalog.get(module_comp.library_id)
     plus = next((item for item in module.power if item.role == "supply_plus"), None)
@@ -1605,7 +1596,7 @@ def _return_drops(
 
     if not returns:
         return
-    from panelcad.render.sheet import parse_pin_ref, pin_world
+    from panelcad.core.pin_geometry import parse_pin_ref, pin_world
 
     owner = str(module_comp.id)
     card_x = float(module_comp.x)
@@ -1905,7 +1896,7 @@ def _earth(session: Any, sheet: Any, module_comp: Any, module: IoModule, owner: 
     item = next((row for row in module.power if row.role == "earth"), None)
     if item is None or item.pin not in module_comp.pin_overrides:
         return
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
 
     device = session.catalog.get(module_comp.library_id)
     try:
@@ -1947,7 +1938,7 @@ def _shields(session: Any, sheet: Any, module_comp: Any, module: IoModule, owner
         module_comp.pin_overrides[item.pin] = PinOverride(
             x=local_x, y=card_h, side="bottom", label=str(item.terminal)
         )
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
 
     device = session.catalog.get(module_comp.library_id)
     located: list[tuple[Any, float, float]] = []
@@ -2285,7 +2276,7 @@ def _end_xy(session: Any, sheet: Any, ref: str, near_y: float) -> tuple[float, f
 
         x, y, _side = rail_point(sheet, ref, near_y, sheet.rail_hot or "", sheet.rail_return or "")
         return float(x), float(y)
-    from panelcad.render.sheet import parse_pin_ref, pin_world
+    from panelcad.core.pin_geometry import parse_pin_ref, pin_world
 
     cid, pid = parse_pin_ref(ref)
     comp = sheet.component(cid)

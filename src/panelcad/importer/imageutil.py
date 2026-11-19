@@ -39,7 +39,8 @@ def prepare_scan(
 
     image = ImageOps_exif(image)
     image, dpi_tuple = _raise_coarse_scan(image, dpi_tuple)
-    turned, quarter = auto_rotate(image)
+    large_format = _is_large_format_sheet(image, dpi_tuple)
+    turned, quarter = auto_rotate(image, large_format=large_format)
 
     work_img = turned
     quad_list = None
@@ -63,13 +64,16 @@ def prepare_scan(
         if illum_applied:
             fixed = Image.fromarray(cv2.cvtColor(norm_gray, cv2.COLOR_GRAY2RGB))
 
-    clean = denoise(fixed)
+    sharp = fixed.convert("RGB")
+    clean = denoise(fixed, preserve_thin_strokes=large_format)
     eff_dpi, src_dpi, norm_dpi = normalize_camera_dpi(clean.width, clean.height, dpi_tuple)
     if norm_dpi and eff_dpi is not None and dpi_tuple is not None:
         clean.info["dpi"] = eff_dpi
+        sharp.info["dpi"] = eff_dpi
     elif dpi_tuple is not None:
         # A coarse scan was enlarged. The new dpi keeps the sheet millimetres.
         clean.info["dpi"] = dpi_tuple
+        sharp.info["dpi"] = dpi_tuple
 
     return PreparedScan(
         image=clean,
@@ -81,6 +85,7 @@ def prepare_scan(
         illumination_normalized=illum_applied,
         effective_dpi=eff_dpi,
         source_dpi=src_dpi,
+        sharp_image=sharp,
     )
 
 
@@ -97,14 +102,16 @@ def _raise_coarse_scan(
     image: Image.Image,
     dpi: tuple[float, float] | None,
 ) -> tuple[Image.Image, tuple[float, float] | None]:
-    """Enlarge a scan stored under about 140 dpi before the median filter.
+    """Enlarge a scan stored under about 140 dpi before denoising.
 
-    A 3-pixel median on a 100 dpi line drawing erases the tags. The pixel
-    count goes up and the dpi tag goes up with it, so the sheet millimetres
-    stay the same. A phone photo is already large and is not enlarged.
+    Coarse 100 dpi line drawings lose thin strokes when processed directly.
+    The pixel count goes up and the dpi tag goes up with it, so the sheet
+    millimetres stay the same. A 72 dpi camera/phone photo is not enlarged.
     """
 
-    if dpi is None or max(image.size) > 2400:
+    from .preprocess import is_default_camera_dpi
+
+    if dpi is None or is_default_camera_dpi(dpi, image.width, image.height):
         return image, dpi
     xdpi, ydpi = float(dpi[0]), float(dpi[1])
     if xdpi < 72 or xdpi >= 140 or ydpi < 72:
@@ -112,10 +119,11 @@ def _raise_coarse_scan(
     scale = min(3.0, 200.0 / xdpi)
     if scale < 1.08:
         return image, dpi
-    enlarged = image.resize(
-        (max(1, int(round(image.width * scale))), max(1, int(round(image.height * scale)))),
-        Image.Resampling.LANCZOS,
-    )
+    new_w = max(1, int(round(image.width * scale)))
+    new_h = max(1, int(round(image.height * scale)))
+    if new_w * new_h > 36_000_000:
+        return image, dpi
+    enlarged = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
     new_dpi = (xdpi * scale, ydpi * scale)
     enlarged.info["dpi"] = new_dpi
     return enlarged, new_dpi
@@ -187,11 +195,70 @@ def _named_sheet(image: Image.Image, dpi: tuple[float, float] | None) -> bool:
     return match_page_size(width_mm, height_mm)[0] != "custom"
 
 
-def denoise(image: Image.Image) -> Image.Image:
-    return image.convert("RGB").filter(ImageFilter.MedianFilter(size=3))
+def _is_large_format_sheet(image: Image.Image, dpi: tuple[float, float] | None) -> bool:
+    """True for large-format drawings (ANSI C/D/E, A1/A0) with small tags relative to page size."""
+
+    if dpi is None:
+        return False
+    try:
+        xdpi, ydpi = float(dpi[0]), float(dpi[1])
+    except (TypeError, ValueError):
+        return False
+    if xdpi < 80 or ydpi < 80:
+        return False
+    width_mm = image.width / xdpi * 25.4
+    height_mm = image.height / ydpi * 25.4
+    return max(width_mm, height_mm) >= 500.0
 
 
-def auto_rotate(image: Image.Image) -> tuple[Image.Image, int]:
+def denoise(image: Image.Image, *, preserve_thin_strokes: bool = False) -> Image.Image:
+    """Remove scan noise.
+
+    Standard sheets keep the 3x3 median filter. Large-format sheets (ANSI
+    C/D/E panel layouts) carry 1-2 px text strokes at 100-200 dpi that a full
+    3x3 median erases, so ``preserve_thin_strokes=True`` only replaces isolated
+    dark speckle dots (when speckle noise is present) and single-pixel white
+    salt holes surrounded by dark ink.
+    """
+
+    if not preserve_thin_strokes:
+        return image.convert("RGB").filter(ImageFilter.MedianFilter(size=3))
+
+    import cv2
+    import numpy as np
+
+    rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
+    if rgb.size == 0 or min(rgb.shape[:2]) < 5:
+        return Image.fromarray(rgb)
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    out = rgb.copy()
+
+    dark = (gray < 180).astype(np.uint8)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(dark, connectivity=8)
+    if count > 1:
+        areas = stats[1:, cv2.CC_STAT_AREA]
+        widths = stats[1:, cv2.CC_STAT_WIDTH]
+        heights = stats[1:, cv2.CC_STAT_HEIGHT]
+        tiny = np.where((areas <= 4) & (widths <= 2) & (heights <= 2))[0] + 1
+        if len(tiny) >= 200:
+            lut = np.zeros(count, dtype=np.bool_)
+            lut[tiny] = True
+            speck = lut[labels]
+            med5 = cv2.medianBlur(rgb, 5)
+            out[speck] = med5[speck]
+
+    gray2 = cv2.cvtColor(out, cv2.COLOR_RGB2GRAY)
+    kernel = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]], dtype=np.uint8)
+    dark_nb = cv2.filter2D((gray2 < 160).astype(np.uint8), -1, kernel)
+    salt = (gray2 > 220) & (dark_nb >= 6)
+    if np.any(salt):
+        med3 = cv2.medianBlur(out, 3)
+        out[salt] = med3[salt]
+
+    return Image.fromarray(out)
+
+
+def auto_rotate(image: Image.Image, *, large_format: bool | None = None) -> tuple[Image.Image, int]:
     """Put the page upright. Returns quarter turns applied (each is 90° CCW).
 
     Tag scores decide when they can. Electrical OCR transcribes a line in
@@ -202,10 +269,34 @@ def auto_rotate(image: Image.Image) -> tuple[Image.Image, int]:
     scanned when none of those is decisive.
     """
 
+    if large_format is None:
+        raw_dpi = image.info.get("dpi")
+        dpi_tuple = raw_dpi if isinstance(raw_dpi, tuple) and len(raw_dpi) == 2 else None
+        large_format = _is_large_format_sheet(image, dpi_tuple)
     # Tags decide before a title-band guess, including on a line drawing
     # whose BOX thumbnail looks blank.
-    scores = _text_scores(image)
-    quarter = choose_quarter(scores, _glyph_quarter(image))
+    scores = _text_scores(image, horizontal_only=True) if large_format else _text_scores(image)
+    glyph = _glyph_quarter(image)
+    quarter = choose_quarter(scores, glyph)
+    if large_format and len(scores) == 4 and quarter in {0, 1, 2, 3}:
+        # When horizontal-only filtering drops sideways scores near zero on a
+        # large-format sheet, opposite quarters (0 vs 180 or 90 vs 270) can
+        # both score high under electrical OCR. Let letter-shape balance break
+        # an opposite-axis near-tie so faded prints do not flip upside down.
+        opposite = (quarter + 2) % 4
+        if (
+            glyph in {quarter, opposite}
+            and scores[opposite] >= 80.0
+            and scores[opposite] >= scores[quarter] * 0.80
+        ):
+            quarter = glyph
+    if quarter is None and large_format and max(image.size) > 2600:
+        # On a large D-size sheet (skewed, speckled, or 1-bit fax), shrinking
+        # to 2400 px can collapse small text below OCR height. Retry once on
+        # a deskewed 3600 px probe before falling back to border ink heuristics.
+        probe_img, _ = deskew(image)
+        retry_scores = _text_scores(probe_img, target_long=3600, horizontal_only=True)
+        quarter = choose_quarter(retry_scores, glyph)
     if quarter is not None:
         turned = image
         for _ in range(quarter):
@@ -357,23 +448,12 @@ def _osd_reading(image: Image.Image) -> tuple[int | None, float]:
     return rotate, confidence
 
 
-def _text_orientation(image: Image.Image) -> tuple[Image.Image, int] | None:
-    """Pick 0/90/180/270 by which way device tags and title words read.
-
-    Upside-down OCR still emits letters, but not MOTOR or 10M-G. A page with
-    no such tokens returns None so the title-band ink test can run.
-    """
-
-    quarter = choose_quarter(_text_scores(image), _glyph_quarter(image))
-    if quarter is None:
-        return None
-    turned = image
-    for _ in range(quarter):
-        turned = turned.transpose(Image.Transpose.ROTATE_270)
-    return turned, quarter
-
-
-def _text_scores(image: Image.Image) -> list[float]:
+def _text_scores(
+    image: Image.Image,
+    *,
+    target_long: int = 2400,
+    horizontal_only: bool = False,
+) -> list[float]:
     from panelcad.ocr.dispatch import active_backend
 
     electrical = active_backend() == "electrical"
@@ -392,7 +472,14 @@ def _text_scores(image: Image.Image) -> list[float]:
     for quarter in range(4):
         if quarter:
             current = current.transpose(Image.Transpose.ROTATE_270)
-        scores.append(_text_score(current, pytesseract))
+        scores.append(
+            _text_score(
+                current,
+                pytesseract,
+                target_long=target_long,
+                horizontal_only=horizontal_only,
+            )
+        )
     return scores
 
 
@@ -518,7 +605,14 @@ def _glyph_balance(image: Image.Image) -> int:
     probe = image.convert("L").resize(
         (max(1, int(image.width * scale)), max(1, int(image.height * scale)))
     )
-    ink = np.asarray(probe) < 160
+    arr = np.asarray(probe)
+    ink = arr < 160
+    if int(ink.sum()) < 200:
+        # Faded prints can keep all strokes above 160; fall back to a contrast
+        # threshold relative to the darkest stroke on the page.
+        darkest = int(arr.min())
+        if darkest < 220:
+            ink = arr < min(225, int(darkest + (255 - darkest) * 0.45))
     height, width = ink.shape
     row = ink.sum(axis=1)
     rule = row > width * 0.35
@@ -551,39 +645,24 @@ def _glyph_balance(image: Image.Image) -> int:
     return total
 
 
-def _orientation_from_scores(image: Image.Image, scores: list[float]) -> tuple[Image.Image, int] | None:
-    if len(scores) != 4:
-        return None
-    best_q = max(range(4), key=lambda index: scores[index])
-    best = scores[best_q]
-    if best < 80.0:
-        return None
-    second = max(score for index, score in enumerate(scores) if index != best_q)
-    if best < second + 60.0:
-        return None
-    # The electrical reader transcribes a line either way up, so an upright
-    # page that already has tags must not be turned over. A page that does
-    # not read until it is rotated still turns.
-    if best_q == 2 and scores[0] >= 80.0:
-        return image, 0
-    turned = image
-    for _ in range(best_q):
-        turned = turned.transpose(Image.Transpose.ROTATE_270)
-    return turned, best_q
-
-
-def _text_score(image: Image.Image, pytesseract: object) -> float:
+def _text_score(
+    image: Image.Image,
+    pytesseract: object,
+    *,
+    target_long: int = 2400,
+    horizontal_only: bool = False,
+) -> float:
     """Score tags and title words on a probe large enough to read a line drawing.
 
     An 800 px thumbnail of a wide sheet scores nothing, so a top rule would
-    decide the rotation. The long side stays near 2400 px.
+    decide the rotation. The long side stays near ``target_long`` px.
     """
 
     probe = image.convert("L")
     long_side = max(probe.size)
     # Shrink a large sheet, and enlarge a small scan, so tags stay readable.
-    if long_side >= 800 and abs(long_side - 2400) > 1:
-        scale = 2400.0 / float(long_side)
+    if long_side >= 800 and abs(long_side - target_long) > 1:
+        scale = float(target_long) / float(long_side)
         probe = probe.resize(
             (max(1, int(round(probe.width * scale))), max(1, int(round(probe.height * scale)))),
             Image.Resampling.LANCZOS,
@@ -591,7 +670,8 @@ def _text_score(image: Image.Image, pytesseract: object) -> float:
     try:
         from panelcad.ocr.dispatch import active_backend, image_to_data
 
-        if active_backend() == "electrical" or pytesseract is None:
+        is_electrical = active_backend() == "electrical" or pytesseract is None
+        if is_electrical:
             data = image_to_data(probe, config="--psm 11")
         else:
             data = pytesseract.image_to_data(probe, output_type=pytesseract.Output.DICT, config="--psm 11")
@@ -600,7 +680,9 @@ def _text_score(image: Image.Image, pytesseract: object) -> float:
 
         return fallback_probe_text_score(probe, _TAG_LIKE, _TITLE_WORD)
     total = 0.0
-    for raw, conf in zip(data.get("text") or [], data.get("conf") or []):
+    widths = data.get("width") or []
+    heights = data.get("height") or []
+    for index, (raw, conf) in enumerate(zip(data.get("text") or [], data.get("conf") or [])):
         text = str(raw or "").strip().upper()
         try:
             confidence = float(conf)
@@ -608,6 +690,23 @@ def _text_score(image: Image.Image, pytesseract: object) -> float:
             continue
         if confidence < 40 or not text:
             continue
+        # On large-format layouts with mixed horizontal and vertical labels,
+        # ignore strongly vertical multi-character electrical boxes so sideways
+        # turns of horizontal tags do not outscore the upright orientation.
+        if (
+            horizontal_only
+            and is_electrical
+            and len(text) >= 2
+            and index < len(widths)
+            and index < len(heights)
+        ):
+            try:
+                box_w = float(widths[index])
+                box_h = float(heights[index])
+            except (TypeError, ValueError):
+                box_w = box_h = 0.0
+            if box_w > 0 and box_h > box_w * 1.2:
+                continue
         if _TAG_LIKE.match(text) or _TITLE_WORD.match(text):
             total += confidence
     return total

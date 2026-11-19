@@ -11,7 +11,6 @@ import pytest
 from panelcad.api.session import Session
 from panelcad.convert import (
     DEFAULT_CONFIDENCE_THRESHOLD,
-    HARD_LAYOUT_FLAGS,
     ROLE_PREFIX_TABLE,
     ConversionEngine,
     RecordedJSONBackend,
@@ -25,9 +24,9 @@ from panelcad.convert import (
     suggest_symbol_counterpart,
 )
 from panelcad.convert.from_to_check import check_connections
-from panelcad.core.models import Project, Wire
+from panelcad.core.models import Project
 from panelcad.convert.netlist import same_netlist, sheet_edges
-from panelcad.library.catalog import Catalog, Library
+from panelcad.library.catalog import Library
 
 
 def _make_ambiguous_iec_session() -> Session:

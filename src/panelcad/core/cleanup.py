@@ -11,7 +11,7 @@ from panelcad.core.layout import footprint_size, is_generated_io_sheet, is_io_sh
 from panelcad.library.panel import effective_footprint
 from panelcad.core.models import Component, Sheet
 from panelcad.core.route import Rect, component_aabb
-from panelcad.render.sheet import parse_pin_ref, pin_world
+from panelcad.core.pin_geometry import parse_pin_ref, pin_world
 from panelcad.render.titleblock import working_rect
 
 if TYPE_CHECKING:
@@ -84,7 +84,6 @@ def arrange_io(sheet: Sheet, catalog: Catalog) -> dict[str, Any]:
         TOP_Y,
         io_card_column,
         io_card_size,
-        io_endpoint,
         io_field_is_left,
         io_module_kind,
         io_pin_is_input,
@@ -320,7 +319,7 @@ def orient_two_pin_flow(sheet: Sheet, catalog: Catalog, ref: str) -> bool:
     """Fuse / OL contact: 0° in a horizontal run, 90° in a vertical drop (JIC H vs V)."""
 
     from panelcad.core.ladder import endpoint_is_rail, is_iec_column_sheet
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     # Column sheets already stand the contact in the current path. Re-orienting
     # from component origins turns the PLC I/O overload flat and into its neighbor.
@@ -416,10 +415,24 @@ def _rung_pin_y_offset(catalog: Catalog, comp: Component) -> float:
 
 
 def _messy_elementary(session: "Session", sheet: Sheet) -> bool:
-    """Re-issue a messy control ladder. A clean sheet, and a power column, stay put."""
+    """Re-issue a messy control ladder. A clean sheet, and a power column, stay put.
+
+    A hand-sketched sheet that has not landed on the hot rail yet still goes
+    through ``arrange_ladder`` + ``complete_ladder_rungs`` so missing rail
+    connections and unplaced aux/lamp pairs are finished first.
+    """
 
     from panelcad.core.elementary_layout import issue_elementary
+    from panelcad.core.ladder import endpoint_is_rail, rail_names
 
+    hot, _ret = rail_names(sheet, session.project)
+    has_hot_rail = any(
+        endpoint_is_rail(sheet, end, session.project) and str(end).strip().upper() == hot.upper()
+        for wire in sheet.wires
+        for end in (wire.frm, wire.to)
+    )
+    if not has_hot_rail:
+        return False
     return issue_elementary(session, sheet)
 
 
@@ -558,7 +571,7 @@ def arrange_ladder(sheet: Sheet, catalog: Catalog) -> int:
 def complete_ladder_rungs(session: "Session", sheet: Sheet) -> int:
     """Attach an existing series path to both rails. Do not invent device-to-device wires."""
 
-    from panelcad.core.ladder import is_aux_library, is_lamp_library, is_rail_ref, rail_names
+    from panelcad.core.ladder import is_aux_library, is_lamp_library, rail_names
 
     hot, ret = rail_names(sheet, session.project)
     n = 0

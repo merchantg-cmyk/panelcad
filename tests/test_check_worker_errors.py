@@ -2,12 +2,29 @@
 
 from __future__ import annotations
 
+import time
+
+from PySide6.QtWidgets import QApplication
+
 from panelcad.api.session import Session
 
 
-def test_check_worker_reports_an_invalid_snapshot_instead_of_raising(qapp):
+def _app() -> QApplication:
+    return QApplication.instance() or QApplication([])
+
+
+def _wait_until(app: QApplication, predicate, timeout_s: float = 10.0) -> None:
+    deadline = time.monotonic() + timeout_s
+    while not predicate():
+        assert time.monotonic() < deadline, "timed out waiting for LiveCheckRunner"
+        app.processEvents()
+        time.sleep(0.01)
+
+
+def test_check_worker_reports_an_invalid_snapshot_instead_of_raising():
     from panelcad.gui.problems import _CheckWorker
 
+    _app()
     session = Session.create("worker-errors")
     payload = session.project.model_dump(mode="python")
     payload["sheets"][0]["drawing_style"] = "not-a-style"
@@ -21,18 +38,20 @@ def test_check_worker_reports_an_invalid_snapshot_instead_of_raising(qapp):
     worker.deleteLater()
 
 
-def test_live_runner_is_not_left_busy_after_a_failed_check(qtbot):
+def test_live_runner_is_not_left_busy_after_a_failed_check():
     from panelcad.gui.problems import LiveCheckRunner
 
+    app = _app()
     session = Session.create("runner-errors")
     session.sheet().drawing_style = "not-a-style"  # type: ignore[assignment]
     runner = LiveCheckRunner(session)
+    got_rows: list[object] = []
+    runner.rows_ready.connect(lambda rows: got_rows.append(rows))
     try:
         runner.run_now()
-        qtbot.waitUntil(lambda: not runner._busy and runner._gc_pause is None, timeout=10000)
+        _wait_until(app, lambda: not runner._busy and runner._gc_pause is None)
         session.sheet().drawing_style = "ladder"
-        with qtbot.waitSignal(runner.rows_ready, timeout=10000):
-            runner.run_now()
-        qtbot.waitUntil(lambda: runner._gc_pause is None, timeout=10000)
+        runner.run_now()
+        _wait_until(app, lambda: bool(got_rows) and runner._gc_pause is None)
     finally:
         runner.stop()

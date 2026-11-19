@@ -1151,12 +1151,15 @@ def _include_key(component: Component, cutout: PanelCutout) -> bool:
     return cutout.cuts_key(bool(raw))
 
 
-def _fmt_length(value_mm: float, units: str) -> str:
+def format_cutout_length(value_mm: float, units: str) -> str:
     if units == "inch":
         return f"{value_mm / MM_PER_INCH:.3f}"
     if abs(value_mm - round(value_mm)) < 1e-6:
         return f"{value_mm:.0f}"
     return f"{value_mm:.1f}"
+
+
+_fmt_length = format_cutout_length
 
 
 def build_drawings(project: Project, catalog: Catalog, settings: CutoutSettings | None = None) -> list[SurfaceDrawing]:
@@ -1859,16 +1862,6 @@ def _opening_gaps(drawing: SurfaceDrawing, left: CutFeature, right: CutFeature) 
     elif b[3] < a[1]:
         dy = a[1] - b[3]
     return dx, dy
-
-
-def _outline_gap(drawing: SurfaceDrawing, left: CutFeature, right: CutFeature) -> float | None:
-    gaps = _opening_gaps(drawing, left, right)
-    if gaps is None:
-        return None
-    dx, dy = gaps
-    if dx == 0.0 and dy == 0.0:
-        return 0.0
-    return math.hypot(dx, dy)
 
 
 def _bounds(prims: list[dict[str, Any]]) -> tuple[float, float, float, float] | None:

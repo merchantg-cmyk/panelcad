@@ -779,13 +779,6 @@ def _ends_ready(sheet: Any, frm: str, to: str) -> bool:
     return left in ids and right in ids
 
 
-def _wire_with_ends(sheet: Any, frm: str, to: str) -> Any:
-    for wire in sheet.wires:
-        if {wire.frm, wire.to} == {frm, to}:
-            return wire
-    return None
-
-
 def _copy_known_end(session: Any, sheet: Any, endpoint: str, bbox: Any) -> None:
     """A tag that already exists on another sheet is marked needs-info on this sheet."""
 

@@ -286,7 +286,7 @@ def _plc_point_rows(project: Project, catalog: Catalog, ref: str | None) -> list
         loc = component_location(project, sheet, comp, device)
         pin = next((item_pin for item_pin in (device.pins if device else []) if str(item_pin.id) == address), None)
         if pin is not None:
-            from panelcad.render.sheet import pin_world
+            from panelcad.core.pin_geometry import pin_world
 
             px, py = pin_world(comp, pin)
             loc = location_of(project, sheet, px, py)
@@ -706,7 +706,7 @@ def _end_location(
     if token and device is not None and (ref.casefold(), token) in keys:
         found = next((item for item in device.pins if str(item.id) == token), None)
         if found is not None:
-            from panelcad.render.sheet import pin_world
+            from panelcad.core.pin_geometry import pin_world
 
             px, py = pin_world(comp, found)
             loc = location_of(project, sheet, px, py)

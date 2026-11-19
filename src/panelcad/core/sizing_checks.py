@@ -408,7 +408,7 @@ def collect_sizing_issues(project: Project, catalog: Catalog, parts: Any = None)
     """Plain dicts. ``checks.run_checks`` wraps them as findings."""
 
     from panelcad.core.checks import _merged_props, parse_amps
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     issues: list[dict[str, Any]] = []
     for sheet in project.sheets:

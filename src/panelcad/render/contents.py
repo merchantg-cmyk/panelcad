@@ -175,12 +175,13 @@ def draw_sheet_body(
         runs = [*line_side_runs(project, sheet, catalog), *pole_runs(project, sheet, catalog)]
         # All paper first. A run's paper laid after its neighbour's colour cut a
         # white seam into every joint of a heater drawn as arcs.
-        painter.set_layer("WIRES")
+        # Draw on DEVICES so symbol-internal pole overlays never pollute the DXF WIRES layer.
+        painter.set_layer("DEVICES")
         for run in runs:
             painter.set_stroke("#ffffff", 0.75)
             painter.polyline(run.points)
         for run in runs:
-            painter.set_layer("WIRES")
+            painter.set_layer("DEVICES")
             if run.pen.outline:
                 painter.set_stroke(run.pen.outline, run.pen.outline_width)
                 painter.polyline(run.points)

@@ -28,23 +28,22 @@ def write_session_pdf(
 ) -> Path:
     """Vector PDF. Readings and causes are the rows of the session."""
 
-    from PySide6.QtGui import QPainter, QPdfWriter
     from PySide6.QtWidgets import QApplication
 
-    from panelcad.render.page import configure_full_page
+    from panelcad.render.pdf import atomic_pdf_writer
 
     if QApplication.instance() is None:
         QApplication([])
     dest = Path(path)
-    dest.parent.mkdir(parents=True, exist_ok=True)
     rows = session_rows(payload, who=who, note=note)
-    writer = QPdfWriter(str(dest))
-    writer.setResolution(144)
     title = project_name or str(payload.get("ref") or "Troubleshooting")
-    writer.setTitle(f"{title} troubleshooting")
-    configure_full_page(writer, PAGE_W, PAGE_H)
-    painter = QPainter(writer)
-    try:
+    with atomic_pdf_writer(
+        dest,
+        resolution=144,
+        title=f"{title} troubleshooting",
+        width_mm=PAGE_W,
+        height_mm=PAGE_H,
+    ) as (writer, painter):
         state = _Page(writer, painter)
         safety = payload.get("safety") or {}
         state.heading("TROUBLESHOOTING LOG")
@@ -119,9 +118,6 @@ def write_session_pdf(
                 state.line(f"Who: {who.strip()}", 2.4)
             if note.strip():
                 state.line(note.strip(), 2.4)
-    finally:
-        if painter.isActive():
-            painter.end()
     return dest
 
 

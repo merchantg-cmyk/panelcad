@@ -340,7 +340,7 @@ def test_conflict_copy_names(tmp_path: Path) -> None:
         "line (1).pcad.yaml",
         "line.pcad (1).yaml",
         "line (conflicted copy).pcad.yaml",
-        "line (Alex's conflicted copy 2026-10-16).pcad.yaml",
+        "line (George's conflicted copy 2026-10-16).pcad.yaml",
         "Copy of line.pcad.yaml",
         "notes (1).yaml",
     ]
@@ -352,7 +352,7 @@ def test_conflict_copy_names(tmp_path: Path) -> None:
         "line (1).pcad.yaml",
         "line.pcad (1).yaml",
         "line (conflicted copy).pcad.yaml",
-        "line (Alex's conflicted copy 2026-10-16).pcad.yaml",
+        "line (George's conflicted copy 2026-10-16).pcad.yaml",
         "Copy of line.pcad.yaml",
     }
 

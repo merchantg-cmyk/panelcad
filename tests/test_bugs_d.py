@@ -629,6 +629,11 @@ def test_context_fractions_are_not_sheet_numbers_in_three_fonts() -> None:
     missing = [path for path in faces if not Path(path).is_file()]
     if missing:
         pytest.skip("font missing: " + ", ".join(missing))
+    from panelcad.importer.tesseract_runtime import find_tesseract
+    from panelcad.ocr.backend import page_engine_ready
+
+    if not page_engine_ready() and not find_tesseract():
+        pytest.skip("neither electrical OCR weights nor Tesseract binary is installed on this machine")
     from panelcad.importer.raster import ocr_title_sheet, prepare_opencv, read_pixels
     from panelcad.library.catalog import default_catalog
 

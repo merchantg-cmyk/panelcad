@@ -28,7 +28,6 @@ from panelcad.core.electrical import (
     _apply_rename_plan,
     _device,
     _is_spare,
-    _lands,
     is_pe_terminal,
     terminal_identity,
     terminal_lands,

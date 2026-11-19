@@ -1,4 +1,4 @@
-"""Alex's rule: layout never packs a generic/placeholder size."""
+"""George's rule: layout never packs a generic/placeholder size."""
 
 import math
 from pathlib import Path
@@ -90,13 +90,13 @@ def test_confirmed_envelope_makes_generic_layout_ready():
         height_mm=89,
         depth_mm=69,
         mount="din_rail",
-        confirmed_by="Alex",
+        confirmed_by="George",
     )
     q1 = s.sheet().component("Q1")
     device = s.catalog.get(q1.library_id)
     assert is_layout_ready(device, q1)
     assert q1.properties["envelope_confirmed"] is True
-    assert q1.properties["envelope_confirmed_by"] == "Alex"
+    assert q1.properties["envelope_confirmed_by"] == "George"
     assert q1.properties["envelope_confirmed_at"]
     assert row["panel"]["dim_source"] == "measured"
     assert footprint_size(device, q1) == (17.5, 89.0)
@@ -394,13 +394,13 @@ def test_inspector_envelope_dialog_confirms(monkeypatch):
         dialog.height.setValue(89)
         dialog.depth.setValue(69)
         dialog.mount.setCurrentText("din_rail")
-        dialog.who.setText("Alex")
+        dialog.who.setText("George")
         monkeypatch.setattr(EnvelopeDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
         result = dialog.apply()
         assert result["confirmed"] is True
         q1 = next(comp for sheet in s.project.sheets for comp in sheet.components if comp.id == "Q1")
         assert is_layout_ready(s.catalog.get(q1.library_id), q1)
-        assert q1.properties["envelope_confirmed_by"] == "Alex"
+        assert q1.properties["envelope_confirmed_by"] == "George"
     finally:
         _dispose_qt(dialog, win)
         _ = app

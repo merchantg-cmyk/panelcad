@@ -5,17 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from PySide6.QtGui import QImage, QPainter
+from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QApplication
 
 from panelcad import Session
 from panelcad.core.checks import run_checks
 from panelcad.core.layout import is_layout_sheet
-from panelcad.io.bom import grouped_rows, instance_rows, unresolved_needs_info_rows
+from panelcad.io.bom import instance_rows, unresolved_needs_info_rows
 from panelcad.library.panel import is_incabinet, is_layout_ready
 from panelcad.reconstruct.fixtures import write_backpanel_photo
 from panelcad.reconstruct.geometry import mm_per_px, region_top_left_mm, validate_corners
-from panelcad.reconstruct.models import ObservedItem, PhotoRegion, item_is_layout_ready
+from panelcad.reconstruct.models import ObservedItem, item_is_layout_ready
 from panelcad.reconstruct.placeholder import is_needs_info_component, project_has_needs_info
 from panelcad.reconstruct.store import load_upright_image, stored_suffix
 from panelcad.reconstruct.vision import FakeVision

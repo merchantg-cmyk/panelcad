@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from panelcad.importer.pipeline import ImportJob
-from panelcad.importer.vision_config import VisionSettings
 
 
 def test_needs_info_page_keeps_parts_and_does_not_say_read_nothing(tmp_path: Path) -> None:

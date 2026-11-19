@@ -47,6 +47,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [
     "confirm_generic_layout: confirm library envelopes so packing/cutout tests can place symbols",
+    "no_qt_log: disable pytest-qt log capture in window leak tests",
 ]
 
 [tool.ruff]

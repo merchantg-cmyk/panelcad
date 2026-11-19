@@ -859,24 +859,6 @@ def runs_along_lanes(points: list[Point], lanes: list[Rect]) -> bool:
     return False
 
 
-def _collapse_collinear(points: list[Point]) -> list[Point]:
-    """Drop vertices that do not change direction. A straight lead stays two points."""
-
-    pts = _dedupe_pts(points)
-    if len(pts) < 3:
-        return pts
-    out = [pts[0]]
-    for index in range(1, len(pts) - 1):
-        prev, cur, nxt = out[-1], pts[index], pts[index + 1]
-        same_x = abs(prev.x - cur.x) <= 0.05 and abs(cur.x - nxt.x) <= 0.05
-        same_y = abs(prev.y - cur.y) <= 0.05 and abs(cur.y - nxt.y) <= 0.05
-        if same_x or same_y:
-            continue
-        out.append(cur)
-    out.append(pts[-1])
-    return _dedupe_pts(out)
-
-
 def _on_page(points: list[Point], bounds: Rect | None) -> bool:
     if bounds is None:
         return True

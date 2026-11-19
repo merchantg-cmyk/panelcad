@@ -72,7 +72,7 @@ from typing import Any
 
 from panelcad.core.checks import parse_amps, parse_volts
 from panelcad.core.models import Component, Device, Project
-from panelcad.electrical.sccr import compute_sccr
+from panelcad.electrical.sccr import compute_sccr, format_ka as _format_ka
 from panelcad.library.catalog import Catalog
 
 INCH_MM = 25.4
@@ -577,14 +577,6 @@ def _supply_id(props: dict[str, Any]) -> str:
             continue
         return text
     return "1"
-
-
-def _format_ka(value: float | None) -> str:
-    if value is None:
-        return ""
-    if abs(value - round(value)) < 1e-6:
-        return str(int(round(value)))
-    return f"{value:.3f}".rstrip("0").rstrip(".")
 
 
 def _primary_supply(supply_ids: list[str]) -> str:

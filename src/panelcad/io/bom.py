@@ -24,7 +24,6 @@ from panelcad.library.panel import (
     assigned_catalog_ready,
     effective_footprint,
     envelope_is_confirmed,
-    export_dimension_mm,
     is_child_contact,
     is_incabinet,
     strip_placeholder_guesses,

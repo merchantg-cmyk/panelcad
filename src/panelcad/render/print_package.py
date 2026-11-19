@@ -1052,6 +1052,7 @@ def _write_print_package(
 ) -> dict[str, Any]:
     from PySide6.QtGui import QPainter, QPdfWriter
 
+    from panelcad.render.pdf import atomic_pdf_path
     from panelcad.render.pdf_outline import apply_outlines_and_links
 
     plan = plan_print_package(session, sections=sections, paper=paper, sheet_ids=sheet_ids)
@@ -1067,27 +1068,31 @@ def _write_print_package(
         raise ValueError("print package has no pages (enable at least one section)")
 
     dest = Path(path)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    writer = QPdfWriter(str(dest))
-    writer.setResolution(300)
-    writer.setTitle(session.project.name or "PanelCAD print package")
-    if hasattr(writer, "setCreator"):
-        writer.setCreator(f"PanelCAD {__version__}")
-    first = plan.pages[0]
-    configure_full_page(writer, first.width_mm, first.height_mm)
-    painter = QPainter(writer)
     hotspots: list[LinkHotspot] = []
     base_dir = session.path.parent if getattr(session, "path", None) else Path.cwd()
     from panelcad.render.titleblock import share_title_nameplate
 
-    try:
-        with share_title_nameplate():
-            _paint_package_pages(painter, writer, session, plan, hotspots, base_dir)
-    finally:
-        if painter.isActive():
-            painter.end()
-
-    outlined = apply_outlines_and_links(dest, plan.bookmarks, hotspots, plan.pages)
+    with atomic_pdf_path(dest) as tmp:
+        writer = QPdfWriter(str(tmp))
+        painter = None
+        try:
+            writer.setResolution(300)
+            writer.setTitle(session.project.name or "PanelCAD print package")
+            if hasattr(writer, "setCreator"):
+                writer.setCreator(f"PanelCAD {__version__}")
+            first = plan.pages[0]
+            configure_full_page(writer, first.width_mm, first.height_mm)
+            painter = QPainter(writer)
+            with share_title_nameplate():
+                _paint_package_pages(painter, writer, session, plan, hotspots, base_dir)
+        finally:
+            if painter is not None:
+                if painter.isActive():
+                    painter.end()
+                del painter
+            # Release QPdfWriter so Qt closes the OS file handle before pypdf reads/replaces it.
+            del writer
+        outlined = apply_outlines_and_links(tmp, plan.bookmarks, hotspots, plan.pages)
     result = plan.as_dict()
     result["path"] = str(dest)
     result["outlines"] = outlined

@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from panelcad.api.session import Session
-from panelcad.core.cutout import DATUMS, STYLES, SURFACES, UNITS, VIEWS, SurfaceDrawing, surface_title
+from panelcad.core.cutout import DATUMS, SURFACES, SurfaceDrawing, surface_title
 from panelcad.render.cutout_draw import render_cutout_qimage
 
 

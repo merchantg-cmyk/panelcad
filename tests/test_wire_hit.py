@@ -23,6 +23,8 @@ def _view():
     view = SchematicView(session)
     view.resize(1000, 800)
     view.show()
+    view.raise_()
+    view.activateWindow()
     app.processEvents()
     view.set_select_mode()
 
@@ -334,7 +336,7 @@ def test_shared_segment_picks_the_top_wire() -> None:
 def test_zoom_1_pick_matches_stacking_order_on_the_wire() -> None:
     from PySide6.QtCore import QPointF
 
-    from panelcad.gui.canvas import WireItem, wire_hit_radius_scene
+    from panelcad.gui.canvas import wire_hit_radius_scene
 
     app, view, near, _far, _cover = _view()
     try:

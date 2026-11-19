@@ -24,8 +24,10 @@ def test_contact_suffix_maps_to_the_device_and_terminal():
     assert contact_tag_parts("K1:14") == ("K1", "14")
     assert contact_tag_parts("-K1:14") == ("K1", "14")
     # An unknown prefix is a contact only when that parent is on the sheet.
-    assert contact_tag_parts("KA1-14") is None
-    assert contact_tag_parts("KA1-14", parents={"KA1"}) == ("KA1", "14")
+    # (KA is a listed relay prefix in libraries/builtin/relays.yaml, so KA1-14 is known.)
+    assert contact_tag_parts("KA1-14") == ("KA1", "14")
+    assert contact_tag_parts("KZ1-14") is None
+    assert contact_tag_parts("KZ1-14", parents={"KZ1"}) == ("KZ1", "14")
     assert contact_tag_parts("KT1-15", parents={"KT1"}) == ("KT1", "15")
     assert contact_tag_parts("TD2-5", parents={"TD2"}) == ("TD2", "5")
     for whole in ("XT1-4", "TS1-5", "LT1-2", "SOL1-2", "JB1-4", "MOT1-2"):

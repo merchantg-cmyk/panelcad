@@ -14,8 +14,7 @@ from panelcad import Session
 from panelcad.cli.agent import Agent
 from panelcad.core.checks import run_checks
 from panelcad.io.bom import instance_rows
-from panelcad.library.panel import is_layout_ready, require_explicit_envelope
-from panelcad.reconstruct.fixtures import write_backpanel_photo
+from panelcad.library.panel import is_layout_ready
 from panelcad.reconstruct.vision import FakeVision
 
 
@@ -453,7 +452,6 @@ def test_n22_confirm_item_uses_require_explicit_envelope(tmp_path: Path):
         assert item.status != "envelope"
         assert item.envelope_confirmed is False
         assert item.library_id != "reconstruct.measured_envelope"
-        require_explicit_envelope  # same rule as the gate
     reply = session.reconstruct_confirm_item(
         item_id,
         envelope_w_mm=50,

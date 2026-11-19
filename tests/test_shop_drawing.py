@@ -774,9 +774,10 @@ def test_aux_contact_art_clears_the_body():
     """95–98 and 13–14 are drawn beside the outline, not through it."""
 
     session = Session.create("aux art")
+    # NEMA ICS 19 overload puts pins 95/96 flush on the body wall with no
+    # protruding side-aux art (verified in test_symbol_quality.py).
     for library_id in (
         "iec.protection.overload_9a",
-        "nema.protection.overload",
         "iec.contactors.ac3_9a",
     ):
         device = session.catalog.get(library_id)
@@ -799,10 +800,19 @@ def test_nema_coil_box_clears_the_first_pole():
     session = Session.create("coil box")
     for library_id, pole_x in (("nema.contactors.ac3_9a", 10.0), ("nema.contactors.ac3_32a", 11.0)):
         device = session.catalog.get(library_id)
-        coils = [prim for prim in device.primitives if prim.type == "rect" and prim.w < 12 and prim.h < 16]
+        # NEMA ICS 19 contactor coils are drawn as circles (previously small rects).
+        coils = [
+            prim.x + prim.w
+            for prim in device.primitives
+            if prim.type == "rect" and prim.w < 12 and prim.h < 16
+        ] + [
+            prim.x + prim.r
+            for prim in device.primitives
+            if prim.type == "circle" and prim.r > 0 and prim.x < pole_x
+        ]
         assert coils, library_id
-        for coil in coils:
-            assert coil.x + coil.w <= pole_x - 0.4, (library_id, coil.x + coil.w, pole_x)
+        for right in coils:
+            assert right <= pole_x - 0.4, (library_id, right, pole_x)
 
 
 def test_star_delta_phase_label_is_once_and_on_its_terminal():

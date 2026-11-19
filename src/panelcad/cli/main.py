@@ -972,7 +972,7 @@ def _import_print_body(
     truth: Optional[Path] = None,
 ) -> None:
     from panelcad.importer.raster import TesseractMissing
-    from panelcad.importer.vision_config import vision_from_options
+    from panelcad.importer.vision_config import VisionSettings, vision_from_options
 
     vision = None
     backend = "external" if external else "auto"

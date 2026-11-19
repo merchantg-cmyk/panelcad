@@ -86,66 +86,6 @@ def _paint_text(
         painter.text(x, y, text, size_mm, align=align, rotate=rotate)
 
 
-def _offset_polyline_for_bundle(
-    pts: list[tuple[float, float]],
-    ties: list[ZipTieWaypoint],
-    strand_offset: float,
-) -> list[tuple[float, float]]:
-    """Offset interior curve points along the smooth normal vector so parallel wires in a
-    bundle are visually distinct, while pinching smoothly to zero offset at both terminal
-    landings and at every ZipTieWaypoint collar (like `@cmzw_`'s zip-ties prototype).
-    """
-
-    if len(pts) <= 2 or abs(strand_offset) < 1e-4:
-        return list(pts)
-
-    tie_coords = [(float(t.x), float(t.y)) for t in ties]
-    cum_len: list[float] = [0.0]
-    for i in range(len(pts) - 1):
-        cum_len.append(cum_len[-1] + math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]))
-    total_len = cum_len[-1]
-    if total_len < 1.0:
-        return list(pts)
-
-    out: list[tuple[float, float]] = [pts[0]]
-    ramp_mm = min(14.0, total_len * 0.25)
-    tie_pinch_mm = 11.0
-
-    for i in range(1, len(pts) - 1):
-        x, y = pts[i]
-        s = cum_len[i]
-        # Smooth cosine ramp from 0 at start/end terminals
-        end_dist = min(s, total_len - s)
-        if end_dist >= ramp_mm:
-            env_end = 1.0
-        else:
-            env_end = 0.5 * (1.0 - math.cos(math.pi * (end_dist / max(1e-3, ramp_mm))))
-
-        # Smooth cosine pinch to 0.12 at each zip-tie collar so wires cinch tightly inside the strap
-        env_tie = 1.0
-        for tx, ty in tie_coords:
-            d_tie = math.hypot(x - tx, y - ty)
-            if d_tie < tie_pinch_mm:
-                pinch = 0.12 + 0.88 * (0.5 * (1.0 - math.cos(math.pi * (d_tie / tie_pinch_mm))))
-                env_tie = min(env_tie, pinch)
-
-        scale = env_end * env_tie
-        prev_x, prev_y = pts[max(0, i - 2)]
-        next_x, next_y = pts[min(len(pts) - 1, i + 2)]
-        tx_vec = next_x - prev_x
-        ty_vec = next_y - prev_y
-        tnorm = math.hypot(tx_vec, ty_vec)
-        if tnorm < 1e-6:
-            out.append((x, y))
-            continue
-        nx = -ty_vec / tnorm
-        ny = tx_vec / tnorm
-        out.append((round(x + nx * strand_offset * scale, 3), round(y + ny * strand_offset * scale, 3)))
-
-    out.append(pts[-1])
-    return out
-
-
 def _draw_arrows_along_polyline(
     painter: Painter,
     pts: list[tuple[float, float]],

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import shutil
@@ -10,6 +9,7 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+from panelcad.update.fetch import sha256_file
 from panelcad.update.manifest import (
     FEED_FILENAME,
     ReleaseManifest,
@@ -22,14 +22,6 @@ from panelcad.update.manifest import (
 
 _ZIP_VERSION = re.compile(r"^PanelCAD-(?P<version>.+)-setup\.zip$", re.IGNORECASE)
 _VERSION_PY = re.compile(r'^__version__\s*=\s*"([^"]+)"', re.MULTILINE)
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def version_from_zip(path: Path) -> str:

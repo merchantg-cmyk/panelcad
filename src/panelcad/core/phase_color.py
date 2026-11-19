@@ -403,11 +403,6 @@ def _special_phase(wire: object) -> str | None:
     return None
 
 
-def _trace_phases(sheet: Sheet, catalog: Catalog) -> dict[str, str]:
-    wires, _pins = _trace_phase_maps(sheet, catalog)
-    return wires
-
-
 def _trace_phase_maps(sheet: Sheet, catalog: Catalog) -> tuple[dict[str, str], dict[str, str]]:
     adj: dict[str, list[tuple[str, str]]] = {}
     devices: dict[str, object] = {}

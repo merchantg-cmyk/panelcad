@@ -2235,10 +2235,6 @@ def _pick_pin(pin: str | None, pins: list[str], used: set[str] | None = None) ->
     return pins[0]
 
 
-def _coil_aux_pins(lib: str) -> list[str]:
-    return [p for p in _pins_for_library(lib) if p.upper() in {"3", "4", "13", "14"}]
-
-
 def _operators_on_sheet(turns: list[dict[str, Any]] | None, job: Path) -> bool:
     libs = _placed_libs(turns, job)
     return any("pb_no" in lib for lib in libs) and any("pb_nc" in lib for lib in libs)

@@ -5,8 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from panelcad.api.session import Session
-from panelcad.convert.from_to_check import check_connections
-from panelcad.convert.netlist import same_netlist
 from panelcad.render.titleblock import title_block_rect, working_rect
 from tests.test_convert_standard import _convert, _session
 

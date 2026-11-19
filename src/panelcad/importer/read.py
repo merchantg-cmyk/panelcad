@@ -395,6 +395,19 @@ def _dxf_layer_role(entity: Any) -> str:
     return "ink"
 
 
+def _dxf_entity_rgb(entity: Any) -> tuple[float, float, float]:
+    """RGB in 0..1 from DXF true_color when present, else dark ink."""
+
+    dxf = getattr(entity, "dxf", None)
+    if dxf is not None and dxf.hasattr("true_color"):
+        try:
+            tc = int(dxf.true_color)
+            return (((tc >> 16) & 0xFF) / 255.0, ((tc >> 8) & 0xFF) / 255.0, (tc & 0xFF) / 255.0)
+        except (TypeError, ValueError):
+            pass
+    return (0.1, 0.1, 0.1)
+
+
 def _dxf_add_line(
     strokes: list,
     entity: Any,
@@ -404,6 +417,9 @@ def _dxf_add_line(
     y2: float,
     width_mm: float = 0.25,
 ) -> None:
+    color = _dxf_entity_rgb(entity)
+    if color[0] >= 0.95 and color[1] >= 0.95 and color[2] >= 0.95:
+        return
     role = _dxf_layer_role(entity)
     strokes.append(("line", role, (float(x1), float(y1)), (float(x2), float(y2)), float(width_mm)))
 
@@ -554,6 +570,7 @@ def _dxf_page(
     for stroke in raw_strokes:
         if stroke[0] == "line":
             width_mm = float(stroke[4]) if len(stroke) > 4 else 0.25
+            color = stroke[5] if len(stroke) > 5 else (0.1, 0.1, 0.1)
             start = [stroke[2][0], _y(stroke[2][1])]
             end = [stroke[3][0], _y(stroke[3][1])]
             # A layer named WIRE is not a conductor. Lineweight promotion decides.
@@ -565,7 +582,7 @@ def _dxf_page(
                     "a": start,
                     "b": end,
                     "pt": width_mm * 72.0 / 25.4,
-                    "color": (0.1, 0.1, 0.1),
+                    "color": color,
                     "span": math.hypot(end[0] - start[0], end[1] - start[1]),
                 }
             )
@@ -922,52 +939,6 @@ def _height_clusters(tokens: list[dict[str, Any]], ratio: float = 1.10) -> list[
     return clusters
 
 
-def _dominant_tags(
-    tagish: list[dict[str, Any]],
-    parents: set[str],
-    catalog: Any = None,
-) -> list[dict[str, Any]]:
-    """Tags at the size actually used on the page.
-
-    The floor is the tallest text size that more than a couple of tokens share.
-    A few larger rail captions do not raise it, so they cannot drop the tags.
-    A smaller cluster, such as terminal marks under the tag size, is not a tag.
-    A contact suffix is kept even when it is drawn a little smaller. The stored
-    text drops an IEC aspect mark so ``-K1`` and ``=A1-K1`` are the product ``K1``.
-    """
-
-    if not tagish:
-        return []
-    clusters = _height_clusters(tagish)
-    total = len(tagish)
-    substantial = [
-        cluster
-        for cluster in clusters
-        if len(cluster) >= 2 and len(cluster) >= 0.25 * total
-    ]
-    # The tallest size that is actually used for tags. A couple of larger rail
-    # captions do not set the floor. A smaller cluster (terminal marks under
-    # the tag size) is not a tag.
-    reference = max(substantial or clusters, key=_median_height)
-    ref_h = _median_height(reference)
-    kept: list[dict[str, Any]] = []
-    for cluster in clusters:
-        med = _median_height(cluster)
-        # Several tags at a nearby point size stay. 4.3 mm and 5.8 mm text on
-        # one sheet are both tags. One or two much shorter words are not a size.
-        near_size = len(cluster) >= 3 and med >= ref_h * 0.70
-        lone = len(cluster) == 1 and med < ref_h * 0.91
-        pair = len(cluster) == 2 and med < ref_h * 0.85
-        much_smaller = med < ref_h * 0.70
-        drop = cluster is not reference and med < ref_h and (lone or pair or much_smaller) and not near_size
-        for tok in cluster:
-            if drop and contact_tag_parts(tok["text"], catalog, parents=parents) is None:
-                continue
-            product = iec_product_tag(tok["text"])
-            kept.append({**tok, "text": product or str(tok["text"]), "role": "tag", "confidence": 0.93})
-    return kept
-
-
 def _best_drawing(text: str) -> str:
     """Longest drawing number in ``text`` that actually contains a digit."""
 
@@ -1115,13 +1086,13 @@ def label_tokens(
     tags: list[dict[str, Any]] = []
     wires: list[dict[str, Any]] = []
     if tagish:
-        cutoff = _tag_height_cutoff([float(tok["h"]) for tok in tagish])
+        cutoff = _tag_height_cutoff([_tag_glyph_height(tok) for tok in tagish])
         passed: list[dict[str, Any]] = []
         below: list[dict[str, Any]] = []
         for tok in tagish:
             # A contact tag is drawn a little smaller than the coil tag above it.
             # The height gate is there to drop a title-block word, not that contact.
-            if float(tok["h"]) >= cutoff or contact_tag_parts(tok["text"], catalog, parents=parents):
+            if _tag_glyph_height(tok) >= cutoff or contact_tag_parts(tok["text"], catalog, parents=parents):
                 passed.append(tok)
             else:
                 below.append(tok)
@@ -1171,6 +1142,23 @@ def label_tokens(
     return {"tags": _dedupe_tags(tags), "wires": wires, "title": _title_tokens(tokens, height_mm)}
 
 
+def _tag_glyph_height(tok: dict[str, Any]) -> float:
+    """Character height of a tag token, accounting for 90°-rotated vertical labels.
+
+    A vertical multi-character tag (such as ``X1-1`` beside a panel terminal
+    block) has its string length in ``h`` and its glyph height in ``w``. Using
+    ``h`` directly would raise ``_tag_height_cutoff`` above horizontal device
+    tags on the same sheet.
+    """
+
+    height = float(tok.get("h") or 0.0)
+    width = float(tok.get("w") or 0.0)
+    text = str(tok.get("text") or "").strip()
+    if len(text) >= 2 and width > 0 and height > width * 1.35:
+        return width
+    return height
+
+
 def _tag_height_cutoff(heights: list[float]) -> float:
     """Height gate from the tags that share a height, not from one extreme.
 
@@ -1184,8 +1172,6 @@ def _tag_height_cutoff(heights: list[float]) -> float:
     ordered = sorted(float(height) for height in heights if height > 0)
     if not ordered:
         return 0.0
-    if len(ordered) < 8:
-        return ordered[-1] * 0.82
     clusters: list[list[float]] = [[ordered[0]]]
     for height in ordered[1:]:
         previous = clusters[-1][-1]
@@ -1195,6 +1181,18 @@ def _tag_height_cutoff(heights: list[float]) -> float:
         else:
             clusters[-1].append(height)
     shared = [cluster for cluster in clusters if len(cluster) >= 3]
+    if len(ordered) < 8:
+        # On a small sheet (such as a panel layout with 5 devices), a single
+        # much-taller misread must not wipe out a shared cluster of real tags.
+        # Only leave the classic max*0.82 rule when that outlier is clearly
+        # above the shared cluster; a mild taller coil tag (or no shared
+        # cluster) keeps the old gate so a shorter stray still drops.
+        if shared:
+            group = max(shared, key=lambda cluster: cluster[-1])
+            above = [value for value in ordered if value > group[-1]]
+            if len(above) == 1 and above[0] >= group[-1] * 1.25:
+                return group[len(group) // 2] * 0.82
+        return ordered[-1] * 0.82
     if not shared:
         index = int(round(0.80 * (len(ordered) - 1)))
         reference = ordered[index]
@@ -1688,11 +1686,6 @@ def _baseline_pitch(words: list[SheetGlyph]) -> float:
     return line
 
 
-def _glyph_order(words: list[SheetGlyph]) -> list[SheetGlyph]:
-    line = _baseline_pitch(words)
-    return sorted(words, key=lambda word: (round((word.top + word.height) / line), word.left))
-
-
 def _glyph_lines(words: list[SheetGlyph]) -> list[list[SheetGlyph]]:
     """Group words that share a baseline. A real next line starts a new group.
 
@@ -2044,13 +2037,6 @@ def _sheet_number_confidence(tokens: list[dict[str, Any]], number: str) -> float
     if not scores:
         return None
     return max(scores)
-
-
-def _read_sheet_numbers(text: str, *, allow_of: bool) -> tuple[str, str]:
-    """Sheet number and count. ``allow_of`` means the text is already in the title block."""
-
-    found = sheet_fields_from_text(text, in_title_block=allow_of)
-    return str(found["sheet_number"]), str(found["sheet_count"])
 
 
 def detect_drawing_standard(
@@ -3243,10 +3229,6 @@ def _is_field_label(text: str) -> bool:
         if prefix in _OTHER_TITLE_PREFIXES:
             return True
     return False
-
-
-def _value_under(tokens: list[dict[str, Any]], label: str) -> str:
-    return _join_under(tokens, label, _zone_rows(tokens))
 
 
 def _left_neighbor_word(tokens: list[dict[str, Any]], lab: dict[str, Any]) -> str:

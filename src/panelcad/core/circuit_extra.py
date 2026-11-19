@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from panelcad.core.circuit_builder import (
-    CLEAR,
     GAP,
     _CONTACTOR_IN,
     _CONTACTOR_OUT,
@@ -16,7 +15,6 @@ from panelcad.core.circuit_builder import (
     _device,
     _one,
     _pin_x,
-    _pin_y,
     _size,
     _wire_dol,
     _wire_vfd,
@@ -932,13 +930,6 @@ def _plc_control(session: Any, symbols: Any, extra: dict[str, Any], *, starter: 
     return parts
 
 
-def _hot_ret(parts: list[_Part], symbols: Any) -> tuple[_Part, str, str]:
-    pins = symbols.pins
-    if _by_role(parts, "transformer"):
-        return _one(parts, "transformer"), pins.cpt_hot, pins.cpt_ret
-    return _one(parts, "psu"), pins.psu_plus, pins.psu_minus
-
-
 def _c(
     connect: Any,
     end: Any,
@@ -1441,7 +1432,7 @@ def _route_star_delta_power(
 def finish_power_routes(session: Any, sheet_id: str, parts: list[_Part], kind: str) -> None:
     """Keep power conductors off the motor body and show the reversing crossover."""
 
-    from panelcad.render.sheet import parse_pin_ref, pin_world
+    from panelcad.core.pin_geometry import parse_pin_ref, pin_world
     from panelcad.render.wiring import clear_route_cache
 
     sheet = session.sheet(sheet_id)

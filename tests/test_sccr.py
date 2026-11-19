@@ -8,7 +8,6 @@ import pytest
 
 from panelcad import Session
 from panelcad.electrical.sccr import (
-    compute_sccr,
     motor_controller_rating,
     nameplate_text,
     peak_let_through,

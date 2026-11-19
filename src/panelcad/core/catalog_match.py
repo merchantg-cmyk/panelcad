@@ -251,7 +251,7 @@ def _motor_fla(project: Project, sheet: Sheet, comp: Component) -> float | None:
     """Full-load current written on the motor this contactor feeds. Not a library default."""
 
     from panelcad.core.checks import parse_amps
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     group = str(comp.properties.get("sizing_group") or "").strip()
 
@@ -627,7 +627,7 @@ def _voltage_on_pins(
     project: Project, sheet: Sheet, comp: Component, pins: tuple[str, ...]
 ) -> tuple[float, str] | None:
     from panelcad.core.checks import _end_voltage, _lands_on
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     wanted = {pin.upper() for pin in pins}
     for wire in _lands_on(sheet, comp.id):
@@ -823,7 +823,7 @@ def _ballot_intersection(
 def _fed_sheets(project: Project, sheet: Sheet, comp: Component) -> list[Sheet]:
     """This sheet, plus a sheet an X1/X2 wire names through an off-page marker."""
 
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     found: dict[str, Sheet] = {sheet.id: sheet}
     wanted = {"X1", "X2"}

@@ -304,7 +304,11 @@ def _classify_device_role_and_library(
         and ({"T1", "T2", "T3"} <= pin_set or {"2", "4", "6"} <= pin_set)
     )
     if re.match(r"^(M|K)\d+$", up_tag) and has_both_line_and_load_3ph:
-        lid = f"{prefix}.contactors.ac3_9a"
+        lid = (
+            raw_library_id
+            if raw_library_id.startswith(f"{prefix}.contactors.ac3_") and raw_library_id in catalog.devices
+            else f"{prefix}.contactors.ac3_9a"
+        )
         return "power_contactor", lid, ["L1", "L2", "L3", "T1", "T2", "T3"]
 
     if (
@@ -345,7 +349,11 @@ def _classify_device_role_and_library(
         return "power_breaker", lid, ["1", "3", "5", "2", "4", "6"]
 
     if "ac3_" in low_type or "contactor_3p" in low_type or (re.match(r"^(M|K)\d+$", up_tag) and has_3ph_pins):
-        lid = f"{prefix}.contactors.ac3_9a"
+        lid = (
+            raw_library_id
+            if raw_library_id.startswith(f"{prefix}.contactors.ac3_") and raw_library_id in catalog.devices
+            else f"{prefix}.contactors.ac3_9a"
+        )
         return "power_contactor", lid, ["L1", "L2", "L3", "T1", "T2", "T3"]
 
     if "ol_contact" in low_type or (pin_set and pin_set <= {"95", "96", "97", "98"} and len(pin_set) <= 2):

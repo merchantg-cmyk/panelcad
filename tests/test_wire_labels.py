@@ -400,26 +400,24 @@ def test_device_tags_clear_the_wire_label_row():
     session = Session.create("Tag clearance")
     result = session.insert_circuit(kind="dol", hp=5, voltage=460)
     sheet = session.sheet(result["sheet"])
-    # Main's circuit stack keeps the default origin y=22. The previous lock
-    # was y=21.2. Mark x and the offset from the contactor and overload are
-    # the same; y follows the symbols by 0.8 mm. The motor sits 1 mm lower
-    # relative to the overload than it did before that stack change.
+    # Single DOL power column is centered on the sheet by distribute_power_columns
+    # (x=179.0 vs the old squeezed-left x=40.0; see test_spacing.py).
     assert [(comp.id, comp.x, comp.y) for comp in sheet.components] == [
-        ("CB1", 40.0, 22.0),
-        ("M1", 38.0, 81.0),
-        ("OL1", 40.0, 155.0),
-        ("MTR1", 40.0, 210.0),
+        ("CB1", 179.0, 22.0),
+        ("M1", 177.0, 81.0),
+        ("OL1", 179.0, 155.0),
+        ("MTR1", 179.0, 210.0),
     ]
     routes = route_sheet_wires(sheet, session.catalog)
     marks = place_wire_marks(sheet, session.catalog, routes)
     # Straight 10 mm pitch drops. The number sits just off the riser.
     expected = {
-        "L1": (50.8, 79.6),
-        "L2": (60.8, 79.6),
-        "L3": (70.8, 79.6),
-        "101": (50.8, 207.5),
-        "102": (60.8, 207.5),
-        "103": (70.8, 207.5),
+        "L1": (189.8, 79.6),
+        "L2": (199.8, 79.6),
+        "L3": (209.8, 79.6),
+        "101": (189.8, 207.5),
+        "102": (199.8, 207.5),
+        "103": (209.8, 207.5),
     }
     seen: dict[str, tuple[float, float, str]] = {}
     for wire in sheet.wires:

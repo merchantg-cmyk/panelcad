@@ -24,8 +24,13 @@ def test_letters_inside_a_coil_are_the_tag_and_a_blank_coil_is_not_named():
     is covered by the electrical OCR tests. This one pins the Tesseract path.
     """
 
+    from panelcad.importer.tesseract_runtime import find_tesseract
     from panelcad.ocr.backend import active_backend, ocr_scope, page_engine_ready, tesseract_required
 
+    if not find_tesseract():
+        import pytest
+
+        pytest.skip("Tesseract binary is not installed on this machine")
     if page_engine_ready() and active_backend() != "tesseract" and not tesseract_required():
         import pytest
 
@@ -88,8 +93,13 @@ def test_a_turned_strip_number_is_read_and_a_blank_side_stays_unread():
     not a second number written into the fixture.
     """
 
-    from panelcad.ocr.backend import active_backend, page_engine_ready, tesseract_required
+    from panelcad.importer.tesseract_runtime import find_tesseract
+    from panelcad.ocr.backend import active_backend, ocr_scope, page_engine_ready, tesseract_required
 
+    if not find_tesseract():
+        import pytest
+
+        pytest.skip("Tesseract binary is not installed on this machine")
     if page_engine_ready() and active_backend() != "tesseract" and not tesseract_required():
         import pytest
 
@@ -102,8 +112,9 @@ def test_a_turned_strip_number_is_read_and_a_blank_side_stays_unread():
     left = 75 - turned.shape[1] // 2
     gray[40 : 40 + turned.shape[0], left : left + turned.shape[1]] = turned
     block = {"x": 40, "y": 160, "w": 70, "h": 200}
-    assert _number_in(gray, block, 10.0, "top") == "201"
-    assert _number_in(gray, block, 10.0, "bottom") == "?"
+    with ocr_scope("tesseract"):
+        assert _number_in(gray, block, 10.0, "top") == "201"
+        assert _number_in(gray, block, 10.0, "bottom") == "?"
 
 
 def test_a_branch_lands_on_the_upstream_pin_and_not_on_the_same_device():

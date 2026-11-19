@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from panelcad.examples.dol import build_dol
+
+if TYPE_CHECKING:
+    from PySide6.QtPrintSupport import QPrinter
 
 
 def _qt_app():
@@ -202,11 +206,11 @@ def test_export_pdf_still_uses_native_sheet_size(tmp_path: Path) -> None:
 def test_print_dialog_initial_size_covers_content_and_fits_screen(monkeypatch) -> None:
     """fit_print_dialog grows to sizeHint and stays on-screen (no native Print UI).
 
-    A shop laptop had to scroll inside a too-small print box. Showing a
-    real QPrintDialog on Windows opens the native Print dialog even under
-    QT_QPA_PLATFORM=offscreen and blocks the suite — use a plain QDialog
-    stand-in for size/show coverage, and only construct QPrintDialog to prove
-    the theme will not scroll-wrap it.
+    On a 1366×768 laptop, the print box opened too small and required scrolling
+    to reach Print/Cancel. Showing a real QPrintDialog on Windows opens the
+    native Print dialog even under QT_QPA_PLATFORM=offscreen and blocks the
+    suite — use a plain QDialog stand-in for size/show coverage, and only
+    construct QPrintDialog to prove the theme will not scroll-wrap it.
     """
     _qt_app()
     from PySide6.QtCore import QRect, QSize, Qt

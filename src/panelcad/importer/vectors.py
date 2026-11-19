@@ -182,8 +182,17 @@ def _promote_conductors(lines: list[dict[str, Any]]) -> None:
     dark = [
         float(line["pt"])
         for line in lines
-        if line.get("pt") and not line.get("from_rect") and _dark_ink(line.get("color"))
+        if line.get("pt")
+        and not line.get("from_rect")
+        and _dark_ink(line.get("color"))
+        and float(line.get("span") or 0.0) >= 2.0
     ]
+    if not dark:
+        dark = [
+            float(line["pt"])
+            for line in lines
+            if line.get("pt") and not line.get("from_rect") and _dark_ink(line.get("color"))
+        ]
     if not dark:
         return
     clusters: dict[float, int] = {}
@@ -635,7 +644,7 @@ def read_drawing(
     """Devices and wires from text plus the strokes underneath them."""
 
     from panelcad.importer.extract import facts_from_tokens
-    from panelcad.importer.symbols import PREFIX_CONFIDENCE, shape_class
+    from panelcad.importer.symbols import PREFIX_CONFIDENCE
 
     facts = facts_from_tokens(tokens, width_mm, height_mm, catalog=catalog)
     if not strokes:
@@ -1008,6 +1017,22 @@ def _match_device(
             wide_lines=wide_pool,
         )
         if best is not None and best[0] >= MATCH_MIN:
+            # A 3-phase motor drawn at a slightly wider lead pitch (e.g. 12 mm vs 10 mm)
+            # can slide sideways in _best_ink to match 2 of 3 leads, stranding the third.
+            # Center it on all 3 drawn leads when pin-landing fits every pin tightly.
+            if best[0] < 0.85 and shape_class(best[1]) == "motor" and len(getattr(best[1], "pins", []) or []) >= 3:
+                centered = _search_pin_landing(
+                    [best[1]],
+                    left,
+                    base_y,
+                    wide_pool or pool,
+                    curve_pool,
+                    standard,
+                    center=center,
+                    claimed=claimed,
+                )
+                if centered is not None:
+                    best = (best[0], centered[1], centered[2], centered[3], centered[4])
             best = _raise_to_drawn_poles(
                 best,
                 candidates,
@@ -1252,6 +1277,14 @@ def _raise_to_drawn_poles(
         inked.sort(key=lambda row: (-row[0], -row[1], row[2], len(row[3].pins)))
         score, _pins, _error, symbol, sox, soy = inked[0]
         return (score, symbol, sox, soy, 1.0)
+    # A 3+ pole pass-through power device whose poles all land tightly beats a
+    # 2-pin auxiliary contact that only matched one pole of an older symbol generation.
+    if through and len(getattr(device, "pins", []) or []) <= 2:
+        multi_pole = [row for row in placed if row[1] >= 3 and row[0] >= 0.45 and row[2] <= 3.0]
+        if multi_pole:
+            multi_pole.sort(key=lambda row: (-row[0], -row[1], row[2], len(row[3].pins)))
+            score, _pins, _error, symbol, sox, soy = multi_pole[0]
+            return (max(score, MATCH_MIN + 0.02), symbol, sox, soy, 1.0)
     if others:
         return best
     placed.sort(key=lambda row: (-row[1], row[2], len(row[3].pins), str(row[3].library_id)))
@@ -1501,10 +1534,6 @@ def _side_crossings(
             if x_lo - reach <= x1 <= x_hi + reach:
                 found.append(("right", along))
     return found
-
-
-def _count_separated(coords: list[float], box: tuple[float, float, float, float], side: str) -> int:
-    return len(_cluster_centers(coords, box, side))
 
 
 def _grown_sides(current: Any, candidate: Any) -> list[str]:
@@ -2351,9 +2380,9 @@ def _best_pin_origin(
         if tight < needed:
             return
         # Wired terminals first: an unwired contact dot must not steal the origin.
-        # Then more terminals, a tighter fit, and the symbol nearest the tag.
+        # Then more terminals, fewer unmatched extra pins, a tighter fit, and the symbol nearest the tag.
         dist = _dist((cx, cy), (ox, oy))
-        key = (wired, tight, snapped, -round(error, 2), -round(dist, 1))
+        key = (wired, tight, snapped, -len(pins), -round(error, 2), -round(dist, 1))
         if best is None or key > best[0]:
             best = (key, ox, oy)
 
@@ -2536,13 +2565,18 @@ def _same_pin_geometry(tied: list[tuple[tuple[int, int, float], float, float, An
 
 
 def _blade_joins(device: Any) -> bool | None:
-    """Whether the slanted contact stroke meets both sides of the symbol.
+    """Whether the contact symbol is normally closed (True), normally open (False), or neither (None)."""
 
-    The near end of every blade sits on its own terminal. A closed contact is
-    one whose far end also meets a stroke. ``None`` means there is no blade.
-    """
-
-    segs = _symbol_segments(device, 0.0, 0.0, 1.0)
+    contact = str((getattr(device, "properties", None) or {}).get("contact") or "").strip().upper()
+    if contact == "NC":
+        return True
+    if contact == "NO":
+        return False
+    segs = [
+        ((float(p.x), float(p.y)), (float(p.x2), float(p.y2)))
+        for p in getattr(device, "primitives", []) or []
+        if getattr(p, "type", "") == "line"
+    ]
     slanted = [
         seg
         for seg in segs
@@ -2557,11 +2591,12 @@ def _blade_joins(device: Any) -> bool | None:
 
 
 def _nc_blade_drawn(device: Any, ox: float, oy: float, lines: list[dict[str, Any]]) -> bool:
-    """The closed blade is on the page when its middle lies along a symbol stroke.
+    """The closed blade is on the page when a slanted stroke bridges both contact sides.
 
     The blade's ends sit on the plates, which an NO contact draws too. Endpoint
-    distance therefore cannot tell them apart. The middle of the slash has to
-    follow a non-wire stroke in the same direction.
+    distance therefore cannot tell them apart. Either the symbol's own slash
+    follows a non-wire stroke, or a slanted non-wire stroke inside the contact
+    box meets ink on both ends.
     """
 
     segs = _symbol_segments(device, ox, oy, 1.0)
@@ -2572,14 +2607,34 @@ def _nc_blade_drawn(device: Any, ox: float, oy: float, lines: list[dict[str, Any
         and abs(seg[0][1] - seg[1][1]) >= 0.8
         and _segment_joins(seg, segs)
     ]
-    if not blades:
-        return False
     ink = [
         ((float(stroke["a"][0]), float(stroke["a"][1])), (float(stroke["b"][0]), float(stroke["b"][1])))
         for stroke in lines
         if stroke.get("role") != "wire"
     ]
-    return any(_lies_along(blade, ink) for blade in blades)
+    if blades and any(_lies_along(blade, ink) for blade in blades):
+        return True
+    w = float(getattr(device, "schematic_width", 28.0) or 28.0)
+    h = float(getattr(device, "schematic_height", 16.0) or 16.0)
+    pad = 4.0
+    box_ink = [
+        seg
+        for seg in ink
+        if (ox - pad <= seg[0][0] <= ox + w + pad and oy - pad <= seg[0][1] <= oy + h + pad)
+        and (ox - pad <= seg[1][0] <= ox + w + pad and oy - pad <= seg[1][1] <= oy + h + pad)
+    ]
+    for seg in box_ink:
+        if abs(seg[0][0] - seg[1][0]) < 0.8 or abs(seg[0][1] - seg[1][1]) < 0.8:
+            continue
+        # Both ends of an NC slash must actually touch another stroke (<= 1.0 mm);
+        # an NO blade only touches its pivot plate and stops well short of the other.
+        other_ink = [s for s in box_ink if s is not seg]
+        if (
+            any(_point_seg(seg[0], s[0], s[1]) <= 1.0 for s in other_ink)
+            and any(_point_seg(seg[1], s[0], s[1]) <= 1.0 for s in other_ink)
+        ):
+            return True
+    return False
 
 
 def _segments_intersect(
@@ -3678,59 +3733,6 @@ def _frame_size(device: dict[str, Any], symbol: Any) -> tuple[float, float]:
         return node_size(len(effective_ports(symbol)))
     scale = float(device.get("scale") or 1.0)
     return (float(symbol.schematic_width) * scale, float(symbol.schematic_height) * scale)
-
-
-def _continue_numbers(
-    chains: list[dict[str, Any]],
-    assigned: dict[int, dict[str, Any]],
-    wires: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """An unlabeled run that leaves a labeled terminal keeps that wire number.
-
-    The pins are the traced ends. The number is copied only when exactly one
-    labeled conductor uses the shared terminal.
-    """
-
-    by_pin: dict[tuple[str, str], set[str]] = {}
-    for wire in wires:
-        if wire.get("ambiguous"):
-            continue
-        number = str(wire.get("number") or "")
-        if not number:
-            continue
-        for key in ((str(wire.get("from_tag") or ""), str(wire.get("from_pin") or "")), (str(wire.get("to_tag") or ""), str(wire.get("to_pin") or ""))):
-            if key[0] and key[1]:
-                by_pin.setdefault(key, set()).add(number)
-    extra: list[dict[str, Any]] = []
-    for index, chain in enumerate(chains):
-        if index in assigned:
-            continue
-        ends = chain["ends"]
-        if not ends[0] or not ends[1]:
-            continue
-        if ends[0]["tag"] == ends[1]["tag"] and ends[0]["pin"] == ends[1]["pin"]:
-            continue
-        numbers: set[str] = set()
-        for end in ends:
-            numbers |= by_pin.get((end["tag"], end["pin"]), set())
-        if len(numbers) != 1:
-            continue
-        seg = chain["segments"][len(chain["segments"]) // 2]
-        extra.append(
-            {
-                "number": next(iter(numbers)),
-                "x": round((seg[0][0] + seg[1][0]) / 2.0, 2),
-                "y": round((seg[0][1] + seg[1][1]) / 2.0, 2),
-                "from_tag": ends[0]["tag"],
-                "to_tag": ends[1]["tag"],
-                "from_pin": ends[0]["pin"],
-                "to_pin": ends[1]["pin"],
-                "confidence": 0.82,
-                "ambiguous": False,
-                "unreadable": False,
-            }
-        )
-    return extra
 
 
 def _wire_from_ends(label: dict[str, Any], ends: list[dict[str, Any] | None]) -> dict[str, Any]:
@@ -4994,7 +4996,29 @@ def _score_indexes(
         for stroke in lines
         if stroke.get("role") != "wire"
     ]
-    body.extend(_straight_chords([stroke for stroke in curves if stroke.get("role") != "wire"]))
+    non_wire_curves = [stroke for stroke in curves if stroke.get("role") != "wire"]
+    body.extend(_straight_chords(non_wire_curves))
+    for stroke in non_wire_curves:
+        pts = stroke.get("points") or []
+        if len(pts) < 2:
+            continue
+        # Open arcs (heater bumps, breaker trip curves) match _symbol_segments arc
+        # chords; closed circles already match via _circle_hit and must not pull
+        # straight symbol leads onto circular outlines.
+        if len(pts) >= 4:
+            step = _dist((float(pts[0][0]), float(pts[0][1])), (float(pts[1][0]), float(pts[1][1])))
+            gap = _dist((float(pts[0][0]), float(pts[0][1])), (float(pts[-1][0]), float(pts[-1][1])))
+            if gap <= max(1.5, step * 1.35):
+                continue
+        for a, b in zip(pts, pts[1:], strict=False):
+            body.append(((float(a[0]), float(a[1])), (float(b[0]), float(b[1]))))
+        if len(pts) >= 3:
+            p0 = (float(pts[0][0]), float(pts[0][1]))
+            p1 = (float(pts[-1][0]), float(pts[-1][1]))
+            if _dist(p0, p1) <= 4.5:
+                pm = (float(pts[len(pts) // 2][0]), float(pts[len(pts) // 2][1]))
+                body.append((p0, pm))
+                body.append((pm, p1))
     if len(_SCORE_CACHE) > 6:
         _SCORE_CACHE.clear()
     cached = (_SegIndex(ends), _SegIndex(body), curves)
@@ -5203,13 +5227,20 @@ def _symbol_segments(
             pts = [(ox + px * s, oy + py * s) for px, py in prim.points]
             found.extend(zip(pts, pts[1:], strict=False))
         elif prim.type == "arc" and prim.r > 0 and abs(prim.sweep) > 1e-6:
+            # One chord per arc primitive so multi-arc heater symbols do not
+            # drown out the body and terminal strokes with 16x tessellation weight.
             from panelcad.core.primitives import arc_polyline
 
             pts = [
                 (ox + px * s, oy + py * s)
                 for px, py in arc_polyline(prim.x, prim.y, prim.r, prim.start, prim.sweep)
             ]
-            found.extend(zip(pts, pts[1:], strict=False))
+            if len(pts) >= 3:
+                mid = len(pts) // 2
+                found.append((pts[0], pts[mid]))
+                found.append((pts[mid], pts[-1]))
+            elif len(pts) == 2:
+                found.append((pts[0], pts[-1]))
     return found
 
 
@@ -5274,10 +5305,6 @@ def _segment_gap(a: tuple[tuple[float, float], tuple[float, float]], b: tuple[tu
     forward = _dist(a[0], b[0]) + _dist(a[1], b[1])
     backward = _dist(a[0], b[1]) + _dist(a[1], b[0])
     return min(forward, backward)
-
-
-def _ends_close(a: tuple[tuple[float, float], tuple[float, float]], b: tuple[tuple[float, float], tuple[float, float]], tol: float = 1.35) -> bool:
-    return (_dist(a[0], b[0]) <= tol and _dist(a[1], b[1]) <= tol) or (_dist(a[0], b[1]) <= tol and _dist(a[1], b[0]) <= tol)
 
 
 def _dist(a: tuple[float, float], b: tuple[float, float]) -> float:

@@ -30,7 +30,7 @@ from panelcad.core.models import Component, Device, Project, Sheet, Wire
 from panelcad.library.catalog import Catalog
 from panelcad.library.panel import effective_footprint, is_incabinet
 from panelcad.library.ports import effective_ports
-from panelcad.render.sheet import parse_pin_ref, pin_world
+from panelcad.core.pin_geometry import parse_pin_ref, pin_world
 
 Severity = Literal["error", "warning", "info"]
 
@@ -508,7 +508,7 @@ def _wire_end_off_pin(project: Project, catalog: Catalog) -> list[Finding]:
     """A wire whose end lands in white space beside the symbol it names."""
 
     from panelcad.core.pin_ink import pin_gap
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     out: list[Finding] = []
     for sheet in project.sheets:
@@ -872,7 +872,7 @@ def _end_xy(sheet: Sheet, catalog: Catalog, pin_ref: str) -> tuple[float, float]
         device = catalog.devices.get(comp.library_id)
         if device is None:
             return (comp.x, comp.y)
-        from panelcad.render.sheet import resolve_pin
+        from panelcad.core.pin_geometry import resolve_pin
 
         return pin_world(comp, resolve_pin(device, comp, pid))
     except Exception:  # noqa: BLE001 — location is best-effort

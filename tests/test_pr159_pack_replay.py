@@ -12,7 +12,7 @@ from panelcad.importer.tile import _separate_colliding_tags, merge_extractions
 
 _PACK_CANDIDATES = [
     Path("/tmp/pr159-rootcause"),
-    Path("/tmp/pr159-rootcause-uploads"),
+    Path("/home/ubuntu/.cursor/projects/agent-repos-panel-designer/uploads/pr159-rootcause"),
 ]
 
 
@@ -21,7 +21,10 @@ def _pack_root() -> Path:
         if (path / "clean_300" / "raw_merged.json").is_file():
             return path
     # Unpack from the uploaded tarball once.
-    upload = Path("/tmp/pr159-rootcause.tar.gz")
+    upload = Path(
+        "/home/ubuntu/.cursor/projects/agent-repos-panel-designer/uploads"
+        "/pr159-188d327-clean_300-dpi_150-rootcause.tar_bd8d.gz"
+    )
     if upload.is_file():
         import tarfile
 

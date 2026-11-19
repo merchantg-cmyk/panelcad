@@ -16,13 +16,9 @@ _PAPER = "#ffffff"
 
 
 def _ensure_app() -> None:
-    import os
+    from panelcad.qt_app import ensure_qt_app
 
-    from PySide6.QtWidgets import QApplication
-
-    if QApplication.instance() is None:
-        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-        QApplication([])
+    ensure_qt_app()
 
 
 def paint_sccr_report(painter, result: SccrResult, project_name: str = "") -> None:
@@ -145,27 +141,22 @@ def _clip(text: str, limit: int) -> str:
 
 
 def write_sccr_pdf(path: Path | str, result: SccrResult, project_name: str = "") -> Path:
-    from PySide6.QtGui import QPainter, QPdfWriter
-
-    from panelcad.render.page import configure_full_page
+    from panelcad.render.pdf import atomic_pdf_writer
     from panelcad.render.qt_painter import QtPainter
 
     _ensure_app()
     dest = Path(path)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    writer = QPdfWriter(str(dest))
-    writer.setResolution(144)
-    writer.setTitle(f"{project_name} SCCR" if project_name else "SCCR")
-    configure_full_page(writer, PAGE_W, PAGE_H)
-    painter = QPainter(writer)
-    try:
+    with atomic_pdf_writer(
+        dest,
+        resolution=144,
+        title=f"{project_name} SCCR" if project_name else "SCCR",
+        width_mm=PAGE_W,
+        height_mm=PAGE_H,
+    ) as (writer, painter):
         dpi_x = float(writer.logicalDpiX() or 72)
         dpi_y = float(writer.logicalDpiY() or 72)
         painter.scale(dpi_x / 25.4, dpi_y / 25.4)
         paint_sccr_report(QtPainter(painter), result, project_name)
-    finally:
-        if painter.isActive():
-            painter.end()
     return dest
 
 

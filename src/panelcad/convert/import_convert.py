@@ -21,7 +21,7 @@ import re
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator, Sequence
+from typing import Any, Callable, Iterator, Sequence
 
 from panelcad.convert.plan import ConversionDecision
 from panelcad.convert.table import parse_device_tag

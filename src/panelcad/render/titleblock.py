@@ -522,8 +522,14 @@ def draw_revision_table(
 def _revision_table(painter: Painter, x: float, y: float, w: float, h: float, tb: TitleBlock) -> None:
     cols = [("REV", 16.0), ("DATE", 28.0), ("DESCRIPTION", 0.0), ("DRAWN", 26.0), ("CHK", 22.0), ("APP", 22.0)]
     fixed = sum(c[1] for c in cols)
-    desc_w = w - fixed
-    widths = [desc_w if name == "DESCRIPTION" else ww for name, ww in cols]
+    min_desc = max(44.0, w * 0.42)
+    if w - fixed < min_desc and fixed > 0:
+        desc_w = min(w * 0.48, min_desc)
+        scale = max(0.0, (w - desc_w) / fixed)
+        widths = [desc_w if name == "DESCRIPTION" else ww * scale for name, ww in cols]
+    else:
+        desc_w = w - fixed
+        widths = [desc_w if name == "DESCRIPTION" else ww for name, ww in cols]
     row_h = h / 4.0
     headers = [c[0] for c in cols]
     _row_cells(painter, x, y, widths, row_h, headers, header=True)

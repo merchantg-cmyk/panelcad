@@ -1719,7 +1719,6 @@ class OpenAICompatibleVision:
             raise VisionFallback(reason)
         if not image.is_file():
             raise VisionFallback("crop missing")
-        import base64
 
         prompt = cleanup_prompt(work)
         encoded_images = _cleanup_images(work, image)
