@@ -94,6 +94,53 @@ def read_print(image: np.ndarray) -> list[OcrSpan] | None:
     return spans
 
 
+def read_crop(image: np.ndarray) -> list[OcrSpan] | None:
+    """Read a tight, already-oriented crop using the bundled detail ONNX reader.
+
+    Returns None when the ONNX runtime or shipped weights are unavailable so
+    callers can fall back to the glyph matcher without downloading anything.
+    """
+
+    from panelcad.ocr.weights import weights_ready
+
+    if image.size == 0 or not available() or not weights_ready():
+        return None
+    short = min(int(image.shape[0]), int(image.shape[1]))
+    if short < 3:
+        return []
+    primary = 4 if short < 16 else (3 if short < 56 else 2)
+    border = (255, 255, 255) if image.ndim == 3 else 255
+
+    def _run(scale: int) -> list[OcrSpan] | None:
+        enlarged = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        padded = cv2.copyMakeBorder(
+            enlarged,
+            24,
+            24,
+            24,
+            24,
+            cv2.BORDER_CONSTANT,
+            value=border,
+        )
+        try:
+            return _predict(_detail(), padded, 2000)
+        except Exception:
+            return None
+
+    spans = _run(primary)
+    if spans is None:
+        return None
+    best_conf = max((span.confidence for span in spans), default=0.0)
+    if best_conf < 0.85:
+        alt_scale = 3 if primary == 4 else 4
+        alt = _run(alt_scale)
+        if alt:
+            alt_conf = max((span.confidence for span in alt), default=0.0)
+            if alt_conf > best_conf:
+                return alt
+    return spans
+
+
 def _page() -> Any:
     global _PAGE
     if _PAGE is None:

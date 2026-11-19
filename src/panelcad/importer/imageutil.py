@@ -63,13 +63,16 @@ def prepare_scan(
         if illum_applied:
             fixed = Image.fromarray(cv2.cvtColor(norm_gray, cv2.COLOR_GRAY2RGB))
 
+    sharp = fixed.convert("RGB")
     clean = denoise(fixed)
     eff_dpi, src_dpi, norm_dpi = normalize_camera_dpi(clean.width, clean.height, dpi_tuple)
     if norm_dpi and eff_dpi is not None and dpi_tuple is not None:
         clean.info["dpi"] = eff_dpi
+        sharp.info["dpi"] = eff_dpi
     elif dpi_tuple is not None:
         # A coarse scan was enlarged. The new dpi keeps the sheet millimetres.
         clean.info["dpi"] = dpi_tuple
+        sharp.info["dpi"] = dpi_tuple
 
     return PreparedScan(
         image=clean,
@@ -81,6 +84,7 @@ def prepare_scan(
         illumination_normalized=illum_applied,
         effective_dpi=eff_dpi,
         source_dpi=src_dpi,
+        sharp_image=sharp,
     )
 
 
