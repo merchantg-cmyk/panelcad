@@ -1788,7 +1788,23 @@ class ImportJob:
         ink = image_ink_fraction(image)
         prepared, angles = prepare_opencv(image)
         prepared.save(page["image"])
-        page["deskew_deg"] = float(angles.get("deskew_deg") or 0.0)
+        fine_angle = float(angles.get("deskew_deg") or 0.0)
+        page["deskew_deg"] = fine_angle
+        strip_image: Image.Image | None = None
+        sharp_path = str(page.get("sharp_image") or "")
+        if sharp_path and Path(sharp_path).is_file():
+            try:
+                sharp_img = Image.open(sharp_path).convert("RGB")
+                if abs(fine_angle) >= 0.3:
+                    sharp_img = sharp_img.rotate(
+                        -fine_angle,
+                        resample=Image.Resampling.BICUBIC,
+                        expand=False,
+                        fillcolor=(255, 255, 255),
+                    )
+                strip_image = sharp_img
+            except Exception:  # noqa: BLE001
+                strip_image = None
         width_mm = float(page["width_mm"])
         height_mm = float(page["height_mm"])
         standard = str(self.manifest.get("standard") or (page.get("classification") or {}).get("standard") or "")
@@ -1800,6 +1816,7 @@ class ImportJob:
             _device_catalog(),
             standard=standard,
             allow_missing_ocr=vision_on,
+            strip_image=strip_image,
         )
         if facts.get("ocr_skipped"):
             from panelcad.importer.raster import TESSERACT_MESSAGE

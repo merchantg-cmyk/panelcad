@@ -403,7 +403,8 @@ def _ingest_image(
     page_id = f"page_{index + 1:03d}"
     image = Image.open(path)
     source_dpi = _image_dpi(image)
-    corrected, angles = prepare_scan(image)
+    prepared_scan = prepare_scan(image)
+    corrected, angles = prepared_scan
     prepared_dpi = _image_dpi(corrected)
     if prepared_dpi is not None:
         # prepare_scan tags the upright image. Swapping again would stretch one axis.
@@ -420,6 +421,12 @@ def _ingest_image(
     folder = workspace.page_dir(page_id)
     preview = folder / "page.png"
     _save_upright(corrected, preview, image, dpi=source_dpi)
+    sharp_path = ""
+    sharp_img = getattr(prepared_scan, "sharp_image", None)
+    if sharp_img is not None:
+        sharp_file = folder / "page_sharp.png"
+        _save_upright(sharp_img, sharp_file, image, dpi=source_dpi)
+        sharp_path = str(sharp_file)
     meta = {
         "width_mm": width_mm,
         "height_mm": height_mm,
@@ -438,6 +445,8 @@ def _ingest_image(
         tokens=[],
     )
     record["prepare"] = angles
+    if sharp_path:
+        record["sharp_image"] = sharp_path
     record["rectified"] = bool(angles.get("rectified", False))
     if angles.get("perspective_quad") is not None:
         record["perspective_quad"] = angles["perspective_quad"]

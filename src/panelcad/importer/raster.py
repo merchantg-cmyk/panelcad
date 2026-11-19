@@ -210,6 +210,7 @@ def read_pixels(
     *,
     standard: str = "",
     allow_missing_ocr: bool = False,
+    strip_image: Image.Image | None = None,
 ) -> dict[str, Any]:
     """Devices, wires, and title-block fields from one prepared page image."""
 
@@ -252,7 +253,41 @@ def read_pixels(
     orient_ladder_devices(devices, catalog, spread=True, page_width=width_mm)
     from panelcad.importer.strip_scan import read_terminal_strip
 
-    strip_devices = read_terminal_strip(gray, rgb, ppm)
+    if strip_image is not None:
+        strip_up = _upscale_low_res(strip_image, width_mm, height_mm)
+        strip_rgb = np.asarray(strip_up.convert("RGB"))
+        strip_gray = cv2.cvtColor(strip_rgb, cv2.COLOR_RGB2GRAY)
+        strip_ppm = strip_rgb.shape[1] / width_mm if width_mm else 1.0
+        strip_devices = read_terminal_strip(strip_gray, strip_rgb, strip_ppm)
+    else:
+        strip_devices = read_terminal_strip(gray, rgb, ppm)
+    if strip_devices:
+        strip_tags = {str(device.get("tag") or "") for device in strip_devices if device.get("tag")}
+        strip_boxes = [
+            (
+                float(device.get("x") or 0.0),
+                float(device.get("y") or 0.0),
+                float(device.get("w") or 0.0),
+                float(device.get("h") or 0.0),
+            )
+            for device in strip_devices
+            if float(device.get("w") or 0.0) > 0 and float(device.get("h") or 0.0) > 0
+        ]
+
+        def _inside_strip_block(dev: dict[str, Any]) -> bool:
+            if str(dev.get("source") or "") != "ocr":
+                return False
+            dtag = str(dev.get("tag") or "")
+            if dtag in strip_tags:
+                return False
+            dx = float(dev.get("x") or 0.0)
+            dy = float(dev.get("y") or 0.0)
+            for bx, by, bw, bh in strip_boxes:
+                if bx - 0.5 <= dx <= bx + bw + 0.5 and by - 0.5 <= dy <= by + bh + 0.5:
+                    return True
+            return False
+
+        devices = [dev for dev in devices if not _inside_strip_block(dev)]
     known = {str(device.get("tag") or "") for device in devices}
     by_tag = {str(device.get("tag") or ""): device for device in devices if device.get("tag")}
     for device in strip_devices:
