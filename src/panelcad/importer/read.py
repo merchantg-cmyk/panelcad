@@ -1115,13 +1115,13 @@ def label_tokens(
     tags: list[dict[str, Any]] = []
     wires: list[dict[str, Any]] = []
     if tagish:
-        cutoff = _tag_height_cutoff([float(tok["h"]) for tok in tagish])
+        cutoff = _tag_height_cutoff([_tag_glyph_height(tok) for tok in tagish])
         passed: list[dict[str, Any]] = []
         below: list[dict[str, Any]] = []
         for tok in tagish:
             # A contact tag is drawn a little smaller than the coil tag above it.
             # The height gate is there to drop a title-block word, not that contact.
-            if float(tok["h"]) >= cutoff or contact_tag_parts(tok["text"], catalog, parents=parents):
+            if _tag_glyph_height(tok) >= cutoff or contact_tag_parts(tok["text"], catalog, parents=parents):
                 passed.append(tok)
             else:
                 below.append(tok)
@@ -1171,6 +1171,23 @@ def label_tokens(
     return {"tags": _dedupe_tags(tags), "wires": wires, "title": _title_tokens(tokens, height_mm)}
 
 
+def _tag_glyph_height(tok: dict[str, Any]) -> float:
+    """Character height of a tag token, accounting for 90°-rotated vertical labels.
+
+    A vertical multi-character tag (such as ``X1-1`` beside a panel terminal
+    block) has its string length in ``h`` and its glyph height in ``w``. Using
+    ``h`` directly would raise ``_tag_height_cutoff`` above horizontal device
+    tags on the same sheet.
+    """
+
+    height = float(tok.get("h") or 0.0)
+    width = float(tok.get("w") or 0.0)
+    text = str(tok.get("text") or "").strip()
+    if len(text) >= 2 and width > 0 and height > width * 1.35:
+        return width
+    return height
+
+
 def _tag_height_cutoff(heights: list[float]) -> float:
     """Height gate from the tags that share a height, not from one extreme.
 
@@ -1184,8 +1201,6 @@ def _tag_height_cutoff(heights: list[float]) -> float:
     ordered = sorted(float(height) for height in heights if height > 0)
     if not ordered:
         return 0.0
-    if len(ordered) < 8:
-        return ordered[-1] * 0.82
     clusters: list[list[float]] = [[ordered[0]]]
     for height in ordered[1:]:
         previous = clusters[-1][-1]
@@ -1195,6 +1210,17 @@ def _tag_height_cutoff(heights: list[float]) -> float:
         else:
             clusters[-1].append(height)
     shared = [cluster for cluster in clusters if len(cluster) >= 3]
+    if len(ordered) < 8:
+        # On a small sheet (such as a panel layout with 5 devices), a single
+        # taller misread token must not wipe out a shared cluster of real tags.
+        # Keep the max*0.82 rule when multiple taller tags exist or no cluster
+        # of three tags shares a height.
+        if shared:
+            group = max(shared, key=lambda cluster: cluster[-1])
+            above = sum(1 for value in ordered if value > group[-1])
+            if above <= 1:
+                return group[len(group) // 2] * 0.82
+        return ordered[-1] * 0.82
     if not shared:
         index = int(round(0.80 * (len(ordered) - 1)))
         reference = ordered[index]

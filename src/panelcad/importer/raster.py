@@ -126,7 +126,8 @@ def _upscale_low_res(image: Image.Image, width_mm: float, height_mm: float) -> I
         return image
     width = max(1, int(round(image.width * scale)))
     height = max(1, int(round(image.height * scale)))
-    if width * height > 18_000_000:
+    max_pixels = 36_000_000 if ppm < floor else 18_000_000
+    if width * height > max_pixels:
         return image
     return image.resize((width, height), Image.Resampling.LANCZOS)
 
@@ -226,6 +227,17 @@ def read_pixels(
             raise
         tokens = []
         ocr_skipped = True
+    title = read_title_block(tokens, height_mm)
+    if not ocr_skipped and not str(title.get("sheet_number") or "").strip() and not title.get("sheet_number_needs_info"):
+        # Ruled cells miss a free-form line and a low-resolution photo. Read the
+        # title-block region itself. An uncertain read stays blank.
+        found = ocr_title_sheet(rgb, ppm, width_mm, height_mm)
+        if found.get("sheet_number") or found.get("sheet_number_needs_info"):
+            title = {**title, **found}
+    title_confidence = _title_confidence(title)
+    texts = _title_items(title, title_confidence)
+    kind = page_kind_from_title(title, str(title.get("text") or ""))
+    is_layout = kind in {"panel_layout", "door_layout"}
     binary = _ink(gray)
     insets = effective_insets(detect_frame_insets(binary, width_mm, height_mm), tokens, width_mm, height_mm)
     labeled = label_tokens(tokens, width_mm, height_mm, insets=insets)
@@ -236,11 +248,12 @@ def read_pixels(
         _match_symbol(tok, match_ink, ppm, rgb.shape, catalog, standard, height_mm=height_mm)
         for tok in labeled["tags"]
     ]
-    devices.extend(_coils_from_ink(gray, binary, devices, ppm, catalog, standard))
-    devices.extend(_fuses_from_ink(gray, match_ink, devices, ppm, catalog, standard))
-    _land_body_symbols(binary, devices, ppm, catalog, standard)
-    _mark_secondary_fuses(devices)
-    _drop_ocr_ghosts_on_transformers(devices)
+    if not is_layout:
+        devices.extend(_coils_from_ink(gray, binary, devices, ppm, catalog, standard))
+        devices.extend(_fuses_from_ink(gray, match_ink, devices, ppm, catalog, standard))
+        _land_body_symbols(binary, devices, ppm, catalog, standard)
+        _mark_secondary_fuses(devices)
+        _drop_ocr_ghosts_on_transformers(devices)
     _sibling_terminal_captions(gray, devices, ppm, catalog)
     _mark_caption_tags(devices, tokens)
     # Rotation first, so the trace sees line pins on the bus side. Spread after
@@ -273,16 +286,6 @@ def read_pixels(
             known.add(tag)
             by_tag[tag] = device
     wires.extend(_strip_number_wires(strip_devices))
-    title = read_title_block(tokens, height_mm)
-    if not ocr_skipped and not str(title.get("sheet_number") or "").strip() and not title.get("sheet_number_needs_info"):
-        # Ruled cells miss a free-form line and a low-resolution photo. Read the
-        # title-block region itself. An uncertain read stays blank.
-        found = ocr_title_sheet(rgb, ppm, width_mm, height_mm)
-        if found.get("sheet_number") or found.get("sheet_number_needs_info"):
-            title = {**title, **found}
-    title_confidence = _title_confidence(title)
-    texts = _title_items(title, title_confidence)
-    kind = page_kind_from_title(title, str(title.get("text") or ""))
     return {
         "devices": devices,
         "wires": wires,
@@ -419,20 +422,35 @@ def _refine_item(
 
 def _skew_angle(gray: np.ndarray) -> float:
     small = cv2.resize(gray, (0, 0), fx=0.4, fy=0.4, interpolation=cv2.INTER_AREA)
-    bw = cv2.threshold(small, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
-    found = cv2.HoughLinesP(bw, 1, np.pi / 180.0, 60, minLineLength=30, maxLineGap=6)
+    # Run Hough on Canny edges rather than a filled Otsu mask: shaded backplates
+    # and wire ducts binarize into solid dark blocks where Hough finds spurious
+    # diagonal chords and tilts straight panel layouts by several degrees.
+    edges = cv2.Canny(small, 50, 150)
+    min_len = max(30, int(min(small.shape[:2]) * 0.08))
+    found = cv2.HoughLinesP(edges, 1, np.pi / 180.0, 60, minLineLength=min_len, maxLineGap=6)
     if found is None:
         return 0.0
-    angles: list[float] = []
+    weighted: list[tuple[float, float]] = []
     for x1, y1, x2, y2 in found.reshape(-1, 4):
-        angle = math.degrees(math.atan2(float(y2 - y1), float(x2 - x1)))
+        dx = float(x2 - x1)
+        dy = float(y2 - y1)
+        length = math.hypot(dx, dy)
+        angle = math.degrees(math.atan2(dy, dx))
         if abs(angle) <= 12:
-            angles.append(angle)
+            weighted.append((angle, length))
         elif abs(abs(angle) - 180) <= 12:
-            angles.append(angle - math.copysign(180, angle))
-    if len(angles) < 4:
+            weighted.append((angle - math.copysign(180, angle), length))
+    if len(weighted) < 4:
         return 0.0
-    median = float(np.median(np.asarray(angles)))
+    weighted.sort(key=lambda item: item[0])
+    half = sum(w for _, w in weighted) * 0.5
+    acc = 0.0
+    median = weighted[-1][0]
+    for angle, weight in weighted:
+        acc += weight
+        if acc >= half:
+            median = angle
+            break
     return median if abs(median) <= 8 else 0.0
 
 
@@ -653,17 +671,39 @@ def _sparse_tokens(canvas: np.ndarray, ppm: float, height_mm: float, pytesseract
     height, width = canvas.shape
     # One pass on a wide sheet misses tags. Overlapping full-height strips
     # keep a ladder column in a box Tesseract can read. Cutting off the title
-    # band first makes the same pass return nothing.
+    # band first makes the same pass return nothing. Tall sheets (e.g. ANSI D
+    # portrait panel layouts) are also tiled vertically so each strip stays at
+    # working aspect and pixel density instead of being heavily shrunk by OCR.
     strip = max(int(200 * ppm), 1)
     step = max(int(140 * ppm), 1)
+    if height_mm > 360.0:
+        y_strip = max(int(300 * ppm), 1)
+        y_step = max(int(240 * ppm), 1)
+        # A faded large-format print has all strokes compressed into light gray
+        # (e.g. min >= 110). Stretching the dynamic range restores ink contrast
+        # before tiled OCR without touching normal-contrast sheets.
+        lo = int(canvas.min()) if canvas.size else 0
+        if lo >= 110:
+            hi = max(lo + 1, int(np.percentile(canvas, 99)))
+            canvas = np.clip((canvas.astype(np.float32) - lo) * 255.0 / float(hi - lo), 0, 255).astype(np.uint8)
+    else:
+        y_strip = height
+        y_step = height
     found: list[dict[str, Any]] = []
-    x = 0
-    while x < width:
-        piece = np.ascontiguousarray(canvas[:, x : min(width, x + strip)])
-        found.extend(_tokens_in_band(piece, ppm, 0, x, pytesseract))
-        if x + strip >= width:
+    y = 0
+    while y < height:
+        y_end = min(height, y + y_strip)
+        x = 0
+        while x < width:
+            piece = np.ascontiguousarray(canvas[y:y_end, x : min(width, x + strip)])
+            if height_mm <= 360.0 or float((piece < 235).mean()) >= 0.0002:
+                found.extend(_tokens_in_band(piece, ppm, y, x, pytesseract))
+            if x + strip >= width:
+                break
+            x += step
+        if y_end >= height:
             break
-        x += step
+        y += y_step
     return [tok for tok in found if 8.0 <= tok["y"] < height_mm - 54]
 
 
@@ -695,7 +735,10 @@ def _tokens_in_band(
             continue
         w_px = float(data["width"][index]) / 2.0
         h_px = float(data["height"][index]) / 2.0
-        if h_px / ppm > 8 or w_px / ppm > 28:
+        w_mm = w_px / ppm
+        h_mm = h_px / ppm
+        vertical = len(text) >= 2 and h_mm > w_mm * 1.35
+        if (vertical and (w_mm > 8 or h_mm > 28)) or (not vertical and (h_mm > 8 or w_mm > 28)):
             continue
         x_px = x0 + float(data["left"][index]) / 2.0 + w_px / 2.0
         y_px = y0 + float(data["top"][index]) / 2.0 + h_px / 2.0
