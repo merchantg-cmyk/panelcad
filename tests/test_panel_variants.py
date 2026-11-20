@@ -19,12 +19,14 @@ import pytest
 from PIL import Image, ImageDraw
 
 from panelcad.importer.imageutil import (
+    _apply_quarter_turns,
     _glyph_quarter,
     _is_large_format_sheet,
     _raise_coarse_scan,
     denoise,
+    despeckle_preserving_strokes,
 )
-from panelcad.importer.raster import _skew_angle, _upscale_low_res
+from panelcad.importer.raster import _skew_angle, _upscale_low_res, prepare_opencv
 from panelcad.importer.read import _tag_glyph_height, _tag_height_cutoff, label_tokens
 from panelcad.importer.tesseract_runtime import find_tesseract
 from panelcad.ocr.backend import active_backend, page_engine_ready
@@ -386,20 +388,299 @@ def test_read_panel_scan_recovers_raw_speckled_layout_and_uprights(
 
     truth, paths = panel_variant_paths
     with Image.open(paths["speckle"]) as src:
+        dpi = src.info.get("dpi")
         image = src.convert("RGB")
     width_mm, height_mm = float(truth["page_mm"][0]), float(truth["page_mm"][1])
 
     facts = read_panel_scan(image, width_mm=width_mm, height_mm=height_mm, catalog=default_catalog())
     assert facts["kind"] == "panel_layout"
     found = {
-        str(dev.get("tag") or "").strip().upper()
+        tag
         for dev in (facts.get("devices") or [])
-        if str(dev.get("tag") or "").strip()
+        if not dev.get("title_ink")
+        for tag in (str(dev.get("tag") or "").strip().upper(),)
+        if tag and tag != "?" and not tag.startswith("?")
     }
     truth_tags = set(truth["devices"])
     assert len(found & truth_tags) / len(truth_tags) >= 5 / 9
 
     sideways = image.transpose(Image.Transpose.ROTATE_270)
+    if isinstance(dpi, tuple) and len(dpi) == 2:
+        sideways.info["dpi"] = (dpi[1], dpi[0])
     with ocr_scope("tesseract"):
-        _turned, quarter = auto_rotate(sideways, large_format=True)
+        turned, quarter = auto_rotate(sideways, large_format=True)
     assert quarter == 3
+    assert turned.size == image.size
+    assert np.array_equal(np.asarray(turned), np.asarray(image))
+
+
+def test_auto_rotate_uprights_sideways_speckled_panel_under_electrical_backend(
+    panel_variant_paths: tuple[dict[str, Any], dict[str, Path]],
+):
+    if not page_engine_ready():
+        pytest.skip("bundled electrical OCR weights are not installed")
+
+    from panelcad.importer.imageutil import auto_rotate
+    from panelcad.ocr.backend import ocr_scope
+
+    _truth, paths = panel_variant_paths
+    with Image.open(paths["speckle"]) as src:
+        dpi = src.info.get("dpi")
+        image = src.convert("RGB")
+    assert isinstance(dpi, tuple) and len(dpi) == 2
+
+    sideways = image.transpose(Image.Transpose.ROTATE_270)
+    sideways.info["dpi"] = (dpi[1], dpi[0])
+    assert _is_large_format_sheet(sideways, sideways.info["dpi"]) is True
+
+    with ocr_scope("electrical"):
+        turned, quarter = auto_rotate(sideways, large_format=None)
+    assert quarter == 3
+    assert turned.size == image.size
+    # Despeckle runs only on the probe; the returned image keeps unfiltered pixels.
+    assert np.array_equal(np.asarray(turned), np.asarray(image))
+
+
+def test_despeckle_preserving_strokes_guards_shapes_dtypes_and_contract():
+    # Empty array and <5 px crops return the input unchanged with changed=False.
+    empty = np.empty((0, 0, 3), dtype=np.uint8)
+    out_empty, changed_empty = despeckle_preserving_strokes(empty)
+    assert changed_empty is False
+    assert out_empty is empty
+
+    for shape in ((4, 20, 3), (20, 4, 3)):
+        tiny_crop = np.full(shape, 255, dtype=np.uint8)
+        out_tiny, changed_tiny = despeckle_preserving_strokes(tiny_crop)
+        assert changed_tiny is False
+        assert out_tiny is tiny_crop
+
+    # Invalid ndim, channel counts, or non-numeric dtypes never raise cv2.error.
+    for invalid in (
+        np.zeros((100,), dtype=np.uint8),
+        np.zeros((1, 20, 20, 3), dtype=np.uint8),
+        np.zeros((20, 20, 2), dtype=np.uint8),
+        np.zeros((20, 20, 5), dtype=np.uint8),
+        np.full((20, 20, 3), "x", dtype="<U1"),
+    ):
+        out_inv, changed_inv = despeckle_preserving_strokes(invalid)
+        assert changed_inv is False
+        assert out_inv is invalid
+
+    # Clean 3-channel uint8 RGB returns (arr, False) untouched.
+    clean = np.full((120, 160, 3), 255, dtype=np.uint8)
+    clean[20:40, 20:40] = 0
+    clean[30, 30] = 255
+    out_clean, changed_clean = despeckle_preserving_strokes(clean)
+    assert changed_clean is False
+    assert np.array_equal(out_clean, clean)
+
+    # Speckled 3-channel uint8 RGB returns (out, True) and removes speckles.
+    speckled = clean.copy()
+    rng = np.random.default_rng(31)
+    ys = rng.integers(50, 115, size=90)
+    xs = rng.integers(5, 155, size=90)
+    speckled[ys, xs] = 0
+    out_spec, changed_spec = despeckle_preserving_strokes(speckled)
+    assert changed_spec is True
+    assert out_spec.dtype == np.uint8 and out_spec.shape == speckled.shape
+    assert int((out_spec[50:115, 5:155, 0] < 120).sum()) < 15
+
+    # Grayscale (2D and HxWx1), RGBA (HxWx4), and non-uint8 numeric arrays convert to 3-ch uint8 RGB.
+    gray_2d = speckled[:, :, 0]
+    out_gray, changed_gray = despeckle_preserving_strokes(gray_2d)
+    assert changed_gray is True
+    assert out_gray.dtype == np.uint8 and out_gray.shape == (120, 160, 3)
+
+    gray_1ch = gray_2d[:, :, None]
+    out_1ch, changed_1ch = despeckle_preserving_strokes(gray_1ch)
+    assert changed_1ch is True
+    assert out_1ch.dtype == np.uint8 and out_1ch.shape == (120, 160, 3)
+
+    rgba = np.dstack([speckled, np.full((120, 160), 255, dtype=np.uint8)])
+    out_rgba, changed_rgba = despeckle_preserving_strokes(rgba)
+    assert changed_rgba is True
+    assert out_rgba.dtype == np.uint8 and out_rgba.shape == (120, 160, 3)
+
+    float01 = speckled.astype(np.float32) / 255.0
+    out_f01, changed_f01 = despeckle_preserving_strokes(float01)
+    assert changed_f01 is True
+    assert out_f01.dtype == np.uint8 and out_f01.shape == (120, 160, 3)
+
+    float255 = speckled.astype(np.float64)
+    out_f255, changed_f255 = despeckle_preserving_strokes(float255)
+    assert changed_f255 is True
+    assert out_f255.dtype == np.uint8 and out_f255.shape == (120, 160, 3)
+
+    u16 = speckled.astype(np.uint16) * 257
+    out_u16, changed_u16 = despeckle_preserving_strokes(u16)
+    assert changed_u16 is True
+    assert out_u16.dtype == np.uint8 and out_u16.shape == (120, 160, 3)
+
+    i32 = clean.astype(np.int32)
+    out_i32, changed_i32 = despeckle_preserving_strokes(i32)
+    assert changed_i32 is False
+    assert out_i32.dtype == np.uint8 and out_i32.shape == (120, 160, 3)
+
+    bool_img = clean[:, :, 0] > 128
+    out_bool, changed_bool = despeckle_preserving_strokes(bool_img)
+    assert changed_bool is False
+    assert out_bool.dtype == np.uint8 and out_bool.shape == (120, 160, 3)
+
+    # Degenerate case: >= speckle_floor 1x1 dark centers where med5[speck] == rgb[speck]
+    # and no pixel exceeds 220 (so salt is empty) must return changed=False.
+    degen = np.zeros((120, 120, 3), dtype=np.uint8)
+    for row in range(8):
+        for col in range(8):
+            cy, cx = 10 + row * 12, 10 + col * 12
+            degen[cy - 1 : cy + 2, cx - 1 : cx + 2] = 200
+            degen[cy, cx] = 0
+    out_degen, changed_degen = despeckle_preserving_strokes(degen)
+    assert changed_degen is False
+    assert np.array_equal(out_degen, degen)
+
+
+def test_prepare_opencv_despeckles_before_bilateral_and_skew_and_keeps_clean_untouched(monkeypatch):
+    from panelcad.importer import raster as raster_mod
+
+    bilateral_inputs: list[np.ndarray] = []
+    skew_inputs: list[np.ndarray] = []
+    real_bilateral = cv2.bilateralFilter
+    real_skew = raster_mod._skew_angle
+
+    def _spy_bilateral(src: np.ndarray, *args: Any, **kwargs: Any) -> np.ndarray:
+        bilateral_inputs.append(src.copy())
+        return real_bilateral(src, *args, **kwargs)
+
+    def _spy_skew(gray: np.ndarray) -> float:
+        skew_inputs.append(gray.copy())
+        return real_skew(gray)
+
+    monkeypatch.setattr(cv2, "bilateralFilter", _spy_bilateral)
+    monkeypatch.setattr(raster_mod, "_skew_angle", _spy_skew)
+
+    # Speckled sheet: isolated dots must be removed before bilateralFilter and _skew_angle.
+    speckled = np.full((300, 400, 3), 255, dtype=np.uint8)
+    cv2.rectangle(speckled, (20, 20), (380, 280), (0, 0, 0), 2)
+    rng = np.random.default_rng(41)
+    ys = rng.integers(60, 240, size=180)
+    xs = rng.integers(60, 340, size=180)
+    speckled[ys, xs] = 0
+
+    cleaned_img, meta = prepare_opencv(Image.fromarray(speckled))
+    assert "deskew_deg" in meta
+    assert len(bilateral_inputs) == 1 and len(skew_inputs) == 1
+    assert int((bilateral_inputs[0][60:240, 60:340, 0] < 120).sum()) < 20
+    assert int((skew_inputs[0][60:240, 60:340] < 120).sum()) < 20
+    # Frame border ink survives.
+    assert int((np.asarray(cleaned_img)[20, 20:380, 0] < 120).sum()) > 300
+
+    # Clean sheet with a 1-px interior white counter stays untouched entering bilateralFilter.
+    clean = np.full((300, 400, 3), 255, dtype=np.uint8)
+    cv2.rectangle(clean, (20, 20), (380, 280), (0, 0, 0), 2)
+    clean[90:110, 90:110] = 0
+    clean[100, 100] = 255
+
+    prepare_opencv(Image.fromarray(clean))
+    assert len(bilateral_inputs) == 2
+    assert np.array_equal(bilateral_inputs[1], clean)
+
+
+def _make_speckled_probe_fixture(width: int = 300, height: int = 400, count: int = 160) -> tuple[np.ndarray, Image.Image]:
+    arr = np.full((height, width, 3), 255, dtype=np.uint8)
+    arr[20:70, 30] = 0
+    arr[20, 30:75] = 0
+    rng = np.random.default_rng(53)
+    ys = rng.integers(90, height - 10, size=count)
+    xs = rng.integers(10, width - 10, size=count)
+    arr[ys, xs] = 0
+    return arr, Image.fromarray(arr)
+
+
+def test_apply_quarter_turns_matches_clockwise_quarter_steps():
+    arr = np.arange(3 * 4 * 3, dtype=np.uint8).reshape((3, 4, 3))
+    img = Image.fromarray(arr)
+    for quarter, expected_transpose in (
+        (0, None),
+        (1, Image.Transpose.ROTATE_270),
+        (2, Image.Transpose.ROTATE_180),
+        (3, Image.Transpose.ROTATE_90),
+        (4, None),
+        (-1, Image.Transpose.ROTATE_90),
+    ):
+        turned, turns = _apply_quarter_turns(img, quarter)
+        assert turns == quarter % 4
+        expected = img if expected_transpose is None else img.transpose(expected_transpose)
+        assert np.array_equal(np.asarray(turned), np.asarray(expected))
+
+
+@pytest.mark.parametrize("fallback", ("deskew_retry", "decisive_title", "osd_reading", "ink_rotate"))
+def test_auto_rotate_fallback_paths_probe_despeckled_and_return_unfiltered_original(
+    monkeypatch: pytest.MonkeyPatch,
+    fallback: str,
+):
+    from panelcad.importer import imageutil
+
+    if fallback == "deskew_retry":
+        arr, speckled = _make_speckled_probe_fixture(width=2700, height=160, count=360)
+        large_format = True
+    else:
+        arr, speckled = _make_speckled_probe_fixture(width=300, height=400, count=160)
+        large_format = False
+
+    def _speckle_count(probe: Image.Image) -> int:
+        g = np.asarray(probe.convert("L"))
+        return int((g[90 : g.shape[0] - 10, 10 : g.shape[1] - 10] < 120).sum())
+
+    probed_dark: list[int] = []
+    monkeypatch.setattr(imageutil, "_glyph_quarter", lambda _img: None)
+
+    if fallback == "deskew_retry":
+        def _fake_scores(probe: Image.Image, **kwargs: Any) -> list[float]:
+            if kwargs.get("target_long") == 3600:
+                probed_dark.append(_speckle_count(probe))
+                return [0.0, 0.0, 180.0, 0.0]
+            return [0.0, 0.0, 0.0, 0.0]
+
+        def _fake_deskew(probe: Image.Image, **_kwargs: Any) -> tuple[Image.Image, float]:
+            probed_dark.append(_speckle_count(probe))
+            return probe, 0.0
+
+        monkeypatch.setattr(imageutil, "_text_scores", _fake_scores)
+        monkeypatch.setattr(imageutil, "deskew", _fake_deskew)
+        expected_quarter = 2
+        restore_transpose = Image.Transpose.ROTATE_180
+    else:
+        monkeypatch.setattr(imageutil, "_text_scores", lambda _img, **_kw: [0.0, 0.0, 0.0, 0.0])
+        if fallback == "decisive_title":
+            def _fake_title(probe: Image.Image) -> tuple[Image.Image, int]:
+                probed_dark.append(_speckle_count(probe))
+                return probe, 3
+
+            monkeypatch.setattr(imageutil, "_decisive_title", _fake_title)
+            expected_quarter = 3
+            restore_transpose = Image.Transpose.ROTATE_270
+        elif fallback == "osd_reading":
+            def _fake_osd(probe: Image.Image) -> tuple[int, float]:
+                probed_dark.append(_speckle_count(probe))
+                return 90, 6.5
+
+            monkeypatch.setattr(imageutil, "_decisive_title", lambda _img: None)
+            monkeypatch.setattr(imageutil, "_osd_reading", _fake_osd)
+            expected_quarter = 3
+            restore_transpose = Image.Transpose.ROTATE_270
+        else:
+            def _fake_ink(probe: Image.Image) -> tuple[Image.Image, int]:
+                probed_dark.append(_speckle_count(probe))
+                return probe, 1
+
+            monkeypatch.setattr(imageutil, "_decisive_title", lambda _img: None)
+            monkeypatch.setattr(imageutil, "_osd_reading", lambda _img: (None, 0.0))
+            monkeypatch.setattr(imageutil, "_ink_rotate", _fake_ink)
+            expected_quarter = 1
+            restore_transpose = Image.Transpose.ROTATE_90
+
+    turned, quarter = imageutil.auto_rotate(speckled, large_format=large_format)
+    assert quarter == expected_quarter
+    assert probed_dark and all(count < 15 for count in probed_dark)
+    restored = np.asarray(turned.transpose(restore_transpose))
+    assert np.array_equal(restored, arr)

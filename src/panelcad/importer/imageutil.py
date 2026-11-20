@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import re
 from io import BytesIO
+from typing import TYPE_CHECKING
 
 from PIL import Image, ImageFilter
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 def prepare_scan(
@@ -211,39 +215,89 @@ def _is_large_format_sheet(image: Image.Image, dpi: tuple[float, float] | None) 
     return max(width_mm, height_mm) >= 500.0
 
 
-def despeckle_preserving_strokes(rgb: "np.ndarray") -> tuple["np.ndarray", bool]:
-    """Remove dense 1-2 px toner speckles and interior 1 px salt holes.
+def _coerce_rgb_uint8(rgb: np.ndarray) -> np.ndarray | None:
+    """Convert 2D grayscale or 1/3/4-channel image arrays to contiguous uint8 RGB.
 
-    Returns ``(cleaned_rgb, changed)``. Clean and low-DPI non-speckled images
-    are returned untouched so thin glyph counters do not fill in.
+    Returns ``None`` for empty, tiny (<5 px), unsupported ndim/channel, or
+    non-numeric arrays so callers can return the input unchanged.
     """
 
     import cv2
     import numpy as np
 
-    if rgb.size == 0 or min(rgb.shape[:2]) < 5:
+    arr = np.asarray(rgb)
+    if arr.size == 0 or arr.ndim not in {2, 3}:
+        return None
+    if min(arr.shape[:2]) < 5:
+        return None
+    if arr.ndim == 3 and arr.shape[2] not in {1, 3, 4}:
+        return None
+
+    if arr.dtype == np.uint8:
+        work = arr
+    elif arr.dtype == np.bool_:
+        work = arr.astype(np.uint8) * 255
+    elif np.issubdtype(arr.dtype, np.floating):
+        finite = np.nan_to_num(arr, nan=0.0, posinf=255.0, neginf=0.0)
+        if float(finite.min()) >= 0.0 and float(finite.max()) <= 1.0:
+            work = np.rint(finite * 255.0).astype(np.uint8)
+        else:
+            work = np.rint(np.clip(finite, 0.0, 255.0)).astype(np.uint8)
+    elif np.issubdtype(arr.dtype, np.integer):
+        if arr.dtype == np.uint16 and int(arr.max()) > 255:
+            work = (arr >> 8).astype(np.uint8)
+        else:
+            work = np.clip(arr, 0, 255).astype(np.uint8)
+    else:
+        return None
+
+    if work.ndim == 2:
+        work = cv2.cvtColor(np.ascontiguousarray(work), cv2.COLOR_GRAY2RGB)
+    elif work.shape[2] == 1:
+        work = cv2.cvtColor(np.ascontiguousarray(work[:, :, 0]), cv2.COLOR_GRAY2RGB)
+    elif work.shape[2] == 4:
+        work = cv2.cvtColor(np.ascontiguousarray(work), cv2.COLOR_RGBA2RGB)
+    elif not work.flags["C_CONTIGUOUS"]:
+        work = np.ascontiguousarray(work)
+    return work
+
+
+def despeckle_preserving_strokes(rgb: np.ndarray) -> tuple[np.ndarray, bool]:
+    """Remove dense 1-2 px toner speckles and interior 1 px salt holes.
+
+    Returns ``(cleaned_rgb, changed)``. Clean and low-DPI non-speckled images
+    are returned untouched so thin glyph counters do not fill in. Grayscale,
+    RGBA, and numeric non-``uint8`` images are converted to 3-channel
+    ``uint8`` RGB; invalid shapes/dtypes or tiny crops are returned unchanged.
+    """
+
+    import cv2
+    import numpy as np
+
+    work = _coerce_rgb_uint8(rgb)
+    if work is None:
         return rgb, False
-    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    gray = cv2.cvtColor(work, cv2.COLOR_RGB2GRAY)
     dark = (gray < 180).astype(np.uint8)
     count, labels, stats, _ = cv2.connectedComponentsWithStats(dark, connectivity=8)
     if count <= 1:
-        return rgb, False
-    areas = stats[1:, cv2.CC_STAT_AREA]
+        return work, False
     widths = stats[1:, cv2.CC_STAT_WIDTH]
     heights = stats[1:, cv2.CC_STAT_HEIGHT]
-    tiny = np.where((areas <= 4) & (widths <= 2) & (heights <= 2))[0] + 1
+    tiny = np.where((widths <= 2) & (heights <= 2))[0] + 1
     # Require at least 250 speckles per megapixel (minimum 40 on tiny crops) so
     # clean/median-filtered sheets (~10-60/MP) are never touched.
-    speckle_floor = max(40, int(round(gray.size * 0.00025)))
+    speckle_floor = max(40, round(gray.size * 0.00025))
     if len(tiny) < speckle_floor:
-        return rgb, False
+        return work, False
 
-    out = rgb.copy()
+    out = work.copy()
     lut = np.zeros(count, dtype=np.bool_)
     lut[tiny] = True
     speck = lut[labels]
-    med5 = cv2.medianBlur(rgb, 5)
+    med5 = cv2.medianBlur(work, 5)
     out[speck] = med5[speck]
+    changed = bool(np.any(out[speck] != work[speck]))
 
     gray2 = cv2.cvtColor(out, cv2.COLOR_RGB2GRAY)
     kernel = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]], dtype=np.uint8)
@@ -251,7 +305,11 @@ def despeckle_preserving_strokes(rgb: "np.ndarray") -> tuple["np.ndarray", bool]
     salt = (gray2 > 220) & (dark_nb >= 6)
     if np.any(salt):
         med3 = cv2.medianBlur(out, 3)
-        out[salt] = med3[salt]
+        if np.any(med3[salt] != out[salt]):
+            out[salt] = med3[salt]
+            changed = True
+    if not changed:
+        return work, False
     return out, True
 
 
@@ -275,16 +333,26 @@ def denoise(image: Image.Image, *, preserve_thin_strokes: bool = False) -> Image
     return Image.fromarray(cleaned)
 
 
+_QUARTER_TRANSPOSE = {
+    1: Image.Transpose.ROTATE_270,
+    2: Image.Transpose.ROTATE_180,
+    3: Image.Transpose.ROTATE_90,
+}
+
+
 def _apply_quarter_turns(image: Image.Image, quarter: int) -> tuple[Image.Image, int]:
-    """Rotate ``image`` CCW by ``quarter`` 90-degree turns."""
+    """Apply ``quarter`` 90-degree clockwise (270-degree CCW) turns to ``image``.
+
+    Matches the quarter-turn convention used by ``_text_scores``,
+    ``_glyph_quarter``, ``_title_orientations``, and ``_ink_rotate`` (each
+    step is ``Image.Transpose.ROTATE_270``).
+    """
 
     turns = int(quarter) % 4
-    if not turns:
+    transpose = _QUARTER_TRANSPOSE.get(turns)
+    if transpose is None:
         return image, 0
-    turned = image
-    for _ in range(turns):
-        turned = turned.transpose(Image.Transpose.ROTATE_270)
-    return turned, turns
+    return image.transpose(transpose), turns
 
 
 def auto_rotate(image: Image.Image, *, large_format: bool | None = None) -> tuple[Image.Image, int]:
