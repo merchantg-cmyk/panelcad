@@ -2769,6 +2769,104 @@ class Session(SessionTroubleshootMixin, SessionReconstructMixin, SessionPortsMix
         self.emit("clear_wire_route", f"auto-route {wire.id}")
         return wire
 
+    def validate_wire_endpoints(self, sheet: Sheet, frm: str, to: str) -> None:
+        """Validate a wire endpoint pair: pins/rails exist, not same pin, not rail short, no control/power mix."""
+
+        self._assert_pin(sheet, frm)
+        self._assert_pin(sheet, to)
+        if str(frm).strip().upper() == str(to).strip().upper():
+            raise ValueError(f"wire from and to are the same pin ({frm})")
+
+        from panelcad.core.circuit import control_power_conflict
+        from panelcad.core.ladder import endpoint_is_rail, rail_short_message
+        from panelcad.render.sheet import parse_pin_ref
+
+        short = rail_short_message(sheet, frm, to, self.project)
+        if short:
+            raise ValueError(short)
+        if endpoint_is_rail(sheet, frm, self.project) and endpoint_is_rail(sheet, to, self.project):
+            raise ValueError(f"{frm} to {to} would short the rails — pick a device terminal")
+        if "." in str(frm) and "." in str(to):
+            a_ref, a_pin = parse_pin_ref(frm)
+            b_ref, b_pin = parse_pin_ref(to)
+            mix = control_power_conflict(
+                sheet.component(a_ref).library_id,
+                a_pin,
+                sheet.component(b_ref).library_id,
+                b_pin,
+            )
+            if mix:
+                raise ValueError(mix)
+
+    def reconnect_wire(
+        self,
+        wire_id: str,
+        which: str,
+        target: str,
+        sheet_id: str | None = None,
+        *,
+        from_at: Any = None,
+        to_at: Any = None,
+    ) -> Wire:
+        """Move one end of an existing wire to a different valid pin or rail.
+
+        Preserves ``id``, ``number``, ``number_locked``, ``gauge``, ``color``,
+        ``wire_type``, ``cable``, ``label``, and ``net``; clears manual
+        ``points`` and the moved end's old ``from_at``/``to_at`` so the wire
+        reroutes cleanly. One undo step via ``_ACTIVITY_METHODS``.
+        """
+
+        end_key = str(which or "").strip().lower()
+        if end_key not in ("from", "to"):
+            raise ValueError(f"which must be 'from' or 'to', got '{which}'")
+        src = self.sheet(sheet_id)
+        wire = self.find_wire(wire_id=wire_id, sheet_id=src.id)
+        target_ref = str(target or "").strip()
+        if not target_ref:
+            raise ValueError("target pin or rail is required")
+
+        new_from = target_ref if end_key == "from" else wire.frm
+        new_to = target_ref if end_key == "to" else wire.to
+        self.validate_wire_endpoints(src, new_from, new_to)
+
+        from panelcad.core.ladder import endpoint_is_rail
+        from panelcad.render.wiring import clear_route_cache
+
+        current_ref = wire.frm if end_key == "from" else wire.to
+        current_at = wire.from_at if end_key == "from" else wire.to_at
+        raw_at = from_at if end_key == "from" else to_at
+        other_ref = wire.to if end_key == "from" else wire.frm
+        target_is_rail = endpoint_is_rail(src, target_ref, self.project)
+        moved_at = (
+            _rail_click(src, self.project, self.catalog, target_ref, other_ref, raw_at)
+            if target_is_rail and raw_at is not None
+            else None
+        )
+
+        if target_ref.upper() == str(current_ref).strip().upper():
+            if not target_is_rail or raw_at is None:
+                return wire
+            if moved_at is None and current_at is None:
+                return wire
+            if (
+                moved_at is not None
+                and current_at is not None
+                and abs(moved_at.x - current_at.x) <= 1e-4
+                and abs(moved_at.y - current_at.y) <= 1e-4
+            ):
+                return wire
+
+        if end_key == "from":
+            wire.frm = target_ref
+            wire.from_at = moved_at
+        else:
+            wire.to = target_ref
+            wire.to_at = moved_at
+        wire.points = []
+        clear_route_cache()
+        self._touch_drawing()
+        return wire
+
     def set_wire_label(
         self,
         wire_id: str | None = None,
@@ -7637,6 +7735,7 @@ _ACTIVITY_METHODS: dict[str, Any] = {
     "wire_offpage": _summary_generic("off-page wire"),
     "pair_offpage": _summary_generic("pair off-page arrows"),
     "set_wire_route": _summary_generic("route"),
+    "reconnect_wire": lambda s, r, a, k: f"reconnect {r.id} {r.frm} → {r.to}",
     "clear_wire_route": _summary_generic("reset route"),
     "save": _summary_generic("save"),
     "import_bom": _summary_generic("import BOM"),

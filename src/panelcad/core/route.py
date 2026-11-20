@@ -234,6 +234,8 @@ def nearest_run(points: list[Point], x: float, y: float, max_dist: float = 4.0) 
     best: tuple[int, str] | None = None
     best_d = max_dist
     for i, (a, b) in enumerate(zip(points, points[1:])):
+        if abs(a.x - b.x) <= 1e-6 and abs(a.y - b.y) <= 1e-6:
+            continue
         kind = _seg_kind(a, b)
         if not kind:
             continue
@@ -254,18 +256,163 @@ def _point_seg_dist(x: float, y: float, a: Point, b: Point) -> float:
     return ((x - px) ** 2 + (y - py) ** 2) ** 0.5
 
 
+def _clean_ortho_points(points: list[Point]) -> list[Point]:
+    """Drop duplicate vertices and strictly collinear interior vertices."""
+
+    pts = _dedupe_pts(points)
+    changed = True
+    while changed and len(pts) >= 3:
+        changed = False
+        simp: list[Point] = [pts[0]]
+        for p in pts[1:-1]:
+            a = simp[-1]
+            if abs(a.x - p.x) <= 1e-6 and abs(a.y - p.y) <= 1e-6:
+                changed = True
+                continue
+            simp.append(p)
+        simp.append(pts[-1])
+        out: list[Point] = [simp[0]]
+        for idx in range(1, len(simp) - 1):
+            a, b, c = out[-1], simp[idx], simp[idx + 1]
+            col_h = abs(a.y - b.y) <= 1e-6 and abs(b.y - c.y) <= 1e-6
+            col_v = abs(a.x - b.x) <= 1e-6 and abs(b.x - c.x) <= 1e-6
+            if col_h or col_v:
+                changed = True
+                continue
+            out.append(b)
+        out.append(simp[-1])
+        pts = _dedupe_pts(out)
+        if len(pts) != len(out):
+            changed = True
+    return pts
+
+
+def nearest_corner(points: list[Point], x: float, y: float, max_dist: float = 4.0) -> int | None:
+    """Index of the closest interior corner, or None if farther than max_dist."""
+
+    best: int | None = None
+    best_d = max_dist
+    for i in range(1, len(points) - 1):
+        p = points[i]
+        d = ((x - p.x) ** 2 + (y - p.y) ** 2) ** 0.5
+        if d < best_d:
+            best_d = d
+            best = i
+    return best
+
+
 def set_run_channel(points: list[Point], i: int, kind: str, channel: float) -> list[Point]:
     """Pull one orthogonal run onto a new X (vertical) or Y (horizontal) channel."""
 
-    if i < 0 or i >= len(points) - 1:
+    n = len(points)
+    if n < 2 or i < 0 or i >= n - 1 or kind not in ("h", "v"):
         return _copy_pts(points)
     a, b = points[i], points[i + 1]
+    cur = (a.y + b.y) / 2.0 if kind == "h" else (a.x + b.x) / 2.0
+    if abs(channel - cur) <= 1e-6:
+        return _copy_pts(points)
+    a0 = Point(x=points[0].x, y=points[0].y)
+    b0 = Point(x=points[-1].x, y=points[-1].y)
+    out: list[Point] = [a0] if i == 0 else _copy_pts(points[:i])
     if kind == "h":
-        cur = (a.y + b.y) / 2.0
+        na = Point(x=a.x, y=channel)
+        nb = Point(x=b.x, y=channel)
+        if i > 0:
+            prev = out[-1]
+            if abs(prev.x - na.x) > 1e-6 and abs(prev.y - na.y) > 1e-6:
+                out.append(Point(x=na.x, y=prev.y))
+        out.append(na)
+        out.append(nb)
+        if i + 1 < n - 1:
+            nxt = points[i + 2]
+            if abs(nb.x - nxt.x) > 1e-6 and abs(nb.y - nxt.y) > 1e-6:
+                out.append(Point(x=nb.x, y=nxt.y))
+            out.extend(_copy_pts(points[i + 2 :]))
+        else:
+            out.append(b0)
     else:
-        cur = (a.x + b.x) / 2.0
-    out = _nudge_seg(points, i, kind, channel - cur)
-    return out if out is not None else _copy_pts(points)
+        na = Point(x=channel, y=a.y)
+        nb = Point(x=channel, y=b.y)
+        if i > 0:
+            prev = out[-1]
+            if abs(prev.x - na.x) > 1e-6 and abs(prev.y - na.y) > 1e-6:
+                out.append(Point(x=prev.x, y=na.y))
+        out.append(na)
+        out.append(nb)
+        if i + 1 < n - 1:
+            nxt = points[i + 2]
+            if abs(nb.x - nxt.x) > 1e-6 and abs(nb.y - nxt.y) > 1e-6:
+                out.append(Point(x=nxt.x, y=nb.y))
+            out.extend(_copy_pts(points[i + 2 :]))
+        else:
+            out.append(b0)
+    cleaned = _clean_ortho_points(out)
+    cleaned[0] = a0
+    cleaned[-1] = b0
+    return cleaned
+
+
+def move_wire_corner(points: list[Point], index: int, nx: float, ny: float) -> list[Point]:
+    """Move interior corner *index* to *(nx, ny)* keeping pin ends fixed and segments orthogonal."""
+
+    n = len(points)
+    if n < 3 or index <= 0 or index >= n - 1:
+        return _copy_pts(points)
+    cur = points[index]
+    if abs(cur.x - nx) <= 1e-6 and abs(cur.y - ny) <= 1e-6:
+        return _copy_pts(points)
+    a0 = Point(x=points[0].x, y=points[0].y)
+    b0 = Point(x=points[-1].x, y=points[-1].y)
+    in_kind = _seg_kind(points[index - 1], cur)
+    out_kind = _seg_kind(cur, points[index + 1])
+    if not in_kind or not out_kind:
+        pts = _copy_pts(points)
+        pts[index] = Point(x=nx, y=ny)
+        pts[0] = a0
+        pts[-1] = b0
+        return _clean_ortho_points(_restore_ortho(pts))
+
+    pts = _copy_pts(points)
+    if index - 1 == 0:
+        left = [a0, Point(x=a0.x, y=ny) if in_kind == "h" else Point(x=nx, y=a0.y)]
+    else:
+        prev2 = pts[index - 2]
+        prev1 = pts[index - 1]
+        left = pts[: index - 1]
+        if in_kind == "h":
+            if abs(prev2.x - prev1.x) <= 1e-4:
+                left.append(Point(x=prev1.x, y=ny))
+            else:
+                left.append(prev1)
+                left.append(Point(x=prev1.x, y=ny))
+        else:
+            if abs(prev2.y - prev1.y) <= 1e-4:
+                left.append(Point(x=nx, y=prev1.y))
+            else:
+                left.append(prev1)
+                left.append(Point(x=nx, y=prev1.y))
+
+    if index + 1 == n - 1:
+        right = [Point(x=b0.x, y=ny) if out_kind == "h" else Point(x=nx, y=b0.y), b0]
+    else:
+        nxt1 = pts[index + 1]
+        nxt2 = pts[index + 2]
+        if out_kind == "h":
+            if abs(nxt1.x - nxt2.x) <= 1e-4:
+                right = [Point(x=nxt1.x, y=ny), *pts[index + 2 :]]
+            else:
+                right = [Point(x=nxt1.x, y=ny), nxt1, *pts[index + 2 :]]
+        else:
+            if abs(nxt1.y - nxt2.y) <= 1e-4:
+                right = [Point(x=nx, y=nxt1.y), *pts[index + 2 :]]
+            else:
+                right = [Point(x=nx, y=nxt1.y), nxt1, *pts[index + 2 :]]
+
+    out = [*left, Point(x=nx, y=ny), *right]
+    cleaned = _clean_ortho_points(out)
+    cleaned[0] = a0
+    cleaned[-1] = b0
+    return cleaned
 
 
 def _is_spike(a: Point, b: Point, c: Point) -> bool:

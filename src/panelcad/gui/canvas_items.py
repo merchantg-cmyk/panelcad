@@ -1300,6 +1300,92 @@ class WireItem(QGraphicsPathItem):
         event.accept()
 
 
+class WireHandleItem(QGraphicsItem):
+    """Draggable endpoint or interior corner handle for a selected wire."""
+
+    HIT = 2.8
+
+    def __init__(
+        self,
+        wire_id: str,
+        x: float,
+        y: float,
+        *,
+        kind: str,
+        which: str = "",
+        corner_index: int = -1,
+    ) -> None:
+        super().__init__()
+        self.wire_id = wire_id
+        self.kind = kind
+        self.which = which
+        self.corner_index = corner_index
+        self._hovered = False
+        self.setPos(float(x), float(y))
+        self.setZValue(34 if kind == "end" else 32)
+        self.setAcceptHoverEvents(True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
+        self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
+        if kind == "end":
+            self.setCursor(Qt.CursorShape.CrossCursor)
+            self.setToolTip(f"Drag {which} end of {wire_id} to a terminal or rail")
+        else:
+            self.setCursor(Qt.CursorShape.SizeAllCursor)
+            self.setToolTip(f"Drag corner of {wire_id} to reroute")
+
+    def _view(self) -> SchematicView | None:
+        scene = self.scene()
+        if scene is None or not scene.views():
+            return None
+        view = scene.views()[0]
+        return view if _is_schematic_view(view) else None
+
+    def hit_radius_scene(self) -> float:
+        return max(self.HIT, wire_hit_radius_scene(self._view()) * 0.75)
+
+    def boundingRect(self) -> QRectF:
+        pad = self.hit_radius_scene() + 0.5
+        return QRectF(-pad, -pad, pad * 2.0, pad * 2.0)
+
+    def shape(self) -> QPainterPath:
+        r = self.hit_radius_scene()
+        path = QPainterPath()
+        path.addEllipse(QRectF(-r, -r, r * 2.0, r * 2.0))
+        return path
+
+    def paint(
+        self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None
+    ) -> None:
+        del option, widget
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if self.kind == "end":
+            r = 1.9 if self._hovered else 1.55
+            fill = _qc("pin_hot") if self._hovered else _qc("highlight")
+            painter.setBrush(QBrush(fill))
+            painter.setPen(QPen(_qc("highlight_edge"), 0.35))
+            painter.drawEllipse(QPointF(0.0, 0.0), r, r)
+        else:
+            r = 1.65 if self._hovered else 1.35
+            fill = _qc("pin_unlocked_hot") if self._hovered else _qc("pin_unlocked")
+            painter.setBrush(QBrush(fill))
+            painter.setPen(QPen(_qc("highlight_edge"), 0.35))
+            painter.drawRect(QRectF(-r, -r, r * 2.0, r * 2.0))
+
+    def hoverEnterEvent(self, event) -> None:  # noqa: N802
+        self._hovered = True
+        self.update()
+        super().hoverEnterEvent(event)
+
+    def hoverLeaveEvent(self, event) -> None:  # noqa: N802
+        self._hovered = False
+        self.update()
+        super().hoverLeaveEvent(event)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        event.accept()
+
+
 class PhaseCalloutItem(QGraphicsItem):
     """Incoming 3-phase supply callout (L1, L2, L3) above an unwired line-side lead."""
 

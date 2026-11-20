@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections import OrderedDict
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, Qt, QTimer, Signal
@@ -12,6 +13,7 @@ from PySide6.QtGui import (
     QPen,
 )
 from PySide6.QtWidgets import (
+    QGraphicsEllipseItem,
     QGraphicsItem,
     QGraphicsLineItem,
     QGraphicsPathItem,
@@ -31,7 +33,7 @@ from panelcad.core.layout import (
     is_wire_by_wire_sheet,
 )
 from panelcad.core.models import PinOverride, infer_pin_side
-from panelcad.core.route import nearest_run, set_run_channel
+from panelcad.core.route import move_wire_corner, nearest_run, set_run_channel
 from panelcad.gui.canvas_items import (
     BOM_MIME as BOM_MIME,
     ComponentItem,
@@ -59,6 +61,7 @@ from panelcad.gui.canvas_items import (
     WIRE_HIT_MM as WIRE_HIT_MM,
     WIRE_HIT_PX as WIRE_HIT_PX,
     WireByWireSheetItem,
+    WireHandleItem,
     WireItem,
     XrefLabelItem,
     _SheetScene,
@@ -132,6 +135,15 @@ class SchematicView(QGraphicsView):
         self._pull_seg = -1
         self._pull_kind = ""
         self._pull_moved = False
+        self._corner_wire: WireItem | None = None
+        self._corner_pts: list[Point] | None = None
+        self._corner_index = -1
+        self._corner_moved = False
+        self._wire_end_drag: dict | None = None
+        self._wire_end_preview: QGraphicsPathItem | None = None
+        self._wire_end_snap: QGraphicsEllipseItem | None = None
+        self._wire_handles: list[WireHandleItem] = []
+        self._syncing_wire_handles = False
         # PySide destroys QGraphicsItems when the last Python wrapper is GC'd.
         # Scene.addItem is not enough — keep every Python-created item here.
         self._items: list[QGraphicsItem] = []
@@ -175,6 +187,7 @@ class SchematicView(QGraphicsView):
         self._fit_timer.setSingleShot(True)
         self._fit_timer.timeout.connect(self._fit_if_automatic)
         self.scene.selectionChanged.connect(self.selection_changed)
+        self.selection_changed.connect(self._sync_wire_handles)
         self.reload()
 
     def _add(self, item: QGraphicsItem) -> QGraphicsItem:
@@ -273,8 +286,10 @@ class SchematicView(QGraphicsView):
         """Drop a rubber-band so a parked sheet does not keep it."""
 
         self._clear_wire_hover()
+        self._cancel_wire_end_drag()
+        self._clear_wire_handles()
         self._wire_hit_scale = -1.0
-        for attr in ("_wire_preview", "_cloud_preview"):
+        for attr in ("_wire_preview", "_cloud_preview", "_wire_end_preview", "_wire_end_snap"):
             item = getattr(self, attr, None)
             if item is None:
                 continue
@@ -331,6 +346,7 @@ class SchematicView(QGraphicsView):
             slot.scene.clearSelection()
         finally:
             slot.scene.blockSignals(False)
+        self._clear_wire_handles()
         # The parked picture can still sit where a drag left it. The model wins.
         self._resync_items_from_model()
 
@@ -501,6 +517,14 @@ class SchematicView(QGraphicsView):
             items.clear()
         self._spare_scenes = []
         self._items.clear()
+        self._wire_handles.clear()
+        self._wire_end_drag = None
+        self._wire_end_preview = None
+        self._wire_end_snap = None
+        self._corner_wire = None
+        self._corner_pts = None
+        self._pull_wire = None
+        self._pull_pts = None
         self._wire_preview = None
         self._cloud_preview = None
         self._cloud_origin = None
@@ -522,10 +546,14 @@ class SchematicView(QGraphicsView):
 
     def _reload_sheet(self) -> None:
         self._clear_wire_hover()
+        self._cancel_wire_end_drag()
         self._wire_hit_scale = -1.0
         self.setBackgroundBrush(QBrush(_qc("paper")))
         self._items.clear()
+        self._wire_handles.clear()
         self._wire_preview = None
+        self._wire_end_preview = None
+        self._wire_end_snap = None
         self._cloud_preview = None
         self._cloud_origin = None
         self.scene.clear()
@@ -599,7 +627,9 @@ class SchematicView(QGraphicsView):
             extra = "  ·  CLOUD  drag a rectangle (Esc cancels)"
         elif self.wire_from:
             extra = f"  ·  wiring from {self.wire_from} — click or release on the other terminal or rail (Esc cancels)"
-        elif self._pull_wire is not None:
+        elif self._wire_end_drag is not None:
+            extra = "  ·  dragging wire end — drop on a valid pin or rail (Esc cancels)"
+        elif self._pull_wire is not None or self._corner_wire is not None:
             extra = "  ·  dragging wire — release to keep, Esc to cancel"
         if is_layout_sheet(sheet):
             return (
@@ -671,9 +701,10 @@ class SchematicView(QGraphicsView):
     def _redraw_wire_items(self) -> None:
         self._clear_wire_hover()
         self._wire_hit_scale = -1.0
+        self._wire_handles.clear()
         kept: list[QGraphicsItem] = []
         for item in self._items:
-            if isinstance(item, (WireItem, PhaseLeadItem, PhaseCalloutItem, RailJunctionItem)):
+            if isinstance(item, (WireItem, WireHandleItem, PhaseLeadItem, PhaseCalloutItem, RailJunctionItem)):
                 if item.scene() is self.scene:
                     self.scene.removeItem(item)
             else:
@@ -815,6 +846,7 @@ class SchematicView(QGraphicsView):
         for jx, jy in rail_landing_points(sheet, routes, self.session.project):
             self._add(RailJunctionItem(jx, jy))
         self._redraw_xref(ladder=elementary)
+        self._sync_wire_handles()
 
     def _redraw_xref(self, *, ladder: bool = False) -> None:
         kept: list[QGraphicsItem] = []
@@ -913,6 +945,11 @@ class SchematicView(QGraphicsView):
         self._pull_seg = -1
         self._pull_kind = ""
         self._pull_moved = False
+        self._corner_wire = None
+        self._corner_pts = None
+        self._corner_index = -1
+        self._corner_moved = False
+        self._cancel_wire_end_drag(resync=False)
         self._moved_since_press = False
         self._dragged_ids.clear()
         self.unsetCursor()
@@ -948,6 +985,8 @@ class SchematicView(QGraphicsView):
 
         if self._closing_gesture:
             return
+        if self._wire_end_drag is not None:
+            self._cancel_wire_end_drag()
         if not self._gesture_edit:
             # Flags cleared without closing the session command (sheet switch
             # used to do this). Abandon so the next edit can push again.
@@ -963,6 +1002,11 @@ class SchematicView(QGraphicsView):
     def _close_open_gesture_body(self) -> None:
         if not self.session.command_open():
             self._drop_gesture_flags()
+            return
+        if self._corner_wire is not None:
+            moved = self._corner_moved
+            self._commit_wire_corner_drag()
+            self._finish_gesture(moved=moved)
             return
         if self._pull_wire is not None:
             moved = self._pull_moved
@@ -1005,13 +1049,23 @@ class SchematicView(QGraphicsView):
         the move command here used to wipe the open undo step mid-drag.
         """
 
-        pulling = self._pull_wire is not None
+        end_dragging = self._wire_end_drag is not None
+        if end_dragging:
+            self._cancel_wire_end_drag()
+        pulling = self._pull_wire is not None or self._corner_wire is not None
         sliding = self._slide_pin is not None
-        # Only abandon pull / slide. A plain move keeps its open command.
+        # Only abandon pull / corner / slide. A plain move keeps its open command.
         if pulling or sliding:
+            dragged_wire_id = (
+                self._pull_wire.wire_id
+                if self._pull_wire is not None
+                else (self._corner_wire.wire_id if self._corner_wire is not None else "")
+            )
             self.drop_open_gesture()
             self._resync_items_from_model()
             self._redraw_wires()
+            if dragged_wire_id:
+                self._select_wire_item(dragged_wire_id)
         else:
             self._slide_pin = None
             self._slide_moved = False
@@ -1020,6 +1074,10 @@ class SchematicView(QGraphicsView):
             self._pull_seg = -1
             self._pull_kind = ""
             self._pull_moved = False
+            self._corner_wire = None
+            self._corner_pts = None
+            self._corner_index = -1
+            self._corner_moved = False
         self.wire_from = None
         self._wire_from_at = None
         self._wire_drag = False
@@ -1315,7 +1373,7 @@ class SchematicView(QGraphicsView):
             return
         self._wire_hit_scale = scale
         for item in self._items:
-            if isinstance(item, WireItem):
+            if isinstance(item, (WireItem, WireHandleItem)):
                 item.prepareGeometryChange()
                 item.update()
 
@@ -1349,9 +1407,11 @@ class SchematicView(QGraphicsView):
         return best
 
     def _hover_wire_at(self, view_pos) -> WireItem | None:
+        scene_pos = self.mapToScene(self._to_point(view_pos))
+        if self._wire_handle_at(view_pos, scene_pos) is not None:
+            return None
         if self._pin_at(view_pos) is not None:
             return None
-        scene_pos = self.mapToScene(self._to_point(view_pos))
         if self._in_title_block(scene_pos):
             return None
         wiring = self.mode == "wire" or self.wire_from is not None
@@ -1378,6 +1438,95 @@ class SchematicView(QGraphicsView):
         if item is not None:
             item.set_hovered(True)
 
+    def _wire_handle_at(self, view_pos, scene_pos: QPointF) -> WireHandleItem | None:
+        px, py = float(scene_pos.x()), float(scene_pos.y())
+        best: WireHandleItem | None = None
+        best_d = 1e9
+        for item in self.items(self._to_point(view_pos)):
+            if not isinstance(item, WireHandleItem) or not item.isVisible():
+                continue
+            d = math.hypot(px - float(item.pos().x()), py - float(item.pos().y()))
+            if best is None or d < best_d - 1e-6 or (abs(d - best_d) <= 1e-6 and item.zValue() > best.zValue()):
+                best = item
+                best_d = d
+        return best
+
+    def _clear_wire_handles(self) -> None:
+        handles = list(self._wire_handles)
+        self._wire_handles.clear()
+        for handle in handles:
+            if handle in self._items:
+                self._items.remove(handle)
+            try:
+                if handle.scene() is self.scene and self.scene is not None:
+                    self.scene.removeItem(handle)
+            except RuntimeError:
+                continue
+
+    def _sync_wire_handles(self) -> None:
+        if self._syncing_wire_handles or self.scene is None:
+            return
+        self._syncing_wire_handles = True
+        try:
+            self._clear_wire_handles()
+            try:
+                sheet = self.session.sheet()
+            except KeyError:
+                return
+            if is_layout_sheet(sheet) or sheet.kind == "terminal":
+                return
+            if self._wire_end_drag is not None:
+                return
+            if self._pull_wire is not None and self._pull_moved:
+                return
+            if self._corner_wire is not None and self._corner_moved:
+                return
+            selected = [
+                item
+                for item in self.scene.selectedItems()
+                if isinstance(item, WireItem) and item.wire_id and item.scene() is self.scene
+            ]
+            for wire_item in selected:
+                try:
+                    pts = self._wire_pts(wire_item.wire_id)
+                except (KeyError, ValueError, IndexError):
+                    continue
+                if len(pts) < 2:
+                    continue
+                specs: list[tuple[float, float, str, str, int]] = [
+                    (pts[0].x, pts[0].y, "end", "from", -1),
+                    (pts[-1].x, pts[-1].y, "end", "to", -1),
+                ]
+                for idx in range(1, len(pts) - 1):
+                    specs.append((pts[idx].x, pts[idx].y, "corner", "", idx))
+                for hx, hy, kind, which, cidx in specs:
+                    handle = WireHandleItem(
+                        wire_item.wire_id,
+                        hx,
+                        hy,
+                        kind=kind,
+                        which=which,
+                        corner_index=cidx,
+                    )
+                    self._wire_handles.append(handle)
+                    self._add(handle)
+        finally:
+            self._syncing_wire_handles = False
+
+    def _select_wire_item(self, wire_id: str) -> None:
+        if self.scene is None or not wire_id:
+            return
+        for item in self._items:
+            if isinstance(item, WireItem) and item.wire_id == wire_id and item.scene() is self.scene:
+                item.setSelected(True)
+                return
+
+    @staticmethod
+    def _pts_equal(a: list[Point], b: list[Point], tol: float = 1e-4) -> bool:
+        if len(a) != len(b):
+            return False
+        return all(abs(p.x - q.x) <= tol and abs(p.y - q.y) <= tol for p, q in zip(a, b))
+
     def _wire_pts(self, wire_id: str) -> list[Point]:
         wire = self.session.find_wire(wire_id=wire_id)
         return list(
@@ -1400,7 +1549,8 @@ class SchematicView(QGraphicsView):
             pts = self._wire_pts(item.wire_id)
         except (KeyError, ValueError, IndexError):
             return False
-        hit = nearest_run(pts, scene_pos.x(), scene_pos.y())
+        limit = max(4.0, wire_hit_radius_scene(self) + 0.5)
+        hit = nearest_run(pts, scene_pos.x(), scene_pos.y(), max_dist=limit)
         if hit is None:
             return False
         self._begin_gesture("pull wire")
@@ -1420,30 +1570,330 @@ class SchematicView(QGraphicsView):
             return
         channel = snap(scene_pos.y() if self._pull_kind == "h" else scene_pos.x())
         pts = set_run_channel(self._pull_pts, self._pull_seg, self._pull_kind, channel)
-        self._pull_moved = True
+        changed = not self._pts_equal(pts, self._pull_pts)
+        self._pull_moved = changed
+        if changed:
+            self._clear_wire_handles()
+        else:
+            self._sync_wire_handles()
         self._set_wire_item_path(self._pull_wire, pts)
         self._pull_wire._live_pts = pts  # type: ignore[attr-defined]
+
+    def _finalize_wire_route_drag(
+        self,
+        item: WireItem | None,
+        pts: list[Point] | None,
+        orig_pts: list[Point] | None,
+        moved: bool,
+        verb: str,
+    ) -> None:
+        self.unsetCursor()
+        if item is None or not item.wire_id:
+            return
+        if not moved or not pts or len(pts) < 2:
+            if orig_pts and len(orig_pts) >= 2:
+                self._set_wire_item_path(item, orig_pts)
+            self._sync_wire_handles()
+            self.status.emit(self._status_text())
+            return
+        wire_id = item.wire_id
+        self.session.set_wire_route(wire_id, pts[1:-1])
+        self._redraw_wires()
+        self._select_wire_item(wire_id)
+        self.project_changed.emit()
+        self.status.emit(f"{verb} wire {wire_id}  —  right-click to reset auto-route")
 
     def _commit_wire_pull(self) -> None:
         item = self._pull_wire
         pts = getattr(item, "_live_pts", None) if item is not None else None
+        orig_pts = self._pull_pts
         self._pull_wire = None
         self._pull_pts = None
         self._pull_seg = -1
         self._pull_kind = ""
         moved = self._pull_moved
         self._pull_moved = False
-        self.unsetCursor()
-        if item is None or not item.wire_id:
+        self._finalize_wire_route_drag(item, pts, orig_pts, moved, "pulled")
+
+    def _begin_wire_corner_drag(self, handle: WireHandleItem) -> bool:
+        if not handle.wire_id or is_layout_sheet(self.session.sheet()):
+            return False
+        wire_item = next(
+            (i for i in self._items if isinstance(i, WireItem) and i.wire_id == handle.wire_id),
+            None,
+        )
+        if wire_item is None:
+            return False
+        try:
+            pts = self._wire_pts(handle.wire_id)
+        except (KeyError, ValueError, IndexError):
+            return False
+        if handle.corner_index <= 0 or handle.corner_index >= len(pts) - 1:
+            return False
+        self._begin_gesture("pull wire")
+        self._corner_wire = wire_item
+        self._corner_pts = pts
+        self._corner_index = handle.corner_index
+        self._corner_moved = False
+        wire_item.setSelected(True)
+        self.setCursor(Qt.CursorShape.SizeAllCursor)
+        return True
+
+    def _update_wire_corner_drag(self, scene_pos: QPointF) -> None:
+        if self._corner_wire is None or not self._corner_pts:
             return
-        if not moved or not pts or len(pts) < 2:
+        nx = snap(scene_pos.x())
+        ny = snap(scene_pos.y())
+        pts = move_wire_corner(self._corner_pts, self._corner_index, nx, ny)
+        changed = not self._pts_equal(pts, self._corner_pts)
+        self._corner_moved = changed
+        if changed:
+            self._clear_wire_handles()
+        else:
+            self._sync_wire_handles()
+        self._set_wire_item_path(self._corner_wire, pts)
+        self._corner_wire._live_pts = pts  # type: ignore[attr-defined]
+
+    def _commit_wire_corner_drag(self) -> None:
+        item = self._corner_wire
+        pts = getattr(item, "_live_pts", None) if item is not None else None
+        orig_pts = self._corner_pts
+        self._corner_wire = None
+        self._corner_pts = None
+        self._corner_index = -1
+        moved = self._corner_moved
+        self._corner_moved = False
+        self._finalize_wire_route_drag(item, pts, orig_pts, moved, "rerouted")
+
+    def _clear_wire_end_visuals(self) -> None:
+        drag = self._wire_end_drag
+        if isinstance(drag, dict):
+            hot_pin = drag.get("hot_pin")
+            if hot_pin is not None:
+                try:
+                    if hot_pin.scene() is not None:
+                        hot_pin._hot = False
+                        hot_pin.update()
+                except RuntimeError:
+                    pass
+                drag["hot_pin"] = None
+        for attr in ("_wire_end_preview", "_wire_end_snap"):
+            item = getattr(self, attr, None)
+            if item is None:
+                continue
+            if item in self._items:
+                self._items.remove(item)
+            try:
+                if item.scene() is not None and self.scene is not None:
+                    self.scene.removeItem(item)
+            except RuntimeError:
+                pass
+            setattr(self, attr, None)
+
+    def _cancel_wire_end_drag(self, *, resync: bool = True) -> None:
+        drag = self._wire_end_drag
+        self._wire_end_drag = None
+        self._clear_wire_end_visuals()
+        self.unsetCursor()
+        if resync and drag is not None:
+            self._sync_wire_handles()
+            self.status.emit(self._status_text())
+
+    def _validate_wire_end_drop(
+        self, wire, which: str, pin: PinItem | None, rail
+    ) -> tuple[str | None, QPointF | None, str]:
+        if pin is not None:
+            target_ref = pin.ref()
+            snap_pt = pin.scenePos()
+        elif rail is not None:
+            target_ref = str(rail.name)
+            snap_pt = QPointF(float(rail.x), float(rail.y))
+        else:
+            return None, None, "drop onto a valid pin or rail"
+
+        new_from = target_ref if which == "from" else wire.frm
+        new_to = target_ref if which == "to" else wire.to
+        try:
+            self.session.validate_wire_endpoints(self.session.sheet(), new_from, new_to)
+        except (KeyError, ValueError) as exc:
+            return None, snap_pt, str(exc)
+        return target_ref, snap_pt, ""
+
+    @staticmethod
+    def _end_drag_moved(drag: dict, view_pos: QPointF, scene_pos: QPointF) -> bool:
+        if drag["moved"]:
+            return True
+        if (view_pos - drag["press_view_pos"]).manhattanLength() >= 4.0:
+            return True
+        return (
+            math.hypot(
+                scene_pos.x() - drag["start_pos"].x(),
+                scene_pos.y() - drag["start_pos"].y(),
+            )
+            >= 1.0
+        )
+
+    def _begin_wire_end_drag(
+        self, handle: WireHandleItem, view_pos: QPointF, scene_pos: QPointF
+    ) -> bool:
+        if not handle.wire_id or handle.which not in ("from", "to"):
+            return False
+        if is_layout_sheet(self.session.sheet()):
+            return False
+        try:
+            pts = self._wire_pts(handle.wire_id)
+        except (KeyError, ValueError, IndexError):
+            return False
+        if len(pts) < 2:
+            return False
+        anchor_pt = pts[-1] if handle.which == "from" else pts[0]
+        start_pt = pts[0] if handle.which == "from" else pts[-1]
+        self._wire_end_drag = {
+            "wire_id": handle.wire_id,
+            "which": handle.which,
+            "anchor": QPointF(anchor_pt.x, anchor_pt.y),
+            "start_pos": QPointF(start_pt.x, start_pt.y),
+            "press_view_pos": QPointF(view_pos),
+            "moved": False,
+            "target_ref": None,
+            "snap_at": None,
+            "snap_is_rail": False,
+            "invalid_msg": "",
+            "hot_pin": None,
+        }
+        self.setCursor(Qt.CursorShape.CrossCursor)
+        return True
+
+    def _update_wire_end_drag(self, view_pos: QPointF, scene_pos: QPointF) -> None:
+        drag = self._wire_end_drag
+        if drag is None or self.scene is None:
+            return
+        if not drag["moved"]:
+            if not self._end_drag_moved(drag, view_pos, scene_pos):
+                return
+            drag["moved"] = True
+            self._clear_wire_handles()
+
+        try:
+            wire = self.session.find_wire(wire_id=drag["wire_id"])
+        except KeyError:
+            self._cancel_wire_end_drag()
+            return
+
+        pin = self._pin_at(view_pos)
+        rail = None if pin is not None else self._rail_at(scene_pos)
+        target_ref, snap_pt, err = self._validate_wire_end_drop(wire, drag["which"], pin, rail)
+
+        old_hot = drag.get("hot_pin")
+        new_hot = pin if target_ref is not None and pin is not None else None
+        if old_hot is not None and old_hot is not new_hot:
+            try:
+                if old_hot.scene() is not None:
+                    old_hot._hot = False
+                    old_hot.update()
+            except RuntimeError:
+                pass
+        if new_hot is not None:
+            new_hot._hot = True
+            new_hot.update()
+        drag["hot_pin"] = new_hot
+
+        drag["target_ref"] = target_ref
+        drag["snap_at"] = snap_pt
+        drag["snap_is_rail"] = bool(target_ref is not None and pin is None and rail is not None)
+        drag["invalid_msg"] = err
+
+        anchor: QPointF = drag["anchor"]
+        end_pt = snap_pt if snap_pt is not None else scene_pos
+        path = QPainterPath()
+        path.moveTo(anchor.x(), anchor.y())
+        mid = (anchor.x() + end_pt.x()) / 2.0
+        path.lineTo(mid, anchor.y())
+        path.lineTo(mid, end_pt.y())
+        path.lineTo(end_pt.x(), end_pt.y())
+        invalid = target_ref is None and snap_pt is not None
+        pen_color = _qc("finding_error") if invalid else _qc("wire_preview")
+        if self._wire_end_preview is None:
+            preview = QGraphicsPathItem()
+            preview.setZValue(31)
+            preview.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            preview.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+            self._add(preview)
+            self._wire_end_preview = preview
+        self._wire_end_preview.setPen(QPen(pen_color, 0.65, Qt.PenStyle.DashLine))
+        self._wire_end_preview.setPath(path)
+
+        if target_ref is not None and snap_pt is not None:
+            if self._wire_end_snap is None:
+                ring = QGraphicsEllipseItem(-3.2, -3.2, 6.4, 6.4)
+                ring.setZValue(33)
+                ring.setPen(QPen(_qc("highlight"), 0.7))
+                ring.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+                ring.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+                ring.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+                self._add(ring)
+                self._wire_end_snap = ring
+            self._wire_end_snap.setPos(snap_pt)
+            self._wire_end_snap.setVisible(True)
+            self.status.emit(f"reconnect {wire.id} {drag['which']} → {target_ref}")
+        else:
+            if self._wire_end_snap is not None:
+                self._wire_end_snap.setVisible(False)
+            self.status.emit(err or "drop onto a valid pin or rail (Esc cancels)")
+
+    def _commit_wire_end_drag(self, view_pos: QPointF, scene_pos: QPointF) -> None:
+        drag = self._wire_end_drag
+        if drag is None:
+            return
+        if not self._end_drag_moved(drag, view_pos, scene_pos):
+            self._cancel_wire_end_drag()
+            return
+        self._update_wire_end_drag(view_pos, scene_pos)
+        drag = self._wire_end_drag
+        if drag is None:
+            return
+        wire_id = str(drag["wire_id"])
+        which = str(drag["which"])
+        target_ref = drag.get("target_ref")
+        snap_at = drag.get("snap_at")
+        snap_is_rail = bool(drag.get("snap_is_rail"))
+        invalid_msg = str(drag.get("invalid_msg") or "")
+
+        self._wire_end_drag = None
+        self._clear_wire_end_visuals()
+        self.unsetCursor()
+
+        if not target_ref:
+            self._sync_wire_handles()
+            self.status.emit(invalid_msg or "drop refused — not a valid pin or rail")
+            return
+        try:
+            wire = self.session.find_wire(wire_id=wire_id)
+        except KeyError:
+            self._sync_wire_handles()
+            return
+        current_ref = wire.frm if which == "from" else wire.to
+        if self._ends_match(target_ref, current_ref) and not snap_is_rail:
+            self._sync_wire_handles()
             self.status.emit(self._status_text())
             return
-        interior = pts[1:-1]
-        self.session.set_wire_route(item.wire_id, interior)
+
+        kwargs: dict = {}
+        if snap_is_rail and snap_at is not None:
+            kwargs["from_at" if which == "from" else "to_at"] = (
+                float(snap_at.x()),
+                float(snap_at.y()),
+            )
+        try:
+            self.session.reconnect_wire(wire_id, which, target_ref, **kwargs)
+        except (KeyError, ValueError) as exc:
+            self._sync_wire_handles()
+            self.status.emit(str(exc))
+            return
         self._redraw_wires()
+        self._select_wire_item(wire_id)
         self.project_changed.emit()
-        self.status.emit(f"pulled wire {item.wire_id}  —  right-click to reset auto-route")
+        self.status.emit(f"reconnected {wire_id} ({which}) → {target_ref}")
 
     def _in_title_block(self, scene_pos: QPointF) -> bool:
         x, y, w, h = title_block_rect(self.session.sheet())
@@ -1524,7 +1974,24 @@ class SchematicView(QGraphicsView):
             event.accept()
             return
 
-        pin = None if is_layout_sheet(self.session.sheet()) else self._pin_at(event.position())
+        layout_sheet = is_layout_sheet(self.session.sheet())
+        if self._wire_end_drag is not None:
+            self._cancel_wire_end_drag()
+        handle = (
+            None
+            if layout_sheet or self.wire_from is not None or self.mode in ("place", "cloud", "zip_tie")
+            else self._wire_handle_at(event.position(), scene_pos)
+        )
+        if handle is not None:
+            self.setDragMode(QGraphicsView.DragMode.NoDrag)
+            if handle.kind == "end" and self._begin_wire_end_drag(handle, event.position(), scene_pos):
+                event.accept()
+                return
+            if handle.kind == "corner" and self._begin_wire_corner_drag(handle):
+                event.accept()
+                return
+
+        pin = None if layout_sheet else self._pin_at(event.position())
         # Rails are wire ends only while the Wire tool is on, or a wire is
         # already started. Select and Place keep the click they had before.
         wiring = self.mode == "wire" or self.wire_from is not None
@@ -1569,8 +2036,9 @@ class SchematicView(QGraphicsView):
 
         if wire is not None:
             self.setDragMode(QGraphicsView.DragMode.NoDrag)
-            self.scene.clearSelection()
-            wire.setSelected(True)
+            if not wire.isSelected() or len(self.scene.selectedItems()) != 1:
+                self.scene.clearSelection()
+                wire.setSelected(True)
             if self._begin_wire_pull(wire, scene_pos):
                 cap = f"  [{wire._label}]" if wire._label else ""
                 self.status.emit(f"wire {wire.wire_id}{cap}  —  drag to pull, right-click to label or reset")
@@ -1614,6 +2082,14 @@ class SchematicView(QGraphicsView):
             return
         if self._slide_pin is not None:
             self._slide_pin_to(event)
+            event.accept()
+            return
+        if self._wire_end_drag is not None:
+            self._update_wire_end_drag(event.position(), self.mapToScene(event.position().toPoint()))
+            event.accept()
+            return
+        if self._corner_wire is not None:
+            self._update_wire_corner_drag(self.mapToScene(event.position().toPoint()))
             event.accept()
             return
         if self._pull_wire is not None:
@@ -1732,10 +2208,26 @@ class SchematicView(QGraphicsView):
             self.setDragMode(QGraphicsView.DragMode.NoDrag)
             event.accept()
             return
+        if self._wire_end_drag is not None and event.button() == Qt.MouseButton.LeftButton:
+            self._commit_wire_end_drag(event.position(), self.mapToScene(event.position().toPoint()))
+            self._left_press_pos = None
+            self._left_select_drag = False
+            event.accept()
+            return
+        if self._corner_wire is not None and event.button() == Qt.MouseButton.LeftButton:
+            moved = self._corner_moved
+            self._commit_wire_corner_drag()
+            self._finish_gesture(moved=moved)
+            self._left_press_pos = None
+            self._left_select_drag = False
+            event.accept()
+            return
         if self._pull_wire is not None and event.button() == Qt.MouseButton.LeftButton:
             moved = self._pull_moved
             self._commit_wire_pull()
             self._finish_gesture(moved=moved)
+            self._left_press_pos = None
+            self._left_select_drag = False
             event.accept()
             return
         if self._slide_pin is not None and event.button() == Qt.MouseButton.LeftButton:
@@ -2356,6 +2848,8 @@ class SchematicView(QGraphicsView):
             return
         self.mode = "wire"
         self.place_library_id = None
+        if self.scene is not None:
+            self.scene.clearSelection()
         self._apply_pin_mode()
         self.setCursor(Qt.CursorShape.CrossCursor)
         self.status.emit("hover a terminal or a rail, then click or drag to the next one")
