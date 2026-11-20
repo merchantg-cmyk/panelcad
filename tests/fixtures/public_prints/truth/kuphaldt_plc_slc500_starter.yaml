@@ -10,7 +10,8 @@ devices:
   - F5
   - F6
   - F7
-wire_numbers:
+wire_numbers: []
+terminal_labels:
   - "L1"
   - "L2/N"
   - "H1"
@@ -22,4 +23,4 @@ wire_numbers:
   - "T1"
   - "T2"
   - "T3"
-notes: "SLC 500 I/O and 480 VAC motor starter pictorial wiring with fuses F1-F7."
+notes: "SLC 500 I/O and 480 VAC motor starter pictorial wiring with fuses F1-F7 and power/motor/transformer terminal labels."

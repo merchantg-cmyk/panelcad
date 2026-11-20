@@ -130,6 +130,7 @@ def degrade(image: Any, source_id: str, variant: dict[str, Any]) -> tuple[Any, d
     if kind == "phone":
         return _phone(image), {"format": "JPEG", "dpi": (72, 72), "quality": 72, "optimize": True}
     if kind == "rot90":
+        # PIL ROTATE_270 rotates 90 degrees clockwise (PIL rotation constants are counter-clockwise).
         return image.transpose(Image.Transpose.ROTATE_270), save
     if kind == "rot180":
         return image.transpose(Image.Transpose.ROTATE_180), save
@@ -424,12 +425,35 @@ def score_variant(source_id: str, variant_id: str, *, workspace: Path, mode: str
     from panelcad.core.ansi_drafting import ansi_drafting_issues
     from panelcad.importer.pipeline import EmptyImport, ImportJob
 
-    truth = json.loads((FIXTURE_ROOT / "truth" / f"{source_id}.json").read_text(encoding="utf-8"))
-    image_path = _fixture_path(source_id, variant_id)
-    row: dict[str, Any] = {
+    truth_path = FIXTURE_ROOT / "truth" / f"{source_id}.json"
+    if not truth_path.is_file():
+        row: dict[str, Any] = {
+            "source": source_id,
+            "variant": variant_id,
+            "image": "",
+            "bytes": 0,
+            "mode": mode,
+        }
+        row.update(_zero(f"FileNotFoundError: missing truth {truth_path}"))
+        return row
+    truth = json.loads(truth_path.read_text(encoding="utf-8"))
+    try:
+        image_path = _fixture_path(source_id, variant_id)
+    except FileNotFoundError as exc:
+        row = {
+            "source": source_id,
+            "variant": variant_id,
+            "image": "",
+            "bytes": 0,
+            "mode": mode,
+        }
+        row.update(_zero(f"FileNotFoundError: {exc}"))
+        return row
+    rel_image = image_path.relative_to(ROOT) if image_path.is_relative_to(ROOT) else image_path
+    row = {
         "source": source_id,
         "variant": variant_id,
-        "image": str(image_path.relative_to(ROOT)),
+        "image": str(rel_image),
         "bytes": image_path.stat().st_size,
         "mode": mode,
     }

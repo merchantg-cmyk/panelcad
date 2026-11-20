@@ -47,6 +47,7 @@ _NEW_SCAN_LADDER_VARIANTS = (
     "two_up",
 )
 _BASELINE_RECALL_SOFT_BAR = 0.50
+_BASELINE_PRECISION_SOFT_BAR = 0.50
 
 
 def _load_manifest() -> dict[str, Any]:
@@ -56,10 +57,15 @@ def _load_manifest() -> dict[str, Any]:
 
 
 def _load_truth(sheet: dict[str, Any]) -> dict[str, Any]:
-    rel = str(sheet.get("truth_file") or "")
+    sheet_id = str(sheet.get("id") or "<unknown>")
+    rel = str(sheet.get("truth_file") or "").strip()
+    if not rel:
+        raise ValueError(f"Sheet {sheet_id!r} has has_truth=True but no truth_file configured")
     path = PUBLIC_DIR / rel
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing truth_file for sheet {sheet_id!r}: {path}")
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    assert isinstance(data, dict)
+    assert isinstance(data, dict), f"Truth file for {sheet_id!r} must be a YAML mapping: {path}"
     return data
 
 
@@ -79,12 +85,13 @@ def _ocr_available() -> bool:
 
 
 def _norm_token(value: Any) -> str:
-    return " ".join(str(value or "").strip().upper().split())
+    # Strip all internal whitespace so e.g. "FU 4" matches "FU4".
+    return "".join(str(value or "").upper().split())
 
 
 def _prf(truth_items: set[str], found_items: set[str]) -> tuple[float | None, float | None, int, int, int]:
     matched = len(truth_items & found_items)
-    precision = (matched / len(found_items)) if found_items else (None if truth_items else 1.0)
+    precision = (matched / len(found_items)) if found_items else None
     recall = (matched / len(truth_items)) if truth_items else None
     return precision, recall, matched, len(truth_items), len(found_items)
 
@@ -113,10 +120,15 @@ def _evaluate_sheet(sheet: dict[str, Any], work_dir: Path) -> dict[str, Any]:
         "raster_wires_count": 0,
         "truth_devices": None,
         "matched_devices": None,
+        "extra_devices": None,
+        "extra_device_tags": [],
+        "missing_device_tags": [],
         "device_precision": None,
         "device_recall": None,
         "truth_wires": None,
         "matched_wires": None,
+        "extra_wires": None,
+        "extra_wire_numbers": [],
         "wire_precision": None,
         "wire_recall": None,
     }
@@ -176,14 +188,22 @@ def _evaluate_sheet(sheet: dict[str, Any], work_dir: Path) -> dict[str, Any]:
         truth_wires = {_norm_token(item) for item in (truth.get("wire_numbers") or []) if _norm_token(item)}
         d_prec, d_rec, d_match, d_truth, _ = _prf(truth_tags, found_tags)
         w_prec, w_rec, w_match, w_truth, _ = _prf(truth_wires, found_wires)
+        extra_device_tags = sorted(found_tags - truth_tags)
+        missing_device_tags = sorted(truth_tags - found_tags)
+        extra_wire_numbers = sorted(found_wires - truth_wires)
         row.update(
             {
                 "truth_devices": d_truth,
                 "matched_devices": d_match,
+                "extra_devices": len(extra_device_tags),
+                "extra_device_tags": extra_device_tags,
+                "missing_device_tags": missing_device_tags,
                 "device_precision": round(d_prec, 4) if d_prec is not None else None,
                 "device_recall": round(d_rec, 4) if d_rec is not None else None,
                 "truth_wires": w_truth,
                 "matched_wires": w_match,
+                "extra_wires": len(extra_wire_numbers),
+                "extra_wire_numbers": extra_wire_numbers,
                 "wire_precision": round(w_prec, 4) if w_prec is not None else None,
                 "wire_recall": round(w_rec, 4) if w_rec is not None else None,
             }
@@ -204,7 +224,8 @@ def write_baseline_scorecard() -> dict[str, Any]:
             rows.append(row)
             print(
                 f"  -> status={row['status']} dev={row['devices_found']} "
-                f"wire={row['wires_found']} d_rec={row['device_recall']} d_prec={row['device_precision']}",
+                f"extra={row['extra_devices']} wire={row['wires_found']} "
+                f"d_rec={row['device_recall']} d_prec={row['device_precision']}",
                 flush=True,
             )
 
@@ -247,19 +268,20 @@ def write_baseline_scorecard() -> dict[str, Any]:
     md_lines = [
         "# Public Prints Baseline Scorecard",
         "",
-        f"- **DPI:** 150",
+        "- **DPI:** 150",
         f"- **Backend:** `raster` (`{active_backend()}` OCR)",
         f"- **Sheets:** {payload['total_sheets']} total ({payload['truth_sheets']} with ground truth, {payload['smoke_only_sheets']} smoke-only)",
         f"- **Outcomes:** {payload['built_count']} built, {payload['empty_count']} empty (`EmptyImport`), {payload['error_count']} errors",
         f"- **Mean Device Recall (truth sheets):** {_pct(avg_dev_recall)}",
         f"- **Mean Device Precision (truth sheets):** {_pct(avg_dev_prec)}",
-        f"- **Mean Wire Recall (truth sheets):** {_pct(avg_wire_recall)}",
+        f"- **Mean Wire Recall (truth sheets with wire numbers):** {_pct(avg_wire_recall)}",
         "",
-        "| sheet_id | standard | kind | truth | status | dev_found | dev_matched | wire_found | wire_matched | dev_prec | dev_rec | wire_prec | wire_rec |",
-        "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| sheet_id | standard | kind | truth | status | dev_found | dev_matched | dev_extra | wire_found | wire_matched | dev_prec | dev_rec | wire_prec | wire_rec |",
+        "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for r in rows:
         dev_match = f"{r['matched_devices']}/{r['truth_devices']}" if r["truth_devices"] is not None else "-"
+        dev_extra = str(r["extra_devices"]) if r["extra_devices"] is not None else "-"
         wire_match = (
             f"{r['matched_wires']}/{r['truth_wires']}"
             if r["truth_wires"] is not None and r["truth_wires"] > 0
@@ -267,7 +289,7 @@ def write_baseline_scorecard() -> dict[str, Any]:
         )
         md_lines.append(
             f"| {r['sheet_id']} | {r['standard']} | {r['kind']} | {r['truth_mode']} | {r['status']} | "
-            f"{r['devices_found']} | {dev_match} | {r['wires_found']} | {wire_match} | "
+            f"{r['devices_found']} | {dev_match} | {dev_extra} | {r['wires_found']} | {wire_match} | "
             f"{_pct(r['device_precision'])} | {_pct(r['device_recall'])} | "
             f"{_pct(r['wire_precision'])} | {_pct(r['wire_recall'])} |"
         )
@@ -286,28 +308,33 @@ def test_manifest_and_licenses_cover_all_public_sources() -> None:
     assert manifest.get("schema_version") == 1
     sources = manifest.get("sources") or []
     sheets = manifest.get("sheets") or []
-    assert len(sources) == 10
-    assert len(sheets) >= 10
+    assert len(sources) > 0
+    assert len(sheets) >= len(sources)
 
     licenses_text = LICENSES_PATH.read_text(encoding="utf-8")
-    assert "MIT License" in licenses_text
-    assert "Copyright (c) 2026 Khaled Ghanem" in licenses_text
-    assert "Permission is hereby granted, free of charge" in licenses_text
+    assert "https://creativecommons.org/licenses/by/4.0/" in licenses_text
+    assert "https://creativecommons.org/licenses/by-sa/3.0/" in licenses_text
 
     source_ids: set[str] = set()
+    pages_by_source: dict[str, list[int]] = {}
     for src in sources:
         sid = str(src["id"])
         assert sid not in source_ids
         source_ids.add(sid)
-        for field in ("title", "author", "url", "license", "style", "source_type"):
+        for field in ("title", "author", "url", "license", "license_url", "style", "source_type"):
             assert str(src.get(field) or "").strip(), f"{sid} missing {field}"
         assert sid in licenses_text, f"{sid} missing from LICENSES.md"
         assert str(src["url"]) in licenses_text, f"{sid} URL missing from LICENSES.md"
         assert str(src["author"]) in licenses_text, f"{sid} author missing from LICENSES.md"
         assert str(src["license"]) in licenses_text, f"{sid} license missing from LICENSES.md"
+        assert str(src["license_url"]) in licenses_text, f"{sid} license URL missing from LICENSES.md"
+        pages_by_source[sid] = sorted(int(p) for p in (src.get("pages_used") or []))
 
     represented = {str(sheet["source_id"]) for sheet in sheets}
     assert represented == source_ids
+    for sid, expected_pages in pages_by_source.items():
+        actual_pages = sorted(int(sheet["page"]) for sheet in sheets if str(sheet["source_id"]) == sid)
+        assert actual_pages == expected_pages, (sid, actual_pages, expected_pages)
 
 
 def test_every_sheet_has_300dpi_and_150dpi_images_and_valid_truth() -> None:
@@ -347,15 +374,32 @@ def test_every_sheet_has_300dpi_and_150dpi_images_and_valid_truth() -> None:
             assert truth.get("source_id") == sheet["source_id"]
             devices = truth.get("devices")
             wires = truth.get("wire_numbers")
+            terminals = truth.get("terminal_labels")
             assert isinstance(devices, list) and len(devices) > 0
             assert isinstance(wires, list)
-            for item in devices + wires:
+            if terminals is not None:
+                assert isinstance(terminals, list)
+            for item in devices + wires + (terminals or []):
                 val = str(item or "").strip()
                 assert val and val != "?" and not val.startswith("?"), (sid, val)
         else:
             assert sheet.get("truth_mode") == "smoke_only"
             assert not sheet.get("truth_file")
             assert str(sheet.get("notes") or "").strip()
+
+
+def test_truth_and_scoring_helpers() -> None:
+    assert _norm_token("FU 4") == _norm_token("FU4") == "FU4"
+    assert _norm_token("  fu\t1-3 ") == "FU1-3"
+    assert _prf(set(), set()) == (None, None, 0, 0, 0)
+    assert _prf({"M1"}, set()) == (None, 0.0, 0, 1, 0)
+    assert _prf(set(), {"M1"}) == (0.0, None, 0, 0, 1)
+    assert _prf({"M1", "FU4"}, {"M1", "FU4", "BOGUS"}) == (pytest.approx(2 / 3), 1.0, 2, 2, 3)
+
+    with pytest.raises(ValueError, match="no truth_file configured"):
+        _load_truth({"id": "missing_entry", "truth_file": None})
+    with pytest.raises(FileNotFoundError, match="does_not_exist.yaml"):
+        _load_truth({"id": "missing_path", "truth_file": "truth/does_not_exist.yaml"})
 
 
 def test_no_windows_user_paths_or_pii_in_public_fixtures() -> None:
@@ -382,6 +426,9 @@ def test_baseline_scorecard_files_are_valid() -> None:
         assert row["status"] in {"built", "empty", "error"}
         assert isinstance(row["devices_found"], int)
         assert isinstance(row["wires_found"], int)
+        if row["has_truth"]:
+            assert isinstance(row["extra_devices"], int)
+            assert isinstance(row["extra_device_tags"], list)
         assert str(row["sheet_id"]) in md_text
 
 
@@ -400,7 +447,7 @@ def test_scan_ladder_new_degradations() -> None:
 
     sample = Image.new("RGB", (600, 400), (255, 255, 255))
     draw = ImageDraw.Draw(sample)
-    # Outer border 8 px inside sheet (< 3.2% crop of 19x13 px) + asymmetric mark in top-left.
+    # Outer border at 8 px inside sheet (< 3.2% crop of dx=19 px, dy=13 px) + interior marks.
     draw.rectangle((8, 8, 591, 391), outline=(0, 0, 0), width=3)
     draw.rectangle((48, 36, 130, 88), fill=(0, 0, 0))
     draw.line((80, 200, 520, 200), fill=(0, 0, 0), width=3)
@@ -426,14 +473,26 @@ def test_scan_ladder_new_degradations() -> None:
     assert int(low_arr.min()) >= 140
     assert 30 <= int(low_arr.max()) - int(low_arr.min()) <= 120
 
+    sample_arr = np.asarray(sample.convert("L"))
+    # Confirm the 8 px outer border exists on all four edges of the source image before cropping.
+    assert int((sample_arr[:20, :] < 128).sum()) > 1000
+    assert int((sample_arr[-20:, :] < 128).sum()) > 1000
+    assert int((sample_arr[:, :20] < 128).sum()) > 500
+    assert int((sample_arr[:, -20:] < 128).sum()) > 500
+
     crop_img, crop_opts = ladder.degrade(sample, "schematic", by_id["cropped_edge"])
     assert crop_opts["format"] == "PNG"
     assert crop_opts["dpi"] == (200, 200)
-    assert crop_img.width < sample.width and crop_img.height < sample.height
+    dx, dy = int(round(sample.width * 0.032)), int(round(sample.height * 0.032))
+    assert crop_img.size == (sample.width - 2 * dx, sample.height - 2 * dy)
     crop_arr = np.asarray(crop_img.convert("L"))
-    # The outer border at 12 px is clipped, while the interior line at y=200 stays intact.
-    assert int((crop_arr[0, :] < 128).sum()) < 20
-    assert int((crop_arr < 128).sum()) > 500
+    # The entire 8 px outer border was clipped off on all four edges; interior marks survive.
+    assert int((crop_arr[:20, :] < 128).sum()) == 0
+    assert int((crop_arr[-20:, :] < 128).sum()) == 0
+    assert int((crop_arr[:, :20] < 128).sum()) == 0
+    assert int((crop_arr[:, -20:] < 128).sum()) == 0
+    # Interior horizontal line at y=200 shifted to y=200-dy remains intact.
+    assert int((crop_arr[200 - dy, 80 - dx : 520 - dx] < 128).sum()) > 400
 
     two_img, two_opts = ladder.degrade(sample, "schematic", by_id["two_up"])
     assert two_opts["format"] == "PNG"
@@ -448,20 +507,80 @@ def test_scan_ladder_new_degradations() -> None:
 
 
 def test_scan_ladder_generate_includes_new_variants(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    pytest.importorskip("PySide6.QtWidgets")
     ladder = _load_scan_ladder_module()
     dest_root = tmp_path / "scan_ladder"
     monkeypatch.setattr(ladder, "FIXTURE_ROOT", dest_root)
     monkeypatch.setattr(ladder, "SOURCES", (ladder.SOURCES[0],))
-    ladder.generate()
+    try:
+        ladder.generate()
+    except (ImportError, OSError, RuntimeError) as exc:
+        if any(tok in str(exc).lower() for tok in ("qt", "pyside6", "display", "xcb", "libgl")):
+            pytest.skip(f"Qt unavailable for scan_ladder.generate(): {exc}")
+        raise
 
     manifest = json.loads((dest_root / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["sources"] == ["schematic"]
-    for vid in _ORIGINAL_SCAN_LADDER_VARIANTS + _NEW_SCAN_LADDER_VARIANTS:
-        assert vid in manifest["variants"]
+    all_variants = _ORIGINAL_SCAN_LADDER_VARIANTS + _NEW_SCAN_LADDER_VARIANTS
+    assert manifest["variants"] == list(all_variants)
     assert (dest_root / "truth" / "schematic.json").is_file()
-    for vid in _NEW_SCAN_LADDER_VARIANTS:
-        out = dest_root / "schematic" / f"{vid}.png"
+    expected_suffix = {
+        item["id"]: ".jpg" if item["kind"] in {"jpeg", "phone"} else ".png"
+        for item in ladder.VARIANTS
+    }
+    for vid in all_variants:
+        out = dest_root / "schematic" / f"{vid}{expected_suffix[vid]}"
         assert out.is_file() and out.stat().st_size > 0, out
+
+
+def test_scan_ladder_score_handles_missing_variants_and_external_fixture_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    ladder = _load_scan_ladder_module()
+    ext_root = tmp_path / "older_scan_ladder"
+    (ext_root / "truth").mkdir(parents=True)
+    (ext_root / "schematic").mkdir(parents=True)
+    truth = {
+        "id": "schematic",
+        "kind": "schematic",
+        "standard": "NEMA/ANSI",
+        "devices": ["CR1"],
+        "offpage": [],
+        "wire_numbers": [],
+        "edges": [],
+        "texts": [],
+    }
+    (ext_root / "truth" / "schematic.json").write_text(json.dumps(truth), encoding="utf-8")
+    # Populate only the original 10 variants; omit the 5 new variants to mimic an older folder.
+    blank = Image.new("RGB", (120, 80), (255, 255, 255))
+    for vid in _ORIGINAL_SCAN_LADDER_VARIANTS:
+        suffix = ".jpg" if vid in {"jpeg", "phone"} else ".png"
+        blank.save(ext_root / "schematic" / f"{vid}{suffix}")
+
+    monkeypatch.setattr(ladder, "FIXTURE_ROOT", ext_root)
+    monkeypatch.setattr(ladder, "RUN_ROOT", tmp_path / "runs")
+
+    # Missing new variant returns an error row rather than raising FileNotFoundError.
+    missing_row = ladder.score_variant("schematic", "rot90", workspace=tmp_path / "ws_rot90")
+    assert missing_row["source"] == "schematic"
+    assert missing_row["variant"] == "rot90"
+    assert "FileNotFoundError" in missing_row["error"]
+    assert missing_row["devices"] == 0.0
+
+    # Present variant outside ROOT does not crash image_path.relative_to(ROOT).
+    from panelcad.importer import pipeline as pipeline_mod
+
+    def _fake_start(*_args: Any, **_kwargs: Any) -> Any:
+        raise pipeline_mod.EmptyImport("mock empty for path check")
+
+    monkeypatch.setattr(pipeline_mod.ImportJob, "start", staticmethod(_fake_start))
+    rows = ladder.score("partial", only="schematic")
+    assert len(rows) == len(_ORIGINAL_SCAN_LADDER_VARIANTS) + len(_NEW_SCAN_LADDER_VARIANTS)
+    by_var = {r["variant"]: r for r in rows}
+    assert by_var["clean_300"]["image"] == str(ext_root / "schematic" / "clean_300.png")
+    assert "mock empty" in by_var["clean_300"]["error"]
+    for vid in _NEW_SCAN_LADDER_VARIANTS:
+        assert "FileNotFoundError" in by_var[vid]["error"], vid
 
 
 @pytest.fixture(scope="module")
@@ -490,12 +609,24 @@ def test_public_print_baseline_truth_xfail(sheet_id: str, imported_public_prints
     assert row["status"] in {"built", "empty"}, row["error"]
     rec = float(row["device_recall"] or 0.0)
     prec = row["device_precision"]
+    extra_count = int(row["extra_devices"] or 0)
+    extra_sample = (row.get("extra_device_tags") or [])[:8]
     w_rec = row["wire_recall"]
-    if row["status"] == "empty" or rec < _BASELINE_RECALL_SOFT_BAR:
+    w_prec = row["wire_precision"]
+    w_extra = int(row["extra_wires"] or 0)
+    below_bar = (
+        row["status"] == "empty"
+        or rec < _BASELINE_RECALL_SOFT_BAR
+        or prec is None
+        or float(prec) < _BASELINE_PRECISION_SOFT_BAR
+    )
+    if below_bar:
         pytest.xfail(
             f"{sheet_id} baseline: status={row['status']} dev={row['matched_devices']}/{row['truth_devices']} "
-            f"(found={row['devices_found']}, rec={rec:.3f}, prec={prec}) "
-            f"wire={row['matched_wires']}/{row['truth_wires']} (found={row['wires_found']}, rec={w_rec})"
+            f"(found={row['devices_found']}, extra={extra_count}, rec={rec:.3f}, prec={prec}, "
+            f"extra_tags={extra_sample}) "
+            f"wire={row['matched_wires']}/{row['truth_wires']} "
+            f"(found={row['wires_found']}, extra={w_extra}, rec={w_rec}, prec={w_prec})"
         )
 
 

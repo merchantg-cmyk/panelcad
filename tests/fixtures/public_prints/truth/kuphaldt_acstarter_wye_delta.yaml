@@ -7,7 +7,8 @@ devices:
   - M2
   - OL1
   - TD1
-wire_numbers:
+wire_numbers: []
+terminal_labels:
   - "L1"
   - "L2"
   - "L3"
