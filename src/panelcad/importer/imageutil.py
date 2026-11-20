@@ -211,41 +211,39 @@ def _is_large_format_sheet(image: Image.Image, dpi: tuple[float, float] | None) 
     return max(width_mm, height_mm) >= 500.0
 
 
-def denoise(image: Image.Image, *, preserve_thin_strokes: bool = False) -> Image.Image:
-    """Remove scan noise.
+def despeckle_preserving_strokes(rgb: "np.ndarray") -> tuple["np.ndarray", bool]:
+    """Remove dense 1-2 px toner speckles and interior 1 px salt holes.
 
-    Standard sheets keep the 3x3 median filter. Large-format sheets (ANSI
-    C/D/E panel layouts) carry 1-2 px text strokes at 100-200 dpi that a full
-    3x3 median erases, so ``preserve_thin_strokes=True`` only replaces isolated
-    dark speckle dots (when speckle noise is present) and single-pixel white
-    salt holes surrounded by dark ink.
+    Returns ``(cleaned_rgb, changed)``. Clean and low-DPI non-speckled images
+    are returned untouched so thin glyph counters do not fill in.
     """
-
-    if not preserve_thin_strokes:
-        return image.convert("RGB").filter(ImageFilter.MedianFilter(size=3))
 
     import cv2
     import numpy as np
 
-    rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
     if rgb.size == 0 or min(rgb.shape[:2]) < 5:
-        return Image.fromarray(rgb)
+        return rgb, False
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    out = rgb.copy()
-
     dark = (gray < 180).astype(np.uint8)
     count, labels, stats, _ = cv2.connectedComponentsWithStats(dark, connectivity=8)
-    if count > 1:
-        areas = stats[1:, cv2.CC_STAT_AREA]
-        widths = stats[1:, cv2.CC_STAT_WIDTH]
-        heights = stats[1:, cv2.CC_STAT_HEIGHT]
-        tiny = np.where((areas <= 4) & (widths <= 2) & (heights <= 2))[0] + 1
-        if len(tiny) >= 200:
-            lut = np.zeros(count, dtype=np.bool_)
-            lut[tiny] = True
-            speck = lut[labels]
-            med5 = cv2.medianBlur(rgb, 5)
-            out[speck] = med5[speck]
+    if count <= 1:
+        return rgb, False
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    widths = stats[1:, cv2.CC_STAT_WIDTH]
+    heights = stats[1:, cv2.CC_STAT_HEIGHT]
+    tiny = np.where((areas <= 4) & (widths <= 2) & (heights <= 2))[0] + 1
+    # Require at least 250 speckles per megapixel (minimum 40 on tiny crops) so
+    # clean/median-filtered sheets (~10-60/MP) are never touched.
+    speckle_floor = max(40, int(round(gray.size * 0.00025)))
+    if len(tiny) < speckle_floor:
+        return rgb, False
+
+    out = rgb.copy()
+    lut = np.zeros(count, dtype=np.bool_)
+    lut[tiny] = True
+    speck = lut[labels]
+    med5 = cv2.medianBlur(rgb, 5)
+    out[speck] = med5[speck]
 
     gray2 = cv2.cvtColor(out, cv2.COLOR_RGB2GRAY)
     kernel = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]], dtype=np.uint8)
@@ -254,8 +252,39 @@ def denoise(image: Image.Image, *, preserve_thin_strokes: bool = False) -> Image
     if np.any(salt):
         med3 = cv2.medianBlur(out, 3)
         out[salt] = med3[salt]
+    return out, True
 
-    return Image.fromarray(out)
+
+def denoise(image: Image.Image, *, preserve_thin_strokes: bool = False) -> Image.Image:
+    """Remove scan noise.
+
+    Standard sheets keep the 3x3 median filter. Large-format sheets (ANSI
+    C/D/E panel layouts) carry 1-2 px text strokes at 100-200 dpi that a full
+    3x3 median erases, so ``preserve_thin_strokes=True`` only replaces isolated
+    dark speckle dots (and interior 1-pixel salt holes) when speckle noise is
+    present.
+    """
+
+    if not preserve_thin_strokes:
+        return image.convert("RGB").filter(ImageFilter.MedianFilter(size=3))
+
+    import numpy as np
+
+    rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
+    cleaned, _changed = despeckle_preserving_strokes(rgb)
+    return Image.fromarray(cleaned)
+
+
+def _apply_quarter_turns(image: Image.Image, quarter: int) -> tuple[Image.Image, int]:
+    """Rotate ``image`` CCW by ``quarter`` 90-degree turns."""
+
+    turns = int(quarter) % 4
+    if not turns:
+        return image, 0
+    turned = image
+    for _ in range(turns):
+        turned = turned.transpose(Image.Transpose.ROTATE_270)
+    return turned, turns
 
 
 def auto_rotate(image: Image.Image, *, large_format: bool | None = None) -> tuple[Image.Image, int]:
@@ -269,14 +298,21 @@ def auto_rotate(image: Image.Image, *, large_format: bool | None = None) -> tupl
     scanned when none of those is decisive.
     """
 
+    import numpy as np
+
     if large_format is None:
         raw_dpi = image.info.get("dpi")
         dpi_tuple = raw_dpi if isinstance(raw_dpi, tuple) and len(raw_dpi) == 2 else None
         large_format = _is_large_format_sheet(image, dpi_tuple)
+    # Remove toner speckles on a temporary probe so orientation OCR does not
+    # drop below threshold while keeping the returned image un-filtered until
+    # prepare_scan extracts sharp/clean images.
+    cleaned_rgb, speckled = despeckle_preserving_strokes(np.asarray(image.convert("RGB"), dtype=np.uint8))
+    probe_source = Image.fromarray(cleaned_rgb) if speckled else image
     # Tags decide before a title-band guess, including on a line drawing
     # whose BOX thumbnail looks blank.
-    scores = _text_scores(image, horizontal_only=True) if large_format else _text_scores(image)
-    glyph = _glyph_quarter(image)
+    scores = _text_scores(probe_source, horizontal_only=True) if large_format else _text_scores(probe_source)
+    glyph = _glyph_quarter(probe_source)
     quarter = choose_quarter(scores, glyph)
     if large_format and len(scores) == 4 and quarter in {0, 1, 2, 3}:
         # When horizontal-only filtering drops sideways scores near zero on a
@@ -290,27 +326,25 @@ def auto_rotate(image: Image.Image, *, large_format: bool | None = None) -> tupl
             and scores[opposite] >= scores[quarter] * 0.80
         ):
             quarter = glyph
-    if quarter is None and large_format and max(image.size) > 2600:
+    if quarter is None and large_format and max(probe_source.size) > 2600:
         # On a large D-size sheet (skewed, speckled, or 1-bit fax), shrinking
         # to 2400 px can collapse small text below OCR height. Retry once on
         # a deskewed 3600 px probe before falling back to border ink heuristics.
-        probe_img, _ = deskew(image)
+        probe_img, _ = deskew(probe_source)
         retry_scores = _text_scores(probe_img, target_long=3600, horizontal_only=True)
         quarter = choose_quarter(retry_scores, glyph)
     if quarter is not None:
-        turned = image
-        for _ in range(quarter):
-            turned = turned.transpose(Image.Transpose.ROTATE_270)
-        return turned, quarter
-    titled = _decisive_title(image)
+        return _apply_quarter_turns(image, quarter)
+    titled = _decisive_title(probe_source)
     if titled is not None:
-        return titled
-    degrees, confidence = _osd_reading(image)
+        return _apply_quarter_turns(image, titled[1])
+    degrees, confidence = _osd_reading(probe_source)
     if confidence >= 4.0 and degrees in {90, 180, 270}:
         return _turn_clockwise(image, degrees)
     if confidence >= 4.0 and degrees == 0:
         return image, 0
-    return _ink_rotate(image)
+    _, ink_q = _ink_rotate(probe_source)
+    return _apply_quarter_turns(image, ink_q)
 
 
 def _title_orientations(image: Image.Image) -> list[tuple[Image.Image, float]]:
@@ -400,10 +434,7 @@ def _turn_clockwise(image: Image.Image, degrees: int) -> tuple[Image.Image, int]
     """Clockwise correction, reported as CCW quarter-turns so callers stay consistent."""
 
     quarters = {90: 3, 180: 2, 270: 1}.get(int(degrees) % 360, 0)
-    turned = image
-    for _ in range(quarters):
-        turned = turned.transpose(Image.Transpose.ROTATE_270)
-    return turned, quarters
+    return _apply_quarter_turns(image, quarters)
 
 
 _TITLE_WORD = re.compile(

@@ -286,3 +286,120 @@ def test_degraded_panel_variant_meets_device_recall_floor(
         f"panel/{variant_id} recall {recall:.3f} < {min_recall:.3f}; "
         f"found={sorted(truth_tags & built_tags)} missing={sorted(truth_tags - built_tags)}"
     )
+
+
+def test_denoise_preserve_thin_strokes_keeps_clean_counters_and_cleans_small_bands():
+    # Clean 100-DPI-like glyph stroke with a 1-px interior white counter (surrounded by 8 dark px).
+    clean = np.full((180, 300, 3), 255, dtype=np.uint8)
+    clean[40:60, 40:60] = 0
+    clean[48, 48] = 255
+    untouched = np.asarray(denoise(Image.fromarray(clean), preserve_thin_strokes=True))
+    assert int(untouched[48, 48, 0]) >= 220
+
+    # Large non-speckled sheet with >200 scattered 1-px dots (<250/MP) must not
+    # false-trigger despeckling or fill 1-px glyph counters (e.g. post-median schematic).
+    sparse = np.full((1000, 1500, 3), 255, dtype=np.uint8)
+    sparse[40:60, 40:60] = 0
+    sparse[48, 48] = 255
+    for idx in range(250):
+        sparse[100 + (idx // 25) * 30, 100 + (idx % 25) * 40] = 0
+    sparse_out = np.asarray(denoise(Image.fromarray(sparse), preserve_thin_strokes=True))
+    assert int(sparse_out[48, 48, 0]) >= 220
+
+    # Cropped band smaller than full-page (>=200) cutoff, yet densely speckled (~1500/MP):
+    # dark speckles and interior salt holes on strokes must both be cleaned.
+    band = clean.copy()
+    rng = np.random.default_rng(19)
+    ys = rng.integers(80, 175, size=80)
+    xs = rng.integers(5, 295, size=80)
+    band[ys, xs] = 0
+    cleaned = np.asarray(denoise(Image.fromarray(band), preserve_thin_strokes=True))
+    assert int(cleaned[48, 48, 0]) < 60
+    assert int((cleaned[80:175, 5:295, 0] < 120).sum()) < 15
+
+
+def test_auto_rotate_speckle_probe_cleans_speckle_without_mutating_source(monkeypatch):
+    from panelcad.importer import imageutil
+
+    img = Image.new("RGB", (300, 400), "white")
+    arr = np.asarray(img).copy()
+    arr[40:90, 60] = 0
+    arr[40, 60:95] = 0
+    rng = np.random.default_rng(23)
+    ys = rng.integers(120, 380, size=140)
+    xs = rng.integers(10, 290, size=140)
+    arr[ys, xs] = 0
+    speckled = Image.fromarray(arr)
+
+    seen_dark: list[int] = []
+
+    def _fake_scores(probe: Image.Image, **_kwargs: Any) -> list[float]:
+        g = np.asarray(probe.convert("L"))
+        seen_dark.append(int((g[120:380, 10:290] < 120).sum()))
+        return [0.0, 180.0, 0.0, 0.0]
+
+    monkeypatch.setattr(imageutil, "_text_scores", _fake_scores)
+    monkeypatch.setattr(imageutil, "_glyph_quarter", lambda _img: None)
+
+    turned, quarter = imageutil.auto_rotate(speckled, large_format=False)
+    assert quarter == 1
+    assert seen_dark == [0]
+    # Original pixels remain untouched (merely rotated) before prepare_scan handles sharp/clean split.
+    assert turned.size == (400, 300)
+    restored = np.asarray(turned.transpose(Image.Transpose.ROTATE_90))
+    assert np.array_equal(restored, arr)
+
+
+def test_speckle_panel_peek_and_route_under_electrical_backend(
+    panel_variant_paths: tuple[dict[str, Any], dict[str, Path]],
+):
+    if not find_tesseract():
+        pytest.skip("Tesseract binary is not installed")
+
+    from panelcad.importer.scan_dispatch import peek_layout_page_kind, route_scan_page
+    from panelcad.ocr.backend import ocr_scope
+
+    truth, paths = panel_variant_paths
+    with Image.open(paths["speckle"]) as src:
+        image = src.convert("RGB")
+    width_mm, height_mm = float(truth["page_mm"][0]), float(truth["page_mm"][1])
+
+    assert peek_layout_page_kind(image, width_mm, height_mm) == "panel_layout"
+    with ocr_scope("electrical"):
+        route = route_scan_page(image, width_mm, height_mm)
+    assert route.reader_kind == "panel"
+    assert route.page_kind == "panel_layout"
+    assert route.ocr_backend == "tesseract"
+    assert route.layout_mode == "preserve"
+
+
+def test_read_panel_scan_recovers_raw_speckled_layout_and_uprights(
+    panel_variant_paths: tuple[dict[str, Any], dict[str, Path]],
+):
+    if not find_tesseract():
+        pytest.skip("Tesseract binary is not installed")
+
+    from panelcad.importer.imageutil import auto_rotate
+    from panelcad.importer.scan_dispatch import read_panel_scan
+    from panelcad.library.catalog import default_catalog
+    from panelcad.ocr.backend import ocr_scope
+
+    truth, paths = panel_variant_paths
+    with Image.open(paths["speckle"]) as src:
+        image = src.convert("RGB")
+    width_mm, height_mm = float(truth["page_mm"][0]), float(truth["page_mm"][1])
+
+    facts = read_panel_scan(image, width_mm=width_mm, height_mm=height_mm, catalog=default_catalog())
+    assert facts["kind"] == "panel_layout"
+    found = {
+        str(dev.get("tag") or "").strip().upper()
+        for dev in (facts.get("devices") or [])
+        if str(dev.get("tag") or "").strip()
+    }
+    truth_tags = set(truth["devices"])
+    assert len(found & truth_tags) / len(truth_tags) >= 5 / 9
+
+    sideways = image.transpose(Image.Transpose.ROTATE_270)
+    with ocr_scope("tesseract"):
+        _turned, quarter = auto_rotate(sideways, large_format=True)
+    assert quarter == 3
