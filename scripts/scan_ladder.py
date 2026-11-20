@@ -199,8 +199,8 @@ def _phone(image: Any) -> Any:
 def _cropped_edge(image: Any) -> Any:
     """Clip a small outer border (roughly 3.2% per edge) to mimic misaligned framing."""
     width, height = image.size
-    dx = max(1, int(round(width * 0.032))) if width >= 40 else 0
-    dy = max(1, int(round(height * 0.032))) if height >= 40 else 0
+    dx = max(1, round(width * 0.032)) if width >= 40 else 0
+    dy = max(1, round(height * 0.032)) if height >= 40 else 0
     if dx == 0 and dy == 0:
         return image
     return image.crop((dx, dy, width - dx, height - dy))
@@ -211,10 +211,10 @@ def _two_up(image: Any) -> Any:
     from PIL import Image, ImageDraw
 
     width, height = image.size
-    page_w = max(80, int(round(width * 0.52)))
-    page_h = max(80, int(round(height * 0.52)))
-    gutter = max(16, int(round(page_w * 0.05)))
-    margin = max(16, int(round(min(page_w, page_h) * 0.04)))
+    page_w = max(80, round(width * 0.52))
+    page_h = max(80, round(height * 0.52))
+    gutter = max(16, round(page_w * 0.05))
+    margin = max(16, round(min(page_w, page_h) * 0.04))
     if 2 * page_w + gutter + 2 * margin <= page_h + 2 * margin:
         gutter = max(gutter, page_h - 2 * page_w + 32)
     canvas_w = margin * 2 + page_w * 2 + gutter
@@ -231,13 +231,13 @@ def _two_up(image: Any) -> Any:
         outline=(60, 60, 60),
         width=2,
     )
-    pad = max(10, int(round(min(page_w, page_h) * 0.04)))
+    pad = max(10, round(min(page_w, page_h) * 0.04))
     draw.rectangle(
         (right_x + pad, margin + pad, right_x + page_w - pad, margin + page_h - pad),
         outline=(90, 90, 90),
         width=2,
     )
-    box_h = max(18, int(round(page_h * 0.10)))
+    box_h = max(18, round(page_h * 0.10))
     draw.rectangle(
         (
             right_x + int(page_w * 0.55),

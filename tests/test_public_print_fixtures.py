@@ -483,7 +483,7 @@ def test_scan_ladder_new_degradations() -> None:
     crop_img, crop_opts = ladder.degrade(sample, "schematic", by_id["cropped_edge"])
     assert crop_opts["format"] == "PNG"
     assert crop_opts["dpi"] == (200, 200)
-    dx, dy = int(round(sample.width * 0.032)), int(round(sample.height * 0.032))
+    dx, dy = round(sample.width * 0.032), round(sample.height * 0.032)
     assert crop_img.size == (sample.width - 2 * dx, sample.height - 2 * dy)
     crop_arr = np.asarray(crop_img.convert("L"))
     # The entire 8 px outer border was clipped off on all four edges; interior marks survive.
