@@ -1,0 +1,27 @@
+id: kuphaldt_acstarter_wye_delta
+source_id: kuphaldt_acstarter
+kind: schematic
+standard: "NEMA/ANSI"
+devices:
+  - M1
+  - M2
+  - OL1
+  - TD1
+wire_numbers: []
+terminal_labels:
+  - "L1"
+  - "L2"
+  - "L3"
+  - "T1"
+  - "T2"
+  - "T3"
+  - "T4"
+  - "T5"
+  - "T6"
+  - "H1"
+  - "H2"
+  - "H3"
+  - "H4"
+  - "X1"
+  - "X2"
+notes: "Wye-delta starter diagram with tagged M1, M2, OL1, TD1 devices and transformer/motor terminal labels."

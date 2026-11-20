@@ -1,0 +1,67 @@
+id: wiki_sandblaster
+source_id: wiki_sandblaster
+kind: schematic
+standard: "IEC"
+devices:
+  - F1
+  - F2
+  - K1
+  - K2
+  - K3
+  - K4
+  - K5
+  - TR1
+  - RCD1
+  - SB1
+  - SB2
+wire_numbers:
+  - "L1"
+  - "L2"
+  - "L3"
+  - "N"
+  - "PE"
+  - "1A1"
+  - "1A2"
+  - "1A3"
+  - "1B1"
+  - "1B2"
+  - "1B3"
+  - "1C1"
+  - "1C2"
+  - "1C3"
+  - "1D1"
+  - "1D2"
+  - "1D3"
+  - "1E1"
+  - "1E2"
+  - "1E3"
+  - "1S1"
+  - "1S2"
+  - "1S3"
+  - "1T1"
+  - "1T2"
+  - "1T3"
+  - "X1-100"
+  - "X1-110"
+  - "X1-120"
+  - "X1-130"
+  - "X1-140"
+  - "X1-150"
+  - "X1-160"
+  - "X1-170"
+  - "X1-180"
+  - "X1-190"
+  - "X1-200"
+  - "X1-210"
+  - "X2-100"
+  - "X2-110"
+  - "X2-120"
+  - "X2-130"
+  - "X2-140"
+  - "X3-100"
+  - "X3-110"
+  - "X4-100"
+  - "X4-110"
+  - "X5-100"
+  - "X5-110"
+notes: "IEC sandblaster starter wiring with 3-phase motor M (symbol label omitted from device tags) and X1-X5 wire marks."

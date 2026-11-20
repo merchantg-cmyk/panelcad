@@ -149,7 +149,7 @@ panelcad import scan.png --vision-backend ollama --vision-model qwen3-vl:8b-inst
 
 ## License
 
-PanelCAD is free software under the GNU Affero General Public License, version 3, or any later version published by the Free Software Foundation. The copyright and that grant are in `NOTICE`. The full license text is `LICENSE`. Other people's code, fonts, and icons are listed in `THIRD_PARTY_NOTICES.md`.
+PanelCAD is free software under the GNU Affero General Public License, version 3, or any later version published by the Free Software Foundation. The copyright and that grant are in `NOTICE`. The full license text is `LICENSE`. Other people's code, fonts, and icons are listed in `THIRD_PARTY_NOTICES.md`. Third-party CC BY 4.0 / CC BY-SA 3.0 test images under `tests/fixtures/public_prints/` are aggregated separately under their own licenses (see `tests/fixtures/public_prints/LICENSES.md`) and excluded from the AGPL-3.0 code license.
 
 If you run a modified PanelCAD as a network service, the AGPL requires you to offer the corresponding source to the people who use that service.
 

@@ -1,0 +1,36 @@
+id: wiki_pump_station_mcc
+source_id: wiki_pump_station_mcc
+kind: schematic
+standard: "IEC"
+devices:
+  - QS1
+  - QF1
+  - QF2
+  - KM1
+  - KM2
+  - PTT1
+  - PTT2
+  - K3.1
+  - K3.2
+  - K3.3
+  - SF1
+  - K3
+  - SA3
+  - SA1
+  - SA2
+  - SB1
+  - SB2
+  - HL1
+  - HL2
+  - HL3
+  - K1.1
+  - K1.2
+  - K2.1
+  - K2.2
+wire_numbers:
+  - "L1"
+  - "L2"
+  - "L3"
+  - "N"
+  - "PE"
+notes: "IEC duplex pump-station MCC wiring with dual E-stops and pressure-switch interlocks."
