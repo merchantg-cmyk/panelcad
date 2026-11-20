@@ -15,9 +15,18 @@ from panelcad.core.electrical import wire_number_conflicts
 from panelcad.core.geometry import Point
 from panelcad.core.ladder import rail_geometry
 from panelcad.core.route import STUB, move_wire_corner, nearest_corner, set_run_channel
-from panelcad.gui.canvas import PinItem, RailJunctionItem, WireHandleItem, WireItem
+from panelcad.core.wire_numbering import wire_networks
+from panelcad.gui.canvas import (
+    ComponentItem,
+    LogoSlotItem,
+    PinItem,
+    RailJunctionItem,
+    WireHandleItem,
+    WireItem,
+)
 from panelcad.gui.main_window import MainWindow
 from panelcad.render.sheet import iter_wire_points, pin_world
+from panelcad.render.titleblock import title_block_rect
 from panelcad.render.wiring import PIN_KEEP_MM
 
 
@@ -1397,3 +1406,930 @@ def test_reconnect_wire_refuses_conflicting_net_api_and_gui() -> None:
         assert "STOP" in win.statusBar().currentMessage()
     finally:
         win.close()
+
+
+def _assert_no_retrace(pts: list[Point], tol: float = 0.2) -> None:
+    """Assert consecutive segments do not double back along themselves."""
+    for a, b, c in zip(pts, pts[1:], pts[2:]):
+        if abs(a.y - b.y) <= tol and abs(b.y - c.y) <= tol:
+            dx1, dx2 = b.x - a.x, c.x - b.x
+            assert dx1 * dx2 >= -tol, (a, b, c)
+        if abs(a.x - b.x) <= tol and abs(b.x - c.x) <= tol:
+            dy1, dy2 = b.y - a.y, c.y - b.y
+            assert dy1 * dy2 >= -tol, (a, b, c)
+
+
+def _seg_len(a: Point, b: Point) -> float:
+    return ((a.x - b.x) ** 2 + (a.y - b.y) ** 2) ** 0.5
+
+
+def test_move_wire_corner_to_end_stub_clamping_stays_orthogonal_and_gui() -> None:
+    """Blocker #1: clamping a to-adjacent corner keeps all segments orthogonal and respects STUB."""
+
+    # 1. 3-point L-bend dragged within STUB of (and past) b0.
+    l3 = [Point(x=0.0, y=0.0), Point(x=50.0, y=0.0), Point(x=50.0, y=40.0)]
+    for target_y in (38.0, 52.0):
+        out = move_wire_corner(l3, 1, 50.0, target_y)
+        _assert_orthogonal(out, tol=1e-3)
+        _assert_no_retrace(out)
+        assert (out[0].x, out[0].y) == (0.0, 0.0)
+        assert (out[-1].x, out[-1].y) == (50.0, 40.0)
+        assert _seg_len(out[0], out[1]) >= STUB - 1e-3
+        assert _seg_len(out[-2], out[-1]) >= STUB - 1e-3
+        assert abs(out[-2].x - 50.0) <= 1e-3 and abs(out[-2].y - (40.0 - STUB)) <= 1e-3
+
+    # 2. 4-point vertical to-exit dragged within STUB of (and past) b0.
+    v4 = [Point(x=0.0, y=0.0), Point(x=0.0, y=20.0), Point(x=50.0, y=20.0), Point(x=50.0, y=40.0)]
+    for target_y in (38.0, 52.0):
+        out = move_wire_corner(v4, 2, 50.0, target_y)
+        _assert_orthogonal(out, tol=1e-3)
+        _assert_no_retrace(out)
+        assert [(p.x, p.y) for p in out] == [
+            (0.0, 0.0),
+            (0.0, 40.0 - STUB),
+            (50.0, 40.0 - STUB),
+            (50.0, 40.0),
+        ]
+        assert _seg_len(out[-2], out[-1]) >= STUB - 1e-3
+
+    # 3. 4-point horizontal to-exit dragged within STUB of (and past) b0.
+    h4 = [Point(x=0.0, y=0.0), Point(x=20.0, y=0.0), Point(x=20.0, y=40.0), Point(x=50.0, y=40.0)]
+    for target_x in (48.0, 62.0):
+        out = move_wire_corner(h4, 2, target_x, 40.0)
+        _assert_orthogonal(out, tol=1e-3)
+        _assert_no_retrace(out)
+        assert [(p.x, p.y) for p in out] == [
+            (0.0, 0.0),
+            (50.0 - STUB, 0.0),
+            (50.0 - STUB, 40.0),
+            (50.0, 40.0),
+        ]
+        assert _seg_len(out[-2], out[-1]) >= STUB - 1e-3
+
+    # 4. Rail-start + pin-end (slide_start=True): a0 stays aligned with clamped corner.
+    for target_y in (38.0, 52.0):
+        out = move_wire_corner(l3, 1, 50.0, target_y, slide_start=True)
+        _assert_orthogonal(out, tol=1e-3)
+        _assert_no_retrace(out)
+        assert [(p.x, p.y) for p in out] == [
+            (0.0, 40.0 - STUB),
+            (50.0, 40.0 - STUB),
+            (50.0, 40.0),
+        ]
+        assert abs(out[0].y - out[1].y) <= 1e-3
+        assert _seg_len(out[-2], out[-1]) >= STUB - 1e-3
+
+    # 5. Live GUI path: drag the to-adjacent interior corner (index == n - 2) within STUB of and past the to pin.
+    session = Session.create("Blocker1GUI")
+    session.set_title_block(drawing_style="ladder", rails="L1/L2")
+    session.place("nema.operators.pb_no", ref="PB1", x=60, y=70)
+    session.place("nema.contactors.coil", ref="M1", x=180, y=100)
+    w = session.wire("PB1.4", "M1.A1", number="101")
+    end_a, end_b = _wire_endpoints_xy(session, w.id)
+    mid_x = round((end_a[0] + end_b[0]) / 2.0 / 2.5) * 2.5
+    session.set_wire_route(w.id, [Point(x=mid_x, y=end_a[1]), Point(x=mid_x, y=end_b[1])])
+    session._undo.clear()
+    session._undo_tip = None
+
+    app, win = _open_window(session)
+    try:
+        canvas = win.canvas
+        for dx_from_b in (-2.0, 12.0):
+            canvas.select_ref(w.id)
+            app.processEvents()
+            corners = sorted(
+                (h for h in _handles(canvas, w.id) if h.kind == "corner"),
+                key=lambda h: h.corner_index,
+            )
+            to_adj = corners[-1]
+            assert to_adj.corner_index == len(iter_wire_points(session.sheet(), session.catalog, session.find_wire(wire_id=w.id), project=session.project)) - 2
+            target = QPointF(end_b[0] + dx_from_b, end_b[1])
+            p0, p1 = _ensure_visible_pair(canvas, app, to_adj.pos(), target)
+            w_item = _wire_item(canvas, w.id)
+            QTest.mousePress(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p0)
+            QTest.mouseMove(canvas.viewport(), p1)
+            app.processEvents()
+            preview = list(getattr(w_item, "_live_pts", []) or [])
+            assert len(preview) >= 3
+            _assert_orthogonal(preview, tol=0.05)
+            _assert_no_retrace(preview)
+            assert abs(preview[-2].y - end_b[1]) <= 0.05
+            assert end_b[0] - preview[-2].x >= STUB - 0.05
+
+            QTest.mouseRelease(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p1)
+            app.processEvents()
+            live = session.find_wire(wire_id=w.id)
+            committed = iter_wire_points(session.sheet(), session.catalog, live, project=session.project)
+            _assert_orthogonal(committed, tol=0.05)
+            _assert_no_retrace(committed)
+            assert abs(committed[-2].y - end_b[1]) <= 0.05
+            assert end_b[0] - committed[-2].x >= STUB - 0.05
+
+            win.undo_edit()
+            app.processEvents()
+    finally:
+        win.close()
+
+
+def test_gui_iec_rail_straighten_clears_points_and_from_at() -> None:
+    """Should-Fix #2: straightening an IEC rail wire back over its pin stores points == [] and from_at is None."""
+    session = Session.create("SF2IECStraighten")
+    session.set_title_block(standard="IEC", rails="L+/0V")
+    session.sheet().drawing_style = "iec"
+    session.place("iec.operators.pb_no", ref="S1", x=100, y=70)
+    w = session.wire("L+", "S1.13", number="10")
+    pin_x, _pin_y = pin_world(
+        session.sheet().component("S1"),
+        session.catalog.get("iec.operators.pb_no").pin("13"),
+    )
+    geom = rail_geometry(session.sheet(), session.project)
+    assert geom is not None and geom.kind == "iec"
+    session._undo.clear()
+    session._undo_tip = None
+
+    app, win = _open_window(session)
+    try:
+        canvas = win.canvas
+        # 1. Drag L+ -> S1.13 out right by 20 mm, then drag vertical rail run back over S1.13.
+        w_item = _wire_item(canvas, w.id)
+        mid = w_item.path().pointAtPercent(0.5)
+        _drag_scene(canvas, app, mid, QPointF(pin_x + 20.0, mid.y()))
+        live = session.find_wire(wire_id=w.id)
+        assert live.from_at is not None and abs(live.from_at.x - (pin_x + 20.0)) < 1.5
+        assert len(live.points) >= 2
+
+        routed_out = iter_wire_points(session.sheet(), session.catalog, live, project=session.project)
+        rail_seg_mid = QPointF(
+            (routed_out[0].x + routed_out[1].x) / 2.0,
+            (routed_out[0].y + routed_out[1].y) / 2.0,
+        )
+        _drag_scene(canvas, app, rail_seg_mid, QPointF(pin_x, rail_seg_mid.y()))
+        live = session.find_wire(wire_id=w.id)
+        assert live.from_at is None
+        assert live.points == []
+        straight_pts = iter_wire_points(session.sheet(), session.catalog, live, project=session.project)
+        assert len(straight_pts) == 2
+        assert abs(straight_pts[0].x - pin_x) < 0.1
+
+        # 2. Drag out again, then straighten back via corner 1 handle -> also clears points and from_at.
+        w_item = _wire_item(canvas, w.id)
+        mid = w_item.path().pointAtPercent(0.5)
+        _drag_scene(canvas, app, mid, QPointF(pin_x + 20.0, mid.y()))
+        assert session.find_wire(wire_id=w.id).from_at is not None
+        canvas.select_ref(w.id)
+        app.processEvents()
+        corner1 = next(h for h in _handles(canvas, w.id) if h.kind == "corner" and h.corner_index == 1)
+        _drag_scene(canvas, app, corner1.pos(), QPointF(pin_x, corner1.pos().y()))
+        live = session.find_wire(wire_id=w.id)
+        assert live.from_at is None
+        assert live.points == []
+    finally:
+        win.close()
+
+
+def test_gui_wire_end_drag_clears_target_pin_hot_on_cancel_and_commit() -> None:
+    """Should-Fix #3: hovered target PinItem._hot is reset to False after cancel (Esc/FocusOut/right-click) AND commit."""
+    session = Session.create("SF3PinHot")
+    session.set_title_block(drawing_style="ladder", rails="L1/L2")
+    session.place("nema.operators.pb_no", ref="PB1", x=60, y=70)
+    session.place("nema.contactors.coil", ref="M1", x=180, y=70)
+    session.place("nema.contactors.coil", ref="M2", x=180, y=120)
+    w = session.wire("PB1.4", "M1.A1", number="101")
+    session._undo.clear()
+    session._undo_tip = None
+
+    app, win = _open_window(session)
+    try:
+        canvas = win.canvas
+        m2_pin = _pin_item(canvas, "M2", "A1")
+
+        def _hover_m2_during_drag() -> QPoint:
+            canvas.select_ref(w.id)
+            app.processEvents()
+            to_h = next(h for h in _handles(canvas, w.id) if h.kind == "end" and h.which == "to")
+            p0, p1 = _ensure_visible_pair(canvas, app, to_h.pos(), m2_pin.scenePos())
+            QTest.mousePress(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p0)
+            QTest.mouseMove(canvas.viewport(), p1)
+            app.processEvents()
+            assert canvas._wire_end_drag is not None
+            assert m2_pin._hot is True
+            return p1
+
+        # 1. Cancel via Esc.
+        p1 = _hover_m2_during_drag()
+        canvas.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier))
+        app.processEvents()
+        QTest.mouseRelease(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p1)
+        app.processEvents()
+        assert m2_pin._hot is False
+
+        # 2. Cancel via FocusOut.
+        p1 = _hover_m2_during_drag()
+        canvas.focusOutEvent(QFocusEvent(QEvent.Type.FocusOut))
+        app.processEvents()
+        QTest.mouseRelease(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p1)
+        app.processEvents()
+        assert m2_pin._hot is False
+
+        # 3. Cancel via right-click.
+        p1 = _hover_m2_during_drag()
+        QTest.mousePress(canvas.viewport(), Qt.MouseButton.RightButton, Qt.KeyboardModifier.NoModifier, p1)
+        QTest.mouseRelease(canvas.viewport(), Qt.MouseButton.RightButton, Qt.KeyboardModifier.NoModifier, p1)
+        QTest.mouseRelease(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p1)
+        app.processEvents()
+        assert m2_pin._hot is False
+
+        # 4. Commit drop onto M2.A1.
+        p1 = _hover_m2_during_drag()
+        QTest.mouseRelease(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p1)
+        app.processEvents()
+        assert session.find_wire(wire_id=w.id).to == "M2.A1"
+        assert m2_pin._hot is False
+    finally:
+        win.close()
+
+
+def test_reconnect_wire_multihop_offpage_and_shared_net_conflicts() -> None:
+    """Should-Fix #4: 2-hop networks, cross-sheet off-page links, and shared-net onto unnamed circuit are caught."""
+    session = Session.create("SF4NetConflicts")
+    session.set_title_block(drawing_style="ladder", rails="L1/L2")
+    session.place("nema.operators.pb_no", ref="PB1", x=60, y=50)
+    session.place("nema.operators.pb_no", ref="PB2", x=60, y=100)
+    session.place("nema.operators.pb_no", ref="PB3", x=60, y=150)
+    session.place("nema.contactors.coil", ref="M1", x=180, y=50)
+    session.place("nema.contactors.coil", ref="M2", x=180, y=100)
+    session.place("nema.operators.pilot_light", ref="LT1", x=240, y=50)
+    session.place("nema.operators.pilot_light", ref="LT2", x=240, y=100)
+    session.place("nema.operators.pilot_light", ref="LT3", x=240, y=150)
+    session.place("iec.connection.offpage", ref="OP1", x=260, y=180, properties={"link": "LNK_STOP"})
+    session.place("iec.connection.offpage", ref="OP3", x=260, y=210, properties={"link": "LNK_STOP"})
+
+    # Sheet 2 carries the off-page peer on net STOP.
+    session.add_sheet("s2", title="Sheet 2", kind="schematic", make_active=False)
+    session.place("iec.connection.offpage_from", ref="OP2", x=40, y=60, properties={"link": "LNK_STOP"}, sheet_id="s2")
+    session.place("nema.contactors.coil", ref="K2", x=140, y=60, sheet_id="s2")
+    session.wire("OP2.A", "K2.A1", net="STOP", sheet_id="s2")
+
+    # 1. 2-hop STOP network on PB2.4: PB2.4 -> M2.A1 (net=None) + M2.A1 -> LT2.X1 (net="STOP").
+    w_start = session.wire("PB1.4", "M1.A1", net="START")
+    session.wire("PB2.4", "M2.A1")
+    session.wire("M2.A1", "LT2.X1", net="STOP")
+    # 2. Off-page STOP network on PB3.4: PB3.4 -> OP1.A (net=None) linked to s2:OP2 (net="STOP").
+    session.wire("PB3.4", "OP1.A")
+    # 3. 2-hop unnamed bridge on LT1.X1 (inherits START via other_ref) for reverse check.
+    w_bridge = session.wire("PB1.3", "M1.A1")
+    session._undo.clear()
+    session._undo_tip = None
+
+    with pytest.raises(ValueError, match="STOP"):
+        session.reconnect_wire(w_start.id, "from", "PB2.4")
+    with pytest.raises(ValueError, match="STOP"):
+        session.reconnect_wire(w_bridge.id, "from", "PB2.4")
+    with pytest.raises(ValueError, match="STOP"):
+        session.reconnect_wire(w_start.id, "from", "PB3.4")
+    with pytest.raises(ValueError, match="STOP"):
+        session.reconnect_wire(w_start.id, "from", "OP3.A")
+    assert session._undo == []
+
+    # 4. Moving a wire that shares net="START" with an untouched sibling onto an unnamed circuit must refuse.
+    s_shared = Session.create("SF4SharedNet")
+    s_shared.set_title_block(drawing_style="ladder", rails="L1/L2")
+    s_shared.place("nema.operators.pb_no", ref="PB1", x=60, y=50)
+    s_shared.place("nema.operators.pb_no", ref="PB2", x=60, y=100)
+    s_shared.place("nema.contactors.coil", ref="M1", x=180, y=50)
+    s_shared.place("nema.contactors.coil", ref="M2", x=180, y=100)
+    s_shared.place("nema.operators.pilot_light", ref="LT1", x=240, y=50)
+    w1 = s_shared.wire("PB1.4", "M1.A1", net="START")
+    w2 = s_shared.wire("PB1.4", "LT1.X1", net="START")
+    w3 = s_shared.wire("PB2.4", "M2.A1")
+    assert w1.number == w2.number
+    orig_w3_num = w3.number
+    assert orig_w3_num and orig_w3_num != w1.number
+    s_shared._undo.clear()
+    s_shared._undo_tip = None
+
+    with pytest.raises(ValueError, match="START"):
+        s_shared.reconnect_wire(w1.id, "from", "PB2.4")
+    assert s_shared._undo == []
+    assert w1.frm == "PB1.4"
+    assert w3.number == orig_w3_num
+    nets = wire_networks(s_shared.project, s_shared.catalog)
+    w1_grp = next(idx for idx, items in enumerate(nets) if any(w is w1 for _sh, w in items))
+    w3_grp = next(idx for idx, items in enumerate(nets) if any(w is w3 for _sh, w in items))
+    assert w1_grp != w3_grp
+
+
+@pytest.mark.parametrize("scheme", ["iec", "sheet_line", "sequential"])
+def test_reconnect_multiwire_branch_into_rail_unifies_numbers(scheme: str) -> None:
+    """Should-Fix #5: reconnecting a multi-wire branch into a rail network leaves no stale unlocked tail numbers."""
+    for rail_first in (True, False):
+        session = Session.create(f"SF5_{scheme}_{rail_first}")
+        session.set_title_block(drawing_style="ladder", rails="L1/L2")
+        session.set_wire_numbering(scheme=scheme, enabled=True, start=1)
+        session.place("nema.operators.pb_no", ref="PB1", x=60, y=50)
+        session.place("nema.operators.pb_no", ref="PB2", x=60, y=100)
+        session.place("nema.contactors.coil", ref="M1", x=180, y=100)
+        session.place("nema.operators.pilot_light", ref="LT1", x=240, y=100)
+        session.place("nema.operators.pilot_light", ref="LT2", x=240, y=150)
+
+        if rail_first:
+            w_rail = session.wire("L1", "PB1.3")
+            w1 = session.wire("PB2.4", "M1.A1")
+            w_tail1 = session.wire("M1.A1", "LT1.X1")
+            w_tail2 = session.wire("LT1.X1", "LT2.X1")
+        else:
+            w1 = session.wire("PB2.4", "M1.A1")
+            w_tail1 = session.wire("M1.A1", "LT1.X1")
+            w_tail2 = session.wire("LT1.X1", "LT2.X1")
+            w_rail = session.wire("L1", "PB1.3")
+
+        assert w_rail.number and not w_rail.number_locked
+        assert w1.number == w_tail1.number == w_tail2.number
+        assert w1.number != w_rail.number
+        rail_num = w_rail.number
+        session._undo.clear()
+        session._undo_tip = None
+
+        # 1. Reconnect w1.from onto L1.
+        before = _dump(session)
+        session.reconnect_wire(w1.id, "from", "L1")
+        assert w_rail.number == rail_num
+        assert w1.number == rail_num
+        assert w_tail1.number == rail_num
+        assert w_tail2.number == rail_num
+        assert wire_number_conflicts(session.project, session.catalog) == []
+        assert session.undo()
+        assert _dump(session) == before
+
+        # Re-fetch live wires after undo and reconnect w1.from onto PB1.3.
+        w_rail = session.find_wire(wire_id=w_rail.id)
+        w1 = session.find_wire(wire_id=w1.id)
+        w_tail1 = session.find_wire(wire_id=w_tail1.id)
+        w_tail2 = session.find_wire(wire_id=w_tail2.id)
+        session.reconnect_wire(w1.id, "from", "PB1.3")
+        assert w_rail.number == rail_num
+        assert w1.number == rail_num
+        assert w_tail1.number == rail_num
+        assert w_tail2.number == rail_num
+        assert wire_number_conflicts(session.project, session.catalog) == []
+
+
+def test_gui_shared_rail_landing_does_not_rehash_per_mousemove(monkeypatch) -> None:
+    """Should-Fix #6: dragging one of two rungs sharing a rail landing checks shared dots once, not every mouseMove."""
+    import panelcad.render.wiring as wiring_mod
+
+    session = Session.create("SF6SharedLanding")
+    session.set_title_block(drawing_style="ladder", rails="L1/L2")
+    session.place("nema.operators.pb_no", ref="PB1", x=90, y=70)
+    session.place("nema.operators.pb_no", ref="PB2", x=150, y=70)
+    w1 = session.wire("L1", "PB1.3", number="100")
+    w2 = session.wire("L1", "PB2.3", number="100")
+    geom = rail_geometry(session.sheet(), session.project)
+    assert geom is not None
+    pts1 = iter_wire_points(session.sheet(), session.catalog, w1, project=session.project)
+    pts2 = iter_wire_points(session.sheet(), session.catalog, w2, project=session.project)
+    assert abs(pts1[0].y - pts2[0].y) < 0.2
+    orig_y = pts1[0].y
+    session._undo.clear()
+    session._undo_tip = None
+
+    app, win = _open_window(session)
+    try:
+        canvas = win.canvas
+        w_item = _wire_item(canvas, w1.id)
+        mid = w_item.path().pointAtPercent(0.5)
+        p0, p_end = _ensure_visible_pair(canvas, app, mid, QPointF(mid.x(), orig_y + 25.0))
+
+        calls = 0
+        orig_route_sheet = wiring_mod.route_sheet_wires
+
+        def spy_route_sheet(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            return orig_route_sheet(*args, **kwargs)
+
+        monkeypatch.setattr(wiring_mod, "route_sheet_wires", spy_route_sheet)
+
+        QTest.mousePress(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p0)
+        app.processEvents()
+        calls = 0  # Measure only mouseMove events during the drag, not initial press/selection.
+        for step in range(1, 9):
+            frac = step / 8.0
+            pt = QPoint(p0.x(), round(p0.y() + (p_end.y() - p0.y()) * frac))
+            QTest.mouseMove(canvas.viewport(), pt)
+            app.processEvents()
+        assert canvas._route_rail_checked is True
+        assert canvas._route_rail_hidden is None  # original dot stays visible for w2
+        assert calls == 1
+
+        # Both original dot (shared with w2) and live preview dot are visible.
+        dots = [
+            (item.rect().center().x(), item.rect().center().y())
+            for item in canvas.scene.items()
+            if isinstance(item, RailJunctionItem) and item.isVisible()
+        ]
+        assert any(abs(jx - geom.left) < 0.5 and abs(jy - orig_y) < 0.5 for jx, jy in dots)
+        assert any(abs(jx - geom.left) < 0.5 and abs(jy - (orig_y + 25.0)) < 2.0 for jx, jy in dots)
+
+        QTest.mouseRelease(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p_end)
+        app.processEvents()
+        assert canvas._route_rail_checked is False
+        assert session.find_wire(wire_id=w1.id).from_at is not None
+        assert len(session._undo) == 1
+    finally:
+        win.close()
+
+
+def test_gui_nits_orphan_drag_close_noop_rail_sync_rotation_and_unlocked_hover(monkeypatch) -> None:
+    """N1-N6 and GUI rotation sync: orphan press cleanup, close mid-drag, no-op rail drop, handle sync, tag rotation, unlocked hover."""
+
+    # --- N1, N3, N4, N6 on a ladder schematic ---
+    session = Session.create("NitsSuite")
+    session.set_title_block(drawing_style="ladder", rails="L1/L2")
+    session.place("nema.operators.pb_no", ref="PB1", x=80, y=70)
+    session.place("nema.contactors.coil", ref="M1", x=180, y=70)
+    w_rail = session.wire("L1", "PB1.3", number="100")
+    w_pin = session.wire("PB1.4", "M1.A1", number="101")
+    session.set_wire_route(w_pin.id, [Point(x=120, y=94), Point(x=120, y=114), Point(x=160, y=114)])
+    session._undo.clear()
+    session._undo_tip = None
+
+    app, win = _open_window(session)
+    try:
+        canvas = win.canvas
+        snap0 = _dump(session)
+
+        def _start_orphan_pull():
+            wi = _wire_item(canvas, w_pin.id)
+            mid = wi.path().pointAtPercent(0.5)
+            p0, p1 = _ensure_visible_pair(canvas, app, mid, QPointF(mid.x(), mid.y() + 15.0))
+            QTest.mousePress(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p0)
+            QTest.mouseMove(canvas.viewport(), p1)
+            app.processEvents()
+            assert canvas._pull_wire is not None and session.command_open()
+
+        # N1a: Orphaned route drag cancelled by new left press on empty space.
+        _start_orphan_pull()
+        empty_pt = QPointF(200.0, 200.0)
+        canvas.centerOn(empty_pt)
+        app.processEvents()
+        pe = canvas.mapFromScene(empty_pt)
+        QTest.mousePress(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, pe)
+        QTest.mouseRelease(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, pe)
+        app.processEvents()
+        assert canvas._pull_wire is None and not session.command_open()
+        assert _dump(session) == snap0 and session._undo == []
+
+        # N1b: Orphaned route drag cancelled by new left press on title block.
+        _start_orphan_pull()
+        tb_x, tb_y, tb_w, tb_h = title_block_rect(session.sheet())
+        tb_pt = QPointF(tb_x + tb_w * 0.5, tb_y + tb_h * 0.5)
+        canvas.fit_page()
+        app.processEvents()
+        ptb = canvas.mapFromScene(tb_pt)
+        QTest.mousePress(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, ptb)
+        QTest.mouseRelease(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, ptb)
+        app.processEvents()
+        assert canvas._pull_wire is None and not session.command_open()
+        assert _dump(session) == snap0 and session._undo == []
+
+        # N1c: Orphaned route drag cancelled by new left press on LogoSlotItem.
+        logo_item = next(i for i in canvas.scene.items() if isinstance(i, LogoSlotItem))
+        _start_orphan_pull()
+        logo_pt = logo_item.mapToScene(logo_item.boundingRect().center())
+        canvas.fit_page()
+        app.processEvents()
+        plogo = canvas.mapFromScene(logo_pt)
+        QTest.mousePress(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, plogo)
+        QTest.mouseRelease(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, plogo)
+        app.processEvents()
+        assert canvas._pull_wire is None and not session.command_open()
+        assert _dump(session) == snap0 and session._undo == []
+
+        # N1d: Orphaned corner drag cancelled by new left press on an end handle.
+        canvas.select_ref(w_pin.id)
+        app.processEvents()
+        corner = next(h for h in _handles(canvas, w_pin.id) if h.kind == "corner")
+        end_h = next(h for h in _handles(canvas, w_pin.id) if h.kind == "end" and h.which == "to")
+        end_pos = end_h.pos()
+        c0, c1 = _ensure_visible_pair(canvas, app, corner.pos(), QPointF(corner.pos().x() + 10.0, corner.pos().y() + 10.0))
+        QTest.mousePress(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, c0)
+        QTest.mouseMove(canvas.viewport(), c1)
+        app.processEvents()
+        assert canvas._corner_wire is not None and session.command_open()
+        canvas.fit_page()
+        app.processEvents()
+        pend = canvas.mapFromScene(end_pos)
+        QTest.mousePress(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, pend)
+        app.processEvents()
+        assert canvas._corner_wire is None and not session.command_open()
+        QTest.mouseRelease(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, pend)
+        app.processEvents()
+        canvas.cancel_wire()
+        app.processEvents()
+        assert _dump(session) == snap0 and session._undo == []
+
+        # N3: No-op same-rail-landing end drop does not redraw, emit project_changed, or say "reconnected".
+        canvas.select_ref(w_rail.id)
+        app.processEvents()
+        from_h = next(h for h in _handles(canvas, w_rail.id) if h.kind == "end" and h.which == "from")
+        rail_orig = from_h.pos()
+        p0, p_out = _ensure_visible_pair(canvas, app, rail_orig, QPointF(rail_orig.x() + 25.0, rail_orig.y() + 25.0))
+        p_back = canvas.mapFromScene(rail_orig)
+        redraw_calls = 0
+        changed_calls = 0
+        orig_redraw = canvas._redraw_wires
+
+        def spy_redraw():
+            nonlocal redraw_calls
+            redraw_calls += 1
+            return orig_redraw()
+
+        def on_changed():
+            nonlocal changed_calls
+            changed_calls += 1
+
+        monkeypatch.setattr(canvas, "_redraw_wires", spy_redraw)
+        canvas.project_changed.connect(on_changed)
+        act_before = len(session.activity)
+        QTest.mousePress(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p0)
+        QTest.mouseMove(canvas.viewport(), p_out)
+        app.processEvents()
+        QTest.mouseMove(canvas.viewport(), p_back)
+        app.processEvents()
+        QTest.mouseRelease(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p_back)
+        app.processEvents()
+        canvas.project_changed.disconnect(on_changed)
+        monkeypatch.undo()
+        assert redraw_calls == 0
+        assert changed_calls == 0
+        assert "reconnected" not in win.statusBar().currentMessage().lower()
+        assert len(session._undo) == 0
+        assert len(session.activity) == act_before
+
+        # N4: No redundant _sync_wire_handles() calls on cancel or plain-click pin fallback.
+        canvas.select_ref(w_pin.id)
+        app.processEvents()
+        sync_calls = 0
+        orig_sync = canvas._sync_wire_handles
+
+        def spy_sync(*args, **kwargs):
+            nonlocal sync_calls
+            sync_calls += 1
+            return orig_sync(*args, **kwargs)
+
+        monkeypatch.setattr(canvas, "_sync_wire_handles", spy_sync)
+        to_h = next(h for h in _handles(canvas, w_pin.id) if h.kind == "end" and h.which == "to")
+        _click_scene(canvas, app, to_h.pos())
+        assert canvas.wire_from == "M1.A1"
+        assert sync_calls == 1
+        monkeypatch.undo()
+        canvas.cancel_wire()
+        app.processEvents()
+
+        # Also verify _cancel_wire_route_drag does not call _sync_wire_handles redundantly after _select_wire_item.
+        _start_orphan_pull()
+        sync_calls_cancel = 0
+        orig_sync2 = canvas._sync_wire_handles
+
+        def spy_sync2(*args, **kwargs):
+            nonlocal sync_calls_cancel
+            sync_calls_cancel += 1
+            return orig_sync2(*args, **kwargs)
+
+        monkeypatch.setattr(canvas, "_sync_wire_handles", spy_sync2)
+        canvas._cancel_wire_route_drag()
+        app.processEvents()
+        monkeypatch.undo()
+        # 1 from removeItem(selected old WireItem), 1 from _redraw_wires(), 1 from _select_wire_item() = 3
+        # (no extra redundant 4th _sync_wire_handles() call after _select_wire_item()).
+        assert sync_calls_cancel == 3
+        assert len(_handles(canvas, w_pin.id)) >= 2
+
+        # N6: Unlocked pin under selected wire's end handle gets pin cursor & tooltip (not CrossCursor/wire-end).
+        session.set_pins_locked("PB1", False)
+        canvas._apply_pin_mode()
+        canvas.select_ref(w_pin.id)
+        app.processEvents()
+        pb1_pin = _pin_item(canvas, "PB1", "4")
+        from_h = next(h for h in _handles(canvas, w_pin.id) if h.kind == "end" and h.which == "from")
+        canvas.centerOn(pb1_pin.scenePos())
+        app.processEvents()
+        top_item = canvas.itemAt(canvas.mapFromScene(pb1_pin.scenePos()))
+        assert top_item is from_h
+        assert top_item.cursor().shape() == Qt.CursorShape.SizeAllCursor
+        assert top_item.toolTip() == pb1_pin.toolTip()
+        assert "Unlocked" in top_item.toolTip()
+        assert "Drag from end" not in top_item.toolTip()
+
+        # Re-locking restores handle cursor, tooltip, and zValue.
+        session.set_pins_locked("PB1", True)
+        canvas._apply_pin_mode()
+        app.processEvents()
+        from_h_locked = next(h for h in _handles(canvas, w_pin.id) if h.kind == "end" and h.which == "from")
+        assert from_h_locked.zValue() >= 30
+        assert from_h_locked.cursor().shape() == Qt.CursorShape.CrossCursor
+        assert "Drag from end" in from_h_locked.toolTip()
+
+        # N2: Closing the window mid-drag (release_scenes) abandons the open session command.
+        _start_orphan_pull()
+        assert session.command_open()
+    finally:
+        win.close()
+        app.processEvents()
+    assert not session.command_open()
+    depth_after_close = len(session._undo)
+    session.place("nema.operators.pb_no", ref="PB9", x=60, y=150)
+    assert len(session._undo) == depth_after_close + 1
+
+    # --- N5 & GUI rotation sync: orient_two_pin_flow updates ComponentItem.rotation() AND _tag_layout ---
+    s_flow = Session.create("N5GUIRotation")
+    s_flow.place("iec.protection.fuse_10a", ref="F1", x=100, y=60)
+    s_flow.place("iec.operators.pb_no", ref="S_H", x=180, y=60)
+    s_flow.place("iec.operators.pb_no", ref="S_V", x=100, y=140)
+    wf = s_flow.wire("F1.2", "S_H.13")
+    assert s_flow.sheet().component("F1").rotation == 0
+    s_flow._undo.clear()
+    s_flow._undo_tip = None
+
+    app2, win2 = _open_window(s_flow)
+    try:
+        canvas2 = win2.canvas
+        f1_item = next(
+            i for i in canvas2.scene.items() if isinstance(i, ComponentItem) and i.component_id == "F1"
+        )
+        assert round(f1_item.rotation()) % 360 == 0
+        canvas2.select_ref(wf.id)
+        app2.processEvents()
+        to_h = next(h for h in _handles(canvas2, wf.id) if h.kind == "end" and h.which == "to")
+        sv_13 = _pin_item(canvas2, "S_V", "13").scenePos()
+        _drag_scene(canvas2, app2, to_h.pos(), sv_13)
+
+        assert s_flow.sheet().component("F1").rotation == 90
+        assert round(f1_item.rotation()) % 360 == 90
+        expected_tags = canvas2._device_tag_layouts()
+        if "F1" in expected_tags:
+            wx, wy, align, size = expected_tags["F1"]
+            expected_local = f1_item.mapFromScene(QPointF(wx, wy))
+            assert f1_item._tag_layout is not None
+            assert abs(f1_item._tag_layout[0] - expected_local.x()) < 0.05
+            assert abs(f1_item._tag_layout[1] - expected_local.y()) < 0.05
+            assert f1_item._tag_layout[2] == align
+            assert abs(f1_item._tag_layout[3] - size) < 0.05
+
+        win2.undo_edit()
+        app2.processEvents()
+        assert s_flow.sheet().component("F1").rotation == 0
+    finally:
+        win2.close()
+
+
+def test_gui_to_rail_run_and_rail_corner_drags_with_junction_dots() -> None:
+    """Test gap: to-rail run drags (M1.A2 -> L2 and K1.A2 -> 0V) and rail-attached corner drags with junction dots."""
+
+    def _visible_junctions(canvas) -> list[tuple[float, float]]:
+        return [
+            (item.rect().center().x(), item.rect().center().y())
+            for item in canvas.scene.items()
+            if isinstance(item, RailJunctionItem) and item.isVisible()
+        ]
+
+    # 1. NEMA ladder to-rail wire M1.A2 -> L2 run drag + rail-attached corner drag.
+    s_lad = Session.create("ToRailLadder")
+    s_lad.set_title_block(drawing_style="ladder", rails="L1/L2")
+    s_lad.place("nema.operators.pb_no", ref="PB1", x=90, y=70)
+    s_lad.place("nema.contactors.coil", ref="M1", x=180, y=70)
+    w_from = s_lad.wire("L1", "PB1.3", number="100")
+    w_to = s_lad.wire("M1.A2", "L2", number="102")
+    geom_l = rail_geometry(s_lad.sheet(), s_lad.project)
+    assert geom_l is not None and geom_l.kind == "ladder"
+    s_lad._undo.clear()
+    s_lad._undo_tip = None
+
+    app, win = _open_window(s_lad)
+    try:
+        canvas = win.canvas
+        wi_to = _wire_item(canvas, w_to.id)
+        mid = wi_to.path().pointAtPercent(0.5)
+        old_y = mid.y()
+        before = _dump(s_lad)
+
+        # Drag M1.A2 -> L2 down by 20 mm -> updates to_at and moves L2 junction dot.
+        _drag_scene(canvas, app, mid, QPointF(mid.x(), old_y + 20.0))
+        live_to = s_lad.find_wire(wire_id=w_to.id)
+        assert live_to.to_at is not None
+        assert abs(live_to.to_at.x - geom_l.right) < 0.2
+        assert abs(live_to.to_at.y - (old_y + 20.0)) < 1.5
+        committed = iter_wire_points(s_lad.sheet(), s_lad.catalog, live_to, project=s_lad.project)
+        _assert_orthogonal(committed)
+        assert abs(committed[-1].y - live_to.to_at.y) < 0.15
+        dots = _visible_junctions(canvas)
+        assert any(abs(jx - geom_l.right) < 0.5 and abs(jy - live_to.to_at.y) < 0.5 for jx, jy in dots)
+        assert not any(abs(jx - geom_l.right) < 0.5 and abs(jy - old_y) < 0.5 for jx, jy in dots)
+        assert len(s_lad._undo) == 1
+
+        # Rail-attached corner drag on to-rail wire (corner index == n - 2) slides to_at further down by 15 mm.
+        canvas.select_ref(w_to.id)
+        app.processEvents()
+        corners_to = sorted(
+            (h for h in _handles(canvas, w_to.id) if h.kind == "corner"),
+            key=lambda h: h.corner_index,
+        )
+        rail_corner_to = corners_to[-1]
+        prev_to_y = live_to.to_at.y
+        _drag_scene(canvas, app, rail_corner_to.pos(), QPointF(rail_corner_to.pos().x(), prev_to_y + 15.0))
+        live_to = s_lad.find_wire(wire_id=w_to.id)
+        assert live_to.to_at is not None
+        assert abs(live_to.to_at.y - (prev_to_y + 15.0)) < 1.5
+        committed_c = iter_wire_points(s_lad.sheet(), s_lad.catalog, live_to, project=s_lad.project)
+        _assert_orthogonal(committed_c)
+        dots = _visible_junctions(canvas)
+        assert any(abs(jx - geom_l.right) < 0.5 and abs(jy - live_to.to_at.y) < 0.5 for jx, jy in dots)
+        assert len(s_lad._undo) == 2
+
+        win.undo_edit()
+        win.undo_edit()
+        app.processEvents()
+        assert _dump(s_lad) == before
+
+        # Also test rail-attached corner drag on from-rail wire L1 -> PB1.3 (offset first, then corner 1 drag).
+        wi_from = _wire_item(canvas, w_from.id)
+        f_mid = wi_from.path().pointAtPercent(0.5)
+        _drag_scene(canvas, app, f_mid, QPointF(f_mid.x(), f_mid.y() + 15.0))
+        live_f = s_lad.find_wire(wire_id=w_from.id)
+        assert live_f.from_at is not None
+        canvas.select_ref(w_from.id)
+        app.processEvents()
+        corner1 = next(h for h in _handles(canvas, w_from.id) if h.kind == "corner" and h.corner_index == 1)
+        prev_from_y = live_f.from_at.y
+        _drag_scene(canvas, app, corner1.pos(), QPointF(corner1.pos().x(), prev_from_y + 15.0))
+        live_f = s_lad.find_wire(wire_id=w_from.id)
+        assert live_f.from_at is not None
+        assert abs(live_f.from_at.y - (prev_from_y + 15.0)) < 1.5
+        dots = _visible_junctions(canvas)
+        assert any(abs(jx - geom_l.left) < 0.5 and abs(jy - live_f.from_at.y) < 0.5 for jx, jy in dots)
+    finally:
+        win.close()
+
+    # 2. IEC to-rail wire K1.A2 -> 0V run drag + straighten back over pin.
+    s_iec = Session.create("ToRailIEC")
+    s_iec.set_title_block(standard="IEC", rails="L+/0V")
+    s_iec.sheet().drawing_style = "iec"
+    s_iec.place("iec.contactors.coil", ref="K1", x=120, y=100)
+    w_ov = s_iec.wire("K1.A2", "0V", number="20")
+    pin_x, _pin_y = pin_world(
+        s_iec.sheet().component("K1"),
+        s_iec.catalog.get("iec.contactors.coil").pin("A2"),
+    )
+    geom_i = rail_geometry(s_iec.sheet(), s_iec.project)
+    assert geom_i is not None and geom_i.kind == "iec"
+    s_iec._undo.clear()
+    s_iec._undo_tip = None
+
+    app2, win2 = _open_window(s_iec)
+    try:
+        canvas2 = win2.canvas
+        wi = _wire_item(canvas2, w_ov.id)
+        mid = wi.path().pointAtPercent(0.5)
+        _drag_scene(canvas2, app2, mid, QPointF(pin_x + 20.0, mid.y()))
+        live = s_iec.find_wire(wire_id=w_ov.id)
+        assert live.to_at is not None
+        assert abs(live.to_at.y - geom_i.bottom) < 0.2
+        assert abs(live.to_at.x - (pin_x + 20.0)) < 1.5
+        committed = iter_wire_points(s_iec.sheet(), s_iec.catalog, live, project=s_iec.project)
+        _assert_orthogonal(committed)
+        dots = _visible_junctions(canvas2)
+        assert any(abs(jx - live.to_at.x) < 0.5 and abs(jy - geom_i.bottom) < 0.5 for jx, jy in dots)
+
+        # Straighten back over K1.A2 -> points == [] and to_at is None.
+        rail_seg_mid = QPointF(
+            (committed[-2].x + committed[-1].x) / 2.0,
+            (committed[-2].y + committed[-1].y) / 2.0,
+        )
+        _drag_scene(canvas2, app2, rail_seg_mid, QPointF(pin_x, rail_seg_mid.y()))
+        live = s_iec.find_wire(wire_id=w_ov.id)
+        assert live.to_at is None
+        assert live.points == []
+    finally:
+        win2.close()
+
+
+def test_gui_network_and_io_sheet_wire_dragging() -> None:
+    """Test gap: wire end, segment, and corner dragging on both network (comms) and io sheets."""
+
+    # 1. Network (comms) sheet.
+    s_net = Session.create("NetSheetDrag")
+    s_net.add_sheet("lan", title="LAN", kind="network", make_active=True)
+    s_net.place("iec.network.switch_5p", ref="SW1", x=60, y=60, sheet_id="lan")
+    s_net.place("iec.hmi.panel_7in", ref="HMI1", x=190, y=50, sheet_id="lan")
+    s_net.place("iec.plc.compact_16dio", ref="PLC1", x=190, y=130, sheet_id="lan")
+    w_net = s_net.wire("SW1.P4", "HMI1.ETH", sheet_id="lan", net="LAN")
+    s_net._undo.clear()
+    s_net._undo_tip = None
+
+    app, win = _open_window(s_net)
+    try:
+        canvas = win.canvas
+        # End drag: reconnect SW1.P4 -> HMI1.ETH to SW1.P5 -> HMI1.ETH.
+        before_end = _dump(s_net)
+        canvas.select_ref(w_net.id)
+        app.processEvents()
+        from_h = next(h for h in _handles(canvas, w_net.id) if h.kind == "end" and h.which == "from")
+        p5_pos = _pin_item(canvas, "SW1", "P5").scenePos()
+        _drag_scene(canvas, app, from_h.pos(), p5_pos)
+        assert s_net.find_wire(wire_id=w_net.id, sheet_id="lan").frm == "SW1.P5"
+        assert len(s_net._undo) == 1
+        win.undo_edit()
+        app.processEvents()
+        assert _dump(s_net) == before_end
+        win.redo_edit()
+        app.processEvents()
+        assert s_net.find_wire(wire_id=w_net.id, sheet_id="lan").frm == "SW1.P5"
+
+        # Segment drag on network link.
+        wi = _wire_item(canvas, w_net.id)
+        mid = wi.path().pointAtPercent(0.5)
+        before_seg = _dump(s_net)
+        _drag_scene(canvas, app, mid, QPointF(mid.x() + 15.0, mid.y() + 15.0))
+        live = s_net.find_wire(wire_id=w_net.id, sheet_id="lan")
+        assert len(live.points) >= 1
+        routed = iter_wire_points(s_net.sheet("lan"), s_net.catalog, live, project=s_net.project)
+        _assert_orthogonal(routed)
+        assert len(s_net._undo) == 2
+
+        # Corner drag on network link.
+        canvas.select_ref(w_net.id)
+        app.processEvents()
+        corners = [h for h in _handles(canvas, w_net.id) if h.kind == "corner"]
+        assert corners
+        c0 = corners[0]
+        _drag_scene(canvas, app, c0.pos(), QPointF(c0.pos().x() + 10.0, c0.pos().y() + 10.0))
+        live = s_net.find_wire(wire_id=w_net.id, sheet_id="lan")
+        routed2 = iter_wire_points(s_net.sheet("lan"), s_net.catalog, live, project=s_net.project)
+        _assert_orthogonal(routed2)
+        assert len(s_net._undo) == 3
+
+        win.undo_edit()
+        win.undo_edit()
+        app.processEvents()
+        assert _dump(s_net) == before_seg
+    finally:
+        win.close()
+
+    # 2. I/O sheet.
+    s_io = Session.create("IOSheetDrag")
+    s_io.add_sheet("io1", title="PLC I/O", kind="io", make_active=True)
+    s_io.place("iec.operators.pb_no", ref="S1", x=60, y=60, sheet_id="io1")
+    s_io.place("iec.plc.di16", ref="DI1", x=180, y=40, sheet_id="io1")
+    w_io = s_io.wire("S1.14", "DI1.I0", sheet_id="io1")
+    s_io._undo.clear()
+    s_io._undo_tip = None
+
+    app2, win2 = _open_window(s_io)
+    try:
+        canvas2 = win2.canvas
+        # End drag: reconnect DI1.I0 -> DI1.I1.
+        before_end = _dump(s_io)
+        canvas2.select_ref(w_io.id)
+        app2.processEvents()
+        to_h = next(h for h in _handles(canvas2, w_io.id) if h.kind == "end" and h.which == "to")
+        i1_pos = _pin_item(canvas2, "DI1", "I1").scenePos()
+        _drag_scene(canvas2, app2, to_h.pos(), i1_pos)
+        assert s_io.find_wire(wire_id=w_io.id, sheet_id="io1").to == "DI1.I1"
+        assert len(s_io._undo) == 1
+        win2.undo_edit()
+        app2.processEvents()
+        assert _dump(s_io) == before_end
+        win2.redo_edit()
+        app2.processEvents()
+        assert s_io.find_wire(wire_id=w_io.id, sheet_id="io1").to == "DI1.I1"
+
+        # Segment drag on I/O wire.
+        wi = _wire_item(canvas2, w_io.id)
+        mid = wi.path().pointAtPercent(0.5)
+        before_seg = _dump(s_io)
+        _drag_scene(canvas2, app2, mid, QPointF(mid.x() + 15.0, mid.y() + 15.0))
+        live = s_io.find_wire(wire_id=w_io.id, sheet_id="io1")
+        assert len(live.points) >= 1
+        routed = iter_wire_points(s_io.sheet("io1"), s_io.catalog, live, project=s_io.project)
+        _assert_orthogonal(routed)
+        assert len(s_io._undo) == 2
+
+        # Corner drag on I/O wire.
+        canvas2.select_ref(w_io.id)
+        app2.processEvents()
+        corners = [h for h in _handles(canvas2, w_io.id) if h.kind == "corner"]
+        assert corners
+        c0 = corners[0]
+        _drag_scene(canvas2, app2, c0.pos(), QPointF(c0.pos().x() + 10.0, c0.pos().y() + 10.0))
+        live = s_io.find_wire(wire_id=w_io.id, sheet_id="io1")
+        routed2 = iter_wire_points(s_io.sheet("io1"), s_io.catalog, live, project=s_io.project)
+        _assert_orthogonal(routed2)
+        assert len(s_io._undo) == 3
+
+        win2.undo_edit()
+        win2.undo_edit()
+        app2.processEvents()
+        assert _dump(s_io) == before_seg
+    finally:
+        win2.close()

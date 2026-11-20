@@ -1327,6 +1327,7 @@ class WireHandleItem(QGraphicsItem):
         which: str = "",
         corner_index: int = -1,
         view: SchematicView | None = None,
+        unlocked_pin: PinItem | None = None,
     ) -> None:
         super().__init__()
         self.wire_id = wire_id
@@ -1334,6 +1335,7 @@ class WireHandleItem(QGraphicsItem):
         self.which = which
         self.corner_index = corner_index
         self._owner_view = weakref.ref(view) if view is not None else None
+        self._unlocked_pin = weakref.ref(unlocked_pin) if unlocked_pin is not None else None
         self._hovered = False
         self.setPos(float(x), float(y))
         self.setZValue(34 if kind == "end" else 32)
@@ -1341,12 +1343,18 @@ class WireHandleItem(QGraphicsItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
         self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
-        if kind == "end":
+        if unlocked_pin is not None:
+            self.setCursor(unlocked_pin.cursor())
+            self.setToolTip(unlocked_pin.toolTip())
+        elif kind == "end":
             self.setCursor(Qt.CursorShape.CrossCursor)
             self.setToolTip(f"Drag {which} end of {wire_id} to a terminal or rail")
         else:
             self.setCursor(Qt.CursorShape.SizeAllCursor)
             self.setToolTip(f"Drag corner of {wire_id} to reroute")
+
+    def _unlocked_pin_item(self) -> PinItem | None:
+        return self._unlocked_pin() if self._unlocked_pin is not None else None
 
     def _view(self) -> SchematicView | None:
         if self._owner_view is not None:
@@ -1376,6 +1384,8 @@ class WireHandleItem(QGraphicsItem):
         self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None
     ) -> None:
         del option, widget
+        if self._unlocked_pin is not None:
+            return
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         if self.kind == "end":
             r = 1.9 if self._hovered else 1.55
@@ -1392,11 +1402,27 @@ class WireHandleItem(QGraphicsItem):
 
     def hoverEnterEvent(self, event) -> None:  # noqa: N802
         self._hovered = True
+        pin = self._unlocked_pin_item()
+        if pin is not None:
+            try:
+                if pin.scene() is not None:
+                    pin._hot = True
+                    pin.update()
+            except RuntimeError:
+                pass
         self.update()
         super().hoverEnterEvent(event)
 
     def hoverLeaveEvent(self, event) -> None:  # noqa: N802
         self._hovered = False
+        pin = self._unlocked_pin_item()
+        if pin is not None:
+            try:
+                if pin.scene() is not None:
+                    pin._hot = False
+                    pin.update()
+            except RuntimeError:
+                pass
         self.update()
         super().hoverLeaveEvent(event)
 

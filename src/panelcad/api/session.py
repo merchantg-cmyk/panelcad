@@ -2698,13 +2698,22 @@ class Session(SessionTroubleshootMixin, SessionReconstructMixin, SessionPortsMix
                 out.append(Point(x=float(raw.get("x", 0)), y=float(raw.get("y", 0))))
             else:
                 out.append(Point(x=float(raw[0]), y=float(raw[1])))
-        from panelcad.core.route import orthogonal_interior
-        from panelcad.render.wiring import wire_ends
+        if not out:
+            wire.points = []
+        else:
+            from panelcad.core.route import orthogonal_interior
+            from panelcad.render.wiring import wire_ends
 
-        ax, ay, _a_side, bx, by, _b_side = wire_ends(
-            self.sheet(sheet_id), self.catalog, wire, self.project
-        )
-        wire.points = orthogonal_interior(ax, ay, bx, by, out)
+            prev_points = wire.points
+            wire.points = out
+            try:
+                ax, ay, _a_side, bx, by, _b_side = wire_ends(
+                    self.sheet(sheet_id), self.catalog, wire, self.project
+                )
+            except Exception:
+                wire.points = prev_points
+                raise
+            wire.points = orthogonal_interior(ax, ay, bx, by, out)
         clear_route_cache()
         self._touch_drawing()
         self.emit("set_wire_route", f"route {wire.id}")
@@ -2810,74 +2819,94 @@ class Session(SessionTroubleshootMixin, SessionReconstructMixin, SessionPortsMix
 
         from panelcad.core.ladder import endpoint_is_rail, rail_names, rail_side
         from panelcad.core.wire_numbering import (
+            _end_key,
+            _norm,
             end_is_comms,
             feedthrough_joins,
             is_comms_wire,
             is_passthrough,
             split_end,
+            wire_networks,
         )
 
         if is_comms_wire(sheet, wire, self.catalog) or end_is_comms(sheet, target_ref, self.catalog):
             return
 
-        def _endpoint_nets(ref: str) -> dict[str, str]:
-            found: dict[str, str] = {}
-            ref_u = str(ref).strip().upper()
-            is_rail = endpoint_is_rail(sheet, ref, self.project)
-            host_comp_u = ""
-            if not is_rail:
-                cid, pid = split_end(ref)
-                if cid and pid:
+        networks = wire_networks(self.project, self.catalog, exclude=(wire,))
+        by_end: dict[tuple, set[int]] = {}
+        by_pass_comp: dict[tuple[str, str], set[int]] = {}
+        by_link: dict[str, set[int]] = {}
+        by_net: dict[str, set[int]] = {}
+
+        for net_idx, items in enumerate(networks):
+            for sh, other in items:
+                if is_comms_wire(sh, other, self.catalog):
+                    continue
+                other_net = _norm(other.net)
+                if other_net:
+                    by_net.setdefault(other_net.upper(), set()).add(net_idx)
+                for end in (other.frm, other.to):
+                    if end_is_comms(sh, end, self.catalog):
+                        continue
+                    ek = _end_key(sh, self.project, end)
+                    by_end.setdefault(ek, set()).add(net_idx)
+                    if ek[0] == "pin":
+                        cid, _pid = split_end(end)
+                        if cid:
+                            try:
+                                comp = sh.component(cid)
+                            except KeyError:
+                                comp = None
+                            if comp is not None and (
+                                is_passthrough(comp, self.catalog, self.project)
+                                or feedthrough_joins(comp, self.catalog, self.project)
+                            ):
+                                by_pass_comp.setdefault((sh.id, comp.id.upper()), set()).add(net_idx)
+                                link = _norm(comp.properties.get("link"))
+                                if link:
+                                    by_link.setdefault(link, set()).add(net_idx)
+
+        def _endpoint_components(ref: str) -> tuple[set[int], dict[str, str]]:
+            hit: set[int] = set()
+            ek = _end_key(sheet, self.project, ref)
+            hit.update(by_end.get(ek, ()))
+            if ek[0] == "pin":
+                cid, _pid = split_end(ref)
+                if cid:
                     try:
                         comp = sheet.component(cid)
-                        if is_passthrough(comp, self.catalog, self.project) or feedthrough_joins(
-                            comp, self.catalog, self.project
-                        ):
-                            host_comp_u = cid.upper()
                     except KeyError:
-                        pass
-
-            def _scan(page: Sheet) -> None:
-                for other in page.wires:
-                    if other is wire:
+                        comp = None
+                    if comp is not None and (
+                        is_passthrough(comp, self.catalog, self.project)
+                        or feedthrough_joins(comp, self.catalog, self.project)
+                    ):
+                        hit.update(by_pass_comp.get((sheet.id, comp.id.upper()), ()))
+                        link = _norm(comp.properties.get("link"))
+                        if link:
+                            hit.update(by_link.get(link, ()))
+            found: dict[str, str] = {}
+            for idx in hit:
+                for sh, other in networks[idx]:
+                    if is_comms_wire(sh, other, self.catalog):
                         continue
-                    if is_comms_wire(page, other, self.catalog):
-                        continue
-                    other_net = str(other.net or "").strip()
-                    if not other_net:
-                        continue
-                    touches = False
-                    for end in (other.frm, other.to):
-                        end_u = str(end).strip().upper()
-                        if end_u == ref_u:
-                            touches = True
-                            break
-                        if host_comp_u and split_end(end)[0].upper() == host_comp_u:
-                            touches = True
-                            break
-                    if touches:
+                    other_net = _norm(other.net)
+                    if other_net:
                         found.setdefault(other_net.upper(), other_net)
-
-            if is_rail:
-                for page in self.project.sheets:
-                    if page.kind in {"panel_layout", "door_layout"}:
-                        continue
-                    _scan(page)
-            else:
-                _scan(sheet)
-            return found
+            return hit, found
 
         other_ref = wire.to if end_key == "from" else wire.frm
+        other_net_idxs, other_nets = _endpoint_components(other_ref)
         source_nets: dict[str, str] = {}
-        own_net = str(wire.net or "").strip()
+        own_net = _norm(wire.net)
         if own_net:
             source_nets[own_net.upper()] = own_net
-        for key, name in _endpoint_nets(other_ref).items():
+        for key, name in other_nets.items():
             source_nets.setdefault(key, name)
         if not source_nets:
             return
 
-        target_nets = _endpoint_nets(target_ref)
+        target_net_idxs, target_nets = _endpoint_components(target_ref)
         for src_u, src_name in source_nets.items():
             for tgt_u, tgt_name in target_nets.items():
                 if src_u != tgt_u:
@@ -2885,7 +2914,22 @@ class Session(SessionTroubleshootMixin, SessionReconstructMixin, SessionPortsMix
                         f"cannot connect net '{src_name}' to {target_ref} (already on net '{tgt_name}')"
                     )
 
-        if endpoint_is_rail(sheet, target_ref, self.project):
+        target_is_rail = endpoint_is_rail(sheet, target_ref, self.project)
+        if own_net:
+            own_u = own_net.upper()
+            sibling_idxs = by_net.get(own_u, set())
+            distinct_target = target_net_idxs - other_net_idxs
+            if (
+                sibling_idxs
+                and distinct_target
+                and not target_nets
+                and not (target_is_rail and target_ref.upper() == own_u)
+            ):
+                raise ValueError(
+                    f"cannot connect net '{own_net}' to {target_ref} (shared with another circuit)"
+                )
+
+        if target_is_rail:
             hot, ret = rail_names(sheet, self.project)
             opp = ret if rail_side(target_ref, hot, ret) == "left" else hot
             opp_u = str(opp).strip().upper()
@@ -3047,20 +3091,47 @@ class Session(SessionTroubleshootMixin, SessionReconstructMixin, SessionPortsMix
                         net_touches_rail = any(
                             _touches_rail(sh, self.project, w) for sh, w in items
                         )
-                        if not net_touches_rail:
-                            canonical = _pick_existing(
-                                [w for _sh, w in items], extras, overwrite=False
+                        target_wires = [
+                            w
+                            for sh, w in items
+                            if (is_locked(w) or w is not wire)
+                            and not (
+                                old_number
+                                and _norm(w.number) == old_number
+                                and not is_locked(w)
+                                and not is_protected(w, extras)
+                                and not _touches_rail(sh, self.project, w)
                             )
-                            if canonical:
-                                for _sh, w in items:
-                                    if (
-                                        w is not wire
-                                        and not is_locked(w)
-                                        and not is_protected(w, extras)
-                                        and _norm(w.number)
-                                        and _norm(w.number) != canonical
-                                    ):
-                                        w.number = ""
+                        ]
+                        canonical = _pick_existing(
+                            target_wires, extras, overwrite=False
+                        ) or _pick_existing([w for _sh, w in items], extras, overwrite=False)
+                        rail_nums = (
+                            {
+                                _norm(rw.number)
+                                for rsh, rw in items
+                                if _touches_rail(rsh, self.project, rw) and _norm(rw.number)
+                            }
+                            if net_touches_rail
+                            else set()
+                        )
+                        if canonical:
+                            for sh, w in items:
+                                num = _norm(w.number)
+                                if (
+                                    w is not wire
+                                    and not is_locked(w)
+                                    and not is_protected(w, extras)
+                                    and not _touches_rail(sh, self.project, w)
+                                    and num
+                                    and num != canonical
+                                    and (
+                                        not net_touches_rail
+                                        or num == old_number
+                                        or num not in rail_nums
+                                    )
+                                ):
+                                    w.number = ""
                     self._auto_number_wires()
 
             clear_route_cache()

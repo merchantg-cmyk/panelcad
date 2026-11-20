@@ -455,6 +455,47 @@ def move_wire_corner(
         return _clean_ortho_points(_restore_ortho(pts))
 
     pts = _copy_pts(points)
+
+    # Pre-compute both endpoint stub clamps before constructing left/right or
+    # sliding a0/b0 so both sides share the exact final (nx, ny) and stay orthogonal.
+    for _ in range(2):
+        prev_nx, prev_ny = nx, ny
+        if index - 1 == 0 and not slide_start:
+            if in_kind == "h":
+                span_a = abs(cur.x - a0.x)
+                sign_a = 1.0 if cur.x > a0.x else (-1.0 if cur.x < a0.x else (1.0 if nx >= a0.x else -1.0))
+                if abs(ny - a0.y) <= _ORTHO_TOL:
+                    min_keep = min(stub, span_a) if stub > 0.0 and span_a > _ORTHO_TOL else 0.0
+                    if min_keep > _ORTHO_TOL and (nx - a0.x) * sign_a < min_keep:
+                        nx = a0.x + sign_a * min_keep
+            else:
+                span_a = abs(cur.y - a0.y)
+                sign_a = 1.0 if cur.y > a0.y else (-1.0 if cur.y < a0.y else (1.0 if ny >= a0.y else -1.0))
+                if abs(nx - a0.x) <= _ORTHO_TOL:
+                    min_keep = min(stub, span_a) if stub > 0.0 and span_a > _ORTHO_TOL else 0.0
+                    if min_keep > _ORTHO_TOL and (ny - a0.y) * sign_a < min_keep:
+                        ny = a0.y + sign_a * min_keep
+        if index + 1 == n - 1 and not slide_end:
+            if out_kind == "h":
+                span_b = abs(cur.x - b0.x)
+                sign_b = 1.0 if cur.x > b0.x else (-1.0 if cur.x < b0.x else (1.0 if nx >= b0.x else -1.0))
+                if abs(ny - b0.y) <= _ORTHO_TOL:
+                    min_keep = min(stub, span_b) if stub > 0.0 and span_b > _ORTHO_TOL else 0.0
+                    if min_keep > _ORTHO_TOL and (nx - b0.x) * sign_b < min_keep:
+                        nx = b0.x + sign_b * min_keep
+            else:
+                span_b = abs(cur.y - b0.y)
+                sign_b = 1.0 if cur.y > b0.y else (-1.0 if cur.y < b0.y else (1.0 if ny >= b0.y else -1.0))
+                if abs(nx - b0.x) <= _ORTHO_TOL:
+                    min_keep = min(stub, span_b) if stub > 0.0 and span_b > _ORTHO_TOL else 0.0
+                    if min_keep > _ORTHO_TOL and (ny - b0.y) * sign_b < min_keep:
+                        ny = b0.y + sign_b * min_keep
+        if abs(nx - prev_nx) <= _ORTHO_TOL and abs(ny - prev_ny) <= _ORTHO_TOL:
+            break
+
+    if abs(cur.x - nx) <= _ORTHO_TOL and abs(cur.y - ny) <= _ORTHO_TOL:
+        return _copy_pts(points)
+
     if index - 1 == 0:
         if slide_start:
             if in_kind == "h":
@@ -466,9 +507,6 @@ def move_wire_corner(
             span_a = abs(cur.x - a0.x)
             sign = 1.0 if cur.x > a0.x else (-1.0 if cur.x < a0.x else (1.0 if nx >= a0.x else -1.0))
             if abs(ny - a0.y) <= _ORTHO_TOL:
-                min_keep = min(stub, span_a) if stub > 0.0 and span_a > _ORTHO_TOL else 0.0
-                if min_keep > _ORTHO_TOL and (nx - a0.x) * sign < min_keep:
-                    nx = a0.x + sign * min_keep
                 left = [a0]
             else:
                 s_a = min(stub, max(span_a, abs(nx - a0.x))) if stub > 0.0 else 0.0
@@ -481,9 +519,6 @@ def move_wire_corner(
             span_a = abs(cur.y - a0.y)
             sign = 1.0 if cur.y > a0.y else (-1.0 if cur.y < a0.y else (1.0 if ny >= a0.y else -1.0))
             if abs(nx - a0.x) <= _ORTHO_TOL:
-                min_keep = min(stub, span_a) if stub > 0.0 and span_a > _ORTHO_TOL else 0.0
-                if min_keep > _ORTHO_TOL and (ny - a0.y) * sign < min_keep:
-                    ny = a0.y + sign * min_keep
                 left = [a0]
             else:
                 s_a = min(stub, max(span_a, abs(ny - a0.y))) if stub > 0.0 else 0.0
@@ -520,9 +555,6 @@ def move_wire_corner(
             span_b = abs(cur.x - b0.x)
             sign = 1.0 if cur.x > b0.x else (-1.0 if cur.x < b0.x else (1.0 if nx >= b0.x else -1.0))
             if abs(ny - b0.y) <= _ORTHO_TOL:
-                min_keep = min(stub, span_b) if stub > 0.0 and span_b > _ORTHO_TOL else 0.0
-                if min_keep > _ORTHO_TOL and (nx - b0.x) * sign < min_keep:
-                    nx = b0.x + sign * min_keep
                 right = [b0]
             else:
                 s_b = min(stub, max(span_b, abs(nx - b0.x))) if stub > 0.0 else 0.0
@@ -535,9 +567,6 @@ def move_wire_corner(
             span_b = abs(cur.y - b0.y)
             sign = 1.0 if cur.y > b0.y else (-1.0 if cur.y < b0.y else (1.0 if ny >= b0.y else -1.0))
             if abs(nx - b0.x) <= _ORTHO_TOL:
-                min_keep = min(stub, span_b) if stub > 0.0 and span_b > _ORTHO_TOL else 0.0
-                if min_keep > _ORTHO_TOL and (ny - b0.y) * sign < min_keep:
-                    ny = b0.y + sign * min_keep
                 right = [b0]
             else:
                 s_b = min(stub, max(span_b, abs(ny - b0.y))) if stub > 0.0 else 0.0

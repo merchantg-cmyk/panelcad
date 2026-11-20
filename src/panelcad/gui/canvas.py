@@ -165,6 +165,7 @@ class SchematicView(QGraphicsView):
         self._corner_rail_axis = ""
         self._route_rail_dot: RailJunctionItem | None = None
         self._route_rail_hidden: RailJunctionItem | None = None
+        self._route_rail_checked = False
         self._wire_end_drag: dict | None = None
         self._wire_end_preview: QGraphicsPathItem | None = None
         self._wire_end_snap: QGraphicsEllipseItem | None = None
@@ -539,6 +540,7 @@ class SchematicView(QGraphicsView):
         no item wrapper outlives the C++ item it points at.
         """
 
+        self.drop_open_gesture()
         scenes: list[QGraphicsScene] = []
 
         def keep(scene) -> None:
@@ -562,6 +564,7 @@ class SchematicView(QGraphicsView):
         self._wire_end_snap = None
         self._route_rail_dot = None
         self._route_rail_hidden = None
+        self._route_rail_checked = False
         self._corner_wire = None
         self._corner_pts = None
         self._corner_press_view = None
@@ -605,6 +608,7 @@ class SchematicView(QGraphicsView):
         self._wire_end_snap = None
         self._route_rail_dot = None
         self._route_rail_hidden = None
+        self._route_rail_checked = False
         self._cloud_preview = None
         self._cloud_origin = None
         self.scene.clear()
@@ -942,6 +946,7 @@ class SchematicView(QGraphicsView):
                     item.set_locked(sheet.component(item.component_id).pins_locked)
                 except KeyError:
                     item.set_locked(True)
+        self._sync_wire_handles()
 
     def _pin_item(self, ref: str) -> PinItem | None:
         for item in self.scene.items():
@@ -1079,7 +1084,6 @@ class SchematicView(QGraphicsView):
         self._redraw_wires()
         if wire_id:
             self._select_wire_item(wire_id)
-        self._sync_wire_handles()
         self.status.emit(self._status_text())
 
     def _close_open_gesture_body(self) -> None:
@@ -1569,6 +1573,16 @@ class SchematicView(QGraphicsView):
         handles = list(self._wire_handles)
         self._wire_handles.clear()
         for handle in handles:
+            if getattr(handle, "_hovered", False):
+                pin_ref = getattr(handle, "_unlocked_pin", None)
+                pin = pin_ref() if pin_ref is not None else None
+                if pin is not None:
+                    try:
+                        if pin.scene() is not None:
+                            pin._hot = False
+                            pin.update()
+                    except RuntimeError:
+                        pass
             if handle in self._items:
                 self._items.remove(handle)
             try:
@@ -1623,6 +1637,15 @@ class SchematicView(QGraphicsView):
             for idx in range(1, len(pts) - 1):
                 specs.append((pts[idx].x, pts[idx].y, "corner", "", idx))
             for hx, hy, kind, which, cidx in specs:
+                unlocked_pin: PinItem | None = None
+                if kind == "end":
+                    # An unlocked pin under the end spot owns hover/cursor/tooltip and drag-to-slide.
+                    for cand in self.scene.items(QRectF(hx - 0.6, hy - 0.6, 1.2, 1.2)):
+                        if isinstance(cand, PinItem) and cand.isVisible() and not cand._locked:
+                            sp = cand.scenePos()
+                            if math.hypot(float(sp.x()) - hx, float(sp.y()) - hy) <= 0.5:
+                                unlocked_pin = cand
+                                break
                 handle = WireHandleItem(
                     wire_item.wire_id,
                     hx,
@@ -1631,6 +1654,7 @@ class SchematicView(QGraphicsView):
                     which=which,
                     corner_index=cidx,
                     view=self,
+                    unlocked_pin=unlocked_pin,
                 )
                 self._wire_handles.append(handle)
                 self._add(handle)
@@ -1686,6 +1710,7 @@ class SchematicView(QGraphicsView):
         item.setPath(path)
 
     def _clear_route_rail_preview(self) -> None:
+        self._route_rail_checked = False
         dot = self._route_rail_dot
         self._route_rail_dot = None
         if dot is not None:
@@ -1711,7 +1736,8 @@ class SchematicView(QGraphicsView):
             return
         if self.scene is None:
             return
-        if self._route_rail_hidden is None:
+        if not self._route_rail_checked:
+            self._route_rail_checked = True
             # Hide the original junction dot if no other wire shares that rail landing.
             shared = False
             try:
@@ -2094,8 +2120,8 @@ class SchematicView(QGraphicsView):
 
     def _cancel_wire_end_drag(self, *, resync: bool = True) -> None:
         drag = self._wire_end_drag
-        self._wire_end_drag = None
         self._clear_wire_end_visuals()
+        self._wire_end_drag = None
         self.unsetCursor()
         if resync and drag is not None:
             self._sync_wire_handles()
@@ -2109,6 +2135,7 @@ class SchematicView(QGraphicsView):
         except KeyError:
             return
         by_id = {c.id: c for c in sheet.components}
+        rotated: list[ComponentItem] = []
         for item in self._items:
             if not isinstance(item, ComponentItem) or item.layout:
                 continue
@@ -2117,6 +2144,22 @@ class SchematicView(QGraphicsView):
                 continue
             if int(round(item.rotation())) % 360 != int(comp.rotation) % 360:
                 item.setRotation(comp.rotation)
+                rotated.append(item)
+        if rotated:
+            self._device_tag_cache = None
+            if (
+                sheet.kind == "schematic"
+                and not is_layout_sheet(sheet)
+                and not is_network_sheet(sheet)
+            ):
+                tags = self._device_tag_layouts()
+                for item in self._items:
+                    if not isinstance(item, ComponentItem) or item.layout or item.network:
+                        continue
+                    if item.component_id in tags:
+                        item.set_tag_layout(tags[item.component_id])
+                    elif item in rotated:
+                        item.set_tag_layout(None)
 
     def _validate_wire_end_drop(
         self, wire, which: str, pin: PinItem | None, rail
@@ -2294,7 +2337,6 @@ class SchematicView(QGraphicsView):
                 self._wire_drag = False
                 self._handle_pin(pin.ref())
                 self._update_wire_preview(scene_pos, None)
-                self._sync_wire_handles()
                 return
             self._sync_wire_handles()
             self.status.emit(self._status_text())
@@ -2310,8 +2352,8 @@ class SchematicView(QGraphicsView):
         snap_is_rail = bool(drag.get("snap_is_rail"))
         invalid_msg = str(drag.get("invalid_msg") or "")
 
-        self._wire_end_drag = None
         self._clear_wire_end_visuals()
+        self._wire_end_drag = None
         self.unsetCursor()
 
         if not target_ref:
@@ -2335,11 +2377,16 @@ class SchematicView(QGraphicsView):
                 float(snap_at.x()),
                 float(snap_at.y()),
             )
+        prev_gen = int(getattr(self.session, "_drawing_generation", 0))
         try:
             self.session.reconnect_wire(wire_id, which, target_ref, **kwargs)
         except (KeyError, ValueError) as exc:
             self._sync_wire_handles()
             self.status.emit(str(exc))
+            return
+        if int(getattr(self.session, "_drawing_generation", 0)) == prev_gen:
+            self._sync_wire_handles()
+            self.status.emit(self._status_text())
             return
         self._sync_component_rotations()
         self._redraw_wires()
@@ -2401,6 +2448,11 @@ class SchematicView(QGraphicsView):
             super().mousePressEvent(event)
             return
 
+        if self._wire_end_drag is not None:
+            self._cancel_wire_end_drag()
+        if self._corner_wire is not None or self._pull_wire is not None:
+            self._cancel_wire_route_drag()
+
         self._left_press_pos = event.position()
         self._left_empty_press = False
         self._left_select_drag = False
@@ -2431,8 +2483,6 @@ class SchematicView(QGraphicsView):
             return
 
         layout_sheet = is_layout_sheet(self.session.sheet())
-        if self._wire_end_drag is not None:
-            self._cancel_wire_end_drag()
         pin = None if layout_sheet else self._pin_at(event.position())
         handle = (
             None
@@ -2672,6 +2722,10 @@ class SchematicView(QGraphicsView):
             event.accept()
             return
         if event.button() == Qt.MouseButton.LeftButton and self._left_empty_press:
+            if self._wire_end_drag is not None:
+                self._cancel_wire_end_drag()
+            if self._corner_wire is not None or self._pull_wire is not None:
+                self._cancel_wire_route_drag()
             dragged = self._left_select_drag
             press_pos = self._left_press_pos or event.position()
             self._left_empty_press = False
