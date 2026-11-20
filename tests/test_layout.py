@@ -536,7 +536,8 @@ def test_gui_drag_wire_segment():
         return QMouseEvent(typ, QPointF(vp), button, buttons, Qt.KeyboardModifier.NoModifier)
 
     canvas.mousePressEvent(ev(QMouseEvent.Type.MouseButtonPress, mid))
-    dragged = QPointF(mid.x(), mid.y() + 18)
+    # mid may sit on either a horizontal or vertical run of the auto-route; move both axes so the hit run pulls.
+    dragged = QPointF(mid.x() + 18, mid.y() + 18)
     canvas.mouseMoveEvent(ev(QMouseEvent.Type.MouseMove, dragged))
     canvas.mouseReleaseEvent(
         ev(QMouseEvent.Type.MouseButtonRelease, dragged, Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton)

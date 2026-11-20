@@ -256,9 +256,16 @@ def _point_seg_dist(x: float, y: float, a: Point, b: Point) -> float:
     return ((x - px) ** 2 + (y - py) ** 2) ** 0.5
 
 
-def _clean_ortho_points(points: list[Point]) -> list[Point]:
+_ORTHO_TOL = 1e-3
+
+
+def _clean_ortho_points(points: list[Point], *, tol: float = _ORTHO_TOL) -> list[Point]:
     """Drop duplicate vertices and strictly collinear interior vertices."""
 
+    if not points:
+        return points
+    a0 = Point(x=points[0].x, y=points[0].y)
+    b0 = Point(x=points[-1].x, y=points[-1].y)
     pts = _dedupe_pts(points)
     changed = True
     while changed and len(pts) >= 3:
@@ -266,16 +273,20 @@ def _clean_ortho_points(points: list[Point]) -> list[Point]:
         simp: list[Point] = [pts[0]]
         for p in pts[1:-1]:
             a = simp[-1]
-            if abs(a.x - p.x) <= 1e-6 and abs(a.y - p.y) <= 1e-6:
+            if abs(a.x - p.x) <= tol and abs(a.y - p.y) <= tol:
                 changed = True
                 continue
             simp.append(p)
-        simp.append(pts[-1])
+        if abs(simp[-1].x - pts[-1].x) <= tol and abs(simp[-1].y - pts[-1].y) <= tol and len(simp) >= 2:
+            simp[-1] = pts[-1]
+            changed = True
+        else:
+            simp.append(pts[-1])
         out: list[Point] = [simp[0]]
         for idx in range(1, len(simp) - 1):
             a, b, c = out[-1], simp[idx], simp[idx + 1]
-            col_h = abs(a.y - b.y) <= 1e-6 and abs(b.y - c.y) <= 1e-6
-            col_v = abs(a.x - b.x) <= 1e-6 and abs(b.x - c.x) <= 1e-6
+            col_h = abs(a.y - b.y) <= tol and abs(b.y - c.y) <= tol
+            col_v = abs(a.x - b.x) <= tol and abs(b.x - c.x) <= tol
             if col_h or col_v:
                 changed = True
                 continue
@@ -284,6 +295,9 @@ def _clean_ortho_points(points: list[Point]) -> list[Point]:
         pts = _dedupe_pts(out)
         if len(pts) != len(out):
             changed = True
+    if pts:
+        pts[0] = a0
+        pts[-1] = b0
     return pts
 
 
@@ -301,50 +315,109 @@ def nearest_corner(points: list[Point], x: float, y: float, max_dist: float = 4.
     return best
 
 
-def set_run_channel(points: list[Point], i: int, kind: str, channel: float) -> list[Point]:
-    """Pull one orthogonal run onto a new X (vertical) or Y (horizontal) channel."""
+def _pin_stub_len(span: float, stub: float, *, both_ends: bool = False) -> float:
+    """Stub offset along a pin's exit side so jogs clear adjacent pins."""
+
+    if stub <= 0.0 or span <= _ORTHO_TOL:
+        return 0.0
+    if both_ends:
+        if span >= 2.0 * stub + 1.0:
+            return stub
+        return min(stub, span / 3.0)
+    if span >= stub + 1.0:
+        return stub
+    return min(stub, span * 0.5)
+
+
+def set_run_channel(
+    points: list[Point],
+    i: int,
+    kind: str,
+    channel: float,
+    *,
+    stub: float = STUB,
+    slide_start: bool = False,
+    slide_end: bool = False,
+) -> list[Point]:
+    """Pull one orthogonal run onto a new X (vertical) or Y (horizontal) channel.
+
+    Pin-adjacent runs keep an exit stub of ``stub`` (default ``STUB``) along the
+    pin side so the jog clears neighbouring terminals. Rail-attached runs pass
+    ``slide_start=True`` or ``slide_end=True`` so the rail endpoint slides along
+    the rail instead of jogging off it.
+    """
 
     n = len(points)
     if n < 2 or i < 0 or i >= n - 1 or kind not in ("h", "v"):
         return _copy_pts(points)
     a, b = points[i], points[i + 1]
     cur = (a.y + b.y) / 2.0 if kind == "h" else (a.x + b.x) / 2.0
-    if abs(channel - cur) <= 1e-6:
+    if abs(channel - cur) <= _ORTHO_TOL:
         return _copy_pts(points)
+    at_start = i == 0
+    at_end = i + 1 == n - 1
+    slide_a = at_start and slide_start
+    slide_b = at_end and slide_end
     a0 = Point(x=points[0].x, y=points[0].y)
     b0 = Point(x=points[-1].x, y=points[-1].y)
-    out: list[Point] = [a0] if i == 0 else _copy_pts(points[:i])
+    if slide_a:
+        a0 = Point(x=a0.x, y=channel) if kind == "h" else Point(x=channel, y=a0.y)
+    if slide_b:
+        b0 = Point(x=b0.x, y=channel) if kind == "h" else Point(x=channel, y=b0.y)
+
+    need_stub_a = at_start and not slide_a
+    need_stub_b = at_end and not slide_b
+    span = abs(b.x - a.x) if kind == "h" else abs(b.y - a.y)
+    off = _pin_stub_len(span, stub, both_ends=(need_stub_a and need_stub_b))
+    sa_off = off if need_stub_a else 0.0
+    sb_off = off if need_stub_b else 0.0
+
+    out: list[Point] = [a0] if at_start else _copy_pts(points[:i])
     if kind == "h":
-        na = Point(x=a.x, y=channel)
-        nb = Point(x=b.x, y=channel)
-        if i > 0:
+        sign = 1.0 if b.x >= a.x else -1.0
+        start_x = a.x + sign * sa_off
+        end_x = b.x - sign * sb_off
+        if need_stub_a and sa_off > _ORTHO_TOL:
+            out.append(Point(x=start_x, y=a0.y))
+        na = Point(x=start_x, y=channel)
+        nb = Point(x=end_x, y=channel)
+        if not at_start:
             prev = out[-1]
-            if abs(prev.x - na.x) > 1e-6 and abs(prev.y - na.y) > 1e-6:
+            if abs(prev.x - na.x) > _ORTHO_TOL and abs(prev.y - na.y) > _ORTHO_TOL:
                 out.append(Point(x=na.x, y=prev.y))
         out.append(na)
         out.append(nb)
-        if i + 1 < n - 1:
+        if not at_end:
             nxt = points[i + 2]
-            if abs(nb.x - nxt.x) > 1e-6 and abs(nb.y - nxt.y) > 1e-6:
+            if abs(nb.x - nxt.x) > _ORTHO_TOL and abs(nb.y - nxt.y) > _ORTHO_TOL:
                 out.append(Point(x=nb.x, y=nxt.y))
             out.extend(_copy_pts(points[i + 2 :]))
         else:
+            if need_stub_b and sb_off > _ORTHO_TOL:
+                out.append(Point(x=end_x, y=b0.y))
             out.append(b0)
     else:
-        na = Point(x=channel, y=a.y)
-        nb = Point(x=channel, y=b.y)
-        if i > 0:
+        sign = 1.0 if b.y >= a.y else -1.0
+        start_y = a.y + sign * sa_off
+        end_y = b.y - sign * sb_off
+        if need_stub_a and sa_off > _ORTHO_TOL:
+            out.append(Point(x=a0.x, y=start_y))
+        na = Point(x=channel, y=start_y)
+        nb = Point(x=channel, y=end_y)
+        if not at_start:
             prev = out[-1]
-            if abs(prev.x - na.x) > 1e-6 and abs(prev.y - na.y) > 1e-6:
+            if abs(prev.x - na.x) > _ORTHO_TOL and abs(prev.y - na.y) > _ORTHO_TOL:
                 out.append(Point(x=prev.x, y=na.y))
         out.append(na)
         out.append(nb)
-        if i + 1 < n - 1:
+        if not at_end:
             nxt = points[i + 2]
-            if abs(nb.x - nxt.x) > 1e-6 and abs(nb.y - nxt.y) > 1e-6:
+            if abs(nb.x - nxt.x) > _ORTHO_TOL and abs(nb.y - nxt.y) > _ORTHO_TOL:
                 out.append(Point(x=nxt.x, y=nb.y))
             out.extend(_copy_pts(points[i + 2 :]))
         else:
+            if need_stub_b and sb_off > _ORTHO_TOL:
+                out.append(Point(x=b0.x, y=end_y))
             out.append(b0)
     cleaned = _clean_ortho_points(out)
     cleaned[0] = a0
@@ -352,14 +425,23 @@ def set_run_channel(points: list[Point], i: int, kind: str, channel: float) -> l
     return cleaned
 
 
-def move_wire_corner(points: list[Point], index: int, nx: float, ny: float) -> list[Point]:
-    """Move interior corner *index* to *(nx, ny)* keeping pin ends fixed and segments orthogonal."""
+def move_wire_corner(
+    points: list[Point],
+    index: int,
+    nx: float,
+    ny: float,
+    *,
+    stub: float = STUB,
+    slide_start: bool = False,
+    slide_end: bool = False,
+) -> list[Point]:
+    """Move interior corner *index* to *(nx, ny)* keeping pin exits clear and segments orthogonal."""
 
     n = len(points)
     if n < 3 or index <= 0 or index >= n - 1:
         return _copy_pts(points)
     cur = points[index]
-    if abs(cur.x - nx) <= 1e-6 and abs(cur.y - ny) <= 1e-6:
+    if abs(cur.x - nx) <= _ORTHO_TOL and abs(cur.y - ny) <= _ORTHO_TOL:
         return _copy_pts(points)
     a0 = Point(x=points[0].x, y=points[0].y)
     b0 = Point(x=points[-1].x, y=points[-1].y)
@@ -374,36 +456,106 @@ def move_wire_corner(points: list[Point], index: int, nx: float, ny: float) -> l
 
     pts = _copy_pts(points)
     if index - 1 == 0:
-        left = [a0, Point(x=a0.x, y=ny) if in_kind == "h" else Point(x=nx, y=a0.y)]
+        if slide_start:
+            if in_kind == "h":
+                a0 = Point(x=a0.x, y=ny)
+            else:
+                a0 = Point(x=nx, y=a0.y)
+            left = [a0]
+        elif in_kind == "h":
+            span_a = abs(cur.x - a0.x)
+            sign = 1.0 if cur.x > a0.x else (-1.0 if cur.x < a0.x else (1.0 if nx >= a0.x else -1.0))
+            if abs(ny - a0.y) <= _ORTHO_TOL:
+                min_keep = min(stub, span_a) if stub > 0.0 and span_a > _ORTHO_TOL else 0.0
+                if min_keep > _ORTHO_TOL and (nx - a0.x) * sign < min_keep:
+                    nx = a0.x + sign * min_keep
+                left = [a0]
+            else:
+                s_a = min(stub, max(span_a, abs(nx - a0.x))) if stub > 0.0 else 0.0
+                if s_a > _ORTHO_TOL:
+                    sx = a0.x + sign * s_a
+                    left = [a0, Point(x=sx, y=a0.y), Point(x=sx, y=ny)]
+                else:
+                    left = [a0, Point(x=a0.x, y=ny)]
+        else:
+            span_a = abs(cur.y - a0.y)
+            sign = 1.0 if cur.y > a0.y else (-1.0 if cur.y < a0.y else (1.0 if ny >= a0.y else -1.0))
+            if abs(nx - a0.x) <= _ORTHO_TOL:
+                min_keep = min(stub, span_a) if stub > 0.0 and span_a > _ORTHO_TOL else 0.0
+                if min_keep > _ORTHO_TOL and (ny - a0.y) * sign < min_keep:
+                    ny = a0.y + sign * min_keep
+                left = [a0]
+            else:
+                s_a = min(stub, max(span_a, abs(ny - a0.y))) if stub > 0.0 else 0.0
+                if s_a > _ORTHO_TOL:
+                    sy = a0.y + sign * s_a
+                    left = [a0, Point(x=a0.x, y=sy), Point(x=nx, y=sy)]
+                else:
+                    left = [a0, Point(x=nx, y=a0.y)]
     else:
         prev2 = pts[index - 2]
         prev1 = pts[index - 1]
         left = pts[: index - 1]
         if in_kind == "h":
-            if abs(prev2.x - prev1.x) <= 1e-4:
+            if _seg_kind(prev2, prev1) == "v":
                 left.append(Point(x=prev1.x, y=ny))
             else:
                 left.append(prev1)
                 left.append(Point(x=prev1.x, y=ny))
         else:
-            if abs(prev2.y - prev1.y) <= 1e-4:
+            if _seg_kind(prev2, prev1) == "h":
                 left.append(Point(x=nx, y=prev1.y))
             else:
                 left.append(prev1)
                 left.append(Point(x=nx, y=prev1.y))
 
     if index + 1 == n - 1:
-        right = [Point(x=b0.x, y=ny) if out_kind == "h" else Point(x=nx, y=b0.y), b0]
+        if slide_end:
+            if out_kind == "h":
+                b0 = Point(x=b0.x, y=ny)
+            else:
+                b0 = Point(x=nx, y=b0.y)
+            right = [b0]
+        elif out_kind == "h":
+            span_b = abs(cur.x - b0.x)
+            sign = 1.0 if cur.x > b0.x else (-1.0 if cur.x < b0.x else (1.0 if nx >= b0.x else -1.0))
+            if abs(ny - b0.y) <= _ORTHO_TOL:
+                min_keep = min(stub, span_b) if stub > 0.0 and span_b > _ORTHO_TOL else 0.0
+                if min_keep > _ORTHO_TOL and (nx - b0.x) * sign < min_keep:
+                    nx = b0.x + sign * min_keep
+                right = [b0]
+            else:
+                s_b = min(stub, max(span_b, abs(nx - b0.x))) if stub > 0.0 else 0.0
+                if s_b > _ORTHO_TOL:
+                    ex = b0.x + sign * s_b
+                    right = [Point(x=ex, y=ny), Point(x=ex, y=b0.y), b0]
+                else:
+                    right = [Point(x=b0.x, y=ny), b0]
+        else:
+            span_b = abs(cur.y - b0.y)
+            sign = 1.0 if cur.y > b0.y else (-1.0 if cur.y < b0.y else (1.0 if ny >= b0.y else -1.0))
+            if abs(nx - b0.x) <= _ORTHO_TOL:
+                min_keep = min(stub, span_b) if stub > 0.0 and span_b > _ORTHO_TOL else 0.0
+                if min_keep > _ORTHO_TOL and (ny - b0.y) * sign < min_keep:
+                    ny = b0.y + sign * min_keep
+                right = [b0]
+            else:
+                s_b = min(stub, max(span_b, abs(ny - b0.y))) if stub > 0.0 else 0.0
+                if s_b > _ORTHO_TOL:
+                    ey = b0.y + sign * s_b
+                    right = [Point(x=nx, y=ey), Point(x=b0.x, y=ey), b0]
+                else:
+                    right = [Point(x=nx, y=b0.y), b0]
     else:
         nxt1 = pts[index + 1]
         nxt2 = pts[index + 2]
         if out_kind == "h":
-            if abs(nxt1.x - nxt2.x) <= 1e-4:
+            if _seg_kind(nxt1, nxt2) == "v":
                 right = [Point(x=nxt1.x, y=ny), *pts[index + 2 :]]
             else:
                 right = [Point(x=nxt1.x, y=ny), nxt1, *pts[index + 2 :]]
         else:
-            if abs(nxt1.y - nxt2.y) <= 1e-4:
+            if _seg_kind(nxt1, nxt2) == "h":
                 right = [Point(x=nx, y=nxt1.y), *pts[index + 2 :]]
             else:
                 right = [Point(x=nx, y=nxt1.y), nxt1, *pts[index + 2 :]]

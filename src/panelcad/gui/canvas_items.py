@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+import weakref
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -80,6 +81,9 @@ PANEL_SNAP = 1.0
 # the hit is whichever is larger.
 WIRE_HIT_MM = 3.0
 WIRE_HIT_PX = 7.0
+WIRE_HANDLE_HIT_MM = 2.4
+WIRE_HANDLE_HIT_MAX_MM = 3.5
+WIRE_HANDLE_HIT_PX = 6.0
 LIBRARY_MIME = "application/x-panelcad-library-id"
 
 
@@ -221,6 +225,13 @@ def wire_hit_width_scene(view) -> float:
     """Full stroker width. ``boundingRect`` must cover this, or the index drops the click."""
 
     return wire_hit_radius_scene(view) * 2.0
+
+
+def handle_hit_radius_scene(view) -> float:
+    """Wire handle hit radius in sheet mm, capped so zoomed-out handles stay clear of adjacent 5 mm pins."""
+
+    scale = _pixels_per_scene(view)
+    return min(WIRE_HANDLE_HIT_MAX_MM, max(WIRE_HANDLE_HIT_MM, WIRE_HANDLE_HIT_PX / scale))
 
 
 def _segment_distance(px: float, py: float, ax: float, ay: float, bx: float, by: float) -> float:
@@ -1303,7 +1314,8 @@ class WireItem(QGraphicsPathItem):
 class WireHandleItem(QGraphicsItem):
     """Draggable endpoint or interior corner handle for a selected wire."""
 
-    HIT = 2.8
+    HIT = WIRE_HANDLE_HIT_MM
+    HIT_MAX = WIRE_HANDLE_HIT_MAX_MM
 
     def __init__(
         self,
@@ -1314,12 +1326,14 @@ class WireHandleItem(QGraphicsItem):
         kind: str,
         which: str = "",
         corner_index: int = -1,
+        view: SchematicView | None = None,
     ) -> None:
         super().__init__()
         self.wire_id = wire_id
         self.kind = kind
         self.which = which
         self.corner_index = corner_index
+        self._owner_view = weakref.ref(view) if view is not None else None
         self._hovered = False
         self.setPos(float(x), float(y))
         self.setZValue(34 if kind == "end" else 32)
@@ -1335,14 +1349,18 @@ class WireHandleItem(QGraphicsItem):
             self.setToolTip(f"Drag corner of {wire_id} to reroute")
 
     def _view(self) -> SchematicView | None:
+        if self._owner_view is not None:
+            owner = self._owner_view()
+            if owner is not None and _is_schematic_view(owner):
+                return owner
         scene = self.scene()
         if scene is None or not scene.views():
             return None
         view = scene.views()[0]
         return view if _is_schematic_view(view) else None
 
-    def hit_radius_scene(self) -> float:
-        return max(self.HIT, wire_hit_radius_scene(self._view()) * 0.75)
+    def hit_radius_scene(self, view: SchematicView | None = None) -> float:
+        return handle_hit_radius_scene(view if view is not None else self._view())
 
     def boundingRect(self) -> QRectF:
         pad = self.hit_radius_scene() + 0.5
