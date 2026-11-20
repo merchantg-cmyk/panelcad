@@ -77,7 +77,9 @@ _DIGIT = str.maketrans({"O": "0", "I": "1", "L": "1", "S": "5", "B": "8", "Z": "
 def prepare_opencv(image: Image.Image) -> tuple[Image.Image, dict[str, float]]:
     """Denoise, then rotate so the long ruled lines are level. Angle is degrees CCW."""
 
-    rgb = np.asarray(image.convert("RGB"))
+    from panelcad.importer.imageutil import despeckle_preserving_strokes
+
+    rgb, _ = despeckle_preserving_strokes(np.asarray(image.convert("RGB"), dtype=np.uint8))
     den = cv2.bilateralFilter(rgb, 5, 40, 40)
     gray = cv2.cvtColor(den, cv2.COLOR_RGB2GRAY)
     angle = _skew_angle(gray)
@@ -207,6 +209,13 @@ def read_pixels(
 ) -> dict[str, Any]:
     """Devices, wires, and title-block fields from one prepared page image."""
 
+    from panelcad.importer.imageutil import despeckle_preserving_strokes
+
+    clean_rgb, speckled = despeckle_preserving_strokes(np.asarray(image.convert("RGB"), dtype=np.uint8))
+    if speckled:
+        cleaned = Image.fromarray(clean_rgb)
+        cleaned.info.update(image.info)
+        image = cleaned
     image = _upscale_low_res(image, width_mm, height_mm)
     rgb = np.asarray(image.convert("RGB"))
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
@@ -1561,6 +1570,7 @@ def _title_tokens(rgb: np.ndarray, ppm: float, width_mm: float, height_mm: float
 def _read_title_cells(rgb: np.ndarray, ppm: float, width_mm: float, height_mm: float) -> list[dict[str, Any]]:
     """Columns and rows are the ruled cells, read one cell-row at a time."""
 
+    from panelcad.importer.imageutil import despeckle_preserving_strokes
     from panelcad.ocr.dispatch import tesseract_required
 
     pytesseract = None
@@ -1568,12 +1578,13 @@ def _read_title_cells(rgb: np.ndarray, ppm: float, width_mm: float, height_mm: f
         import pytesseract
 
         configure_tesseract()
-    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    height, width = gray.shape
+    height, width = rgb.shape[:2]
     top = max(0, height - int(68 * ppm))
-    band = gray[top:]
-    if band.size == 0:
+    band_rgb = rgb[top:]
+    if band_rgb.size == 0:
         return []
+    band_rgb, _ = despeckle_preserving_strokes(np.asarray(band_rgb, dtype=np.uint8))
+    band = cv2.cvtColor(band_rgb, cv2.COLOR_RGB2GRAY)
     ink = (band < 180).astype(np.uint8) * 255
     vkernel = max(5, int(8 * ppm))
     hkernel = max(5, int(6 * ppm))
