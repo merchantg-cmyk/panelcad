@@ -1,0 +1,26 @@
+id: wiki_mcc_wiring
+source_id: wiki_mcc_wiring
+kind: schematic
+standard: "IEC"
+devices:
+  - QS1
+  - "FU 1-3"
+  - "FU 4"
+  - KM
+  - PTT1
+  - SA1
+  - SB1
+  - SB2
+  - K1
+  - K2
+  - K3
+  - K4
+  - HL1
+  - HL2
+wire_numbers:
+  - "L1"
+  - "L2"
+  - "L3"
+  - "N"
+  - "PE"
+notes: "IEC motor control centre power and start/stop control wiring."

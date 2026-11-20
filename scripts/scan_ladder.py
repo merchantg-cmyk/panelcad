@@ -61,6 +61,11 @@ VARIANTS: tuple[dict[str, Any], ...] = (
     {"id": "faded", "dpi": 200, "kind": "faded"},
     {"id": "speckle", "dpi": 150, "kind": "speckle"},
     {"id": "fax", "dpi": 200, "kind": "fax"},
+    {"id": "rot90", "dpi": 200, "kind": "rot90"},
+    {"id": "rot180", "dpi": 200, "kind": "rot180"},
+    {"id": "low_contrast", "dpi": 200, "kind": "low_contrast"},
+    {"id": "cropped_edge", "dpi": 200, "kind": "cropped_edge"},
+    {"id": "two_up", "dpi": 200, "kind": "two_up"},
 )
 
 SKEW_DEG = {"schematic": 1.6, "panel": -2.2, "terminal": 2.8}
@@ -124,6 +129,18 @@ def degrade(image: Any, source_id: str, variant: dict[str, Any]) -> tuple[Any, d
         return Image.fromarray(bw), save
     if kind == "phone":
         return _phone(image), {"format": "JPEG", "dpi": (72, 72), "quality": 72, "optimize": True}
+    if kind == "rot90":
+        return image.transpose(Image.Transpose.ROTATE_270), save
+    if kind == "rot180":
+        return image.transpose(Image.Transpose.ROTATE_180), save
+    if kind == "low_contrast":
+        arr = np.asarray(image).astype(np.float32)
+        low = np.clip(arr * 0.28 + 166.0, 0, 255).astype(np.uint8)
+        return Image.fromarray(low), save
+    if kind == "cropped_edge":
+        return _cropped_edge(image), save
+    if kind == "two_up":
+        return _two_up(image), save
     raise ValueError(kind)
 
 
@@ -176,6 +193,70 @@ def _phone(image: Any) -> Any:
     mask = cv2.warpPerspective(np.full((height, width), 255, np.uint8), matrix, (canvas_w, canvas_h))
     canvas = np.where(mask[:, :, None] > 127, warped, desk)
     return Image.fromarray(canvas)
+
+
+def _cropped_edge(image: Any) -> Any:
+    """Clip a small outer border (roughly 3.2% per edge) to mimic misaligned framing."""
+    width, height = image.size
+    dx = max(1, int(round(width * 0.032))) if width >= 40 else 0
+    dy = max(1, int(round(height * 0.032))) if height >= 40 else 0
+    if dx == 0 and dy == 0:
+        return image
+    return image.crop((dx, dy, width - dx, height - dy))
+
+
+def _two_up(image: Any) -> Any:
+    """Place a shrunk sheet beside a framed blank continuation sheet in a 2-up spread."""
+    from PIL import Image, ImageDraw
+
+    width, height = image.size
+    page_w = max(80, int(round(width * 0.52)))
+    page_h = max(80, int(round(height * 0.52)))
+    gutter = max(16, int(round(page_w * 0.05)))
+    margin = max(16, int(round(min(page_w, page_h) * 0.04)))
+    if 2 * page_w + gutter + 2 * margin <= page_h + 2 * margin:
+        gutter = max(gutter, page_h - 2 * page_w + 32)
+    canvas_w = margin * 2 + page_w * 2 + gutter
+    canvas_h = margin * 2 + page_h
+    canvas = Image.new("RGB", (canvas_w, canvas_h), (236, 236, 233))
+    resized = image.resize((page_w, page_h), Image.Resampling.LANCZOS)
+    canvas.paste(resized, (margin, margin))
+
+    right_x = margin + page_w + gutter
+    draw = ImageDraw.Draw(canvas)
+    draw.rectangle(
+        (right_x, margin, right_x + page_w - 1, margin + page_h - 1),
+        fill=(255, 255, 255),
+        outline=(60, 60, 60),
+        width=2,
+    )
+    pad = max(10, int(round(min(page_w, page_h) * 0.04)))
+    draw.rectangle(
+        (right_x + pad, margin + pad, right_x + page_w - pad, margin + page_h - pad),
+        outline=(90, 90, 90),
+        width=2,
+    )
+    box_h = max(18, int(round(page_h * 0.10)))
+    draw.rectangle(
+        (
+            right_x + int(page_w * 0.55),
+            margin + page_h - pad - box_h,
+            right_x + page_w - pad,
+            margin + page_h - pad,
+        ),
+        outline=(90, 90, 90),
+        width=1,
+    )
+    for idx in range(4):
+        y_rule = margin + pad + int(page_h * (0.18 + idx * 0.08))
+        draw.line(
+            (right_x + pad * 2, y_rule, right_x + page_w - pad * 2, y_rule),
+            fill=(195, 195, 195),
+            width=1,
+        )
+    fold_x = margin + page_w + gutter // 2
+    draw.line((fold_x, 0, fold_x, canvas_h - 1), fill=(165, 165, 160), width=2)
+    return canvas
 
 
 def _save(image: Any, path: Path, options: dict[str, Any]) -> None:
@@ -270,7 +351,8 @@ def generate() -> None:
                 suffix = ".jpg" if options["format"] == "JPEG" else ".png"
                 dest = FIXTURE_ROOT / source["id"] / f"{variant['id']}{suffix}"
                 _save(image, dest, options)
-                print(f"wrote {dest.relative_to(ROOT)} {dest.stat().st_size}")
+                rel = dest.relative_to(ROOT) if dest.is_relative_to(ROOT) else dest
+                print(f"wrote {rel} {dest.stat().st_size}")
     manifest = {"sources": [item["id"] for item in SOURCES], "variants": [item["id"] for item in VARIANTS]}
     (FIXTURE_ROOT / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 

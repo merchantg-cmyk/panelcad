@@ -1,0 +1,62 @@
+id: ghanem_motor_schematic
+source_id: github_industrial_motor_schematic
+kind: schematic
+standard: "NEMA/ANSI"
+devices:
+  - MS7
+  - MS8
+  - MS9
+  - MS10
+  - MS11
+  - MS12
+  - MS13
+  - MS14
+  - MS15
+  - MS16
+  - MS17
+  - MS18
+  - MS19
+  - MS20
+  - MC7
+  - MC8
+  - MC9
+  - MC10
+  - MC11
+  - MC12
+  - MC13
+  - MC14
+  - MC15
+  - MC16
+  - MC17
+  - MC18
+  - MC19
+  - MC20
+  - MOT7
+  - MOT8
+  - MOT9
+  - MOT10
+  - MOT11
+  - MOT12
+  - MOT13
+  - MOT14
+  - MOT15
+  - MOT16
+  - MOT17
+  - MOT18
+  - MOT19
+  - MOT20
+  - TB1
+wire_numbers:
+  - "1L1"
+  - "1L2"
+  - "1L3"
+  - "1X1"
+  - "1X2"
+  - "U9"
+  - "V9"
+  - "W8"
+  - "W9"
+  - "U14"
+  - "V14"
+  - "W14"
+notes: "Power schematic for 14 motors (MS7-MS20, MC7-MC20, MOT7-MOT20, TB1 terminals). MOT8 right terminal is labeled W8."

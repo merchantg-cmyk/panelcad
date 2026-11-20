@@ -1,0 +1,20 @@
+id: ghanem_motor_panel
+source_id: github_industrial_motor_panel
+kind: panel_layout
+standard: "NEMA/ANSI"
+devices:
+  - PS01
+  - PLC
+  - PS02
+  - CR300
+panel_furniture:
+  - "SLOT 1"
+  - "SLOT 2"
+  - "SLOT 3"
+  - "DIN-01"
+  - "DIN-02"
+  - "PAN-01"
+  - "PAN-02"
+  - "PAN-03"
+wire_numbers: []
+notes: "Enclosure panel layout. Overlapping terminal strip block text on DIN-01 is omitted rather than guessed."
