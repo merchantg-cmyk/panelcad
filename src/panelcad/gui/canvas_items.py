@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+import weakref
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -80,6 +81,9 @@ PANEL_SNAP = 1.0
 # the hit is whichever is larger.
 WIRE_HIT_MM = 3.0
 WIRE_HIT_PX = 7.0
+WIRE_HANDLE_HIT_MM = 2.4
+WIRE_HANDLE_HIT_MAX_MM = 3.5
+WIRE_HANDLE_HIT_PX = 6.0
 LIBRARY_MIME = "application/x-panelcad-library-id"
 
 
@@ -221,6 +225,13 @@ def wire_hit_width_scene(view) -> float:
     """Full stroker width. ``boundingRect`` must cover this, or the index drops the click."""
 
     return wire_hit_radius_scene(view) * 2.0
+
+
+def handle_hit_radius_scene(view) -> float:
+    """Wire handle hit radius in sheet mm, capped so zoomed-out handles stay clear of adjacent 5 mm pins."""
+
+    scale = _pixels_per_scene(view)
+    return min(WIRE_HANDLE_HIT_MAX_MM, max(WIRE_HANDLE_HIT_MM, WIRE_HANDLE_HIT_PX / scale))
 
 
 def _segment_distance(px: float, py: float, ax: float, ay: float, bx: float, by: float) -> float:
@@ -1297,6 +1308,125 @@ class WireItem(QGraphicsPathItem):
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         # Consume so Qt does not fall through to rubber-band or a device under the wire.
+        event.accept()
+
+
+class WireHandleItem(QGraphicsItem):
+    """Draggable endpoint or interior corner handle for a selected wire."""
+
+    HIT = WIRE_HANDLE_HIT_MM
+    HIT_MAX = WIRE_HANDLE_HIT_MAX_MM
+
+    def __init__(
+        self,
+        wire_id: str,
+        x: float,
+        y: float,
+        *,
+        kind: str,
+        which: str = "",
+        corner_index: int = -1,
+        view: SchematicView | None = None,
+        unlocked_pin: PinItem | None = None,
+    ) -> None:
+        super().__init__()
+        self.wire_id = wire_id
+        self.kind = kind
+        self.which = which
+        self.corner_index = corner_index
+        self._owner_view = weakref.ref(view) if view is not None else None
+        self._unlocked_pin = weakref.ref(unlocked_pin) if unlocked_pin is not None else None
+        self._hovered = False
+        self.setPos(float(x), float(y))
+        self.setZValue(34 if kind == "end" else 32)
+        self.setAcceptHoverEvents(True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
+        self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
+        if unlocked_pin is not None:
+            self.setCursor(unlocked_pin.cursor())
+            self.setToolTip(unlocked_pin.toolTip())
+        elif kind == "end":
+            self.setCursor(Qt.CursorShape.CrossCursor)
+            self.setToolTip(f"Drag {which} end of {wire_id} to a terminal or rail")
+        else:
+            self.setCursor(Qt.CursorShape.SizeAllCursor)
+            self.setToolTip(f"Drag corner of {wire_id} to reroute")
+
+    def _unlocked_pin_item(self) -> PinItem | None:
+        return self._unlocked_pin() if self._unlocked_pin is not None else None
+
+    def _view(self) -> SchematicView | None:
+        if self._owner_view is not None:
+            owner = self._owner_view()
+            if owner is not None and _is_schematic_view(owner):
+                return owner
+        scene = self.scene()
+        if scene is None or not scene.views():
+            return None
+        view = scene.views()[0]
+        return view if _is_schematic_view(view) else None
+
+    def hit_radius_scene(self, view: SchematicView | None = None) -> float:
+        return handle_hit_radius_scene(view if view is not None else self._view())
+
+    def boundingRect(self) -> QRectF:
+        pad = self.hit_radius_scene() + 0.5
+        return QRectF(-pad, -pad, pad * 2.0, pad * 2.0)
+
+    def shape(self) -> QPainterPath:
+        r = self.hit_radius_scene()
+        path = QPainterPath()
+        path.addEllipse(QRectF(-r, -r, r * 2.0, r * 2.0))
+        return path
+
+    def paint(
+        self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None
+    ) -> None:
+        del option, widget
+        if self._unlocked_pin is not None:
+            return
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if self.kind == "end":
+            r = 1.9 if self._hovered else 1.55
+            fill = _qc("pin_hot") if self._hovered else _qc("highlight")
+            painter.setBrush(QBrush(fill))
+            painter.setPen(QPen(_qc("highlight_edge"), 0.35))
+            painter.drawEllipse(QPointF(0.0, 0.0), r, r)
+        else:
+            r = 1.65 if self._hovered else 1.35
+            fill = _qc("pin_unlocked_hot") if self._hovered else _qc("pin_unlocked")
+            painter.setBrush(QBrush(fill))
+            painter.setPen(QPen(_qc("highlight_edge"), 0.35))
+            painter.drawRect(QRectF(-r, -r, r * 2.0, r * 2.0))
+
+    def hoverEnterEvent(self, event) -> None:  # noqa: N802
+        self._hovered = True
+        pin = self._unlocked_pin_item()
+        if pin is not None:
+            try:
+                if pin.scene() is not None:
+                    pin._hot = True
+                    pin.update()
+            except RuntimeError:
+                pass
+        self.update()
+        super().hoverEnterEvent(event)
+
+    def hoverLeaveEvent(self, event) -> None:  # noqa: N802
+        self._hovered = False
+        pin = self._unlocked_pin_item()
+        if pin is not None:
+            try:
+                if pin.scene() is not None:
+                    pin._hot = False
+                    pin.update()
+            except RuntimeError:
+                pass
+        self.update()
+        super().hoverLeaveEvent(event)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
         event.accept()
 
 

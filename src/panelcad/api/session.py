@@ -1872,30 +1872,7 @@ class Session(SessionTroubleshootMixin, SessionReconstructMixin, SessionPortsMix
                 frm, to, net=net, from_sheet=src.id, to_sheet=dest_id, label=label, make_room=make_room,
                 number=number,
             )
-        self._assert_pin(src, frm)
-        self._assert_pin(src, to)
-        if str(frm).strip().upper() == str(to).strip().upper():
-            raise ValueError(f"wire from and to are the same pin ({frm})")
-        from panelcad.core.circuit import control_power_conflict
-        from panelcad.core.ladder import rail_short_message
-        from panelcad.render.sheet import parse_pin_ref
-
-        short = rail_short_message(src, frm, to, self.project)
-        if short:
-            raise ValueError(short)
-        # Two device pins are always checked. A bare rail name has no pin, so
-        # L1.X2 is the device and a bare L1 is not.
-        if "." in str(frm) and "." in str(to):
-            a_ref, a_pin = parse_pin_ref(frm)
-            b_ref, b_pin = parse_pin_ref(to)
-            mix = control_power_conflict(
-                src.component(a_ref).library_id,
-                a_pin,
-                src.component(b_ref).library_id,
-                b_pin,
-            )
-            if mix:
-                raise ValueError(mix)
+        self.validate_wire_endpoints(src, frm, to)
         self._wire_seq += 1
         wid = wire_id or f"w{self._wire_seq}"
         # Wire ids are unique across the project, not just this sheet: a
@@ -2692,18 +2669,27 @@ class Session(SessionTroubleshootMixin, SessionReconstructMixin, SessionPortsMix
             raise KeyError(f"no wire {frm} → {to} on sheet '{sheet.id}'")
         raise ValueError("pass wire_id or from/to")
 
+    _ROUTE_AT_UNSET = object()
+
     def set_wire_route(
         self,
         wire_id: str,
         points: list[Any],
         sheet_id: str | None = None,
+        *,
+        from_at: Any = _ROUTE_AT_UNSET,
+        to_at: Any = _ROUTE_AT_UNSET,
     ) -> Wire:
-        """Store interior waypoints so a human-pulled wire keeps its shape."""
+        """Store interior waypoints (and optional rail landings) so a pulled wire keeps its shape."""
 
         from panelcad.core.geometry import Point
         from panelcad.render.wiring import clear_route_cache
 
         wire = self.find_wire(wire_id=wire_id, sheet_id=sheet_id)
+        if from_at is not self._ROUTE_AT_UNSET:
+            wire.from_at = _as_point(from_at)
+        if to_at is not self._ROUTE_AT_UNSET:
+            wire.to_at = _as_point(to_at)
         out: list[Point] = []
         for raw in points or []:
             if isinstance(raw, Point):
@@ -2712,13 +2698,22 @@ class Session(SessionTroubleshootMixin, SessionReconstructMixin, SessionPortsMix
                 out.append(Point(x=float(raw.get("x", 0)), y=float(raw.get("y", 0))))
             else:
                 out.append(Point(x=float(raw[0]), y=float(raw[1])))
-        from panelcad.core.route import orthogonal_interior
-        from panelcad.render.wiring import wire_ends
+        if not out:
+            wire.points = []
+        else:
+            from panelcad.core.route import orthogonal_interior
+            from panelcad.render.wiring import wire_ends
 
-        ax, ay, _a_side, bx, by, _b_side = wire_ends(
-            self.sheet(sheet_id), self.catalog, wire, self.project
-        )
-        wire.points = orthogonal_interior(ax, ay, bx, by, out)
+            prev_points = wire.points
+            wire.points = out
+            try:
+                ax, ay, _a_side, bx, by, _b_side = wire_ends(
+                    self.sheet(sheet_id), self.catalog, wire, self.project
+                )
+            except Exception:
+                wire.points = prev_points
+                raise
+            wire.points = orthogonal_interior(ax, ay, bx, by, out)
         clear_route_cache()
         self._touch_drawing()
         self.emit("set_wire_route", f"route {wire.id}")
@@ -2767,6 +2762,388 @@ class Session(SessionTroubleshootMixin, SessionReconstructMixin, SessionPortsMix
         clear_route_cache()
         self._touch_drawing()
         self.emit("clear_wire_route", f"auto-route {wire.id}")
+        return wire
+
+    def validate_wire_endpoints(self, sheet: Sheet, frm: str, to: str) -> None:
+        """Validate a wire endpoint pair: pins/rails exist, not same pin, not rail short, no control/power mix."""
+
+        self._assert_pin(sheet, frm)
+        self._assert_pin(sheet, to)
+        if str(frm).strip().upper() == str(to).strip().upper():
+            raise ValueError(f"wire from and to are the same pin ({frm})")
+
+        from panelcad.core.circuit import control_power_conflict
+        from panelcad.core.ladder import rail_short_message
+        from panelcad.render.sheet import parse_pin_ref
+
+        short = rail_short_message(sheet, frm, to, self.project)
+        if short:
+            raise ValueError(short)
+        # Two device pins are always checked. A bare rail name has no pin, so
+        # L1.X2 is the device and a bare L1 is not.
+        if "." in str(frm) and "." in str(to):
+            a_ref, a_pin = parse_pin_ref(frm)
+            b_ref, b_pin = parse_pin_ref(to)
+            mix = control_power_conflict(
+                sheet.component(a_ref).library_id,
+                a_pin,
+                sheet.component(b_ref).library_id,
+                b_pin,
+            )
+            if mix:
+                raise ValueError(mix)
+
+    def validate_wire_reconnect(
+        self,
+        sheet: Sheet,
+        wire: Wire,
+        which: str,
+        target: str,
+    ) -> None:
+        """Validate moving one end of *wire* to *target*, including net-merge conflicts."""
+
+        end_key = str(which or "").strip().lower()
+        if end_key not in ("from", "to"):
+            raise ValueError(f"which must be 'from' or 'to', got '{which}'")
+        target_ref = str(target or "").strip()
+        if not target_ref:
+            raise ValueError("target pin or rail is required")
+
+        new_from = target_ref if end_key == "from" else wire.frm
+        new_to = target_ref if end_key == "to" else wire.to
+        self.validate_wire_endpoints(sheet, new_from, new_to)
+
+        current_ref = wire.frm if end_key == "from" else wire.to
+        if target_ref.upper() == str(current_ref).strip().upper():
+            return
+
+        from panelcad.core.ladder import endpoint_is_rail, rail_names, rail_side
+        from panelcad.core.wire_numbering import (
+            _end_key,
+            _norm,
+            end_is_comms,
+            feedthrough_joins,
+            is_comms_wire,
+            is_passthrough,
+            split_end,
+            wire_networks,
+        )
+
+        if is_comms_wire(sheet, wire, self.catalog) or end_is_comms(sheet, target_ref, self.catalog):
+            return
+
+        networks = wire_networks(self.project, self.catalog, exclude=(wire,))
+        by_end: dict[tuple, set[int]] = {}
+        by_pass_comp: dict[tuple[str, str], set[int]] = {}
+        by_link: dict[str, set[int]] = {}
+        by_net: dict[str, set[int]] = {}
+
+        for net_idx, items in enumerate(networks):
+            for sh, other in items:
+                if is_comms_wire(sh, other, self.catalog):
+                    continue
+                other_net = _norm(other.net)
+                if other_net:
+                    by_net.setdefault(other_net.upper(), set()).add(net_idx)
+                for end in (other.frm, other.to):
+                    if end_is_comms(sh, end, self.catalog):
+                        continue
+                    ek = _end_key(sh, self.project, end)
+                    by_end.setdefault(ek, set()).add(net_idx)
+                    if ek[0] == "pin":
+                        cid, _pid = split_end(end)
+                        if cid:
+                            try:
+                                comp = sh.component(cid)
+                            except KeyError:
+                                comp = None
+                            if comp is not None and (
+                                is_passthrough(comp, self.catalog, self.project)
+                                or feedthrough_joins(comp, self.catalog, self.project)
+                            ):
+                                by_pass_comp.setdefault((sh.id, comp.id.upper()), set()).add(net_idx)
+                                link = _norm(comp.properties.get("link"))
+                                if link:
+                                    by_link.setdefault(link, set()).add(net_idx)
+
+        def _endpoint_components(ref: str) -> tuple[set[int], dict[str, str]]:
+            hit: set[int] = set()
+            ek = _end_key(sheet, self.project, ref)
+            hit.update(by_end.get(ek, ()))
+            if ek[0] == "pin":
+                cid, _pid = split_end(ref)
+                if cid:
+                    try:
+                        comp = sheet.component(cid)
+                    except KeyError:
+                        comp = None
+                    if comp is not None and (
+                        is_passthrough(comp, self.catalog, self.project)
+                        or feedthrough_joins(comp, self.catalog, self.project)
+                    ):
+                        hit.update(by_pass_comp.get((sheet.id, comp.id.upper()), ()))
+                        link = _norm(comp.properties.get("link"))
+                        if link:
+                            hit.update(by_link.get(link, ()))
+            found: dict[str, str] = {}
+            for idx in hit:
+                for sh, other in networks[idx]:
+                    if is_comms_wire(sh, other, self.catalog):
+                        continue
+                    other_net = _norm(other.net)
+                    if other_net:
+                        found.setdefault(other_net.upper(), other_net)
+            return hit, found
+
+        other_ref = wire.to if end_key == "from" else wire.frm
+        other_net_idxs, other_nets = _endpoint_components(other_ref)
+        source_nets: dict[str, str] = {}
+        own_net = _norm(wire.net)
+        if own_net:
+            source_nets[own_net.upper()] = own_net
+        for key, name in other_nets.items():
+            source_nets.setdefault(key, name)
+        if not source_nets:
+            return
+
+        target_net_idxs, target_nets = _endpoint_components(target_ref)
+        for src_u, src_name in source_nets.items():
+            for tgt_u, tgt_name in target_nets.items():
+                if src_u != tgt_u:
+                    raise ValueError(
+                        f"cannot connect net '{src_name}' to {target_ref} (already on net '{tgt_name}')"
+                    )
+
+        target_is_rail = endpoint_is_rail(sheet, target_ref, self.project)
+        if own_net:
+            own_u = own_net.upper()
+            sibling_idxs = by_net.get(own_u, set())
+            distinct_target = target_net_idxs - other_net_idxs
+            if (
+                sibling_idxs
+                and distinct_target
+                and not target_nets
+                and not (target_is_rail and target_ref.upper() == own_u)
+            ):
+                raise ValueError(
+                    f"cannot connect net '{own_net}' to {target_ref} (shared with another circuit)"
+                )
+
+        if target_is_rail:
+            hot, ret = rail_names(sheet, self.project)
+            opp = ret if rail_side(target_ref, hot, ret) == "left" else hot
+            opp_u = str(opp).strip().upper()
+            if opp_u and opp_u in source_nets and opp_u != target_ref.upper():
+                raise ValueError(
+                    f"cannot connect net '{source_nets[opp_u]}' to rail {target_ref}"
+                )
+
+    def reconnect_wire(
+        self,
+        wire_id: str,
+        which: str,
+        target: str,
+        sheet_id: str | None = None,
+        *,
+        from_at: Any = None,
+        to_at: Any = None,
+    ) -> Wire:
+        """Move one end of an existing wire to a different valid pin or rail.
+
+        Preserves ``id``, ``number_locked``, ``gauge``, ``color``, ``wire_type``,
+        ``cable``, ``label``, and ``net``; preserves locked wire numbers and
+        re-runs incremental numbering and two-pin flow orientation when the
+        endpoint changes. Clears manual ``points`` and the moved end's old
+        ``from_at``/``to_at`` so the wire reroutes cleanly. No-op reconnects
+        push 0 undo steps and log no activity.
+        """
+
+        end_key = str(which or "").strip().lower()
+        if end_key not in ("from", "to"):
+            raise ValueError(f"which must be 'from' or 'to', got '{which}'")
+        src = self.sheet(sheet_id)
+        wire = self.find_wire(wire_id=wire_id, sheet_id=src.id)
+        target_ref = str(target or "").strip()
+        if not target_ref:
+            raise ValueError("target pin or rail is required")
+
+        self.validate_wire_reconnect(src, wire, end_key, target_ref)
+
+        from panelcad.core.ladder import endpoint_is_rail
+        from panelcad.render.wiring import clear_route_cache
+
+        current_ref = wire.frm if end_key == "from" else wire.to
+        current_at = wire.from_at if end_key == "from" else wire.to_at
+        raw_at = from_at if end_key == "from" else to_at
+        other_ref = wire.to if end_key == "from" else wire.frm
+        target_is_rail = endpoint_is_rail(src, target_ref, self.project)
+        moved_at = (
+            _rail_click(src, self.project, self.catalog, target_ref, other_ref, raw_at)
+            if target_is_rail and raw_at is not None
+            else None
+        )
+        endpoint_changed = target_ref.upper() != str(current_ref).strip().upper()
+
+        if not endpoint_changed:
+            if not target_is_rail or raw_at is None:
+                return wire
+            if moved_at is None and current_at is None:
+                return wire
+            if (
+                moved_at is not None
+                and current_at is not None
+                and abs(moved_at.x - current_at.x) <= 1e-4
+                and abs(moved_at.y - current_at.y) <= 1e-4
+            ):
+                return wire
+
+        nested = self._history_lock > 0
+        opened = self.begin_command("reconnect_wire")
+        failed = True
+        try:
+            old_from, old_to = wire.frm, wire.to
+            old_number = str(wire.number or "").strip()
+            if end_key == "from":
+                wire.frm = target_ref
+                wire.from_at = moved_at
+            else:
+                wire.to = target_ref
+                wire.to_at = moved_at
+            wire.points = []
+
+            if endpoint_changed:
+                from panelcad.core.cleanup import orient_two_pin_flow
+                from panelcad.core.wire_numbering import (
+                    _network_extras,
+                    _norm,
+                    _pick_existing,
+                    _touches_rail,
+                    is_locked,
+                    is_protected,
+                    resolve_settings,
+                    wire_networks,
+                )
+                from panelcad.render.sheet import parse_pin_ref
+
+                seen_cids: set[str] = set()
+                for end in (old_from, old_to, wire.frm, wire.to):
+                    try:
+                        cid, _ = parse_pin_ref(end)
+                    except ValueError:
+                        continue
+                    if cid in seen_cids:
+                        continue
+                    seen_cids.add(cid)
+                    if orient_two_pin_flow(src, self.catalog, cid):
+                        prefix = cid + "."
+                        for other in src.wires:
+                            if other.points and (
+                                str(other.frm).startswith(prefix)
+                                or str(other.to).startswith(prefix)
+                            ):
+                                other.points = []
+
+                if resolve_settings(self.project).enabled:
+                    extras = _network_extras(self.project)
+                    if not wire.number_locked:
+                        wire.number = ""
+                    networks = wire_networks(self.project, self.catalog)
+                    wire_net_idx = next(
+                        (
+                            idx
+                            for idx, items in enumerate(networks)
+                            if any(w is wire for _sh, w in items)
+                        ),
+                        None,
+                    )
+                    if old_number:
+                        holders = [
+                            idx
+                            for idx, items in enumerate(networks)
+                            if any(_norm(w.number) == old_number for _sh, w in items)
+                        ]
+                        if len(holders) > 1:
+                            keep_idx = next(
+                                (
+                                    idx
+                                    for idx in holders
+                                    if any(
+                                        _norm(w.number) == old_number
+                                        and (is_locked(w) or _touches_rail(sh, self.project, w))
+                                        for sh, w in networks[idx]
+                                    )
+                                ),
+                                next((idx for idx in holders if idx != wire_net_idx), holders[0]),
+                            )
+                            for idx in holders:
+                                if idx == keep_idx:
+                                    continue
+                                for sh, w in networks[idx]:
+                                    if (
+                                        _norm(w.number) == old_number
+                                        and not is_locked(w)
+                                        and not is_protected(w, extras)
+                                        and not _touches_rail(sh, self.project, w)
+                                    ):
+                                        w.number = ""
+                    if wire_net_idx is not None:
+                        items = networks[wire_net_idx]
+                        net_touches_rail = any(
+                            _touches_rail(sh, self.project, w) for sh, w in items
+                        )
+                        target_wires = [
+                            w
+                            for sh, w in items
+                            if (is_locked(w) or w is not wire)
+                            and not (
+                                old_number
+                                and _norm(w.number) == old_number
+                                and not is_locked(w)
+                                and not is_protected(w, extras)
+                                and not _touches_rail(sh, self.project, w)
+                            )
+                        ]
+                        canonical = _pick_existing(
+                            target_wires, extras, overwrite=False
+                        ) or _pick_existing([w for _sh, w in items], extras, overwrite=False)
+                        rail_nums = (
+                            {
+                                _norm(rw.number)
+                                for rsh, rw in items
+                                if _touches_rail(rsh, self.project, rw) and _norm(rw.number)
+                            }
+                            if net_touches_rail
+                            else set()
+                        )
+                        if canonical:
+                            for sh, w in items:
+                                num = _norm(w.number)
+                                if (
+                                    w is not wire
+                                    and not is_locked(w)
+                                    and not is_protected(w, extras)
+                                    and not _touches_rail(sh, self.project, w)
+                                    and num
+                                    and num != canonical
+                                    and (
+                                        not net_touches_rail
+                                        or num == old_number
+                                        or num not in rail_nums
+                                    )
+                                ):
+                                    w.number = ""
+                    self._auto_number_wires()
+
+            clear_route_cache()
+            self._touch_drawing()
+            failed = False
+        finally:
+            if opened:
+                if failed and not nested:
+                    self._cancel_command()
+                else:
+                    self.end_command()
+        self.emit("reconnect_wire", f"reconnect {wire.id} {wire.frm} → {wire.to}")
         return wire
 
     def set_wire_label(
