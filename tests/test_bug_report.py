@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import re
-import select
 import signal
 import subprocess
 import sys

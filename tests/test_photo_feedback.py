@@ -570,7 +570,7 @@ def test_mobile_field_capture_web_server_end_to_end_and_gui_qr_dialog(tmp_path: 
     import json
     import urllib.request
     from panelcad.gui.photo_viewer import MobileCaptureServerDialog
-    from panelcad.reconstruct.capture_web import CaptureWebServer, render_qr_svg
+    from panelcad.reconstruct.capture_web import render_qr_svg
 
     _app()
     session, photo_id = _build_mixed_reconstruct_session(tmp_path)
@@ -729,8 +729,6 @@ def test_mobile_web_update_box_and_refine_box_endpoints_and_two_click_mode(tmp_p
     """Mobile web /api/sessions/<id>/items/<item_id>/box and /refine-box endpoints + Desktop 2-click corner mode."""
     import json
     import urllib.request
-    from PySide6.QtCore import QPointF, Qt
-    from PySide6.QtGui import QMouseEvent
     from panelcad.gui.photo_viewer import MobileCaptureServerDialog, PhotoFeedbackDialog
 
     _app()

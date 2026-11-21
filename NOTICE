@@ -17,3 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 SPDX-License-Identifier: AGPL-3.0-or-later
 
 The full license text is LICENSE. Third-party notices are THIRD_PARTY_NOTICES.md.
+
+Third-party test fixture images under tests/fixtures/public_prints/ are licensed
+separately under CC BY 4.0 and CC BY-SA 3.0 (see tests/fixtures/public_prints/LICENSES.md).
+They are aggregated separately as test data and excluded from the AGPL-3.0 code license.

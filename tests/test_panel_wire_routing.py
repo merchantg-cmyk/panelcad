@@ -17,7 +17,6 @@ from panelcad.core.models import (
     Rail,
     Sheet,
     Wire,
-    WireTray,
 )
 from panelcad.core.panel_wiring import (
     PanelWireRoute,
@@ -40,7 +39,6 @@ from panelcad.core.panel_wiring import (
     render_walkthrough_step_png,
     resolve_pin_landing,
     route_panel_wires,
-    set_panel_wiring_mode,
     set_walkthrough_step,
     step_walkthrough,
     verify_routes_inside_trays,

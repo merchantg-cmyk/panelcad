@@ -550,7 +550,7 @@ def test_seal_in_parallel_lands_on_parent_load_pin_not_coil() -> None:
     ]
     assert seal_rows, [r.to_dict() for r in inferred if "M1-13" in {r.from_tag, r.to_tag}]
     assert all(
-        {row.from_pin, row.to_pin} == {"4", "4"} or "4" in {row.from_pin, row.to_pin}
+        {row.from_pin, row.to_pin} == {"4"} or "4" in {row.from_pin, row.to_pin}
         for row in seal_rows
     ), [r.to_dict() for r in seal_rows]
     bad_coil = [

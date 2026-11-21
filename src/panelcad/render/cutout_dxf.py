@@ -19,6 +19,7 @@ from panelcad.core.cutout import (
     CutFeature,
     SurfaceDrawing,
     d_cut_paths,
+    format_cutout_length as _len,
     local_holes,
     local_profile,
     opening_reach_mm,
@@ -372,14 +373,6 @@ def _draw_title(msp, drawing: SurfaceDrawing, project: Project | None, unit: flo
             _xy(x, y + index * 5.0, height, unit),
             align=TextEntityAlignment.LEFT,
         )
-
-
-def _len(value_mm: float, units: str) -> str:
-    if units == "inch":
-        return f"{value_mm / MM_PER_INCH:.3f}"
-    if abs(value_mm - round(value_mm)) < 1e-6:
-        return f"{value_mm:.0f}"
-    return f"{value_mm:.1f}"
 
 
 def _require_layers(path: Path) -> None:

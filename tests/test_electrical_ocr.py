@@ -7,6 +7,7 @@ is ``scripts/bench_electrical_ocr.py``.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import numpy as np
@@ -197,7 +198,7 @@ def test_cli_accepts_the_electrical_backend(tmp_path: Path, monkeypatch: pytest.
     image = tmp_path / "blank.png"
     Image.new("RGB", (80, 40), (255, 255, 255)).save(image)
     runner = CliRunner()
-    help_text = runner.invoke(app, ["import", "--help"]).output
+    help_text = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", runner.invoke(app, ["import", "--help"]).output)
     assert "--ocr-backend" in help_text
     rejected = runner.invoke(
         app,

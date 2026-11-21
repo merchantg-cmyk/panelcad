@@ -3,8 +3,8 @@
 
 Usage (from launch.sh, which sets the isolated env):  drive.py <feature>
 Features implemented: print-package, print-dialog, iec-to-nema-convert, panel-wiring,
-dol-photos-pdf, elementary-print.  Writes screenshots, outputs and result.json to
-$EVIDENCE.  Exit 0 = every assertion passed.
+dol-photos-pdf, elementary-print, leftover-questions, undo.  Writes screenshots,
+outputs and result.json to $EVIDENCE.  Exit 0 = every assertion passed.
 
 Rules: reach features through QMenuBar actions by visible text and through
 the dialog's own widgets (QCheckBox, QListWidget items, QLineEdit, the OK
@@ -1109,6 +1109,130 @@ def feature_leftover_questions(app, win) -> None:
     app.processEvents()
     shot(win, "leftover-questions-issued")
 
+def feature_undo(app, win) -> None:
+    """Prove Edit → Undo reverses real GUI edits after a reopen."""
+
+    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtTest import QTest
+    from panelcad.gui.canvas import ComponentItem
+
+    shot(win, "main-before-undo")
+    session = win.session
+    check("reopened project starts with empty undo stack", len(session._undo) == 0, str(len(session._undo)))
+
+    # Prefer the control schematic when the sample has several sheets.
+    tabs = win.sheet_bar.tabs
+    control_tab = -1
+    for i in range(tabs.count()):
+        text = tabs.tabText(i)
+        if tabs.tabData(i) == "control" or "Control" in text:
+            control_tab = i
+            break
+    if control_tab >= 0:
+        QTest.mouseClick(tabs, Qt.MouseButton.LeftButton, pos=tabs.tabRect(control_tab).center())
+        app.processEvents()
+        QTest.qWait(80)
+
+    before_ids = {c.id for c in session.sheet().components}
+    depth = len(session._undo)
+
+    lib = win.library_dock
+    tree = getattr(lib, "tree", None)
+    check("library tree present", tree is not None, "libraryDock.tree")
+    placed = False
+    lib_id = ""
+    if tree is not None:
+        lib.search.setText("pb_no")
+        app.processEvents()
+        for i in range(tree.topLevelItemCount()):
+            group = tree.topLevelItem(i)
+            for j in range(group.childCount()):
+                child = group.child(j)
+                raw = child.data(0, Qt.ItemDataRole.UserRole)
+                if not raw:
+                    continue
+                lib_id = str(raw)
+                tree.setCurrentItem(child)
+                # Same path as clicking a library row then arming place mode.
+                lib.device_chosen.emit(lib_id)
+                app.processEvents()
+                vp = win.canvas.viewport()
+                # Empty area away from G1/A1/H1 on the sample control sheet.
+                at = win.canvas.mapFromScene(QPointF(320.0, 160.0))
+                QTest.mouseClick(vp, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, at)
+                app.processEvents()
+                QTest.qWait(80)
+                placed = len(session.sheet().components) > len(before_ids)
+                break
+            if placed:
+                break
+    check(
+        "placed a device from the library",
+        placed,
+        f"lib={lib_id} ids={sorted(c.id for c in session.sheet().components)}",
+    )
+    check("place pushed one undo step", len(session._undo) == depth + 1, str(session.undo_command_names()))
+    shot(win, "after-place")
+
+    act = menu_action(win, "Edit", "Undo")
+    check("Edit → Undo enabled after place", act.isEnabled(), act.text())
+    act.trigger()
+    app.processEvents()
+    QTest.qWait(80)
+    check("undo removed the placed device", {c.id for c in session.sheet().components} == before_ids,
+          str(sorted(c.id for c in session.sheet().components)))
+    check("undo stack empty again", len(session._undo) == 0, str(session.undo_command_names()))
+    shot(win, "after-undo")
+
+    # Redo the place, then drag-move and undo through the menu again.
+    redo = menu_action(win, "Edit", "Redo")
+    check("Edit → Redo enabled", redo.isEnabled(), redo.text())
+    redo.trigger()
+    app.processEvents()
+    QTest.qWait(80)
+    new_ids = {c.id for c in session.sheet().components} - before_ids
+    check("redo restored the placed device", bool(new_ids), str(new_ids))
+    ref = sorted(new_ids)[0]
+    item = next(
+        i for i in win.canvas.scene.items()
+        if isinstance(i, ComponentItem) and i.component_id == ref
+    )
+    start = (session.sheet().component(ref).x, session.sheet().component(ref).y)
+    depth = len(session._undo)
+    from PySide6.QtGui import QMouseEvent
+
+    center = item.sceneBoundingRect().center()
+    end = QPointF(center.x() + 30.0, center.y())
+    vp = win.canvas.viewport()
+    press_at = win.canvas.mapFromScene(center)
+    release_at = win.canvas.mapFromScene(end)
+    QTest.mousePress(vp, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, press_at)
+    app.sendEvent(
+        vp,
+        QMouseEvent(
+            QMouseEvent.Type.MouseMove,
+            QPointF(release_at),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        ),
+    )
+    QTest.mouseRelease(vp, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, release_at)
+    app.processEvents()
+    moved = (session.sheet().component(ref).x, session.sheet().component(ref).y)
+    check("drag moved the device", moved != start, f"{start} → {moved}")
+    check("move pushed one undo step", len(session._undo) == depth + 1, str(session.undo_command_names()[-1:]))
+    menu_action(win, "Edit", "Undo").trigger()
+    app.processEvents()
+    QTest.qWait(80)
+    check(
+        "undo restored the pre-move position",
+        (session.sheet().component(ref).x, session.sheet().component(ref).y) == start,
+        str((session.sheet().component(ref).x, session.sheet().component(ref).y)),
+    )
+    shot(win, "after-move-undo")
+
+
 def feature_print_dialog(app, win) -> None:
     """File → Print… → Print button → QPrintDialog with page-range options enabled."""
     from PySide6.QtCore import Qt
@@ -1299,6 +1423,7 @@ FEATURES = {
     "elementary-print": ("scan_ladder_demo.pcad.yaml", feature_elementary_print),
     "leftover-questions": ("sample_catalog.pcad.yaml", feature_leftover_questions),
     "print-dialog": ("sample_catalog.pcad.yaml", feature_print_dialog),
+    "undo": ("sample_catalog.pcad.yaml", feature_undo),
 }
 
 

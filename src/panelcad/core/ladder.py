@@ -6,7 +6,7 @@ Applies to schematic sheets with drawing_style=ladder only.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from panelcad.core.geometry import Point
 from panelcad.render.titleblock import working_rect
@@ -288,7 +288,7 @@ def series_rung_ys(sheet: Sheet, catalog) -> list[float]:
     """
 
     from panelcad.core.cleanup import _is_power_load, is_offpage
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
 
     ys: list[float] = []
     used: list[float] = []
@@ -589,7 +589,7 @@ def _near_other_pin(
     if catalog is None or "." not in str(other):
         return False
     try:
-        from panelcad.render.sheet import parse_pin_ref, pin_world
+        from panelcad.core.pin_geometry import parse_pin_ref, pin_world
 
         cid, pid = parse_pin_ref(other)
         comp = sheet.component(cid)

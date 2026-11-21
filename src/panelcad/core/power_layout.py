@@ -16,7 +16,7 @@ from __future__ import annotations
 from panelcad.core.models import Component, Device, Sheet
 from panelcad.core.route import component_aabb
 from panelcad.library.catalog import Catalog
-from panelcad.render.sheet import parse_pin_ref, pin_side_world, pin_world
+from panelcad.core.pin_geometry import parse_pin_ref, pin_side_world, pin_world
 from panelcad.render.titleblock import working_rect
 
 # Room for a tag and a wire number between stacked power symbols.
@@ -306,23 +306,6 @@ def _phase_inset(chain: list[Component], devices: dict[str, Device]) -> float:
     if not pins:
         return 0.0
     return float(pins[0].x) * chain[0].visual_scale()
-
-
-def _column_width(chain: list[Component], devices: dict[str, Device]) -> float:
-    return max(float(devices[comp.id].schematic_width) * comp.visual_scale() for comp in chain)
-
-
-def _chain_load_y(chain: list[Component], devices: dict[str, Device]) -> float:
-    lowest = 0.0
-    for comp in chain:
-        device = devices[comp.id]
-        bots = [pin for pin in device.pins if pin.side == "bottom"]
-        scale = comp.visual_scale()
-        if bots:
-            lowest = max(lowest, comp.y + max(float(pin.y) for pin in bots) * scale)
-        else:
-            lowest = max(lowest, comp.y + float(device.schematic_height) * scale)
-    return lowest
 
 
 def _side_widths(

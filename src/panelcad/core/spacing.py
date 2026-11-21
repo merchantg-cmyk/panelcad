@@ -10,7 +10,7 @@ from typing import Any
 
 from panelcad.core.models import Component, Device, Sheet
 from panelcad.library.catalog import Catalog
-from panelcad.render.sheet import pin_world
+from panelcad.core.pin_geometry import pin_world
 from panelcad.render.titleblock import SCHEMATIC_SNAP_MM, working_rect
 
 # Body-to-body room for a wire number (horizontal) and a tag (vertical).
@@ -201,12 +201,6 @@ def _hits_any(
         if _boxes_hit(box, _body_box(other, devices[other.id])):
             return True
     return False
-
-
-def _outside_usable(sheet: Sheet, comp: Component, device: Device) -> bool:
-    """True when the symbol body leaves the drawing area or covers the title block."""
-
-    return _leaves_drawing(sheet, comp, device) or _covers_title_block(sheet, comp, device)
 
 
 def _leaves_drawing(sheet: Sheet, comp: Component, device: Device) -> bool:

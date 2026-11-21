@@ -1339,7 +1339,7 @@ def _fla(props: dict[str, Any]) -> float | None:
 
 def _collect_legs(project: Project, catalog: Any) -> list[_Leg]:
     from panelcad.core.electrical import terminal_identity
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     index = _index(project, catalog)
     legs: list[_Leg] = []
@@ -1428,7 +1428,7 @@ def _group_is_vfd(project: Project, catalog: Any, legs: list[_Leg]) -> bool:
 
 def _upstream_is_vfd(project: Project, index: dict[str, Any], leg: _Leg) -> bool:
     from panelcad.core.electrical import terminal_identity
-    from panelcad.render.sheet import parse_pin_ref
+    from panelcad.core.pin_geometry import parse_pin_ref
 
     other = "A" if leg.terminal_pin.upper() == "B" else "B" if leg.terminal_pin.upper() == "A" else ""
     if not other:

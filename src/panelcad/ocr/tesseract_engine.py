@@ -20,7 +20,7 @@ class TesseractOcr:
     name = "tesseract"
 
     def available(self) -> bool:
-        from panelcad.importer.raster import find_tesseract
+        from panelcad.ocr.tesseract_runtime import find_tesseract
 
         return bool(find_tesseract())
 
@@ -32,7 +32,7 @@ class TesseractOcr:
         whitelist: str | None = None,
         rotations: tuple[int, ...] = (0,),
     ) -> list[OcrSpan]:
-        from panelcad.importer.raster import configure_tesseract
+        from panelcad.ocr.tesseract_runtime import configure_tesseract
 
         if not configure_tesseract():
             return []
@@ -53,12 +53,12 @@ class TesseractOcr:
                     view, output_type=pytesseract.Output.DICT, config=config
                 )
             except Exception as exc:  # noqa: BLE001 — the caller treats a miss as no words
-                from panelcad.importer.raster import TesseractMissing, _reraise_tesseract
+                from panelcad.ocr.tesseract_runtime import TesseractMissing, reraise_tesseract
 
                 if isinstance(exc, TesseractMissing):
                     return []
                 try:
-                    _reraise_tesseract(exc)
+                    reraise_tesseract(exc)
                 except TesseractMissing:
                     return []
                 raise

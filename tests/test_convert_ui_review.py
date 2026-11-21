@@ -8,14 +8,9 @@ import pytest
 from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QLabel, QTableWidget
 
 from panelcad.api.session import Session
-from panelcad.convert.engine import ConversionEngine, convert_standard, start_conversion
-from panelcad.convert.from_to_check import build_from_to_diff_rows
-from panelcad.convert.netlist import same_netlist, sheet_edges
+from panelcad.convert.engine import ConversionEngine
 from panelcad.convert.plan import (
     ConversionDecision,
-    resolve_conversion_decision,
-    sort_decisions_by_confidence,
-    valid_decision_options,
 )
 from panelcad.core.checks import run_checks
 from panelcad.gui.convert_dialog import CompareDialog, ConvertDialog

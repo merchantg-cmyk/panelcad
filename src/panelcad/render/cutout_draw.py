@@ -10,11 +10,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from panelcad.core.cutout import (
-    MM_PER_INCH,
     TITLE_LINE_MM,
     CutFeature,
     SurfaceDrawing,
     d_cut_paths,
+    format_cutout_length as _fmt,
     local_holes,
     local_profile,
     opening_reach_mm,
@@ -210,21 +210,20 @@ def render_cutout_qimage(drawing: SurfaceDrawing, project: Project | None = None
 def write_cutout_pdf(path: Path | str, drawings: list[SurfaceDrawing], project: Project | None = None) -> Path:
     """One PDF page per surface, at the sheet size from the fit (1:1 when it fits)."""
 
-    from PySide6.QtGui import QPainter, QPdfWriter
-
     from panelcad.render.page import configure_full_page
+    from panelcad.render.pdf import atomic_pdf_writer
 
     if not drawings:
         raise ValueError("no cutout sheets to export")
     dest = Path(path)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    writer = QPdfWriter(str(dest))
-    writer.setResolution(150)
     title = project.name if project is not None and project.name else "Cutouts"
-    writer.setTitle(title)
-    configure_full_page(writer, drawings[0].page_width_mm, drawings[0].page_height_mm)
-    painter = QPainter(writer)
-    try:
+    with atomic_pdf_writer(
+        dest,
+        resolution=150,
+        title=title,
+        width_mm=drawings[0].page_width_mm,
+        height_mm=drawings[0].page_height_mm,
+    ) as (writer, painter):
         for index, drawing in enumerate(drawings):
             if index:
                 configure_full_page(writer, drawing.page_width_mm, drawing.page_height_mm)
@@ -233,9 +232,6 @@ def write_cutout_pdf(path: Path | str, drawings: list[SurfaceDrawing], project: 
             painter.resetTransform()
             painter.scale(dpi / 25.4, dpi / 25.4)
             paint_cutout(QtPainter(painter, print_paper=True), drawing, project)
-    finally:
-        if painter.isActive():
-            painter.end()
     return dest
 
 
@@ -658,11 +654,3 @@ def paint_cutout_legend(
             MIN_PAPER_TEXT_MM,
             MIN_PAPER_TEXT_MM + 1.15,
         )
-
-
-def _fmt(value_mm: float, units: str) -> str:
-    if units == "inch":
-        return f"{value_mm / MM_PER_INCH:.3f}"
-    if abs(value_mm - round(value_mm)) < 1e-6:
-        return f"{value_mm:.0f}"
-    return f"{value_mm:.1f}"

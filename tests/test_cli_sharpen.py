@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -10,10 +11,11 @@ from typer.testing import CliRunner
 from panelcad.cli.main import app
 
 runner = CliRunner()
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 def _text(result) -> str:
-    return (result.output or "") + (getattr(result, "stderr", None) or "")
+    return _ANSI_RE.sub("", (result.output or "") + (getattr(result, "stderr", None) or ""))
 
 
 def _json_line(result) -> dict:

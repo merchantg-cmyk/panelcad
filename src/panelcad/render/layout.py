@@ -113,19 +113,6 @@ def _tray_label_mm(painter: Painter, nominal: float) -> float:
     return max(nominal, min(6.0, 10.0 / scale))
 
 
-def _elide_mm(text: str, size: float, limit: float) -> str:
-    """Shorten ``text`` so it fits in ``limit`` millimetres."""
-
-    if limit <= 0:
-        return ""
-    if caption_width(text, size) <= limit:
-        return text
-    kept = text
-    while kept and caption_width(kept + "…", size) > limit:
-        kept = kept[:-1]
-    return (kept + "…") if kept else ""
-
-
 def draw_tray(
     painter: Painter,
     tray: WireTray,

@@ -10,7 +10,6 @@ from panelcad.reconstruct.placeholder import project_has_needs_info
 from panelcad.reconstruct.service import (
     apply_to_print,
     record_wire_landing,
-    synthesize_reconstruct_schematic,
 )
 from panelcad.reconstruct.vision import FakeVision
 from panelcad.reconstruct.fixtures import write_backpanel_photo

@@ -245,6 +245,22 @@ ACTION_TIPS: dict[str, tuple[str, str]] = {
         "Read imported photos and write the drawings. The run stops only for flagged items.",
         "reconstruct",
     ),
+    "Panel…": (
+        "Manage control panels, enclosures, and backplate assignments for this job.",
+        "panel",
+    ),
+    "Cabinet Photo Feedback Overlay…": (
+        "Compare cabinet photo detections against the layout and export an annotated review overlay.",
+        "reconstruct",
+    ),
+    "Mobile Field Capture Server (Phone QR)…": (
+        "Start a local Wi-Fi QR upload server so a phone can send cabinet photos straight into this job.",
+        "reconstruct",
+    ),
+    "Wiring Walkthrough / Cut Sheet…": (
+        "Step through panel wires one by one with cut lengths and terminal landings for the shop floor.",
+        "wires",
+    ),
     "Import BOM…": ("Import a vendor parts list (CSV).", "parts"),
     "Import wires…": ("Import a From/To wire list (CSV).", "wires"),
     "Import library…": ("Load a symbol library YAML file.", "import"),

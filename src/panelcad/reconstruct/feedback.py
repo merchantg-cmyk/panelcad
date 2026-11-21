@@ -1581,7 +1581,7 @@ def render_annotated_cabinet_photo(
     """Render the cabinet photo with color-coded device boxes, missing-info badges, and Site-Exit Readiness status."""
     _ensure_qt_gui_app()
     from PySide6.QtCore import QPointF, QRectF, Qt
-    from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QPainter, QPainterPath, QPen
+    from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen
 
     if badge_hits is not None:
         badge_hits.clear()

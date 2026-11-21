@@ -21,7 +21,6 @@ import json
 import math
 import os
 import re
-import shutil
 import threading
 import urllib.parse
 import urllib.request

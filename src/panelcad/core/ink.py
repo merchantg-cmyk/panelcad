@@ -328,7 +328,7 @@ def _include_pins(
 ) -> None:
     for pin in device.pins:
         if component is not None:
-            from panelcad.render.sheet import pin_side_world, pin_world
+            from panelcad.core.pin_geometry import pin_side_world, pin_world
 
             wx, wy = pin_world(component, pin)
             side = pin_side_world(component, pin)

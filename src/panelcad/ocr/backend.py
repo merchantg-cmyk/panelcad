@@ -90,7 +90,7 @@ def tesseract_required() -> bool:
         return False
     if page_engine_ready():
         return False
-    from panelcad.importer.tesseract_runtime import find_tesseract
+    from panelcad.ocr.tesseract_runtime import find_tesseract
 
     return bool(find_tesseract())
 

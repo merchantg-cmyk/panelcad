@@ -1,0 +1,269 @@
+schema_version: 1
+description: >
+  Publicly licensed real-world electrical drawings rasterized at 300 DPI and 150 DPI
+  for importer smoke testing, regression analysis, and baseline OCR scoring.
+sources:
+  - id: kuphaldt_acstarter
+    title: "AC Induction Motor Starters (ModEL)"
+    author: "Tony R. Kuphaldt"
+    url: "https://www.ibiblio.org/kuphaldt/socratic/model/mod_acstarter.pdf"
+    license: "CC BY 4.0"
+    license_url: "https://creativecommons.org/licenses/by/4.0/"
+    style: "NEMA/ANSI"
+    source_type: "pdf"
+    pages_used: [21, 22, 36, 38]
+  - id: kuphaldt_ladderlogic
+    title: "Relay Ladder Logic (ModEL)"
+    author: "Tony R. Kuphaldt"
+    url: "https://www.ibiblio.org/kuphaldt/socratic/model/mod_ladderlogic.pdf"
+    license: "CC BY 4.0"
+    license_url: "https://creativecommons.org/licenses/by/4.0/"
+    style: "NEMA/ANSI"
+    source_type: "pdf"
+    pages_used: [32]
+  - id: kuphaldt_plc_discrete
+    title: "PLC Discrete I/O (ModEL)"
+    author: "Tony R. Kuphaldt"
+    url: "https://www.ibiblio.org/kuphaldt/socratic/model/mod_plc_discrete.pdf"
+    license: "CC BY 4.0"
+    license_url: "https://creativecommons.org/licenses/by/4.0/"
+    style: "NEMA/ANSI"
+    source_type: "pdf"
+    pages_used: [147, 148, 153, 156]
+  - id: wiki_mcc_wiring
+    title: "Wiring diagram of motor control centre"
+    author: "Dmitry G"
+    url: "https://commons.wikimedia.org/wiki/File:Wiring_diagram_of_motor_control_centre.JPG"
+    license: "CC BY-SA 3.0"
+    license_url: "https://creativecommons.org/licenses/by-sa/3.0/"
+    style: "IEC"
+    source_type: "jpg"
+    pages_used: [1]
+  - id: wiki_pump_station_mcc
+    title: "Wiring diagram of motor control centre on pump station"
+    author: "Dmitry G"
+    url: "https://commons.wikimedia.org/wiki/File:Wiring_diagram_of_motor_control_centre_on_pump_station.JPG"
+    license: "CC BY-SA 3.0"
+    license_url: "https://creativecommons.org/licenses/by-sa/3.0/"
+    style: "IEC"
+    source_type: "jpg"
+    pages_used: [1]
+  - id: wiki_air_fans_mcc
+    title: "Wiring diagram of air fans control centre"
+    author: "Dmitry G"
+    url: "https://commons.wikimedia.org/wiki/File:Wiring_diagram_of_air_fans_control_centre.JPG"
+    license: "CC BY-SA 3.0"
+    license_url: "https://creativecommons.org/licenses/by-sa/3.0/"
+    style: "IEC"
+    source_type: "jpg"
+    pages_used: [1]
+  - id: wiki_gantry_crane
+    title: "Wiring diagram of the gantry crane"
+    author: "Dmitry G"
+    url: "https://commons.wikimedia.org/wiki/File:Wiring_diagram_of_the_gantry_crane.JPG"
+    license: "CC BY-SA 3.0"
+    license_url: "https://creativecommons.org/licenses/by-sa/3.0/"
+    style: "IEC"
+    source_type: "jpg"
+    pages_used: [1]
+  - id: wiki_sandblaster
+    title: "Sandblaster wiring diagram"
+    author: "Dmitry G"
+    url: "https://commons.wikimedia.org/wiki/File:Sandblaster_wiring_diagram.JPG"
+    license: "CC BY-SA 3.0"
+    license_url: "https://creativecommons.org/licenses/by-sa/3.0/"
+    style: "IEC"
+    source_type: "jpg"
+    pages_used: [1]
+
+sheets:
+  - id: kuphaldt_acstarter_start_stop
+    source_id: kuphaldt_acstarter
+    page: 21
+    book_page: "18"
+    kind: schematic
+    standard: "NEMA/ANSI"
+    has_truth: false
+    truth_mode: smoke_only
+    truth_file: null
+    images:
+      dpi_300: images/300dpi/kuphaldt_acstarter_start_stop.png
+      dpi_150: images/150dpi/kuphaldt_acstarter_start_stop.png
+    notes: "Textbook diagram using descriptive English labels (Stop pushbutton, Start pushbutton) instead of CAD tags."
+
+  - id: kuphaldt_acstarter_reversing
+    source_id: kuphaldt_acstarter
+    page: 22
+    book_page: "19"
+    kind: schematic
+    standard: "NEMA/ANSI"
+    has_truth: false
+    truth_mode: smoke_only
+    truth_file: null
+    images:
+      dpi_300: images/300dpi/kuphaldt_acstarter_reversing.png
+      dpi_150: images/150dpi/kuphaldt_acstarter_reversing.png
+    notes: "Textbook reversing motor starter using descriptive labels rather than CAD component tags."
+
+  - id: kuphaldt_acstarter_autoxfmr
+    source_id: kuphaldt_acstarter
+    page: 36
+    book_page: "33"
+    kind: schematic
+    standard: "NEMA/ANSI"
+    has_truth: false
+    truth_mode: smoke_only
+    truth_file: null
+    images:
+      dpi_300: images/300dpi/kuphaldt_acstarter_autoxfmr.png
+      dpi_150: images/150dpi/kuphaldt_acstarter_autoxfmr.png
+    notes: "Autotransformer starter textbook figure (mixed TD1 tag with descriptive English labels)."
+
+  - id: kuphaldt_acstarter_wye_delta
+    source_id: kuphaldt_acstarter
+    page: 38
+    book_page: "35"
+    kind: schematic
+    standard: "NEMA/ANSI"
+    has_truth: true
+    truth_mode: full
+    truth_file: truth/kuphaldt_acstarter_wye_delta.yaml
+    images:
+      dpi_300: images/300dpi/kuphaldt_acstarter_wye_delta.png
+      dpi_150: images/150dpi/kuphaldt_acstarter_wye_delta.png
+    notes: "Wye-delta starter schematic with clearly tagged devices (M1, M2, OL1, TD1) and power terminals."
+
+  - id: kuphaldt_ladderlogic_redline
+    source_id: kuphaldt_ladderlogic
+    page: 32
+    book_page: "29"
+    kind: schematic
+    standard: "NEMA/ANSI"
+    has_truth: false
+    truth_mode: smoke_only
+    truth_file: null
+    images:
+      dpi_300: images/300dpi/kuphaldt_ladderlogic_redline.png
+      dpi_150: images/150dpi/kuphaldt_ladderlogic_redline.png
+    notes: "Photographed real paper relay ladder with red-line PLR edits and a scribbled-out contact (?); smoke-only."
+
+  - id: kuphaldt_plc_micrologix
+    source_id: kuphaldt_plc_discrete
+    page: 147
+    book_page: "143"
+    kind: schematic
+    standard: "NEMA/ANSI"
+    has_truth: false
+    truth_mode: smoke_only
+    truth_file: null
+    images:
+      dpi_300: images/300dpi/kuphaldt_plc_micrologix.png
+      dpi_150: images/150dpi/kuphaldt_plc_micrologix.png
+    notes: "MicroLogix 1000 pictorial wiring diagram plus live ladder program snippet."
+
+  - id: kuphaldt_plc_slc500_starter
+    source_id: kuphaldt_plc_discrete
+    page: 148
+    book_page: "144"
+    kind: schematic
+    standard: "NEMA/ANSI"
+    has_truth: true
+    truth_mode: full
+    truth_file: truth/kuphaldt_plc_slc500_starter.yaml
+    images:
+      dpi_300: images/300dpi/kuphaldt_plc_slc500_starter.png
+      dpi_150: images/150dpi/kuphaldt_plc_slc500_starter.png
+    notes: "SLC 500 I/O and 480 VAC motor starter pictorial wiring with clearly labeled fuses F1-F7."
+
+  - id: kuphaldt_plc_io_program
+    source_id: kuphaldt_plc_discrete
+    page: 153
+    book_page: "149"
+    kind: schematic
+    standard: "NEMA/ANSI"
+    has_truth: false
+    truth_mode: smoke_only
+    truth_file: null
+    images:
+      dpi_300: images/300dpi/kuphaldt_plc_io_program.png
+      dpi_150: images/150dpi/kuphaldt_plc_io_program.png
+    notes: "Discrete I/O card wiring and highlighted online PLC ladder program."
+
+  - id: kuphaldt_plc_compressor
+    source_id: kuphaldt_plc_discrete
+    page: 156
+    book_page: "152"
+    kind: schematic
+    standard: "NEMA/ANSI"
+    has_truth: false
+    truth_mode: smoke_only
+    truth_file: null
+    images:
+      dpi_300: images/300dpi/kuphaldt_plc_compressor.png
+      dpi_150: images/150dpi/kuphaldt_plc_compressor.png
+    notes: "SLC 500 air compressor pictorial I/O wiring with PSH and PSL pressure switches."
+
+  - id: wiki_mcc_wiring
+    source_id: wiki_mcc_wiring
+    page: 1
+    kind: schematic
+    standard: "IEC"
+    has_truth: true
+    truth_mode: full
+    truth_file: truth/wiki_mcc_wiring.yaml
+    images:
+      dpi_300: images/300dpi/wiki_mcc_wiring.png
+      dpi_150: images/150dpi/wiki_mcc_wiring.png
+    notes: "Clean IEC power and start/stop control wiring diagram."
+
+  - id: wiki_pump_station_mcc
+    source_id: wiki_pump_station_mcc
+    page: 1
+    kind: schematic
+    standard: "IEC"
+    has_truth: true
+    truth_mode: full
+    truth_file: truth/wiki_pump_station_mcc.yaml
+    images:
+      dpi_300: images/300dpi/wiki_pump_station_mcc.png
+      dpi_150: images/150dpi/wiki_pump_station_mcc.png
+    notes: "Clean IEC duplex pump-station MCC wiring diagram."
+
+  - id: wiki_air_fans_mcc
+    source_id: wiki_air_fans_mcc
+    page: 1
+    kind: schematic
+    standard: "IEC"
+    has_truth: true
+    truth_mode: full
+    truth_file: truth/wiki_air_fans_mcc.yaml
+    images:
+      dpi_300: images/300dpi/wiki_air_fans_mcc.png
+      dpi_150: images/150dpi/wiki_air_fans_mcc.png
+    notes: "Clean IEC three-fan power distribution and 24 V control ladder."
+
+  - id: wiki_gantry_crane
+    source_id: wiki_gantry_crane
+    page: 1
+    kind: schematic
+    standard: "IEC"
+    has_truth: false
+    truth_mode: smoke_only
+    truth_file: null
+    images:
+      dpi_300: images/300dpi/wiki_gantry_crane.png
+      dpi_150: images/150dpi/wiki_gantry_crane.png
+    notes: "Wide 5500x1940 multi-bay overview schematic with dense small wire/contact labels; smoke-only."
+
+  - id: wiki_sandblaster
+    source_id: wiki_sandblaster
+    page: 1
+    kind: schematic
+    standard: "IEC"
+    has_truth: true
+    truth_mode: full
+    truth_file: truth/wiki_sandblaster.yaml
+    images:
+      dpi_300: images/300dpi/wiki_sandblaster.png
+      dpi_150: images/150dpi/wiki_sandblaster.png
+    notes: "Clean IEC sandblaster motor starter with full power and control wire numbers."

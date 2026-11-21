@@ -8,6 +8,12 @@ VERIFY_ROOT="${VERIFY_ROOT:-$(cd "$REPO/.." && pwd)/verify-panelcad-runs}"
 RUN="${1:-${RUN:-run-$(date +%Y%m%d-%H%M%S)}}"
 export RUN REPO VERIFY_ROOT
 export PY="${PANELCAD_PY:-python3}"
+# Keep pip --user packages after HOME is redirected into the scratch tree.
+# Capture once: doctor.sh sources this again after HOME already points at scratch.
+if [[ -z "${PANELCAD_USER_SITE:-}" ]]; then
+  PANELCAD_USER_SITE="$("$PY" -c 'import site; print(site.getusersitepackages())' 2>/dev/null || true)"
+  export PANELCAD_USER_SITE
+fi
 export SCRATCH="$VERIFY_ROOT/scratch/$RUN"          # removed by cleanup.sh
 export EVIDENCE="$VERIFY_ROOT/evidence/$RUN"        # survives cleanup
 mkdir -p "$SCRATCH/home" "$SCRATCH/data" "$SCRATCH/config" "$SCRATCH/xdg" "$SCRATCH/work" "$EVIDENCE"
@@ -17,5 +23,5 @@ export PANELCAD_BUG_REPORTS=off PANELCAD_UPDATE_FEED= PANELCAD_AI_LOOKUP=off PAN
 export PANELCAD_NO_SPLASH=1 PANELCAD_NO_WELCOME=1 PANELCAD_KEEP_OFFSCREEN=1 PANELCAD_AUTOSAVE_SECONDS=0
 export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-offscreen}"
 unset PANELCAD_AI_API_KEY PANELCAD_SLACK_BOT_TOKEN PANELCAD_BUG_WEBHOOK GROK_HOME 2>/dev/null || true
-export PYTHONPATH="$REPO/src"
+export PYTHONPATH="$REPO/src${PANELCAD_USER_SITE:+:$PANELCAD_USER_SITE}"
 echo "RUN=$RUN SCRATCH=$SCRATCH EVIDENCE=$EVIDENCE"

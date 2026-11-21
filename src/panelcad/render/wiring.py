@@ -120,7 +120,9 @@ def component_obstacle(sheet: Sheet, catalog: Catalog, comp: Component, *, pad: 
     return expand_rect(box, pad)
 
 
-def sheet_obstacles(sheet: Sheet, catalog: Catalog, skip: set[str] | None = None) -> list[Rect]:
+def sheet_obstacles(
+    sheet: Sheet, catalog: Catalog, skip: set[str] | None = None, *, pad: float | None = None
+) -> list[Rect]:
     ignore = skip or set()
     rects: list[Rect] = []
     for comp in sheet.components:
@@ -129,7 +131,11 @@ def sheet_obstacles(sheet: Sheet, catalog: Catalog, skip: set[str] | None = None
         device = catalog.get(comp.library_id)
         if (device.category or "").lower().startswith("connection.notes"):
             continue
-        rects.append(component_obstacle(sheet, catalog, comp))
+        rects.append(
+            component_obstacle(sheet, catalog, comp)
+            if pad is None
+            else component_obstacle(sheet, catalog, comp, pad=pad)
+        )
     tx, ty, tw, th = title_block_rect(sheet)
     rects.append((tx, ty, tx + tw, ty + th))
     return rects
@@ -403,8 +409,13 @@ def _rotated_bus_route(
             sx, sy, dx, dy, index, forward = bx, by, ax, ay, b_index, False
     else:
         return None
-    # A lead along one starter row is already on its own y. Only the drop
-    # from row to row, or out to the off-page column, needs a lane.
+    # A lead along one starter row is already on its own y. Keep it on that
+    # straight/L phase lane even on freeform 3-phase power sheets so rotated
+    # overload/contactor leads do not fold back onto the incoming bus stub.
+    if a_index is not None and b_index is not None and abs(sy - dy) < 8.0:
+        from panelcad.core.ladder import ladder_route
+
+        return ladder_route(ax, ay, bx, by)
     if abs(sy - dy) < 8.0 or abs(sx - dx) < 8.0:
         return None
     # The marker may sit on either side of the starter. Try the gap beside
@@ -623,12 +634,16 @@ def route_wire(
         blocks = _supply_interiors(sheet, catalog)
         around = bool(blocks and path_hits_obstacles(plain, blocks, skip_ends=True))
         walls = sheet_obstacles(sheet, catalog, skip=ends)
+        # Check strict symbol body interiors (pad=-0.5) so a horizontal bus sharing
+        # a pin Y along a neighbor's top/bottom edge (e.g. IEC column branches) stays
+        # straight instead of ducking through adjacent terminal labels.
+        body_walls = sheet_obstacles(sheet, catalog, skip=ends, pad=-0.5)
         if (
             not around
-            and walls
+            and body_walls
             and not _terminal_end(sheet, catalog, ends)
             and not _power_lane(sheet, catalog, ends)
-            and path_hits_obstacles(plain, walls, skip_ends=True)
+            and path_hits_obstacles(plain, body_walls, skip_ends=True)
         ):
             around = True
         if around:

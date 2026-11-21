@@ -30,7 +30,7 @@ SKIP_DIR_NAMES = frozenset(
     {".git", ".venv", ".venvs", "__pycache__", ".pytest_cache", ".ruff_cache", ".sharpen", ".grok"}
 )
 # Rollback replaces these trees in place. Drawings and other files next to them stay.
-PROGRAM_DIRS = ("src", "scripts")
+PROGRAM_DIRS = ("src", "scripts", "libraries", "packaging")
 # pip install -e reads these from the install root. The backup already holds them
 # because the whole program folder is copied. Restore must put them back too, or
 # the reinstall keeps the new version's metadata while version.py is the old one.
@@ -587,8 +587,10 @@ def apply_upgrade(
     if wait:
         wait_for_exit(plan.wait_pid)
     root = Path(plan.install_root)
+    backed_up = False
     if root.exists():
         backup_install_tree(root, Path(plan.backup_dir))
+        backed_up = True
         write_rollback(
             previous_version=plan.previous_version,
             backup=plan.backup_dir,
@@ -602,8 +604,20 @@ def apply_upgrade(
         else:
             _run_installer(plan)
     except UpdateError:
+        if backed_up and Path(plan.backup_dir).is_dir():
+            try:
+                restore_install_tree(Path(plan.backup_dir), root)
+                _log_update("update_auto_rollback", plan.install_root)
+            except Exception as rb_exc:  # noqa: BLE001 — preserve original install error
+                _log_update("error", f"auto_rollback_failed {rb_exc}")
         raise
     except Exception as exc:
+        if backed_up and Path(plan.backup_dir).is_dir():
+            try:
+                restore_install_tree(Path(plan.backup_dir), root)
+                _log_update("update_auto_rollback", plan.install_root)
+            except Exception as rb_exc:  # noqa: BLE001 — preserve original install error
+                _log_update("error", f"auto_rollback_failed {rb_exc}")
         raise UpdateError(f"The installer did not run: {exc}") from exc
     write_notice(plan.new_version, Path(plan.config_dir), kind="update")
     if relaunch:

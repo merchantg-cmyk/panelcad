@@ -6,7 +6,7 @@ This module asks PaddleOCR for two smaller English models from the same
 family and runs them with ONNX Runtime:
 
 * PP-OCRv5 mobile reads the page. On a schematic that is enough.
-* PP-OCRv6 small reads one enlarged crop where the glyphs are only a few
+* PP-OCRv6 small reads enlarged crops where the glyphs are only a few
   pixels tall (a terminal strip, a row of panel nameplates). The page pass
   shrinks those until the digits disappear.
 
@@ -18,6 +18,7 @@ them and does not read ``~/.paddlex``.
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
@@ -29,9 +30,19 @@ from panelcad.ocr.types import OcrSpan
 os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
 os.environ.setdefault("ORT_LOG_SEVERITY_LEVEL", "3")
 
+log = logging.getLogger("panelcad.ocr.ppocr")
+
 _SOURCE = "electrical"
 _PAGE: Any = None
 _DETAIL: Any = None
+_LAST_ERROR: str = ""
+_MAX_FINE_CROPS = 2
+
+
+def last_error() -> str:
+    """Most recent PP-OCR load or inference error, or empty string when clean."""
+
+    return _LAST_ERROR
 
 
 def runtime_packages() -> list[str]:
@@ -53,8 +64,8 @@ def model_dirs() -> list[str]:
 
 def available() -> bool:
     try:
-        import paddleocr  # noqa: F401
         import onnxruntime  # noqa: F401
+        import paddleocr  # noqa: F401
     except ImportError:
         return False
     return True
@@ -64,9 +75,10 @@ def read_print(image: np.ndarray) -> list[OcrSpan] | None:
     """Read a full print. None means the local engine cannot load.
 
     A missing wheel or a missing weight file is None. This does not download
-    a model to fill the gap.
+    a model to fill the gap. Runtime failures are logged rather than swallowed.
     """
 
+    global _LAST_ERROR
     from panelcad.ocr.weights import weights_ready
 
     if image.size == 0 or not available() or not weights_ready():
@@ -82,15 +94,66 @@ def read_print(image: np.ndarray) -> list[OcrSpan] | None:
         spans = []
         for limit in limits:
             spans.extend(_predict(_page(), image, limit))
-    except Exception:
+        _LAST_ERROR = ""
+    except Exception as exc:  # noqa: BLE001 — degrade gracefully to glyph fallback with diagnostic log
+        _LAST_ERROR = f"{type(exc).__name__}: {exc}"
+        log.warning("electrical PP-OCR page read failed (falling back): %s", _LAST_ERROR)
         return None
     for origin, crop, scale in _fine_crops(image):
         try:
             detail = _predict(_detail(), crop, 2000)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 — keep page-level spans if one fine crop fails
+            log.warning("electrical PP-OCR fine-crop read failed at %s: %s: %s", origin, type(exc).__name__, exc)
             continue
         for span in detail:
             spans.append(_place(span, origin, scale))
+    return spans
+
+
+def read_crop(image: np.ndarray) -> list[OcrSpan] | None:
+    """Read a tight, already-oriented crop using the bundled detail ONNX reader.
+
+    Returns None when the ONNX runtime or shipped weights are unavailable so
+    callers can fall back to the glyph matcher without downloading anything.
+    """
+
+    from panelcad.ocr.weights import weights_ready
+
+    if image.size == 0 or not available() or not weights_ready():
+        return None
+    short = min(int(image.shape[0]), int(image.shape[1]))
+    if short < 3:
+        return []
+    primary = 4 if short < 16 else (3 if short < 56 else 2)
+    border = (255, 255, 255) if image.ndim == 3 else 255
+
+    def _run(scale: int) -> list[OcrSpan] | None:
+        enlarged = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        padded = cv2.copyMakeBorder(
+            enlarged,
+            24,
+            24,
+            24,
+            24,
+            cv2.BORDER_CONSTANT,
+            value=border,
+        )
+        try:
+            return _predict(_detail(), padded, 2000)
+        except Exception:
+            return None
+
+    spans = _run(primary)
+    if spans is None:
+        return None
+    best_conf = max((span.confidence for span in spans), default=0.0)
+    if best_conf < 0.85:
+        alt_scale = 3 if primary == 4 else 4
+        alt = _run(alt_scale)
+        if alt:
+            alt_conf = max((span.confidence for span in alt), default=0.0)
+            if alt_conf > best_conf:
+                return alt
     return spans
 
 
@@ -235,46 +298,88 @@ def _place(span: OcrSpan, origin: tuple[int, int], scale: float) -> OcrSpan:
 
 
 def _fine_crops(image: np.ndarray) -> list[tuple[tuple[int, int], np.ndarray, float]]:
-    """Enlarge the densest block of tiny glyphs above the title band.
+    """Enlarge up to two dense blocks of tiny glyphs above the title band.
 
-    A terminal strip sits in a corner and its wire numbers are only a few
-    pixels tall. The page pass shrinks them. The title block is also tiny,
-    and the page pass already reads it, so this search stays above that band.
+    A terminal strip or panel legend sits in a corner and its wire numbers are
+    only a few pixels tall. Filtering connected components in NumPy (instead of
+    bailing out at ``count > 6000``) keeps speckled scans from losing fine-crop
+    enrichment. Window sums use a 20 px cell grid so each candidate still matches
+    the original exact 720×500 sliding window (an 80 px cell grid over-counted
+    sideways pages and flipped faded panel scans 180°).
     """
 
     gray = image if image.ndim == 2 else cv2.cvtColor(image[:, :, :3], cv2.COLOR_RGB2GRAY)
     _threshold, ink = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     count, _labels, stats, _centroids = cv2.connectedComponentsWithStats(ink, 8)
-    if count > 6000:
+    if count <= 1:
         return []
     height, width = image.shape[:2]
     ceiling = int(height * 0.72)
-    points: list[tuple[int, int]] = []
-    for index in range(1, count):
-        x, y, w, h, area = (int(value) for value in stats[index])
-        if area < 8 or h < 4 or h > 18 or w < 1 or w > 40 or y >= ceiling:
+    body = stats[1:]
+    xs = body[:, cv2.CC_STAT_LEFT]
+    ys = body[:, cv2.CC_STAT_TOP]
+    ws = body[:, cv2.CC_STAT_WIDTH]
+    hs = body[:, cv2.CC_STAT_HEIGHT]
+    areas = body[:, cv2.CC_STAT_AREA]
+    # Vectorized glyph-size filter strips 1-7 px dust speckles even on very noisy scans.
+    mask = (areas >= 8) & (hs >= 4) & (hs <= 18) & (ws >= 1) & (ws <= 40) & (ys < ceiling)
+    gx = xs[mask]
+    gy = ys[mask]
+    if gx.size < 30:
+        return []
+
+    win_w, win_h, step, cell = 720, 500, 80, 20
+    nx = max(1, (width + cell - 1) // cell)
+    ny = max(1, (max(1, ceiling) + cell - 1) // cell)
+    grid = np.zeros((ny, nx), dtype=np.int32)
+    np.add.at(grid, (np.clip(gy // cell, 0, ny - 1), np.clip(gx // cell, 0, nx - 1)), 1)
+    kw = win_w // cell
+    kh = win_h // cell
+    pad_y = max(0, kh - 1)
+    pad_x = max(0, kw - 1)
+    integral = np.pad(grid, ((1, pad_y), (1, pad_x))).cumsum(axis=0).cumsum(axis=1)
+    tops = np.arange(0, max(1, ceiling - 40), step) // cell
+    lefts = np.arange(0, max(1, width - 80), step) // cell
+    if tops.size == 0 or lefts.size == 0:
+        return []
+    t0 = tops[:, None]
+    l0 = lefts[None, :]
+    sums = (
+        integral[t0 + kh, l0 + kw]
+        - integral[t0, l0 + kw]
+        - integral[t0 + kh, l0]
+        + integral[t0, l0]
+    )
+
+    crops: list[tuple[tuple[int, int], np.ndarray, float]] = []
+    chosen_boxes: list[tuple[int, int, int, int]] = []
+    work_sums = sums.copy()
+    while len(crops) < _MAX_FINE_CROPS:
+        flat = int(np.argmax(work_sums))
+        best_count = int(work_sums.flat[flat])
+        if best_count < 40:
+            break
+        row, col = divmod(flat, work_sums.shape[1])
+        best_left = int(lefts[col] * cell)
+        best_top = int(tops[row] * cell)
+        x0 = max(0, best_left - 8)
+        y0 = max(0, best_top - 8)
+        x1 = min(width, best_left + win_w + 8)
+        y1 = min(height, best_top + win_h + 8)
+        # Suppress the chosen window neighborhood so a second crop covers a distinct region.
+        r0, r1 = max(0, row - (kh * cell) // step + 1), min(work_sums.shape[0], row + (kh * cell) // step)
+        c0, c1 = max(0, col - (kw * cell) // step + 1), min(work_sums.shape[1], col + (kw * cell) // step)
+        work_sums[r0:r1, c0:c1] = 0
+        if any(
+            not (x1 <= ox0 or x0 >= ox1 or y1 <= oy0 or y0 >= oy1)
+            for ox0, oy0, ox1, oy1 in chosen_boxes
+        ):
             continue
-        points.append((x, y))
-    if len(points) < 30:
-        return []
-    win_w, win_h, step = 720, 500, 80
-    best_count = 0
-    best_xy = (0, 0)
-    for top in range(0, max(1, ceiling - 40), step):
-        for left in range(0, max(1, width - 80), step):
-            hits = sum(1 for x, y in points if left <= x < left + win_w and top <= y < top + win_h)
-            if hits > best_count:
-                best_count = hits
-                best_xy = (left, top)
-    if best_count < 40:
-        return []
-    x0 = max(0, best_xy[0] - 8)
-    y0 = max(0, best_xy[1] - 8)
-    x1 = min(width, best_xy[0] + win_w + 8)
-    y1 = min(height, best_xy[1] + win_h + 8)
-    crop = image[y0:y1, x0:x1]
-    scale = 4.0
-    if max(crop.shape[:2]) * scale > 2800:
-        scale = 2800 / max(crop.shape[:2])
-    enlarged = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-    return [((x0, y0), enlarged, scale)]
+        chosen_boxes.append((x0, y0, x1, y1))
+        crop = image[y0:y1, x0:x1]
+        scale = 4.0
+        if max(crop.shape[:2]) * scale > 2800:
+            scale = 2800 / max(crop.shape[:2])
+        enlarged = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        crops.append(((x0, y0), enlarged, scale))
+    return crops

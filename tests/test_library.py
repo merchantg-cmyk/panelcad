@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from panelcad.library.catalog import default_catalog
 
 

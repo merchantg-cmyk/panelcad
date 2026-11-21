@@ -13,7 +13,7 @@ from contextvars import ContextVar
 from math import floor, hypot
 
 from panelcad.core.geometry import Point
-from panelcad.core.models import Sheet
+from panelcad.core.models import Project, Sheet
 from panelcad.library.catalog import Catalog
 
 MARK_SIZE = 2.3
@@ -44,10 +44,6 @@ _OFF_SHEET = 1.0e12
 
 def _text_w(text: str, size: float) -> float:
     return max(2.2, len(text) * size * 0.64)
-
-
-def _text_h(size: float) -> float:
-    return size * 1.2
 
 
 def bundle_note(spec: str) -> bool:
@@ -2588,18 +2584,6 @@ def _axis_box_distance(
     if gy == 0.0:
         return gx
     return hypot(gx, gy)
-
-
-def _box_segment_distance(
-    box: tuple[float, float, float, float],
-    a: Point,
-    b: Point,
-) -> float:
-    """Same value as ``box_route_distance`` for one segment."""
-
-    if abs(a.x - b.x) < 1e-9 or abs(a.y - b.y) < 1e-9:
-        return _axis_box_distance(box, a, b)
-    return box_route_distance(box, [a, b])
 
 
 def box_route_distance(

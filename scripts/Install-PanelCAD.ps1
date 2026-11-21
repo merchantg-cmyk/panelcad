@@ -20,6 +20,11 @@ if (-not $Quiet -and $env:PANELCAD_INSTALL_QUIET -eq "1") {
 }
 
 $PythonVersion = "3.12.10"
+# Official SHA-256 checksums for python.org Windows installers (3.12.10).
+$PythonInstallerSha256 = @{
+    "amd64" = "67b5635e80ea51072b87941312d00ec8927c4db9ba18938f7ad2d27b328b95fb"
+    "arm64" = "377ac8fd478987940088e879441e702a71b53164d2a1e6f1d51ff77a7e470258"
+}
 $InstallRoot = Join-Path $env:USERPROFILE "PanelCAD"
 $VenvRoot = Join-Path $env:USERPROFILE ".venvs\panelcad"
 $Example = Join-Path $InstallRoot "examples\dol_starter.pcad.yaml"
@@ -70,7 +75,22 @@ function Backup-ExistingInstall([string]$Root, [string]$Python, [string]$Script)
     New-Item -ItemType Directory -Force -Path $config | Out-Null
     Set-Content -LiteralPath (Join-Path $config "rollback.json") -Value $rollback -Encoding UTF8
     Remove-OldBackups $config
-    return $true
+    return $dest
+}
+
+function Restore-BackupOnFailure([string]$BackupDir, [string]$InstallRoot, [string]$Python, [string]$Script) {
+    if ([string]::IsNullOrWhiteSpace($BackupDir) -or -not (Test-Path -LiteralPath $BackupDir)) { return }
+    Write-Step "Install failed; restoring previous PanelCAD from $BackupDir"
+    try {
+        & $Python $Script --source $BackupDir --dest $InstallRoot
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Automatic rollback could not copy $BackupDir (exit $LASTEXITCODE)." -ForegroundColor Yellow
+        } else {
+            Write-Host "Restored previous PanelCAD from $BackupDir." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "Automatic rollback failed: $_" -ForegroundColor Yellow
+    }
 }
 
 function Remove-OldBackups([string]$Config) {
@@ -148,12 +168,21 @@ function Install-Python {
     $arch = $env:PROCESSOR_ARCHITECTURE
     $suffix = "amd64"
     if ($arch -eq "ARM64") { $suffix = "arm64" }
+    $expectedSha = $PythonInstallerSha256[$suffix]
+    if (-not $expectedSha) {
+        throw "No pinned SHA-256 checksum for Python $PythonVersion ($suffix)."
+    }
     $name = "python-$PythonVersion-$suffix.exe"
     $url = "https://www.python.org/ftp/python/$PythonVersion/$name"
     $dest = Join-Path $env:TEMP $name
     Write-Step "Downloading Python $PythonVersion ($suffix) from python.org"
     Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
-    Write-Step "Running the Python installer"
+    $actualSha = (Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualSha -ne $expectedSha.ToLowerInvariant()) {
+        Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue
+        throw "Refusing to run Python installer: SHA-256 mismatch for $name (expected $expectedSha, got $actualSha)."
+    }
+    Write-Step "Running the Python installer (SHA-256 verified)"
     $args = @(
         "/quiet",
         "InstallAllUsers=0",
@@ -325,32 +354,54 @@ if (Test-BundledTesseract $source) {
     Write-Host "A tesseract command is already on this PC. It is used only if the electrical reader cannot load."
 }
 $treeScript = Join-Path $source "scripts\install_tree.py"
-$didBackup = Backup-ExistingInstall $InstallRoot $python $treeScript
-
-Copy-Source $source $InstallRoot $python
-
-Write-Step "Creating the virtual environment"
-if (-not (Test-Path (Join-Path $VenvRoot "Scripts\python.exe"))) {
-    New-Item -ItemType Directory -Force -Path (Split-Path $VenvRoot -Parent) | Out-Null
-    & $python -m venv $VenvRoot
+$backupDir = Backup-ExistingInstall $InstallRoot $python $treeScript
+$didBackup = [bool]$backupDir
+if (-not $backupDir -and $env:PANELCAD_BACKUP_DONE -eq "1") {
+    $rollbackFile = Join-Path (Join-Path $env:USERPROFILE ".panelcad") "rollback.json"
+    if (Test-Path -LiteralPath $rollbackFile) {
+        try {
+            $rb = Get-Content -Raw -LiteralPath $rollbackFile | ConvertFrom-Json
+            if ($rb.backup) { $backupDir = [string]$rb.backup }
+        } catch {
+            $backupDir = ""
+        }
+    }
 }
-$venvPy = Join-Path $VenvRoot "Scripts\python.exe"
-if (-not (Test-Path $venvPy)) { throw "venv python was not created at $venvPy" }
 
-Write-Step "Installing PanelCAD and Qt (this is the long step)"
-& $venvPy -m pip install --upgrade pip
-if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed" }
-Install-BundledOnnxRuntime $venvPy $source
-& $venvPy -m pip install -e $InstallRoot
-if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
-# paddlex asks for opencv-contrib-python. That build carries its own Qt and
-# replaces the headless cv2 PanelCAD already uses. Put the headless module
-# back. The contrib package name stays installed so the OCR dependency check
-# still passes, and import cv2 is the headless build.
-& $venvPy -m pip install --force-reinstall --no-deps "opencv-python-headless>=4.9,<5"
-if ($LASTEXITCODE -ne 0) { throw "Could not restore opencv-python-headless" }
+try {
+    Copy-Source $source $InstallRoot $python
 
-Assert-InstalledVersion $venvPy $version
+    Write-Step "Creating the virtual environment"
+    if (-not (Test-Path (Join-Path $VenvRoot "Scripts\python.exe"))) {
+        New-Item -ItemType Directory -Force -Path (Split-Path $VenvRoot -Parent) | Out-Null
+        & $python -m venv $VenvRoot
+    }
+    $venvPy = Join-Path $VenvRoot "Scripts\python.exe"
+    if (-not (Test-Path $venvPy)) { throw "venv python was not created at $venvPy" }
+
+    Write-Step "Installing PanelCAD and Qt (this is the long step)"
+    & $venvPy -m pip install --upgrade pip
+    if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed" }
+    Install-BundledOnnxRuntime $venvPy $source
+    $constraints = Join-Path $InstallRoot "packaging\constraints.txt"
+    if (Test-Path -LiteralPath $constraints) {
+        & $venvPy -m pip install -e $InstallRoot -c $constraints
+    } else {
+        & $venvPy -m pip install -e $InstallRoot
+    }
+    if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
+    # paddlex asks for opencv-contrib-python. That build carries its own Qt and
+    # replaces the headless cv2 PanelCAD already uses. Put the headless module
+    # back. The contrib package name stays installed so the OCR dependency check
+    # still passes, and import cv2 is the headless build.
+    & $venvPy -m pip install --force-reinstall --no-deps "opencv-python-headless>=4.9,<5"
+    if ($LASTEXITCODE -ne 0) { throw "Could not restore opencv-python-headless" }
+
+    Assert-InstalledVersion $venvPy $version
+} catch {
+    Restore-BackupOnFailure $backupDir $InstallRoot $python $treeScript
+    throw
+}
 
 $launcher = Join-Path $InstallRoot "PanelCAD.cmd"
 @"

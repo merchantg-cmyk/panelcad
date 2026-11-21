@@ -171,7 +171,6 @@ def set_settings(
     rung_pitch_mm: float | None = None,
     rung_numbers: str | None = None,
 ) -> Any:
-    from panelcad.core.models import CrossReference
 
     current = resolve_settings(project)
     if nc_mark is not None:
@@ -231,7 +230,7 @@ def component_rung_y(comp: Component, device: Device | None) -> float:
         return float(comp.y) + float(device.schematic_height) * comp.visual_scale() * 0.5
     prefer = {"A1", "A", "3", "1", "13", "21", "95"}
     pin = next((item for item in pins if str(item.id) in prefer), pins[0])
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
 
     return float(pin_world(comp, pin)[1])
 
@@ -266,7 +265,7 @@ def component_location(
         if pins:
             prefer = {"A1", "A", "3", "1", "13", "21", "95", "11"}
             pin = next((item for item in pins if str(item.id) in prefer), pins[0])
-            from panelcad.render.sheet import pin_world
+            from panelcad.core.pin_geometry import pin_world
 
             x, y = pin_world(comp, pin)
     return location_of(project, sheet, x, y)
@@ -901,7 +900,7 @@ def _coil_annotation(
             # sits on that symbol. 95–98 hang past the right edge; centre the
             # table on that aux column, clear of the captions. The top of the
             # relay is K1's bay.
-            from panelcad.render.sheet import pin_world
+            from panelcad.core.pin_geometry import pin_world
 
             aux = [pin for pin in member.device.pins if str(pin.id) in {"95", "96", "97", "98"}]
             if aux:

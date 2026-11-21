@@ -19,7 +19,6 @@ from panelcad.core.layout import (
     door_row_pitch,
     MODULE_GAP_MM,
     RAIL_CLEAR_MM,
-    RAIL_HEIGHT_MM,
     footprint_size,
     heading_rect,
     legend_plate_rect,

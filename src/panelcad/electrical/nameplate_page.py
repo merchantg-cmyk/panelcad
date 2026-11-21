@@ -22,11 +22,9 @@ _LAYERS = {"TEXT": 7, "CUT": 1, "HOLE": 5}
 
 
 def _ensure_app() -> None:
-    from PySide6.QtWidgets import QApplication
+    from panelcad.qt_app import ensure_qt_app
 
-    if QApplication.instance() is None:
-        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-        QApplication([])
+    ensure_qt_app()
 
 
 def paint_marks(painter, marks: list[Mark], width_mm: float, height_mm: float) -> None:
@@ -62,37 +60,37 @@ def _write_one_pdf(path: Path, width_mm: float, height_mm: float, marks: list[Ma
     caution label. Each page is its own file and the caller merges them.
     """
 
-    from PySide6.QtGui import QPainter, QPdfWriter
-
-    from panelcad.render.page import configure_full_page
+    from panelcad.render.pdf import atomic_pdf_writer
     from panelcad.render.qt_painter import QtPainter
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    writer = QPdfWriter(str(path))
-    writer.setResolution(300)
-    writer.setTitle(title)
-    writer.setCreator("PanelCAD")
-    configure_full_page(writer, width_mm, height_mm)
-    painter = QPainter(writer)
-    try:
+    with atomic_pdf_writer(
+        path,
+        resolution=300,
+        title=title,
+        creator="PanelCAD",
+        width_mm=width_mm,
+        height_mm=height_mm,
+    ) as (writer, painter):
         dpi_x = float(writer.logicalDpiX() or 72)
         dpi_y = float(writer.logicalDpiY() or 72)
         painter.scale(dpi_x / 25.4, dpi_y / 25.4)
         paint_marks(QtPainter(painter, print_paper=True), marks, width_mm, height_mm)
-    finally:
-        if painter.isActive():
-            painter.end()
 
 
 def _merge_pdfs(dest: Path, parts: list[Path]) -> None:
+    import io
+
     from pypdf import PdfReader, PdfWriter
+
+    from panelcad.render.pdf import atomic_pdf_path
 
     writer = PdfWriter()
     for part in parts:
-        reader = PdfReader(str(part))
+        reader = PdfReader(io.BytesIO(part.read_bytes()))
         writer.add_page(reader.pages[0])
-    with dest.open("wb") as handle:
-        writer.write(handle)
+    with atomic_pdf_path(dest) as tmp:
+        with tmp.open("wb") as handle:
+            writer.write(handle)
 
 
 def write_nameplate_pdf(path: Path | str, plate: Nameplate) -> Path:

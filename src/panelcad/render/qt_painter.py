@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetricsF, QImage, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetricsF, QPainter, QPen
 
 from panelcad.render.painter import Painter
 
@@ -98,9 +98,9 @@ def _add_font(path: Path) -> str | None:
 
 def _font_family() -> str:
     """Load a real TTF. Named families like 'Segoe UI' tofu under offscreen/PDF."""
-    from panelcad.api.session import _ensure_qt_app
+    from panelcad.qt_app import ensure_qt_app
 
-    _ensure_qt_app()
+    ensure_qt_app()
     global _FONT_FAMILY, _FONTS_READY
     if _FONTS_READY and _FONT_FAMILY:
         return _FONT_FAMILY

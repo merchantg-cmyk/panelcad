@@ -43,7 +43,7 @@ from panelcad.convert.import_convert import (
     build_iec_project_from_imported_from_to,
     import_iec_print_to_from_to,
 )
-from panelcad.convert.netlist import same_netlist, sheet_edges
+from panelcad.convert.netlist import sheet_edges
 from panelcad.core.models import Component
 from panelcad.core.xref import xref_families
 from panelcad.examples.dol import build_dol

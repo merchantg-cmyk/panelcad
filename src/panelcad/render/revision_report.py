@@ -489,30 +489,26 @@ def _paint_cells(
 
 
 def _ensure_qt() -> None:
-    from PySide6.QtWidgets import QApplication
+    from panelcad.qt_app import ensure_qt_app
 
-    if QApplication.instance() is None:
-        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-        QApplication([])
+    ensure_qt_app()
 
 
 def write_compare_pdf(path: Path | str, report: dict[str, Any], project: Project) -> Path:
-    from PySide6.QtGui import QPainter, QPdfWriter
-
-    from panelcad.render.page import configure_full_page
+    from panelcad.render.pdf import atomic_pdf_writer
     from panelcad.render.qt_painter import QtPainter
 
     _ensure_qt()
     dest = Path(path)
-    dest.parent.mkdir(parents=True, exist_ok=True)
     header_h, prepared = prepare_compare(project, report)
     pages = paginate_compare(prepared, PAGE_H, header_h)
-    writer = QPdfWriter(str(dest))
-    writer.setResolution(150)
-    writer.setTitle(f"{project.name} revision compare")
-    configure_full_page(writer, PAGE_W, PAGE_H)
-    painter = QPainter(writer)
-    try:
+    with atomic_pdf_writer(
+        dest,
+        resolution=150,
+        title=f"{project.name} revision compare",
+        width_mm=PAGE_W,
+        height_mm=PAGE_H,
+    ) as (writer, painter):
         for index, page in enumerate(pages):
             if index:
                 writer.newPage()
@@ -527,9 +523,6 @@ def write_compare_pdf(path: Path | str, report: dict[str, Any], project: Project
                 page_index=index,
                 page_count=len(pages),
             )
-    finally:
-        if painter.isActive():
-            painter.end()
     return dest
 
 

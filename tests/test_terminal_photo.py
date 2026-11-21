@@ -57,9 +57,14 @@ def _app() -> QApplication:
 
 
 def _need_tesseract() -> None:
-    """The default reader is electrical. pytesseract stays importable for the fallback."""
+    """Require either bundled electrical OCR weights or a system Tesseract binary."""
 
     pytest.importorskip("pytesseract")
+    from panelcad.importer.tesseract_runtime import find_tesseract
+    from panelcad.ocr.backend import page_engine_ready
+
+    if not page_engine_ready() and not find_tesseract():
+        pytest.skip("neither electrical OCR weights nor Tesseract binary is installed on this machine")
 
 
 def _screw(painter: QPainter, rect: dict) -> None:

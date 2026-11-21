@@ -24,6 +24,11 @@ def test_ladder_covers_demo_sheets_and_degradations():
         "faded",
         "speckle",
         "fax",
+        "rot90",
+        "rot180",
+        "low_contrast",
+        "cropped_edge",
+        "two_up",
     }
     for source in manifest["sources"]:
         truth = json.loads((ROOT / "truth" / f"{source}.json").read_text(encoding="utf-8"))
@@ -42,7 +47,8 @@ def test_phone_photo_is_tagged_72_dpi_and_fax_is_bilevel():
     assert dpi is not None and abs(float(dpi[0]) - 200) < 0.1 and abs(float(dpi[1]) - 200) < 0.1
 
 
-def test_fixture_tree_stays_under_nine_megabytes():
+def test_fixture_tree_stays_under_twelve_megabytes():
     # The backplate is an ANSI D sheet, so the panel scans are larger than the old A3 set.
+    # Five extra shop-floor variants (rot90/rot180/low_contrast/cropped_edge/two_up) add ~2.6 MB.
     total = sum(path.stat().st_size for path in ROOT.rglob("*") if path.is_file())
-    assert total < 9_000_000
+    assert total < 12_000_000

@@ -97,13 +97,6 @@ def _grid(page: dict[str, Any], width: float, height: float) -> list[dict[str, A
     return tiles
 
 
-def _trim_title(tiles: list[dict[str, Any]], height: float) -> list[dict[str, Any]]:
-    """Drop the title strip. A tile that still has drawing above it is shortened."""
-
-    kept, _skipped = _trim_title_report(tiles, height)
-    return kept
-
-
 def _trim_title_report(
     tiles: list[dict[str, Any]], height: float
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:

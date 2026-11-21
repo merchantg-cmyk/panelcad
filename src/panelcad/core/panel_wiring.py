@@ -12,13 +12,12 @@ from pathlib import Path
 from typing import Any, Literal
 
 from panelcad.core.layout import (
-    effective_footprint,
     footprint_size,
     is_layout_sheet,
 )
 
 display_footprint_size = footprint_size
-from panelcad.core.models import Component, Device, Project, Sheet, WireTray
+from panelcad.core.models import Device, Project, Sheet, WireTray
 from panelcad.library.catalog import Catalog
 
 INCH_MM = 25.4

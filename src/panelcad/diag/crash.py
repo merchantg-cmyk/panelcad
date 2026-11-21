@@ -137,7 +137,7 @@ def reset_state() -> None:
     """Restore hooks and forget this process. Does not delete files in the data dir."""
 
     global _started, _fatal, _handling, _hooks, _gui, _dialogs, _recovery_session
-    global _prev_sys, _prev_thread, _prev_qt, _fault_handle, _original_invoke
+    global _prev_sys, _prev_thread, _prev_qt, _original_invoke
     global _process_started, _lock_path
     _stop_maintenance()
     if _hooks:

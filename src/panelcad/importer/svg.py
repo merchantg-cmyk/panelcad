@@ -2227,15 +2227,6 @@ def _font_user(style: dict[str, str], frame: Frame, doc: _Doc) -> float:
     return size
 
 
-def _first_length(element: ET.Element, name: str, frame: Frame, axis: str, doc: _Doc, default: float) -> float:
-    raw = _attr(element, name).strip()
-    if not raw:
-        return default
-    first = raw.replace(",", " ").split()[0]
-    value = _user_length(first, frame, axis, doc)
-    return default if value is None else value
-
-
 def _collapse(text: str, preserve: bool) -> str:
     if preserve:
         return text.strip("\n")

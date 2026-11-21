@@ -922,7 +922,7 @@ def _refit_panel(session: Any, drive_id: str) -> None:
             comp.properties["keepout_top_mm"] = _CLEAR_ABOVE_MM
             comp.properties["keepout_bottom_mm"] = _CLEAR_BELOW_MM
             comp.properties["keepout_note"] = (
-                f"Fig 7.5 p.36: B 30 mm sides, C 100 mm above/below (front A is 50 mm)"
+                "Fig 7.5 p.36: B 30 mm sides, C 100 mm above/below (front A is 50 mm)"
             )
     schematic = session.project.sheets
     for sheet in schematic:
@@ -1014,7 +1014,7 @@ def _height(session: Any, comp: Any) -> float:
 
 
 def _pin_xy(session: Any, comp: Any, pin_id: str) -> tuple[float, float]:
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
 
     device = session.catalog.get(comp.library_id)
     return pin_world(comp, device.pin(pin_id))

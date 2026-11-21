@@ -679,7 +679,7 @@ def draw_wire_caption(
     """
     if not pts:
         return
-    from panelcad.render.wire_labels import MARK_SIZE, SPEC_SIZE
+    from panelcad.render.wire_labels import MARK_SIZE
 
     mark = wire.drawn_mark(ladder=ladder)
     shown = wire.spec_text() if spec is None else spec

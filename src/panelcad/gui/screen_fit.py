@@ -103,8 +103,8 @@ def fit_print_dialog(dialog: QDialog) -> None:
     File → Print uses ``QPrintPreviewDialog`` then ``QPrintDialog``. Qt often
     opens them smaller than ``sizeHint``, and the theme dialog clamp can wrap
     a tall print dialog in a scroll area so Print/Cancel sit below the fold
-    (observed on a 1366×768 laptop). Opt out of that wrap, grow
-    to the content hint, and cap to the work area. The dialog stays resizable.
+    on a 1366×768 laptop. Opt out of that wrap, grow to the content hint, and
+    cap to the work area. The dialog stays resizable.
     """
 
     dialog.setProperty("_pc_own_fit", True)

@@ -30,6 +30,7 @@ class PreparedScan:
     illumination_normalized: bool = False
     effective_dpi: tuple[float, float] | None = None
     source_dpi: tuple[float, float] | None = None
+    sharp_image: Image.Image | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {

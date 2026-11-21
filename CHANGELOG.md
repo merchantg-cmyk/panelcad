@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.5.29 — 2026-11-20
+
+- Wire drag fix.
+- New public print test fixtures and panel scan variants.
+- Release zip leaves public print images out.
+- Undo: a sheet switch or Escape mid-drag no longer leaves the undo command open, so later edits push again. Resize commits drop wire routes inside the same undo step. A clean disk reload still starts with an empty stack.
+
 ## 0.5.28 — 2026-11-17
 
 - Scan rebuilds default to ladder layout.

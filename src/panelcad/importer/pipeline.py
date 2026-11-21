@@ -137,6 +137,267 @@ EMPTY_IMPORT_MESSAGE = (
     "Check the review list, the page rotation, and the vision backend."
 )
 
+from panelcad.importer.preserve_mode import (
+    PRESERVE_SCAN_KINDS as _PRESERVE_SCAN_KINDS,  # noqa: F401
+    PRESERVE_SCAN_PAGE_KINDS as _PRESERVE_SCAN_PAGE_KINDS,
+    default_scan_layout_mode as _scan_default_layout,  # noqa: F401
+    resolve_effective_layout_mode,
+)
+from panelcad.importer.scan_dispatch import (
+    block_row_in_any_turn as _block_row_in_any_turn,  # noqa: F401
+    dispatch_scan_read,
+    is_narrow_strip_row as _is_narrow_strip_row,  # noqa: F401
+    looks_like_strip_device as _looks_like_strip_device,
+    peek_layout_page_kind as _peek_layout_page_kind,  # noqa: F401
+    raw_has_terminal_strip as _raw_has_terminal_strip,
+    route_scan_page,
+)
+
+
+def _page_has_unread_terminal_strip(
+    image: Image.Image,
+    facts: dict[str, Any],
+    *,
+    width_mm: float,
+    height_mm: float,
+) -> bool:
+    """True when strip geometry is on the page but electrical OCR missed the tags."""
+
+    kind = str(facts.get("kind") or "").strip().lower()
+    if kind.startswith("schematic"):
+        return False
+    if not _raw_has_terminal_strip(image, width_mm, height_mm):
+        return False
+    tags = {str(item.get("tag") or "").strip().upper() for item in (facts.get("devices") or [])}
+    if any(tag.startswith("X") and "-" in tag for tag in tags):
+        return False
+    return True
+
+
+def _page_wants_tesseract_reader(
+    facts: dict[str, Any],
+    *,
+    image: Image.Image | None = None,
+    width_mm: float = 0.0,
+    height_mm: float = 0.0,
+) -> bool:
+    """True when this page should use Tesseract instead of electrical OCR.
+
+    Electrical ONNX OCR is the schematic default. On a panel or terminal
+    sheet it invents catalog text as tags or misses the strip, and an empty
+    build then asks for a vision backend. Those kinds stay on Tesseract.
+    """
+
+    kind = str(facts.get("kind") or "").strip().lower()
+    if kind in _PRESERVE_SCAN_PAGE_KINDS:
+        return True
+    if kind.startswith("schematic"):
+        return False
+    devices = [item for item in (facts.get("devices") or []) if str(item.get("tag") or "").strip()]
+    if kind in {"", "other"} and devices and all(_looks_like_strip_device(item) for item in devices):
+        return True
+    if image is not None and not any(not _looks_like_strip_device(item) for item in devices) and _page_has_unread_terminal_strip(
+        image, facts, width_mm=width_mm, height_mm=height_mm
+    ):
+        return True
+    # Empty or junk-only non-schematic read: try Tesseract before asking for vision.
+    if kind in {"", "other"} and not _strip_tags(facts):
+        if not devices:
+            return True
+        if all(bool(item.get("guess") or item.get("needs_review")) for item in devices):
+            return True
+    return False
+
+
+def _merge_title_band_strip_facts(
+    merged: dict[str, Any],
+    facts: dict[str, Any],
+    *,
+    page_id: str,
+) -> dict[str, Any]:
+    """Re-attach strip terminals that tile title-band trim dropped."""
+
+    have = {
+        str(device.get("tag") or "").strip().upper()
+        for device in (merged.get("devices") or [])
+        if str(device.get("tag") or "").strip()
+    }
+    extra_devices: list[dict[str, Any]] = []
+    for device in facts.get("devices") or []:
+        if not isinstance(device, dict) or not _looks_like_strip_device(device):
+            continue
+        tag = str(device.get("tag") or "").strip().upper()
+        if not tag or tag in have or tag == "?":
+            continue
+        # Proper strip tags look like X1-1. Skip lone junk OCR.
+        if not (tag.startswith("X") and "-" in tag):
+            continue
+        item = dict(device)
+        item["page_id"] = page_id
+        extra_devices.append(item)
+        have.add(tag)
+    if not extra_devices:
+        return merged
+    out = dict(merged)
+    out["devices"] = list(merged.get("devices") or []) + extra_devices
+    strip_tags = {str(device.get("tag") or "").strip().upper() for device in extra_devices}
+    extra_wires: list[dict[str, Any]] = []
+    seen_wires = {
+        (
+            str(wire.get("number") or "").strip(),
+            str(wire.get("frm") or "").strip().upper(),
+            str(wire.get("to") or "").strip().upper(),
+        )
+        for wire in (merged.get("wires") or [])
+        if isinstance(wire, dict)
+    }
+    for wire in facts.get("wires") or []:
+        if not isinstance(wire, dict):
+            continue
+        ends = {
+            str(wire.get("frm") or "").strip().upper(),
+            str(wire.get("to") or "").strip().upper(),
+        }
+        if not (ends & strip_tags):
+            continue
+        key = (
+            str(wire.get("number") or "").strip(),
+            str(wire.get("frm") or "").strip().upper(),
+            str(wire.get("to") or "").strip().upper(),
+        )
+        if key in seen_wires:
+            continue
+        item = dict(wire)
+        item["page_id"] = page_id
+        extra_wires.append(item)
+        seen_wires.add(key)
+    if extra_wires:
+        out["wires"] = list(merged.get("wires") or []) + extra_wires
+    return out
+
+
+def _choose_raster_ocr_backend(image: Image.Image, width_mm: float, height_mm: float) -> str | None:
+    """Pin Tesseract for panel/terminal pages; otherwise leave the default alone."""
+
+    return route_scan_page(image, width_mm, height_mm).ocr_backend
+
+
+def _reread_layout_pages_with_tesseract(
+    image: Image.Image,
+    facts: dict[str, Any],
+    *,
+    width_mm: float,
+    height_mm: float,
+    standard: str,
+    allow_missing_ocr: bool,
+    catalog: Any = None,
+    strip_image: Image.Image | None = None,
+) -> dict[str, Any]:
+    """Fallback re-read when the first electrical pass only found strip tags."""
+
+    from panelcad.ocr.backend import active_backend, ocr_scope
+
+    if active_backend() != "electrical" or not _page_wants_tesseract_reader(
+        facts, image=image, width_mm=width_mm, height_mm=height_mm
+    ):
+        return facts
+    from panelcad.importer.tesseract_runtime import find_tesseract
+
+    if not find_tesseract():
+        return facts
+    from panelcad.importer.raster import read_pixels
+
+    with ocr_scope("tesseract"):
+        tess = read_pixels(
+            image,
+            width_mm,
+            height_mm,
+            catalog if catalog is not None else _device_catalog(),
+            standard=standard,
+            allow_missing_ocr=allow_missing_ocr,
+            strip_image=strip_image,
+        )
+    kind = str(facts.get("kind") or "").strip().lower()
+    # Panel/terminal classifications always prefer Tesseract when electrical
+    # missed strip tags (it often invents a single junk tag instead).
+    if kind in _PRESERVE_SCAN_PAGE_KINDS and not _strip_tags(facts):
+        return tess
+    return tess if _raster_read_better(tess, facts) else facts
+
+
+def _strip_tags(facts: dict[str, Any]) -> set[str]:
+    return {
+        str(device.get("tag") or "").strip().upper()
+        for device in (facts.get("devices") or [])
+        if str(device.get("tag") or "").strip().upper().startswith("X")
+        and "-" in str(device.get("tag") or "")
+    }
+
+
+def _raster_read_better(candidate: dict[str, Any], baseline: dict[str, Any]) -> bool:
+    """True when ``candidate`` recovered strip tags or a layout/terminal kind."""
+
+    cand_kind = str(candidate.get("kind") or "").strip().lower()
+    base_kind = str(baseline.get("kind") or "").strip().lower()
+    cand_strip = _strip_tags(candidate)
+    base_strip = _strip_tags(baseline)
+    if cand_strip and len(cand_strip) > len(base_strip):
+        return True
+    if cand_kind in _PRESERVE_SCAN_PAGE_KINDS and base_kind not in _PRESERVE_SCAN_PAGE_KINDS:
+        return True
+    if cand_strip and not base_strip:
+        return True
+    # Prefer a full X1-1..n set over mixed junk + a couple of strip tags.
+    cand_proper = {tag for tag in cand_strip if tag.startswith("X") and tag[1:2].isdigit()}
+    base_proper = {tag for tag in base_strip if tag.startswith("X") and tag[1:2].isdigit()}
+    if len(cand_proper) > len(base_proper):
+        return True
+    return False
+
+
+def _read_pixels_for_scan(
+    image: Image.Image,
+    *,
+    width_mm: float,
+    height_mm: float,
+    standard: str,
+    allow_missing_ocr: bool,
+    catalog: Any = None,
+    peek_image: Image.Image | None = None,
+    ocr_backend: str | None = None,
+    strip_image: Image.Image | None = None,
+) -> dict[str, Any]:
+    """One full raster read on the page-kind's OCR engine, with a strip fallback.
+
+    ``peek_image`` is the pre-deskew scan when ``image`` is already prepared.
+    ``ocr_backend`` skips the title peek when the caller already chose.
+    """
+
+    devices_catalog = catalog if catalog is not None else _device_catalog()
+    dispatched = dispatch_scan_read(
+        image,
+        width_mm=width_mm,
+        height_mm=height_mm,
+        catalog=devices_catalog,
+        standard=standard,
+        allow_missing_ocr=allow_missing_ocr,
+        peek_image=peek_image,
+        ocr_backend=ocr_backend,
+        strip_image=strip_image,
+    )
+    if dispatched.route.ocr_backend:
+        return dispatched.facts
+    return _reread_layout_pages_with_tesseract(
+        image,
+        dispatched.facts,
+        width_mm=width_mm,
+        height_mm=height_mm,
+        standard=standard,
+        allow_missing_ocr=allow_missing_ocr,
+        catalog=devices_catalog,
+        strip_image=strip_image,
+    )
+
 
 def page_kind_words(kind: str) -> str:
     """Words for a page kind. The raw token ``other`` is not shown."""
@@ -637,9 +898,10 @@ class ImportJob:
                     stitched["from_to_schedule"] = prior["from_to_schedule"]
                     break
         # Ladder is the default only for the raster scan reader (backend
-        # raster / auto / empty) on non-vector pages. PDF/vector input keeps
-        # preserve even when backend=raster. External, vision, and photo
-        # imports keep preserve. Preserve-mode scan-reader sheets cannot issue.
+        # raster / auto / empty) on schematic pages. Panel, door, and terminal
+        # scans keep preserve placement. PDF/vector input keeps preserve even
+        # when backend=raster. External, vision, and photo imports keep
+        # preserve. Preserve-mode scan-reader sheets cannot issue.
         requested = str(layout_mode or "").strip().lower()
         stamped = str(self.manifest.get("layout_mode") or stitched.get("layout_mode") or "").strip().lower()
         backend = str(self.manifest.get("backend") or self.backend_name or "").strip().lower()
@@ -647,18 +909,12 @@ class ImportJob:
             not page.get("vector") and not _page_is_svg(page) for page in pages
         )
         scan_reader = backend in {"raster", "auto", ""} and non_vector
-        if requested in {"ladder", "clean_ladder", "clean"}:
-            eff_layout = "ladder"
-        elif requested == "preserve":
-            eff_layout = "preserve"
-        elif stamped in {"ladder", "clean_ladder", "clean"}:
-            eff_layout = "ladder"
-        elif stamped == "preserve":
-            eff_layout = "preserve"
-        elif scan_reader:
-            eff_layout = "ladder"
-        else:
-            eff_layout = "preserve"
+        eff_layout = resolve_effective_layout_mode(
+            requested=requested,
+            stamped=stamped,
+            scan_reader=scan_reader,
+            stitched=stitched,
+        )
         eff_target_std = str(
             target_standard
             if target_standard and target_standard != "auto"
@@ -884,7 +1140,6 @@ class ImportJob:
 
     def _extract_vector(self, page: dict[str, Any], tiles: list[dict[str, Any]]) -> None:
         from panelcad.importer.vectors import read_drawing
-        from panelcad.library.catalog import default_catalog
 
         tokens = self.ws.read_json("pages", page["id"], "words.json", default=[]) or []
         strokes = self.ws.read_json("pages", page["id"], "strokes.json", default=[]) or []
@@ -917,6 +1172,10 @@ class ImportJob:
             self.ws.write_json(piece, "pages", page["id"], "tiles", f"{tile['id']}.json")
             parts.append(piece)
         merged = merge_extractions(parts)
+        # Ingest may quarter-turn a landscape strip into the title band. Tile
+        # trim drops that band, so put strip terminals (and their wire marks)
+        # back from the full-page raster read.
+        merged = _merge_title_band_strip_facts(merged, facts, page_id=str(page.get("id") or ""))
         self.ws.write_json(merged, "pages", page["id"], "merged.json")
         if self.diagnostics is not None:
             self.diagnostics.ingest_pixel(
@@ -1782,24 +2041,45 @@ class ImportJob:
     def _read_raster(self, page: dict[str, Any]) -> dict[str, Any] | None:
         """Read one scan from pixels. A configured model may refine low-confidence items."""
 
-        from panelcad.importer.raster import prepare_opencv, read_pixels, refine_with_model
+        from panelcad.importer.raster import prepare_opencv, refine_with_model
 
         image = Image.open(page["image"]).convert("RGB")
         ink = image_ink_fraction(image)
-        prepared, angles = prepare_opencv(image)
-        prepared.save(page["image"])
-        page["deskew_deg"] = float(angles.get("deskew_deg") or 0.0)
         width_mm = float(page["width_mm"])
         height_mm = float(page["height_mm"])
+        # Choose the OCR engine from the raw scan. Deskew/denoise can wipe a
+        # degraded title band, and then electrical OCR is selected by mistake.
+        pinned = _choose_raster_ocr_backend(image, width_mm, height_mm)
+        prepared, angles = prepare_opencv(image)
+        prepared.save(page["image"])
+        fine_angle = float(angles.get("deskew_deg") or 0.0)
+        page["deskew_deg"] = fine_angle
+        strip_image: Image.Image | None = None
+        sharp_path = str(page.get("sharp_image") or "")
+        if sharp_path and Path(sharp_path).is_file():
+            try:
+                sharp_img = Image.open(sharp_path).convert("RGB")
+                if abs(fine_angle) >= 0.3:
+                    sharp_img = sharp_img.rotate(
+                        -fine_angle,
+                        resample=Image.Resampling.BICUBIC,
+                        expand=False,
+                        fillcolor=(255, 255, 255),
+                    )
+                strip_image = sharp_img
+            except Exception:  # noqa: BLE001
+                strip_image = None
         standard = str(self.manifest.get("standard") or (page.get("classification") or {}).get("standard") or "")
         vision_on = self._vision_client() is not None
-        facts = read_pixels(
+        facts = _read_pixels_for_scan(
             prepared,
-            width_mm,
-            height_mm,
-            _device_catalog(),
+            width_mm=width_mm,
+            height_mm=height_mm,
             standard=standard,
             allow_missing_ocr=vision_on,
+            catalog=_device_catalog(),
+            ocr_backend=pinned or "",
+            strip_image=strip_image,
         )
         if facts.get("ocr_skipped"):
             from panelcad.importer.raster import TESSERACT_MESSAGE
@@ -2443,10 +2723,23 @@ def _facts_from_ingested_page(page: dict[str, Any], workspace: Workspace, catalo
     image_path = str(page.get("image") or "")
     if image_path and Path(image_path).is_file() and width > 0 and height > 0:
         try:
-            from panelcad.importer.raster import read_pixels
-
+            strip_image: Image.Image | None = None
+            sharp_path = str(page.get("sharp_image") or "")
+            if sharp_path and Path(sharp_path).is_file():
+                try:
+                    strip_image = Image.open(sharp_path).convert("RGB")
+                except Exception:  # noqa: BLE001
+                    strip_image = None
             with Image.open(image_path) as image:
-                return read_pixels(image, width, height, catalog, allow_missing_ocr=True)
+                return _read_pixels_for_scan(
+                    image,
+                    width_mm=width,
+                    height_mm=height,
+                    standard="",
+                    allow_missing_ocr=True,
+                    catalog=catalog,
+                    strip_image=strip_image,
+                )
         except Exception:  # noqa: BLE001
             return {}
     return {}

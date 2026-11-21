@@ -139,6 +139,11 @@ EXCLUDE_FILE_NAMES = {
     "PanelCAD-Setup.zip",
     "PanelCAD-Setup.tar.gz",
 }
+# Paths omitted from public release zips only (kept in shop zips and public
+# repo snapshots). A trailing slash means the whole directory.
+PUBLIC_ZIP_EXCLUDE = (
+    "tests/fixtures/public_prints/images/",
+)
 CRLF_SUFFIXES = {".cmd", ".ps1", ".bat"}
 EXEC_NAMES = {"check", "setup.sh", "build-release.py"}
 ENDPOINT_REL = "src/panelcad/diag/_report_endpoint.txt"
@@ -501,6 +506,14 @@ def _snapshot_module():
     return module
 
 
+def _public_zip_excluded(rel: str) -> bool:
+    posix = rel.replace("\\", "/")
+    for item in PUBLIC_ZIP_EXCLUDE:
+        if posix == item or posix.startswith(item.rstrip("/") + "/"):
+            return True
+    return False
+
+
 def iter_release_files(root: Path, *, public: bool = False) -> list[tuple[str, Path]]:
     snap = _snapshot_module() if public else None
     items: list[tuple[str, Path]] = []
@@ -509,7 +522,7 @@ def iter_release_files(root: Path, *, public: bool = False) -> list[tuple[str, P
         if not path.is_file():
             continue
         rel = name.replace("\\", "/")
-        if snap is not None and snap.excluded(rel):
+        if snap is not None and (snap.excluded(rel) or _public_zip_excluded(rel)):
             continue
         items.append((rel, path))
     for dirname in INCLUDE_DIRS:
@@ -524,7 +537,7 @@ def iter_release_files(root: Path, *, public: bool = False) -> list[tuple[str, P
             if should_skip_file(path):
                 continue
             rel = path.relative_to(root).as_posix()
-            if snap is not None and snap.excluded(rel):
+            if snap is not None and (snap.excluded(rel) or _public_zip_excluded(rel)):
                 continue
             items.append((rel, path))
     present = {rel for rel, _path in items}

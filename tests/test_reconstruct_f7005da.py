@@ -14,8 +14,7 @@ from panelcad import Session
 from panelcad.cli.agent import Agent
 from panelcad.core.checks import run_checks
 from panelcad.io.bom import instance_rows
-from panelcad.library.panel import is_layout_ready, require_explicit_envelope
-from panelcad.reconstruct.fixtures import write_backpanel_photo
+from panelcad.library.panel import is_layout_ready
 from panelcad.reconstruct.vision import FakeVision
 
 
@@ -208,7 +207,7 @@ def test_i1_import_bom_size_change_clears_confirmation(tmp_path: Path):
     session = Session.create("BOM size")
     session.place("iec.contactors.ac3_9a", ref="K1", x=40, y=40, sheet_id="main")
     session.confirm_envelope(
-        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="george"
+        "K1", width_mm=45, height_mm=85, depth_mm=95, mount="din_rail", confirmed_by="alex"
     )
     csv_path = tmp_path / "resize.csv"
     csv_path.write_text(
@@ -453,7 +452,6 @@ def test_n22_confirm_item_uses_require_explicit_envelope(tmp_path: Path):
         assert item.status != "envelope"
         assert item.envelope_confirmed is False
         assert item.library_id != "reconstruct.measured_envelope"
-        require_explicit_envelope  # same rule as the gate
     reply = session.reconstruct_confirm_item(
         item_id,
         envelope_w_mm=50,

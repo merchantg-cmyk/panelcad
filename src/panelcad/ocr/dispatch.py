@@ -67,7 +67,7 @@ def image_to_data(
         return _electrical_dict(image, cfg)
     import pytesseract
 
-    from panelcad.importer.raster import configure_tesseract
+    from panelcad.ocr.tesseract_runtime import configure_tesseract
 
     configure_tesseract()
     call: dict[str, Any] = {}
@@ -93,7 +93,7 @@ def image_to_string(
         return _electrical_string(image, cfg)
     import pytesseract
 
-    from panelcad.importer.raster import configure_tesseract
+    from panelcad.ocr.tesseract_runtime import configure_tesseract
 
     configure_tesseract()
     if cfg:

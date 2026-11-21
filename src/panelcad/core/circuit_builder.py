@@ -1761,12 +1761,6 @@ def _outside_component_ids(session: Any, sheet_id: str) -> list[str]:
     return outside
 
 
-def _devices_outside_enclosure(session: Any, sheet_id: str) -> bool:
-    """True when a placed in-cabinet part hangs outside the backpanel outline."""
-
-    return bool(_outside_component_ids(session, sheet_id))
-
-
 def _remember_panel_unplaced(
     session: Any, sheet_id: str, refs: list[str], owners: list[str] | None = None
 ) -> None:
@@ -2106,36 +2100,6 @@ def _layout(
     return parts
 
 
-def _dol_controls(symbols: SymbolSet) -> list[tuple[str, str, str]]:
-    pins = symbols.pins
-    return [
-        (symbols.psu, "psu", pins.psu_plus),
-        (symbols.estop, "estop", pins.estop_in),
-        (symbols.pb_nc, "stop", pins.stop_in),
-        (symbols.pb_no, "start", pins.start_in),
-    ]
-
-
-def _control_row(session: Any, power: list[_Part], symbols: list[tuple[str, str, str]]) -> list[_Part]:
-    """Left-to-right rung. Contact pins share a world y; bodies stay beside the power stack."""
-
-    power_top = min(part.y for part in power)
-    rung_y = power_top
-    for library_id, _role, pin_id in symbols:
-        rung_y = max(rung_y, power_top + _pin_y(_device(session, library_id), pin_id))
-    right = max(part.x + _size(_device(session, part.library_id))[0] for part in power)
-    cursor_x = right + CLEAR
-    row: list[_Part] = []
-    for library_id, role, pin_id in symbols:
-        device = _device(session, library_id)
-        width, _height = _size(device)
-        row.append(
-            _Part(library_id, role, cursor_x, rung_y - _pin_y(device, pin_id), align_pin=pin_id)
-        )
-        cursor_x += width + GAP
-    return row
-
-
 def _vfd_controls(
     session: Any, drive: _Part, spec: dict[str, Any], symbols: SymbolSet
 ) -> list[_Part]:
@@ -2171,7 +2135,7 @@ def _repark_vfd_operators(session: Any, sheet_id: str) -> None:
     not a 24 V coil circuit.
     """
 
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
 
     sheet = session.sheet(sheet_id)
     order = {"estop": 0, "stop": 1, "start": 2}

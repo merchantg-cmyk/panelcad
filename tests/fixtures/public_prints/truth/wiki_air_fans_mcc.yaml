@@ -1,0 +1,41 @@
+id: wiki_air_fans_mcc
+source_id: wiki_air_fans_mcc
+kind: schematic
+standard: "IEC"
+devices:
+  - QS1
+  - QF1
+  - QF2
+  - QF3
+  - KM1
+  - KM2
+  - KM3
+  - M1
+  - M2
+  - M3
+  - SF1
+  - SF2
+  - SF3
+  - VDS1
+  - FU1
+  - SA1
+  - C1
+  - HL1
+  - HL2
+  - HL3
+  - HL4
+  - HL5
+  - HL6
+  - HL7
+  - HL8
+  - HL9
+  - HL10
+  - K1
+  - K2
+wire_numbers:
+  - "L1"
+  - "L2"
+  - "L3"
+  - "N"
+  - "PE"
+notes: "IEC three-fan power distribution and 24 V control ladder (FU1 / SA1 shown as combined label)."

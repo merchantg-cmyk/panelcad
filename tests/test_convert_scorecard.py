@@ -13,12 +13,9 @@ from panelcad.convert import (
     GOLDEN_NEMA_FROM_TO_FILES,
     SCORER_VERSION,
     STATIC_CORPUS_GROUND_TRUTH,
-    build_golden_nema_from_to_session,
     build_iec_conversion_corpus,
     compare_scorecard_modes,
-    export_golden_nema_from_to_csv,
     run_conversion_scorecard,
-    score_conversion_item,
     verify_golden_nema_from_to_csvs,
 )
 
@@ -196,7 +193,7 @@ def test_conversion_docs_and_public_exports():
     )
     from panelcad.convert.standard_map import ENTRIES
 
-    assert panelcad.__version__ == "0.5.28"
+    assert panelcad.__version__ == "0.5.29"
     assert verify_converted_from_to is check_connections
     assert consolidate_multipage_iec is consolidate_control_sheets
 

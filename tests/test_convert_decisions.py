@@ -13,8 +13,6 @@ from panelcad.convert import (
     ConversionDecision,
     ConversionPlan,
     accept_chunk,
-    apply_conversion,
-    conversion_plan,
     convert_standard,
     revert_chunk,
 )

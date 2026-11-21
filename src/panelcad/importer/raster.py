@@ -59,33 +59,27 @@ INFERRED_CONFIDENCE = 0.55
 TERMINAL_MARGIN_MM = 6.0
 TERMINAL_PIN_MM = 8.0
 ENDPOINT_LIBRARY = "iec.connection.node"
-TESSERACT_MESSAGE = (
-    "Scans need OCR or vision turned on. "
-    "Tesseract OCR was not found. PanelCAD looks for the runtime shipped with the install, "
-    "then for the tesseract command on PATH. "
-    "Official source: https://github.com/tesseract-ocr/tesseract "
-    "Downloads: https://tesseract-ocr.github.io/tessdoc/Downloads.html"
+from panelcad.ocr.tesseract_runtime import (
+    TESSDATA_MESSAGE,
+    TESSERACT_MESSAGE,
+    TesseractMissing,
+    _reraise_tesseract,
 )
-TESSDATA_MESSAGE = (
-    "Tesseract language data eng.traineddata was not found. "
-    "Install the English traineddata next to Tesseract's tessdata directory. "
-    "Official source: https://github.com/tesseract-ocr/tessdata"
-)
+
 # A label may sit a few millimetres past a short conductor. Farther than this
 # is the next wire's endpoint, not this segment.
 ALONG_SLACK_MM = 3.0
 SIDE_PENALTY_MM = 12.0
 
-
-class TesseractMissing(RuntimeError):
-    """The tesseract binary is not installed. The message names the official source."""
 _DIGIT = str.maketrans({"O": "0", "I": "1", "L": "1", "S": "5", "B": "8", "Z": "2", "G": "6"})
 
 
 def prepare_opencv(image: Image.Image) -> tuple[Image.Image, dict[str, float]]:
     """Denoise, then rotate so the long ruled lines are level. Angle is degrees CCW."""
 
-    rgb = np.asarray(image.convert("RGB"))
+    from panelcad.importer.imageutil import despeckle_preserving_strokes
+
+    rgb, _ = despeckle_preserving_strokes(np.asarray(image.convert("RGB"), dtype=np.uint8))
     den = cv2.bilateralFilter(rgb, 5, 40, 40)
     gray = cv2.cvtColor(den, cv2.COLOR_RGB2GRAY)
     angle = _skew_angle(gray)
@@ -126,7 +120,8 @@ def _upscale_low_res(image: Image.Image, width_mm: float, height_mm: float) -> I
         return image
     width = max(1, int(round(image.width * scale)))
     height = max(1, int(round(image.height * scale)))
-    if width * height > 18_000_000:
+    max_pixels = 36_000_000 if ppm < floor else 18_000_000
+    if width * height > max_pixels:
         return image
     return image.resize((width, height), Image.Resampling.LANCZOS)
 
@@ -210,9 +205,17 @@ def read_pixels(
     *,
     standard: str = "",
     allow_missing_ocr: bool = False,
+    strip_image: Image.Image | None = None,
 ) -> dict[str, Any]:
     """Devices, wires, and title-block fields from one prepared page image."""
 
+    from panelcad.importer.imageutil import despeckle_preserving_strokes
+
+    clean_rgb, speckled = despeckle_preserving_strokes(np.asarray(image.convert("RGB"), dtype=np.uint8))
+    if speckled:
+        cleaned = Image.fromarray(clean_rgb)
+        cleaned.info.update(image.info)
+        image = cleaned
     image = _upscale_low_res(image, width_mm, height_mm)
     rgb = np.asarray(image.convert("RGB"))
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
@@ -226,6 +229,17 @@ def read_pixels(
             raise
         tokens = []
         ocr_skipped = True
+    title = read_title_block(tokens, height_mm)
+    if not ocr_skipped and not str(title.get("sheet_number") or "").strip() and not title.get("sheet_number_needs_info"):
+        # Ruled cells miss a free-form line and a low-resolution photo. Read the
+        # title-block region itself. An uncertain read stays blank.
+        found = ocr_title_sheet(rgb, ppm, width_mm, height_mm)
+        if found.get("sheet_number") or found.get("sheet_number_needs_info"):
+            title = {**title, **found}
+    title_confidence = _title_confidence(title)
+    texts = _title_items(title, title_confidence)
+    kind = page_kind_from_title(title, str(title.get("text") or ""))
+    is_layout = kind in {"panel_layout", "door_layout"}
     binary = _ink(gray)
     insets = effective_insets(detect_frame_insets(binary, width_mm, height_mm), tokens, width_mm, height_mm)
     labeled = label_tokens(tokens, width_mm, height_mm, insets=insets)
@@ -236,11 +250,12 @@ def read_pixels(
         _match_symbol(tok, match_ink, ppm, rgb.shape, catalog, standard, height_mm=height_mm)
         for tok in labeled["tags"]
     ]
-    devices.extend(_coils_from_ink(gray, binary, devices, ppm, catalog, standard))
-    devices.extend(_fuses_from_ink(gray, match_ink, devices, ppm, catalog, standard))
-    _land_body_symbols(binary, devices, ppm, catalog, standard)
-    _mark_secondary_fuses(devices)
-    _drop_ocr_ghosts_on_transformers(devices)
+    if not is_layout:
+        devices.extend(_coils_from_ink(gray, binary, devices, ppm, catalog, standard))
+        devices.extend(_fuses_from_ink(gray, match_ink, devices, ppm, catalog, standard))
+        _land_body_symbols(binary, devices, ppm, catalog, standard)
+        _mark_secondary_fuses(devices)
+        _drop_ocr_ghosts_on_transformers(devices)
     _sibling_terminal_captions(gray, devices, ppm, catalog)
     _mark_caption_tags(devices, tokens)
     # Rotation first, so the trace sees line pins on the bus side. Spread after
@@ -252,7 +267,41 @@ def read_pixels(
     orient_ladder_devices(devices, catalog, spread=True, page_width=width_mm)
     from panelcad.importer.strip_scan import read_terminal_strip
 
-    strip_devices = read_terminal_strip(gray, rgb, ppm)
+    if strip_image is not None:
+        strip_up = _upscale_low_res(strip_image, width_mm, height_mm)
+        strip_rgb = np.asarray(strip_up.convert("RGB"))
+        strip_gray = cv2.cvtColor(strip_rgb, cv2.COLOR_RGB2GRAY)
+        strip_ppm = strip_rgb.shape[1] / width_mm if width_mm else 1.0
+        strip_devices = read_terminal_strip(strip_gray, strip_rgb, strip_ppm)
+    else:
+        strip_devices = read_terminal_strip(gray, rgb, ppm)
+    if strip_devices:
+        strip_tags = {str(device.get("tag") or "") for device in strip_devices if device.get("tag")}
+        strip_boxes = [
+            (
+                float(device.get("x") or 0.0),
+                float(device.get("y") or 0.0),
+                float(device.get("w") or 0.0),
+                float(device.get("h") or 0.0),
+            )
+            for device in strip_devices
+            if float(device.get("w") or 0.0) > 0 and float(device.get("h") or 0.0) > 0
+        ]
+
+        def _inside_strip_block(dev: dict[str, Any]) -> bool:
+            if str(dev.get("source") or "") != "ocr":
+                return False
+            dtag = str(dev.get("tag") or "")
+            if dtag in strip_tags:
+                return False
+            dx = float(dev.get("x") or 0.0)
+            dy = float(dev.get("y") or 0.0)
+            for bx, by, bw, bh in strip_boxes:
+                if bx - 0.5 <= dx <= bx + bw + 0.5 and by - 0.5 <= dy <= by + bh + 0.5:
+                    return True
+            return False
+
+        devices = [dev for dev in devices if not _inside_strip_block(dev)]
     known = {str(device.get("tag") or "") for device in devices}
     by_tag = {str(device.get("tag") or ""): device for device in devices if device.get("tag")}
     for device in strip_devices:
@@ -273,16 +322,20 @@ def read_pixels(
             known.add(tag)
             by_tag[tag] = device
     wires.extend(_strip_number_wires(strip_devices))
-    title = read_title_block(tokens, height_mm)
-    if not ocr_skipped and not str(title.get("sheet_number") or "").strip() and not title.get("sheet_number_needs_info"):
-        # Ruled cells miss a free-form line and a low-resolution photo. Read the
-        # title-block region itself. An uncertain read stays blank.
-        found = ocr_title_sheet(rgb, ppm, width_mm, height_mm)
-        if found.get("sheet_number") or found.get("sheet_number_needs_info"):
-            title = {**title, **found}
-    title_confidence = _title_confidence(title)
-    texts = _title_items(title, title_confidence)
-    kind = page_kind_from_title(title, str(title.get("text") or ""))
+    # A strip row is a terminal plan only when the page does not already carry
+    # non-terminal schematic devices (an elementary sheet with X1-1..X1-4 on the
+    # bottom stays a schematic, not a terminal plan).
+    non_terminal = [
+        item
+        for item in devices
+        if str(item.get("symbol") or item.get("type") or "").strip().lower() != "terminal"
+        and not (
+            str(item.get("tag") or "").strip().upper().startswith("X")
+            and "-" in str(item.get("tag") or "")
+        )
+    ]
+    if strip_devices and not non_terminal and str(kind or "").strip().lower() in {"", "other"}:
+        kind = "terminal_plan"
     return {
         "devices": devices,
         "wires": wires,
@@ -419,20 +472,35 @@ def _refine_item(
 
 def _skew_angle(gray: np.ndarray) -> float:
     small = cv2.resize(gray, (0, 0), fx=0.4, fy=0.4, interpolation=cv2.INTER_AREA)
-    bw = cv2.threshold(small, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
-    found = cv2.HoughLinesP(bw, 1, np.pi / 180.0, 60, minLineLength=30, maxLineGap=6)
+    # Run Hough on Canny edges rather than a filled Otsu mask: shaded backplates
+    # and wire ducts binarize into solid dark blocks where Hough finds spurious
+    # diagonal chords and tilts straight panel layouts by several degrees.
+    edges = cv2.Canny(small, 50, 150)
+    min_len = max(30, int(min(small.shape[:2]) * 0.08))
+    found = cv2.HoughLinesP(edges, 1, np.pi / 180.0, 60, minLineLength=min_len, maxLineGap=6)
     if found is None:
         return 0.0
-    angles: list[float] = []
+    weighted: list[tuple[float, float]] = []
     for x1, y1, x2, y2 in found.reshape(-1, 4):
-        angle = math.degrees(math.atan2(float(y2 - y1), float(x2 - x1)))
+        dx = float(x2 - x1)
+        dy = float(y2 - y1)
+        length = math.hypot(dx, dy)
+        angle = math.degrees(math.atan2(dy, dx))
         if abs(angle) <= 12:
-            angles.append(angle)
+            weighted.append((angle, length))
         elif abs(abs(angle) - 180) <= 12:
-            angles.append(angle - math.copysign(180, angle))
-    if len(angles) < 4:
+            weighted.append((angle - math.copysign(180, angle), length))
+    if len(weighted) < 4:
         return 0.0
-    median = float(np.median(np.asarray(angles)))
+    weighted.sort(key=lambda item: item[0])
+    half = sum(w for _, w in weighted) * 0.5
+    acc = 0.0
+    median = weighted[-1][0]
+    for angle, weight in weighted:
+        acc += weight
+        if acc >= half:
+            median = angle
+            break
     return median if abs(median) <= 8 else 0.0
 
 
@@ -586,17 +654,6 @@ def require_tesseract() -> str:
     return path
 
 
-def _reraise_tesseract(exc: BaseException) -> None:
-    name = type(exc).__name__
-    if name == "TesseractNotFoundError":
-        raise TesseractMissing(TESSERACT_MESSAGE) from None
-    if name == "TesseractError":
-        raise TesseractMissing(TESSDATA_MESSAGE) from None
-    text = str(exc).lower()
-    if isinstance(exc, (FileNotFoundError, OSError)) and "tesseract" in text:
-        raise TesseractMissing(TESSERACT_MESSAGE) from None
-
-
 def _ocr_tokens(gray: np.ndarray, rgb: np.ndarray, ppm: float, width_mm: float, height_mm: float) -> list[dict[str, Any]]:
     from panelcad.ocr.dispatch import tesseract_required
 
@@ -653,17 +710,39 @@ def _sparse_tokens(canvas: np.ndarray, ppm: float, height_mm: float, pytesseract
     height, width = canvas.shape
     # One pass on a wide sheet misses tags. Overlapping full-height strips
     # keep a ladder column in a box Tesseract can read. Cutting off the title
-    # band first makes the same pass return nothing.
+    # band first makes the same pass return nothing. Tall sheets (e.g. ANSI D
+    # portrait panel layouts) are also tiled vertically so each strip stays at
+    # working aspect and pixel density instead of being heavily shrunk by OCR.
     strip = max(int(200 * ppm), 1)
     step = max(int(140 * ppm), 1)
+    if height_mm > 360.0:
+        y_strip = max(int(300 * ppm), 1)
+        y_step = max(int(240 * ppm), 1)
+        # A faded large-format print has all strokes compressed into light gray
+        # (e.g. min >= 110). Stretching the dynamic range restores ink contrast
+        # before tiled OCR without touching normal-contrast sheets.
+        lo = int(canvas.min()) if canvas.size else 0
+        if lo >= 110:
+            hi = max(lo + 1, int(np.percentile(canvas, 99)))
+            canvas = np.clip((canvas.astype(np.float32) - lo) * 255.0 / float(hi - lo), 0, 255).astype(np.uint8)
+    else:
+        y_strip = height
+        y_step = height
     found: list[dict[str, Any]] = []
-    x = 0
-    while x < width:
-        piece = np.ascontiguousarray(canvas[:, x : min(width, x + strip)])
-        found.extend(_tokens_in_band(piece, ppm, 0, x, pytesseract))
-        if x + strip >= width:
+    y = 0
+    while y < height:
+        y_end = min(height, y + y_strip)
+        x = 0
+        while x < width:
+            piece = np.ascontiguousarray(canvas[y:y_end, x : min(width, x + strip)])
+            if height_mm <= 360.0 or float((piece < 235).mean()) >= 0.0002:
+                found.extend(_tokens_in_band(piece, ppm, y, x, pytesseract))
+            if x + strip >= width:
+                break
+            x += step
+        if y_end >= height:
             break
-        x += step
+        y += y_step
     return [tok for tok in found if 8.0 <= tok["y"] < height_mm - 54]
 
 
@@ -695,7 +774,10 @@ def _tokens_in_band(
             continue
         w_px = float(data["width"][index]) / 2.0
         h_px = float(data["height"][index]) / 2.0
-        if h_px / ppm > 8 or w_px / ppm > 28:
+        w_mm = w_px / ppm
+        h_mm = h_px / ppm
+        vertical = len(text) >= 2 and h_mm > w_mm * 1.35
+        if (vertical and (w_mm > 8 or h_mm > 28)) or (not vertical and (h_mm > 8 or w_mm > 28)):
             continue
         x_px = x0 + float(data["left"][index]) / 2.0 + w_px / 2.0
         y_px = y0 + float(data["top"][index]) / 2.0 + h_px / 2.0
@@ -1488,6 +1570,7 @@ def _title_tokens(rgb: np.ndarray, ppm: float, width_mm: float, height_mm: float
 def _read_title_cells(rgb: np.ndarray, ppm: float, width_mm: float, height_mm: float) -> list[dict[str, Any]]:
     """Columns and rows are the ruled cells, read one cell-row at a time."""
 
+    from panelcad.importer.imageutil import despeckle_preserving_strokes
     from panelcad.ocr.dispatch import tesseract_required
 
     pytesseract = None
@@ -1495,12 +1578,13 @@ def _read_title_cells(rgb: np.ndarray, ppm: float, width_mm: float, height_mm: f
         import pytesseract
 
         configure_tesseract()
-    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    height, width = gray.shape
+    height, width = rgb.shape[:2]
     top = max(0, height - int(68 * ppm))
-    band = gray[top:]
-    if band.size == 0:
+    band_rgb = rgb[top:]
+    if band_rgb.size == 0:
         return []
+    band_rgb, _ = despeckle_preserving_strokes(np.asarray(band_rgb, dtype=np.uint8))
+    band = cv2.cvtColor(band_rgb, cv2.COLOR_RGB2GRAY)
     ink = (band < 180).astype(np.uint8) * 255
     vkernel = max(5, int(8 * ppm))
     hkernel = max(5, int(6 * ppm))

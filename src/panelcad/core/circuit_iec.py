@@ -453,7 +453,7 @@ def attach_primary_references(session: Any, control_sheet_id: str) -> None:
     if not {"L", "N", "PE"} <= set(pins):
         return
     from panelcad.core.zones import column_from_header, sheet_number
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
 
     supply_no = sheet_number(session.project.sheets, power_sheet.id) or 1
     supply_col = column_from_header(power_sheet, line_x)
@@ -504,7 +504,7 @@ def _incoming_supply(session: Any, control_sheet_id: str):
     order may be a NEMA breaker left from an earlier circuit.
     """
 
-    from panelcad.render.sheet import pin_world
+    from panelcad.core.pin_geometry import pin_world
 
     page = session.sheet(control_sheet_id)
     style = str(getattr(page, "drawing_style", "") or "")

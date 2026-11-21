@@ -317,6 +317,9 @@ _CHECK_LABELS = {
     "nameplate_flc_approximate": "Nameplate current is an estimate",
     "nameplate_unconfirmed": "Nameplate not confirmed",
     "power_columns_overflow": "Power columns do not fit",
+    "page_over_dense": "Sheet is too crowded",
+    "wire_end_off_pin": "Wire end misses the terminal",
+    "label_covered_by_wire": "Wire crosses a label",
 }
 
 

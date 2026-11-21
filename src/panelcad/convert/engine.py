@@ -29,37 +29,14 @@ from panelcad.convert.ai_assist import (
     suggest_symbol_counterpart,
 )
 from panelcad.convert.flags import sheet_flags, suggest_cleanup
-from panelcad.convert.import_convert import (
-    DEFAULT_IMPORT_CONFIDENCE_THRESHOLD,
-    ImportedConversionResult,
-    ImportedDeviceRecord,
-    ImportedFromToRow,
-    ImportedIECPrintDraft,
-    RecordedImportVisionBackend,
-    apply_from_to_corrections,
-    build_iec_project_from_imported_from_to,
-    convert_imported_iec_print,
-    import_iec_print_to_from_to,
-)
-from panelcad.convert.from_to_check import build_from_to_diff_rows
 from panelcad.convert.plan import (
-    ALL_REASON_CODES,
-    DECISION_REASON_CODES,
-    SHEET_FLAG_REASON_CODES,
     ConversionChunk,
-    ConversionDecision,
-    ConversionPlan,
     _is_ambiguous_symbol,
-    decision_original_value,
-    decision_proposal_value,
     decisions_for_layout_chunk,
     decisions_for_symbols_chunk,
     decisions_for_tags_chunk,
-    decisions_from_issues,
     resolve_conversion_decision,
-    sort_decisions_by_confidence,
     sync_project_conversion_decisions,
-    valid_decision_options,
 )
 from panelcad.convert.layout_convert import (
     apply_sheet_rails,
@@ -700,7 +677,6 @@ class ConversionEngine:
             target=self.target,
         )
 
-    run = convert
     start_conversion = convert
 
     def next_chunk(self, workspace: str | Path | None = None) -> dict[str, Any]:

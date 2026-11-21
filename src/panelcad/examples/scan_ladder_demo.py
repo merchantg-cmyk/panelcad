@@ -162,15 +162,6 @@ def _split_terminal_numbers(session: Session) -> None:
         wire.number_locked = True
 
 
-def _clear_numbers(session: Session) -> None:
-    for sheet in session.project.sheets:
-        for wire in sheet.wires:
-            wire.net = None
-            wire.label = ""
-            wire.number = ""
-            wire.number_locked = False
-
-
 def _backplate(session: Session) -> None:
     """Power on the top rail, control in the middle, terminals on the bottom rail."""
 

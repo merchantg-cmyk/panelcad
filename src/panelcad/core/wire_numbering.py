@@ -387,7 +387,7 @@ def _wire_pin_x(sheet: Sheet, catalog: Catalog | None, wire: Wire) -> float:
             pdef = device.pin(pin)
         except KeyError:
             return float(comp.x)
-        from panelcad.render.sheet import pin_world
+        from panelcad.core.pin_geometry import pin_world
 
         return float(pin_world(comp, pdef)[0])
     return 0.0
@@ -409,6 +409,8 @@ def _wire_anchor(sheet: Sheet, project: Project, wire: Wire) -> tuple[float, flo
 def wire_networks(
     project: Project,
     catalog: Catalog | None = None,
+    *,
+    exclude: Iterable[Wire] = (),
 ) -> list[list[tuple[Sheet, Wire]]]:
     """Group wires that share a pin, a junction, an off-page link, or a net name.
 
@@ -417,11 +419,14 @@ def wire_networks(
     port. Same-net power conductors still share a number.
     """
 
+    excluded_ids = {id(w) for w in exclude}
     indexed: list[tuple[int, Sheet, Wire]] = []
     for sheet in project.sheets:
         if sheet.kind in {"panel_layout", "door_layout"}:
             continue
         for wire in sheet.wires:
+            if excluded_ids and id(wire) in excluded_ids:
+                continue
             indexed.append((len(indexed), sheet, wire))
     if not indexed:
         return []

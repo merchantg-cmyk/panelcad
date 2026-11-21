@@ -290,7 +290,12 @@ def _rail_click(sheet, project, catalog, ref: str, other: str, raw: Any):
     return explicit_rail_landing(sheet, ref, other, point, project=project, catalog=catalog)
 
 
-class Session:
+from panelcad.api.session_ports import SessionPortsMixin
+from panelcad.api.session_reconstruct import SessionReconstructMixin
+from panelcad.api.session_troubleshoot import SessionTroubleshootMixin
+
+
+class Session(SessionTroubleshootMixin, SessionReconstructMixin, SessionPortsMixin):
     """Single façade for GUI, CLI, Python, and the JSONL agent."""
 
     def __init__(
@@ -626,6 +631,16 @@ class Session:
 
     def end_edit(self) -> None:
         self.end_command()
+
+    def abandon_edit(self) -> None:
+        """Cancel an in-progress edit without pushing an undo step.
+
+        The drawing goes back to the start of that edit. Later place / move /
+        wire calls must not nest inside a cancelled drag, or they push nothing
+        and Ctrl+Z looks broken.
+        """
+
+        self._abandon_open_command()
 
     def forget_noop_checkpoint(self) -> None:
         """Drop a step whose drawing matches the drawing on screen."""
@@ -1857,30 +1872,7 @@ class Session:
                 frm, to, net=net, from_sheet=src.id, to_sheet=dest_id, label=label, make_room=make_room,
                 number=number,
             )
-        self._assert_pin(src, frm)
-        self._assert_pin(src, to)
-        if str(frm).strip().upper() == str(to).strip().upper():
-            raise ValueError(f"wire from and to are the same pin ({frm})")
-        from panelcad.core.circuit import control_power_conflict
-        from panelcad.core.ladder import rail_short_message
-        from panelcad.render.sheet import parse_pin_ref
-
-        short = rail_short_message(src, frm, to, self.project)
-        if short:
-            raise ValueError(short)
-        # Two device pins are always checked. A bare rail name has no pin, so
-        # L1.X2 is the device and a bare L1 is not.
-        if "." in str(frm) and "." in str(to):
-            a_ref, a_pin = parse_pin_ref(frm)
-            b_ref, b_pin = parse_pin_ref(to)
-            mix = control_power_conflict(
-                src.component(a_ref).library_id,
-                a_pin,
-                src.component(b_ref).library_id,
-                b_pin,
-            )
-            if mix:
-                raise ValueError(mix)
+        self.validate_wire_endpoints(src, frm, to)
         self._wire_seq += 1
         wid = wire_id or f"w{self._wire_seq}"
         # Wire ids are unique across the project, not just this sheet: a
@@ -2677,18 +2669,27 @@ class Session:
             raise KeyError(f"no wire {frm} → {to} on sheet '{sheet.id}'")
         raise ValueError("pass wire_id or from/to")
 
+    _ROUTE_AT_UNSET = object()
+
     def set_wire_route(
         self,
         wire_id: str,
         points: list[Any],
         sheet_id: str | None = None,
+        *,
+        from_at: Any = _ROUTE_AT_UNSET,
+        to_at: Any = _ROUTE_AT_UNSET,
     ) -> Wire:
-        """Store interior waypoints so a human-pulled wire keeps its shape."""
+        """Store interior waypoints (and optional rail landings) so a pulled wire keeps its shape."""
 
         from panelcad.core.geometry import Point
         from panelcad.render.wiring import clear_route_cache
 
         wire = self.find_wire(wire_id=wire_id, sheet_id=sheet_id)
+        if from_at is not self._ROUTE_AT_UNSET:
+            wire.from_at = _as_point(from_at)
+        if to_at is not self._ROUTE_AT_UNSET:
+            wire.to_at = _as_point(to_at)
         out: list[Point] = []
         for raw in points or []:
             if isinstance(raw, Point):
@@ -2697,13 +2698,22 @@ class Session:
                 out.append(Point(x=float(raw.get("x", 0)), y=float(raw.get("y", 0))))
             else:
                 out.append(Point(x=float(raw[0]), y=float(raw[1])))
-        from panelcad.core.route import orthogonal_interior
-        from panelcad.render.wiring import wire_ends
+        if not out:
+            wire.points = []
+        else:
+            from panelcad.core.route import orthogonal_interior
+            from panelcad.render.wiring import wire_ends
 
-        ax, ay, _a_side, bx, by, _b_side = wire_ends(
-            self.sheet(sheet_id), self.catalog, wire, self.project
-        )
-        wire.points = orthogonal_interior(ax, ay, bx, by, out)
+            prev_points = wire.points
+            wire.points = out
+            try:
+                ax, ay, _a_side, bx, by, _b_side = wire_ends(
+                    self.sheet(sheet_id), self.catalog, wire, self.project
+                )
+            except Exception:
+                wire.points = prev_points
+                raise
+            wire.points = orthogonal_interior(ax, ay, bx, by, out)
         clear_route_cache()
         self._touch_drawing()
         self.emit("set_wire_route", f"route {wire.id}")
@@ -2752,6 +2762,388 @@ class Session:
         clear_route_cache()
         self._touch_drawing()
         self.emit("clear_wire_route", f"auto-route {wire.id}")
+        return wire
+
+    def validate_wire_endpoints(self, sheet: Sheet, frm: str, to: str) -> None:
+        """Validate a wire endpoint pair: pins/rails exist, not same pin, not rail short, no control/power mix."""
+
+        self._assert_pin(sheet, frm)
+        self._assert_pin(sheet, to)
+        if str(frm).strip().upper() == str(to).strip().upper():
+            raise ValueError(f"wire from and to are the same pin ({frm})")
+
+        from panelcad.core.circuit import control_power_conflict
+        from panelcad.core.ladder import rail_short_message
+        from panelcad.render.sheet import parse_pin_ref
+
+        short = rail_short_message(sheet, frm, to, self.project)
+        if short:
+            raise ValueError(short)
+        # Two device pins are always checked. A bare rail name has no pin, so
+        # L1.X2 is the device and a bare L1 is not.
+        if "." in str(frm) and "." in str(to):
+            a_ref, a_pin = parse_pin_ref(frm)
+            b_ref, b_pin = parse_pin_ref(to)
+            mix = control_power_conflict(
+                sheet.component(a_ref).library_id,
+                a_pin,
+                sheet.component(b_ref).library_id,
+                b_pin,
+            )
+            if mix:
+                raise ValueError(mix)
+
+    def validate_wire_reconnect(
+        self,
+        sheet: Sheet,
+        wire: Wire,
+        which: str,
+        target: str,
+    ) -> None:
+        """Validate moving one end of *wire* to *target*, including net-merge conflicts."""
+
+        end_key = str(which or "").strip().lower()
+        if end_key not in ("from", "to"):
+            raise ValueError(f"which must be 'from' or 'to', got '{which}'")
+        target_ref = str(target or "").strip()
+        if not target_ref:
+            raise ValueError("target pin or rail is required")
+
+        new_from = target_ref if end_key == "from" else wire.frm
+        new_to = target_ref if end_key == "to" else wire.to
+        self.validate_wire_endpoints(sheet, new_from, new_to)
+
+        current_ref = wire.frm if end_key == "from" else wire.to
+        if target_ref.upper() == str(current_ref).strip().upper():
+            return
+
+        from panelcad.core.ladder import endpoint_is_rail, rail_names, rail_side
+        from panelcad.core.wire_numbering import (
+            _end_key,
+            _norm,
+            end_is_comms,
+            feedthrough_joins,
+            is_comms_wire,
+            is_passthrough,
+            split_end,
+            wire_networks,
+        )
+
+        if is_comms_wire(sheet, wire, self.catalog) or end_is_comms(sheet, target_ref, self.catalog):
+            return
+
+        networks = wire_networks(self.project, self.catalog, exclude=(wire,))
+        by_end: dict[tuple, set[int]] = {}
+        by_pass_comp: dict[tuple[str, str], set[int]] = {}
+        by_link: dict[str, set[int]] = {}
+        by_net: dict[str, set[int]] = {}
+
+        for net_idx, items in enumerate(networks):
+            for sh, other in items:
+                if is_comms_wire(sh, other, self.catalog):
+                    continue
+                other_net = _norm(other.net)
+                if other_net:
+                    by_net.setdefault(other_net.upper(), set()).add(net_idx)
+                for end in (other.frm, other.to):
+                    if end_is_comms(sh, end, self.catalog):
+                        continue
+                    ek = _end_key(sh, self.project, end)
+                    by_end.setdefault(ek, set()).add(net_idx)
+                    if ek[0] == "pin":
+                        cid, _pid = split_end(end)
+                        if cid:
+                            try:
+                                comp = sh.component(cid)
+                            except KeyError:
+                                comp = None
+                            if comp is not None and (
+                                is_passthrough(comp, self.catalog, self.project)
+                                or feedthrough_joins(comp, self.catalog, self.project)
+                            ):
+                                by_pass_comp.setdefault((sh.id, comp.id.upper()), set()).add(net_idx)
+                                link = _norm(comp.properties.get("link"))
+                                if link:
+                                    by_link.setdefault(link, set()).add(net_idx)
+
+        def _endpoint_components(ref: str) -> tuple[set[int], dict[str, str]]:
+            hit: set[int] = set()
+            ek = _end_key(sheet, self.project, ref)
+            hit.update(by_end.get(ek, ()))
+            if ek[0] == "pin":
+                cid, _pid = split_end(ref)
+                if cid:
+                    try:
+                        comp = sheet.component(cid)
+                    except KeyError:
+                        comp = None
+                    if comp is not None and (
+                        is_passthrough(comp, self.catalog, self.project)
+                        or feedthrough_joins(comp, self.catalog, self.project)
+                    ):
+                        hit.update(by_pass_comp.get((sheet.id, comp.id.upper()), ()))
+                        link = _norm(comp.properties.get("link"))
+                        if link:
+                            hit.update(by_link.get(link, ()))
+            found: dict[str, str] = {}
+            for idx in hit:
+                for sh, other in networks[idx]:
+                    if is_comms_wire(sh, other, self.catalog):
+                        continue
+                    other_net = _norm(other.net)
+                    if other_net:
+                        found.setdefault(other_net.upper(), other_net)
+            return hit, found
+
+        other_ref = wire.to if end_key == "from" else wire.frm
+        other_net_idxs, other_nets = _endpoint_components(other_ref)
+        source_nets: dict[str, str] = {}
+        own_net = _norm(wire.net)
+        if own_net:
+            source_nets[own_net.upper()] = own_net
+        for key, name in other_nets.items():
+            source_nets.setdefault(key, name)
+        if not source_nets:
+            return
+
+        target_net_idxs, target_nets = _endpoint_components(target_ref)
+        for src_u, src_name in source_nets.items():
+            for tgt_u, tgt_name in target_nets.items():
+                if src_u != tgt_u:
+                    raise ValueError(
+                        f"cannot connect net '{src_name}' to {target_ref} (already on net '{tgt_name}')"
+                    )
+
+        target_is_rail = endpoint_is_rail(sheet, target_ref, self.project)
+        if own_net:
+            own_u = own_net.upper()
+            sibling_idxs = by_net.get(own_u, set())
+            distinct_target = target_net_idxs - other_net_idxs
+            if (
+                sibling_idxs
+                and distinct_target
+                and not target_nets
+                and not (target_is_rail and target_ref.upper() == own_u)
+            ):
+                raise ValueError(
+                    f"cannot connect net '{own_net}' to {target_ref} (shared with another circuit)"
+                )
+
+        if target_is_rail:
+            hot, ret = rail_names(sheet, self.project)
+            opp = ret if rail_side(target_ref, hot, ret) == "left" else hot
+            opp_u = str(opp).strip().upper()
+            if opp_u and opp_u in source_nets and opp_u != target_ref.upper():
+                raise ValueError(
+                    f"cannot connect net '{source_nets[opp_u]}' to rail {target_ref}"
+                )
+
+    def reconnect_wire(
+        self,
+        wire_id: str,
+        which: str,
+        target: str,
+        sheet_id: str | None = None,
+        *,
+        from_at: Any = None,
+        to_at: Any = None,
+    ) -> Wire:
+        """Move one end of an existing wire to a different valid pin or rail.
+
+        Preserves ``id``, ``number_locked``, ``gauge``, ``color``, ``wire_type``,
+        ``cable``, ``label``, and ``net``; preserves locked wire numbers and
+        re-runs incremental numbering and two-pin flow orientation when the
+        endpoint changes. Clears manual ``points`` and the moved end's old
+        ``from_at``/``to_at`` so the wire reroutes cleanly. No-op reconnects
+        push 0 undo steps and log no activity.
+        """
+
+        end_key = str(which or "").strip().lower()
+        if end_key not in ("from", "to"):
+            raise ValueError(f"which must be 'from' or 'to', got '{which}'")
+        src = self.sheet(sheet_id)
+        wire = self.find_wire(wire_id=wire_id, sheet_id=src.id)
+        target_ref = str(target or "").strip()
+        if not target_ref:
+            raise ValueError("target pin or rail is required")
+
+        self.validate_wire_reconnect(src, wire, end_key, target_ref)
+
+        from panelcad.core.ladder import endpoint_is_rail
+        from panelcad.render.wiring import clear_route_cache
+
+        current_ref = wire.frm if end_key == "from" else wire.to
+        current_at = wire.from_at if end_key == "from" else wire.to_at
+        raw_at = from_at if end_key == "from" else to_at
+        other_ref = wire.to if end_key == "from" else wire.frm
+        target_is_rail = endpoint_is_rail(src, target_ref, self.project)
+        moved_at = (
+            _rail_click(src, self.project, self.catalog, target_ref, other_ref, raw_at)
+            if target_is_rail and raw_at is not None
+            else None
+        )
+        endpoint_changed = target_ref.upper() != str(current_ref).strip().upper()
+
+        if not endpoint_changed:
+            if not target_is_rail or raw_at is None:
+                return wire
+            if moved_at is None and current_at is None:
+                return wire
+            if (
+                moved_at is not None
+                and current_at is not None
+                and abs(moved_at.x - current_at.x) <= 1e-4
+                and abs(moved_at.y - current_at.y) <= 1e-4
+            ):
+                return wire
+
+        nested = self._history_lock > 0
+        opened = self.begin_command("reconnect_wire")
+        failed = True
+        try:
+            old_from, old_to = wire.frm, wire.to
+            old_number = str(wire.number or "").strip()
+            if end_key == "from":
+                wire.frm = target_ref
+                wire.from_at = moved_at
+            else:
+                wire.to = target_ref
+                wire.to_at = moved_at
+            wire.points = []
+
+            if endpoint_changed:
+                from panelcad.core.cleanup import orient_two_pin_flow
+                from panelcad.core.wire_numbering import (
+                    _network_extras,
+                    _norm,
+                    _pick_existing,
+                    _touches_rail,
+                    is_locked,
+                    is_protected,
+                    resolve_settings,
+                    wire_networks,
+                )
+                from panelcad.render.sheet import parse_pin_ref
+
+                seen_cids: set[str] = set()
+                for end in (old_from, old_to, wire.frm, wire.to):
+                    try:
+                        cid, _ = parse_pin_ref(end)
+                    except ValueError:
+                        continue
+                    if cid in seen_cids:
+                        continue
+                    seen_cids.add(cid)
+                    if orient_two_pin_flow(src, self.catalog, cid):
+                        prefix = cid + "."
+                        for other in src.wires:
+                            if other.points and (
+                                str(other.frm).startswith(prefix)
+                                or str(other.to).startswith(prefix)
+                            ):
+                                other.points = []
+
+                if resolve_settings(self.project).enabled:
+                    extras = _network_extras(self.project)
+                    if not wire.number_locked:
+                        wire.number = ""
+                    networks = wire_networks(self.project, self.catalog)
+                    wire_net_idx = next(
+                        (
+                            idx
+                            for idx, items in enumerate(networks)
+                            if any(w is wire for _sh, w in items)
+                        ),
+                        None,
+                    )
+                    if old_number:
+                        holders = [
+                            idx
+                            for idx, items in enumerate(networks)
+                            if any(_norm(w.number) == old_number for _sh, w in items)
+                        ]
+                        if len(holders) > 1:
+                            keep_idx = next(
+                                (
+                                    idx
+                                    for idx in holders
+                                    if any(
+                                        _norm(w.number) == old_number
+                                        and (is_locked(w) or _touches_rail(sh, self.project, w))
+                                        for sh, w in networks[idx]
+                                    )
+                                ),
+                                next((idx for idx in holders if idx != wire_net_idx), holders[0]),
+                            )
+                            for idx in holders:
+                                if idx == keep_idx:
+                                    continue
+                                for sh, w in networks[idx]:
+                                    if (
+                                        _norm(w.number) == old_number
+                                        and not is_locked(w)
+                                        and not is_protected(w, extras)
+                                        and not _touches_rail(sh, self.project, w)
+                                    ):
+                                        w.number = ""
+                    if wire_net_idx is not None:
+                        items = networks[wire_net_idx]
+                        net_touches_rail = any(
+                            _touches_rail(sh, self.project, w) for sh, w in items
+                        )
+                        target_wires = [
+                            w
+                            for sh, w in items
+                            if (is_locked(w) or w is not wire)
+                            and not (
+                                old_number
+                                and _norm(w.number) == old_number
+                                and not is_locked(w)
+                                and not is_protected(w, extras)
+                                and not _touches_rail(sh, self.project, w)
+                            )
+                        ]
+                        canonical = _pick_existing(
+                            target_wires, extras, overwrite=False
+                        ) or _pick_existing([w for _sh, w in items], extras, overwrite=False)
+                        rail_nums = (
+                            {
+                                _norm(rw.number)
+                                for rsh, rw in items
+                                if _touches_rail(rsh, self.project, rw) and _norm(rw.number)
+                            }
+                            if net_touches_rail
+                            else set()
+                        )
+                        if canonical:
+                            for sh, w in items:
+                                num = _norm(w.number)
+                                if (
+                                    w is not wire
+                                    and not is_locked(w)
+                                    and not is_protected(w, extras)
+                                    and not _touches_rail(sh, self.project, w)
+                                    and num
+                                    and num != canonical
+                                    and (
+                                        not net_touches_rail
+                                        or num == old_number
+                                        or num not in rail_nums
+                                    )
+                                ):
+                                    w.number = ""
+                    self._auto_number_wires()
+
+            clear_route_cache()
+            self._touch_drawing()
+            failed = False
+        finally:
+            if opened:
+                if failed and not nested:
+                    self._cancel_command()
+                else:
+                    self.end_command()
+        self.emit("reconnect_wire", f"reconnect {wire.id} {wire.frm} → {wire.to}")
         return wire
 
     def set_wire_label(
@@ -4317,150 +4709,6 @@ class Session:
         from panelcad.core.xref_index import lookup_zone
 
         return lookup_zone(self.project, self.catalog, zone, sheet=sheet)
-
-    def trace_wire(self, number: str) -> dict[str, Any]:
-        """Follow wire *number* across sheets: from/to, pages, devices."""
-
-        from panelcad.core.xref_index import trace_wire
-
-        return trace_wire(self.project, self.catalog, number)
-
-    def circuit_for(self, ref: str) -> dict[str, Any]:
-        """Control and power path for *ref*, from the drawing only."""
-
-        from panelcad.core.troubleshoot import circuit_for
-
-        return circuit_for(self.project, self.catalog, ref)
-
-    def checkpoints(self, ref: str, symptom: str) -> dict[str, Any]:
-        """Ordered LIVE and DE-ENERGIZED checks for *symptom* on *ref*."""
-
-        from panelcad.core.troubleshoot import checkpoints
-
-        return checkpoints(self.project, self.catalog, ref, symptom)
-
-    def upstream(self, endpoint: str) -> dict[str, Any]:
-        """Devices and wires from *endpoint* (``ref.pin``) toward the supply."""
-
-        from panelcad.core.troubleshoot import upstream
-
-        return upstream(self.project, self.catalog, endpoint)
-
-    def downstream(self, endpoint: str) -> dict[str, Any]:
-        """Devices and wires from *endpoint* (``ref.pin``) toward the load or return."""
-
-        from panelcad.core.troubleshoot import downstream
-
-        return downstream(self.project, self.catalog, endpoint)
-
-    def plc_point(self, address: str) -> dict[str, Any]:
-        """One PLC I/O point by address, point label, or tag on the drawing."""
-
-        from panelcad.core.troubleshoot import plc_point
-
-        return plc_point(self.project, self.catalog, address)
-
-    def likely_causes(
-        self,
-        ref: str,
-        symptom: str,
-        readings: list[dict[str, Any]] | None = None,
-    ) -> dict[str, Any]:
-        """Ranked causes. A first wrong reading narrows the fault to that segment."""
-
-        from panelcad.core.troubleshoot import likely_causes
-
-        return likely_causes(self.project, self.catalog, ref, symptom, readings)
-
-    def export_troubleshoot(self, path: Path | str) -> Path:
-        """Write the open ``troubleshoot.json`` document. Does not change the project file."""
-
-        from panelcad.core.troubleshoot import write_troubleshoot
-
-        return write_troubleshoot(self.project, self.catalog, path)
-
-    def append_troubleshoot_log(
-        self,
-        *,
-        ref: str,
-        symptom: str,
-        readings: list[dict[str, Any]] | None = None,
-        who: str = "",
-        note: str = "",
-        when: str = "",
-        project_path: Path | str | None = None,
-    ) -> dict[str, Any]:
-        """Append a readings entry beside the project. The project file is not written."""
-
-        from panelcad.core.troubleshoot import append_troubleshoot_log
-        from panelcad.core.xref_index import QueryError
-
-        src = project_path if project_path is not None else self.path
-        if src is None:
-            raise QueryError("save the project before writing the troubleshooting log")
-        return append_troubleshoot_log(
-            self.project,
-            self.catalog,
-            src,
-            ref=ref,
-            symptom=symptom,
-            readings=readings,
-            who=who,
-            note=note,
-            when=when,
-        )
-
-    def troubleshoot_guide(
-        self,
-        ref: str,
-        symptom: str,
-        readings: list[dict[str, Any]] | None = None,
-    ) -> dict[str, Any]:
-        """Guided next check, fault window, and causes. Same payload as the dock."""
-
-        from panelcad.core.troubleshoot_guide import guide
-
-        return guide(self.project, self.catalog, ref, symptom, readings)
-
-    def export_troubleshoot_csv(
-        self,
-        path: Path | str,
-        *,
-        ref: str,
-        symptom: str,
-        readings: list[dict[str, Any]] | None = None,
-        who: str = "",
-        note: str = "",
-    ) -> Path:
-        """CSV of the guided session. Does not modify the project file."""
-
-        from panelcad.core.troubleshoot_guide import session_rows, write_session_csv
-
-        payload = self.troubleshoot_guide(ref, symptom, readings)
-        return write_session_csv(path, session_rows(payload, who=who, note=note))
-
-    def export_troubleshoot_pdf(
-        self,
-        path: Path | str,
-        *,
-        ref: str,
-        symptom: str,
-        readings: list[dict[str, Any]] | None = None,
-        who: str = "",
-        note: str = "",
-    ) -> Path:
-        """PDF of the guided session, opening with the lockout text."""
-
-        from panelcad.render.troubleshoot_log import write_session_pdf
-
-        payload = self.troubleshoot_guide(ref, symptom, readings)
-        return write_session_pdf(
-            path,
-            payload,
-            who=who,
-            note=note,
-            project_name=self.project.name,
-        )
 
     def phase_colors(self) -> dict[str, Any]:
         from panelcad.core.phase_color import phase_color_payload
@@ -7626,507 +7874,6 @@ class Session:
             config_dir=config_dir(),
         )
 
-    def reconstruct_add_photos(
-        self,
-        paths: list[Path | str] | Path | str,
-        role: str = "other",
-        note: str = "",
-    ) -> dict[str, Any]:
-        from panelcad.reconstruct.service import add_photos
-
-        items = paths if isinstance(paths, (list, tuple)) else [paths]
-        return add_photos(self, list(items), role=role, note=note)
-
-    def reconstruct_tag_photo(self, photo_id: str, role: str, note: str | None = None) -> dict[str, Any]:
-        from panelcad.reconstruct.service import tag_photo
-
-        return tag_photo(self, photo_id, role, note)
-
-    def reconstruct_list_photos(self) -> dict[str, Any]:
-        from panelcad.reconstruct.service import status
-
-        return {"photos": status(self)["photos"]}
-
-    def reconstruct_set_corners(self, photo_id: str, corners: list[Any]) -> dict[str, Any]:
-        from panelcad.reconstruct.service import set_corners
-
-        return set_corners(self, photo_id, corners)
-
-    def reconstruct_set_scale(
-        self,
-        photo_id: str,
-        kind: str,
-        p1: Any,
-        p2: Any,
-        *,
-        known_mm: float | None = None,
-        catalog: str = "",
-        manufacturer: str = "",
-        dimension: str = "width",
-        note: str = "",
-        known_height_mm: float | None = None,
-        face_width_mm: float | None = None,
-        face_height_mm: float | None = None,
-        backpanel: bool = False,
-        slot: int | str | None = None,
-        replace: str | None = None,
-    ) -> dict[str, Any]:
-        from panelcad.reconstruct.service import set_scale
-
-        return set_scale(
-            self,
-            photo_id,
-            kind,
-            p1,
-            p2,
-            known_mm=known_mm,
-            catalog=catalog,
-            manufacturer=manufacturer,
-            dimension=dimension,
-            note=note,
-            known_height_mm=known_height_mm,
-            face_width_mm=face_width_mm,
-            face_height_mm=face_height_mm,
-            backpanel=backpanel,
-            slot=slot,
-            replace=replace,
-        )
-
-    def reconstruct_clear_scale(self, photo_id: str) -> dict[str, Any]:
-        from panelcad.reconstruct.service import clear_scale
-
-        return clear_scale(self, photo_id)
-
-    def reconstruct_identify(
-        self,
-        photo_id: str | None = None,
-        *,
-        vision: Any = None,
-        recordings: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        from panelcad.reconstruct.service import identify
-
-        return identify(self, photo_id, vision=vision, recordings=recordings)
-
-    def reconstruct_library_choices(self, query: str = "", *, limit: int = 8) -> list[dict[str, Any]]:
-        """Published parts for the missing-info editor. Does not change the project."""
-
-        from panelcad.reconstruct.feedback import library_choices
-
-        return library_choices(self, query, limit=limit)
-
-    def reconstruct_apply_missing_info(
-        self,
-        item_id: str,
-        field: str,
-        *,
-        value: str = "",
-        catalog: str = "",
-        manufacturer: str = "",
-        library_id: str = "",
-        width_mm: float | None = None,
-        height_mm: float | None = None,
-        depth_mm: float | None = None,
-        mount: str = "",
-        terminal: str = "",
-        wire_number: str = "",
-        to_ref: str = "",
-    ) -> dict[str, Any]:
-        """Save one missing-info badge onto the project. Refuses placeholder text."""
-
-        from panelcad.reconstruct.feedback import apply_missing_info
-
-        return apply_missing_info(
-            self,
-            item_id,
-            field,
-            value=value,
-            catalog=catalog,
-            manufacturer=manufacturer,
-            library_id=library_id,
-            width_mm=width_mm,
-            height_mm=height_mm,
-            depth_mm=depth_mm,
-            mount=mount,
-            terminal=terminal,
-            wire_number=wire_number,
-            to_ref=to_ref,
-        )
-
-    def reconstruct_confirm_item(
-        self,
-        item_id: str,
-        *,
-        catalog: str = "",
-        manufacturer: str = "",
-        envelope_w_mm: float | None = None,
-        envelope_h_mm: float | None = None,
-        envelope_d_mm: float | None = None,
-        tag: str = "",
-        library_id: str = "",
-        mount: str = "",
-    ) -> dict[str, Any]:
-        from panelcad.reconstruct.service import confirm_item
-
-        return confirm_item(
-            self,
-            item_id,
-            catalog=catalog,
-            manufacturer=manufacturer,
-            envelope_w_mm=envelope_w_mm,
-            envelope_h_mm=envelope_h_mm,
-            envelope_d_mm=envelope_d_mm,
-            tag=tag,
-            library_id=library_id,
-            mount=mount,
-        )
-
-    def reconstruct_place_needs_info(self, photo_id: str | None = None) -> dict[str, Any]:
-        from panelcad.reconstruct.service import place_needs_info
-
-        return place_needs_info(self, photo_id)
-
-    def reconstruct_place_confirmed(self, sheet_id: str | None = None) -> dict[str, Any]:
-        from panelcad.reconstruct.service import place_confirmed
-
-        return place_confirmed(self, sheet_id)
-
-    def reconstruct_checklist(self) -> dict[str, Any]:
-        from panelcad.reconstruct.checklist import rebuild_checklist
-        from panelcad.reconstruct.models import ensure_reconstruction
-        from panelcad.reconstruct.service import status
-
-        rebuild_checklist(ensure_reconstruction(self.project))
-        return {"checklist": status(self)["checklist"]}
-
-    def reconstruct_next_question(self) -> dict[str, Any]:
-        from panelcad.reconstruct.service import next_question
-
-        return next_question(self)
-
-    def reconstruct_answer(
-        self,
-        step_id: str,
-        text: str = "",
-        *,
-        photo: Path | str | None = None,
-        confirm: bool = False,
-    ) -> dict[str, Any]:
-        from panelcad.reconstruct.service import answer
-
-        return answer(self, step_id, text, photo=photo, confirm=confirm)
-
-    def reconstruct_confirm_connection(
-        self,
-        step_id: str | None = None,
-        wire_id: str | None = None,
-    ) -> dict[str, Any]:
-        from panelcad.reconstruct.service import confirm_connection
-
-        return confirm_connection(self, step_id=step_id, wire_id=wire_id)
-
-    def reconstruct_attach_print(self, path: Path | str, note: str = "") -> dict[str, Any]:
-        from panelcad.reconstruct.service import attach_print
-
-        return attach_print(self, path, note=note)
-
-    def reconstruct_compare_print(self, path: Path | str | None = None) -> dict[str, Any]:
-        from panelcad.reconstruct.service import compare_print
-
-        return compare_print(self, path)
-
-    def reconstruct_photo_region(
-        self,
-        item_id: str | None = None,
-        ref: str | None = None,
-        photo_id: str | None = None,
-    ) -> dict[str, Any]:
-        from panelcad.reconstruct.service import photo_region
-
-        return photo_region(self, item_id=item_id, ref=ref, photo_id=photo_id)
-
-    def reconstruct_unconfirmed(self) -> dict[str, Any]:
-        from panelcad.reconstruct.service import list_unconfirmed
-
-        return list_unconfirmed(self)
-
-    def reconstruct_status(self) -> dict[str, Any]:
-        from panelcad.reconstruct.service import status
-
-        return status(self)
-
-    def reconstruct_record_wire_landing(
-        self,
-        wire_number: str = "",
-        *,
-        number: str = "",
-        from_tag: str = "",
-        from_pin: str = "",
-        to_tag: str = "",
-        to_pin: str = "",
-        from_ref: str = "",
-        to_ref: str = "",
-        confirmed: bool = True,
-        inferred: bool | None = None,
-        note: str = "",
-    ) -> dict[str, Any]:
-        from panelcad.reconstruct.service import record_wire_landing
-
-        return record_wire_landing(
-            self,
-            wire_number=wire_number,
-            number=number,
-            from_tag=from_tag,
-            from_pin=from_pin,
-            to_tag=to_tag,
-            to_pin=to_pin,
-            from_ref=from_ref,
-            to_ref=to_ref,
-            confirmed=confirmed,
-            inferred=inferred,
-            note=note,
-        )
-
-    def reconstruct_synthesize_schematic(self, sheet_id: str | None = None) -> dict[str, Any]:
-        from panelcad.reconstruct.service import synthesize_reconstruct_schematic
-
-        return synthesize_reconstruct_schematic(self, sheet_id=sheet_id)
-
-    def reconstruct_apply_to_print(self, sheet_id: str | None = None) -> dict[str, Any]:
-        from panelcad.reconstruct.service import apply_to_print
-
-        return apply_to_print(self, sheet_id=sheet_id)
-
-    def reconstruct_photos_to_drawings(
-        self,
-        *,
-        vision: Any = None,
-        recordings: dict[str, Any] | None = None,
-        unboxed_callouts: Any = None,
-        extra_flags: list[dict[str, Any]] | None = None,
-        accepted_ids: list[str] | None = None,
-        dismissed_ids: list[str] | None = None,
-    ) -> dict[str, Any]:
-        """Run imported photos through to drawings, stopping only for flagged items."""
-
-        from panelcad.reconstruct.guided import run_photos_to_drawings
-
-        return run_photos_to_drawings(
-            self,
-            vision=vision,
-            recordings=recordings,
-            unboxed_callouts=unboxed_callouts,
-            extra_flags=extra_flags,
-            accepted_ids=accepted_ids,
-            dismissed_ids=dismissed_ids,
-        )
-
-    def reconstruct_photo_feedback(
-        self,
-        photo_id: str | None = None,
-        *,
-        filter_mode: str = "all",
-        include_terminals: bool = False,
-        unboxed_callouts: list[dict[str, Any]] | None = None,
-    ) -> dict[str, Any]:
-        from panelcad.reconstruct.feedback import build_photo_feedback_report
-
-        return build_photo_feedback_report(
-            self,
-            photo_id=photo_id,
-            filter_mode=filter_mode,  # type: ignore[arg-type]
-            include_terminals=include_terminals,
-            unboxed_callouts=unboxed_callouts,
-        )
-
-    def reconstruct_site_exit_check(
-        self,
-        photo_id: str | None = None,
-        *,
-        unboxed_callouts: list[dict[str, Any]] | None = None,
-    ) -> dict[str, Any]:
-        """Capture-phase check: may the tech close the cabinet and leave site?"""
-        from panelcad.reconstruct.feedback import capture_site_exit_readiness
-
-        report = capture_site_exit_readiness(self, photo_id=photo_id, unboxed_callouts=unboxed_callouts)
-        keys = (
-            "photo_id",
-            "safe_to_leave_site",
-            "site_exit_status",
-            "site_exit_banner",
-            "on_site_shot_list",
-            "total_detected",
-            "confirmed_count",
-            "missing_info_count",
-            "closeup_needed_count",
-            "unboxed_count",
-        )
-        return {k: report[k] for k in keys}
-
-    def reconstruct_link_closeup(
-        self,
-        item_id: str,
-        *,
-        closeup_photo_path: Path | str | None = None,
-        closeup_photo_id: str = "",
-        closeup_role: str = "nameplate",
-        tag: str = "",
-        part_number: str = "",
-        brand: str = "",
-        envelope_w_mm: float | None = None,
-        envelope_h_mm: float | None = None,
-        envelope_d_mm: float | None = None,
-        mount: str = "",
-        library_id: str = "",
-    ) -> dict[str, Any]:
-        from panelcad.reconstruct.feedback import link_closeup_to_device
-
-        return link_closeup_to_device(
-            self,
-            item_id,
-            closeup_photo_path=closeup_photo_path,
-            closeup_photo_id=closeup_photo_id,
-            closeup_role=closeup_role,
-            tag=tag,
-            part_number=part_number,
-            brand=brand,
-            envelope_w_mm=envelope_w_mm,
-            envelope_h_mm=envelope_h_mm,
-            envelope_d_mm=envelope_d_mm,
-            mount=mount,
-            library_id=library_id,
-        )
-
-    def reconstruct_add_missed_device(
-        self,
-        photo_id: str,
-        region: dict[str, Any] | tuple[float, float, float, float] | list[float],
-        *,
-        tag: str = "",
-        part_number: str = "",
-        brand: str = "",
-        label_text: str = "",
-        envelope_w_mm: float | None = None,
-        envelope_h_mm: float | None = None,
-        envelope_d_mm: float | None = None,
-        mount: str = "",
-        library_id: str = "",
-        note: str = "",
-        closeup_photo_id: str = "",
-        snap_to_edges: bool = False,
-    ) -> dict[str, Any]:
-        from panelcad.reconstruct.feedback import add_missed_device_on_photo
-
-        return add_missed_device_on_photo(
-            self,
-            photo_id=photo_id,
-            region=region,
-            tag=tag,
-            part_number=part_number,
-            brand=brand,
-            label_text=label_text,
-            envelope_w_mm=envelope_w_mm,
-            envelope_h_mm=envelope_h_mm,
-            envelope_d_mm=envelope_d_mm,
-            mount=mount,
-            library_id=library_id,
-            note=note,
-            closeup_photo_id=closeup_photo_id,
-            snap_to_edges=snap_to_edges,
-        )
-
-    def reconstruct_add_missed_strip(
-        self,
-        photo_id: str,
-        region: dict[str, Any] | tuple[float, float, float, float] | list[float],
-        *,
-        tag: str = "",
-        snap_to_edges: bool = False,
-        block_count: int | None = None,
-    ) -> dict[str, Any]:
-        from panelcad.reconstruct.feedback import add_missed_strip_on_photo
-
-        return add_missed_strip_on_photo(
-            self,
-            photo_id,
-            region,
-            tag=tag,
-            snap_to_edges=snap_to_edges,
-            block_count=block_count,
-        )
-
-    def reconstruct_accept_terminal_strip(
-        self,
-        item_id: str,
-        *,
-        tag: str = "",
-        block_count: int | None = None,
-    ) -> dict[str, Any]:
-        """Accept a suggested terminal strip. Does not require width, height, or depth."""
-
-        from panelcad.reconstruct.feedback import accept_terminal_strip_on_photo
-
-        return accept_terminal_strip_on_photo(self, item_id, tag=tag, block_count=block_count)
-
-    def reconstruct_update_device_box(
-        self,
-        item_id: str,
-        *,
-        box: dict[str, Any] | tuple[float, float, float, float] | list[float] | None = None,
-        snap_to_edges: bool = False,
-        search_margin_ratio: float = 0.12,
-    ) -> dict[str, Any]:
-        from panelcad.reconstruct.feedback import update_device_box_on_photo
-
-        return update_device_box_on_photo(
-            self,
-            item_id,
-            box=box,
-            snap_to_edges=snap_to_edges,
-            search_margin_ratio=search_margin_ratio,
-        )
-
-    def reconstruct_refine_device_box(
-        self,
-        photo_id: str,
-        box: dict[str, Any] | tuple[float, float, float, float] | list[float],
-        *,
-        search_margin_ratio: float = 0.12,
-    ) -> dict[str, float]:
-        from panelcad.reconstruct.feedback import refine_device_box_on_photo
-        from panelcad.reconstruct.models import ensure_reconstruction
-        from panelcad.reconstruct.store import resolve_path
-
-        store = ensure_reconstruction(self.project)
-        photo = store.photo(photo_id)
-        resolved = resolve_path(photo.path, getattr(self, "path", None))
-        if not resolved.is_file() and photo.source_path and Path(photo.source_path).is_file():
-            resolved = Path(photo.source_path)
-        rx, ry, rw, rh = refine_device_box_on_photo(resolved, box, search_margin_ratio=search_margin_ratio)
-        return {"x": float(rx), "y": float(ry), "w": float(rw), "h": float(rh)}
-
-    def reconstruct_export_photo_feedback(
-        self,
-        output_path: Path | str,
-        photo_id: str | None = None,
-        *,
-        filter_mode: str = "all",
-        selected_item_id: str | None = None,
-        unboxed_callouts: list[dict[str, Any]] | None = None,
-        include_banner: bool = True,
-    ) -> dict[str, Any]:
-        from panelcad.reconstruct.feedback import export_photo_feedback
-
-        return export_photo_feedback(
-            self,
-            output_path=output_path,
-            photo_id=photo_id,
-            filter_mode=filter_mode,  # type: ignore[arg-type]
-            selected_item_id=selected_item_id,
-            unboxed_callouts=unboxed_callouts,
-            include_banner=include_banner,
-        )
-
     def describe(self, sheet_id: str | None = None) -> dict[str, Any]:
         """Full structured snapshot for an AI to read without the GUI."""
         target = [self.sheet(sheet_id)] if sheet_id else list(self.project.sheets)
@@ -8174,403 +7921,6 @@ class Session:
 
         return structural_messages(self.project, self.catalog)
 
-    def _assert_pin(self, sheet: Sheet, pin_ref: str) -> None:
-        from panelcad.core.checks import assert_pin_ref
-
-        assert_pin_ref(self.project, self.catalog, sheet, pin_ref)
-
-    def _ensure_instance_ports(self, ref: str, sheet_id: str | None = None) -> Component:
-        sheet = self.sheet(sheet_id)
-        comp = sheet.component(ref)
-        if not comp.ports:
-            device = self.catalog.get(comp.library_id)
-            comp.ports = [p.model_copy() for p in device.ports]
-        return comp
-
-    def list_ports(self, ref: str, sheet_id: str | None = None) -> list[dict[str, Any]]:
-        sheet = self.sheet(sheet_id)
-        comp = sheet.component(ref)
-        device = self.catalog.get(comp.library_id)
-        return [p.model_dump() for p in effective_ports(device, comp)]
-
-    def add_port(
-        self,
-        ref: str,
-        port_id: str,
-        kind: str = "serial",
-        medium: str = "",
-        protocol: str = "",
-        connector: str = "",
-        side: str | None = None,
-        sheet_id: str | None = None,
-    ) -> CommPort:
-        comp = self._ensure_instance_ports(ref, sheet_id)
-        pid = port_id.strip() or "COM"
-        if any(p.id == pid for p in comp.ports):
-            raise ValueError(f"{ref} already has port '{pid}'")
-        port = parse_port(
-            {
-                "id": pid,
-                "kind": kind,
-                "medium": medium,
-                "protocol": protocol,
-                "connector": connector,
-                "side": side or default_kind_side(kind),  # type: ignore[arg-type]
-            }
-        )
-        comp.ports.append(port)
-        return port
-
-    def set_port(self, ref: str, port_id: str, sheet_id: str | None = None, **fields: Any) -> CommPort:
-        comp = self._ensure_instance_ports(ref, sheet_id)
-        for i, p in enumerate(comp.ports):
-            if p.id != port_id:
-                continue
-            data = p.model_dump()
-            data.update({k: v for k, v in fields.items() if v is not None})
-            if "id" in fields and fields["id"]:
-                data["id"] = str(fields["id"])
-            comp.ports[i] = parse_port(data)
-            return comp.ports[i]
-        raise KeyError(f"{ref} has no port '{port_id}'")
-
-    def delete_port(self, ref: str, port_id: str, sheet_id: str | None = None) -> None:
-        comp = self._ensure_instance_ports(ref, sheet_id)
-        before = len(comp.ports)
-        comp.ports = [p for p in comp.ports if p.id != port_id]
-        if len(comp.ports) == before:
-            raise KeyError(f"{ref} has no port '{port_id}'")
-
-    def set_network(
-        self,
-        name: str | None = None,
-        medium: str | None = None,
-        protocol: str | None = None,
-        sheet_id: str | None = None,
-    ) -> NetworkInfo:
-        sheet = self.sheet(sheet_id)
-        info = sheet.network or NetworkInfo()
-        if name is not None:
-            info.name = name
-        if medium is not None:
-            info.medium = medium  # type: ignore[assignment]
-        if protocol is not None:
-            info.protocol = protocol
-        sheet.network = info
-        if sheet.kind != "network":
-            sheet.kind = "network"
-        return info
-
-    def layout_network(self, sheet_id: str | None = None, medium: str | None = None) -> dict[str, Any]:
-        """Place devices that have matching comms ports onto a network sheet.
-
-        A stored IP is copied onto the network node. A blank IP stays blank,
-        and an explicit TBD stays TBD. This does not assign 192.168.x.x or
-        any other address.
-        """
-        dest = self.sheet(sheet_id)
-        if dest.kind != "network":
-            dest.kind = "network"
-        info = dest.network or NetworkInfo(name=dest.title or dest.id)
-        filt = medium or (info.medium if info.medium != "mixed" else None)
-        if medium:
-            info.medium = medium  # type: ignore[assignment]
-        dest.network = info
-        dest.components = []
-        dest.wires = []
-        x, y = 36.0, 36.0
-        placed = 0
-        seen: set[str] = set()
-        next_node = 1
-        for src in self.project.sheets:
-            if src.kind not in ("schematic", "io"):
-                continue
-            for comp in src.components:
-                if comp.id in seen:
-                    continue
-                device = self.catalog.get(comp.library_id)
-                ports = [p for p in effective_ports(device, comp) if port_matches_medium(p, filt)]
-                if not ports:
-                    continue
-                seen.add(comp.id)
-                props = dict(comp.properties)
-                retain_known_ip(props)
-                if filt == "serial" or any(p.kind == "serial" for p in ports):
-                    if not str(props.get("node") or props.get("station") or "").strip():
-                        props["node"] = str(next_node)
-                        props["station"] = str(next_node)
-                        next_node += 1
-                for key in ("node", "station"):
-                    if key in props:
-                        comp.properties[key] = props[key]
-                for key in ("ip", "address"):
-                    if key in props and str(props.get(key) or "").strip():
-                        comp.properties[key] = props[key]
-                    else:
-                        comp.properties.pop(key, None)
-                dest.components.append(
-                    Component(
-                        id=comp.id,
-                        library_id=comp.library_id,
-                        x=x,
-                        y=y,
-                        properties=props,
-                        ports=list(comp.ports),
-                    )
-                )
-                placed += 1
-                x += 90.0
-                if x > 340.0:
-                    x = 36.0
-                    y += 70.0
-        return {"sheet": dest.id, "medium": info.medium, "devices": placed}
-
-    def mark_reference(
-        self,
-        ref: str,
-        sheet_id: str | None = None,
-        primary_sheet: str | None = None,
-    ) -> dict[str, Any]:
-        """Mark the copy of ``ref`` on ``sheet_id`` as a reference of the primary device.
-
-        The copy keeps its library_id, position, and wires. It stops counting
-        as a second device for duplicate_device_tag, and the index and print
-        show "see <sheet-zone>" for it. ``primary_sheet`` defaults to the first
-        other sheet that has ``ref`` and is not itself a reference. One undo.
-        """
-
-        from panelcad.core.references import REFERENCE_PROP, reference_target
-
-        sheet = self.sheet(sheet_id)
-        comp = sheet.component(ref)
-        others = [
-            other
-            for other in self.project.sheets
-            if other is not sheet and any(c.id == comp.id for c in other.components)
-        ]
-        if primary_sheet:
-            target = self.project.sheet(primary_sheet)
-            if target is sheet:
-                raise ValueError(f"{comp.id}: the primary sheet must be a different sheet than {sheet.id}")
-            if target not in others:
-                raise KeyError(f"no component '{comp.id}' on sheet '{target.id}'")
-        else:
-            usable = [o for o in others if not reference_target(o.component(comp.id))]
-            if not usable:
-                raise ValueError(f"{comp.id} is not drawn on any other sheet to reference")
-            target = usable[0]
-        comp.properties[REFERENCE_PROP] = target.id
-        return {"id": comp.id, "sheet": sheet.id, "reference_of": target.id}
-
-    def clear_reference(self, ref: str, sheet_id: str | None = None) -> dict[str, Any]:
-        """Undo ``mark_reference``: the copy on ``sheet_id`` counts as its own device again."""
-
-        from panelcad.core.references import REFERENCE_PROP
-
-        sheet = self.sheet(sheet_id)
-        comp = sheet.component(ref)
-        was = str(comp.properties.pop(REFERENCE_PROP, "") or "")
-        return {"id": comp.id, "sheet": sheet.id, "cleared": bool(was)}
-
-    def set_sheet_overview(self, overview: bool = True, sheet_id: str | None = None) -> dict[str, Any]:
-        """Flag a sheet as an overview page. Its device copies become references. One undo."""
-
-        sheet = self.sheet(sheet_id)
-        sheet.overview = bool(overview)
-        return {"sheet": sheet.id, "overview": sheet.overview}
-
-    def layout_io(self, sheet_id: str | None = None) -> dict[str, Any]:
-        """ANSI I/O: field in from the left, loads out to the right.
-
-        Input cards default to the right, output cards to the left, combo in the middle.
-        """
-        from panelcad.core.cleanup import arrange_io
-        from panelcad.render.io_ladder import is_io_module
-
-        dest = self.sheet(sheet_id)
-        dest.kind = "io"
-        if not dest.components:
-            seen: set[str] = set()
-            for src in self.project.sheets:
-                if src.id == dest.id or src.kind not in ("schematic", "io"):
-                    continue
-                for c in src.components:
-                    if c.id in seen:
-                        continue
-                    device = self.catalog.get(c.library_id)
-                    cat = device.category
-                    if not (
-                        is_io_module(device)
-                        or cat.startswith("operator")
-                        or "relay" in cat
-                        or cat.startswith("drive")
-                        or cat.startswith("load")
-                    ):
-                        continue
-                    seen.add(c.id)
-                    dest.components.append(
-                        Component(
-                            id=c.id,
-                            library_id=c.library_id,
-                            x=c.x,
-                            y=c.y,
-                            properties=dict(c.properties),
-                            ports=list(c.ports),
-                        )
-                    )
-        packed = arrange_io(dest, self.catalog)
-        return {"sheet": dest.id, "modules": packed["modules"], "field": packed["field"]}
-
-
-    # ------------------------------------------------------------------
-    # Backpanel Wire Routing, Zip-Tie Bundles & Technician Walkthrough
-    # ------------------------------------------------------------------
-    def route_panel_wires(self, sheet_id: str | None = None) -> list[Any]:
-        from panelcad.core.panel_wiring import route_panel_wires
-
-        return route_panel_wires(self, sheet_id=sheet_id)
-
-    def build_wire_by_wire_schedule(self, sheet_id: str | None = None) -> Any:
-        from panelcad.core.panel_wiring import build_wire_by_wire_schedule
-
-        return build_wire_by_wire_schedule(self, sheet_id=sheet_id)
-
-    def add_zip_tie_slice(
-        self,
-        x1: float,
-        y1: float,
-        x2: float,
-        y2: float,
-        sheet_id: str | None = None,
-    ) -> Any:
-        from panelcad.core.panel_wiring import add_zip_tie_slice
-
-        return add_zip_tie_slice(self, sheet_id, x1, y1, x2, y2)
-
-    def add_zip_tie_waypoint(
-        self,
-        x: float,
-        y: float,
-        wire_numbers: list[str] | None = None,
-        orientation: str = "h",
-        sheet_id: str | None = None,
-    ) -> Any:
-        from panelcad.core.panel_wiring import add_zip_tie_waypoint
-
-        return add_zip_tie_waypoint(
-            self,
-            sheet_id,
-            x,
-            y,
-            wire_numbers=wire_numbers,
-            orientation=orientation,
-        )
-
-    def move_zip_tie_waypoint(
-        self,
-        zip_tie_id: str,
-        new_x: float,
-        new_y: float,
-        sheet_id: str | None = None,
-    ) -> Any:
-        from panelcad.core.panel_wiring import move_zip_tie_waypoint
-
-        return move_zip_tie_waypoint(self, sheet_id, zip_tie_id, new_x, new_y)
-
-    def remove_zip_tie_waypoint(
-        self,
-        zip_tie_id: str,
-        sheet_id: str | None = None,
-    ) -> bool:
-        from panelcad.core.panel_wiring import remove_zip_tie_waypoint
-
-        return remove_zip_tie_waypoint(self, sheet_id, zip_tie_id)
-
-    def list_zip_tie_waypoints(self, sheet_id: str | None = None) -> list[Any]:
-        from panelcad.core.panel_wiring import list_zip_tie_waypoints
-
-        return list_zip_tie_waypoints(self, sheet_id=sheet_id)
-
-    def set_panel_wiring_mode(self, mode: str, sheet_id: str | None = None) -> dict[str, Any]:
-        from panelcad.core.panel_wiring import set_panel_wiring_mode
-
-        return set_panel_wiring_mode(self, mode, sheet_id=sheet_id)
-
-    def get_panel_wiring_mode(self, sheet_id: str | None = None) -> str:
-        from panelcad.core.panel_wiring import get_panel_wiring_mode
-
-        return get_panel_wiring_mode(self, sheet_id=sheet_id)
-
-    def set_walkthrough_step(self, step_index: int, sheet_id: str | None = None) -> dict[str, Any]:
-        from panelcad.core.panel_wiring import set_walkthrough_step
-
-        return set_walkthrough_step(self, step_index, sheet_id=sheet_id)
-
-    def get_walkthrough_step(self, sheet_id: str | None = None) -> int:
-        from panelcad.core.panel_wiring import get_walkthrough_step
-
-        return get_walkthrough_step(self, sheet_id=sheet_id)
-
-    def step_walkthrough(self, delta: int = 1, sheet_id: str | None = None) -> dict[str, Any]:
-        from panelcad.core.panel_wiring import step_walkthrough
-
-        return step_walkthrough(self, delta=delta, sheet_id=sheet_id)
-
-    def mark_wire_installed(
-        self,
-        wire_number_or_index: str | int,
-        installed: bool = True,
-        sheet_id: str | None = None,
-    ) -> dict[str, Any]:
-        from panelcad.core.panel_wiring import mark_wire_installed
-
-        return mark_wire_installed(
-            self,
-            wire_number_or_index,
-            installed=installed,
-            sheet_id=sheet_id,
-        )
-
-    def add_wire_by_wire_sheet(
-        self,
-        sheet_id: str = "wire_by_wire",
-        title: str = "Wire-by-Wire Cut Sheet",
-        layout_sheet_id: str | None = None,
-    ) -> Sheet:
-        from panelcad.core.panel_wiring import add_wire_by_wire_sheet
-
-        return add_wire_by_wire_sheet(
-            self,
-            sheet_id=sheet_id,
-            title=title,
-            layout_sheet_id=layout_sheet_id,
-        )
-
-    def export_wire_by_wire_csv(
-        self,
-        path: Path | str,
-        sheet_id: str | None = None,
-    ) -> Path:
-        from panelcad.core.panel_wiring import export_wire_by_wire_csv
-
-        return export_wire_by_wire_csv(self, path, sheet_id=sheet_id)
-
-    def render_walkthrough_step_png(
-        self,
-        step_index: int,
-        output_path: Path | str,
-        sheet_id: str | None = None,
-        dpi: float = 200.0,
-    ) -> Path:
-        from panelcad.core.panel_wiring import render_walkthrough_step_png
-
-        return render_walkthrough_step_png(
-            self,
-            step_index,
-            output_path,
-            sheet_id=sheet_id,
-            dpi=dpi,
-        )
 
 
 def _summary_place(self: Session, result: Any, args: tuple, kwargs: dict) -> str:
@@ -8762,69 +8112,11 @@ def _headless_qt() -> bool:
     return not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY")
 
 
-def prepare_qt_fonts() -> None:
-    """Drop the font-directory warning without replacing the system fonts.
-
-    ``QT_QPA_FONTDIR`` turns off the system font database. On Windows that
-    selects a tighter face, and the update dialog grab fell to 114 px.
-    """
-
-    try:
-        install_headless_qt_filter()
-    except Exception:  # noqa: BLE001 — a headless import still runs without Qt
-        return
-
-
-_filter_installed = False
-
-
-def install_headless_qt_filter() -> None:
-    """Drop the PySide font-directory warning. A display does not make the warning useful.
-
-    Install once. ``Session`` creation used to wrap the handler again, and a
-    message that paints emits another message. That stack overflowed in the
-    update dialog and in later Qt tests.
-    """
-
-    global _filter_installed
-    if _filter_installed:
-        return
-    from PySide6.QtCore import qInstallMessageHandler
-
-    previous = qInstallMessageHandler(None)
-    depth = 0
-
-    def _quiet(mode, context, message) -> None:  # noqa: ANN001
-        nonlocal depth
-        text = str(message or "")
-        # Only this warning. Dropping every QFontDatabase message during
-        # QApplication startup left later Windows tests with a doubled font.
-        if "Cannot find font directory" in text:
-            return
-        if previous is None or depth:
-            return
-        depth += 1
-        try:
-            previous(mode, context, message)
-        finally:
-            depth -= 1
-
-    qInstallMessageHandler(_quiet)
-    _filter_installed = True
-
-
-def _ensure_qt_app() -> None:
-    import os
-
-    prepare_qt_fonts()
-    from PySide6.QtWidgets import QApplication
-
-    if QApplication.instance() is None:
-        # Headless CLI/PDF only. Never force offscreen while a GUI is already running —
-        # that was blanking the on-screen title block after File → Print/PDF.
-        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-        install_headless_qt_filter()
-        QApplication([])
+from panelcad.qt_app import (
+    ensure_qt_app as _ensure_qt_app,
+    install_headless_qt_filter,
+    prepare_qt_fonts,
+)
 
 
 def create_project(name: str) -> Session:

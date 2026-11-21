@@ -13,8 +13,6 @@ from panelcad.api.session import Session
 from panelcad.convert import (
     DECISION_REASON_CODES,
     ImportedConversionResult,
-    ImportedDeviceRecord,
-    ImportedFromToRow,
     ImportedIECPrintDraft,
     RecordedImportVisionBackend,
     apply_from_to_corrections,

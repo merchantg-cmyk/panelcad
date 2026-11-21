@@ -368,7 +368,7 @@ def _describe(
     if comp is not None:
         pin_def = _pin_def(device, pin)
         if pin_def is not None:
-            from panelcad.render.sheet import pin_world
+            from panelcad.core.pin_geometry import pin_world
 
             x, y = pin_world(comp, pin_def)
         else:

@@ -146,7 +146,7 @@ def _run_electrical(samples: list[OcrSample]) -> dict[str, Any]:
 
 
 def _run_tesseract(samples: list[OcrSample], *, rotations: tuple[int, ...]) -> dict[str, Any]:
-    from panelcad.importer.raster import find_tesseract
+    from panelcad.ocr.tesseract_runtime import find_tesseract
 
     name = "tesseract" if rotations == (0,) else "tesseract_four_angles"
     binary = find_tesseract() or shutil.which("tesseract") or ""
@@ -154,7 +154,7 @@ def _run_tesseract(samples: list[OcrSample], *, rotations: tuple[int, ...]) -> d
         return _score(name, samples, None, available=False, reason="tesseract binary not found")
     import pytesseract
 
-    from panelcad.importer.raster import configure_tesseract
+    from panelcad.ocr.tesseract_runtime import configure_tesseract
 
     configure_tesseract()
 
@@ -500,7 +500,7 @@ def _electrical_footprint() -> dict[str, Any]:
 
 
 def _tesseract_footprint() -> dict[str, Any]:
-    from panelcad.importer.raster import find_tesseract
+    from panelcad.ocr.tesseract_runtime import find_tesseract
 
     binary = find_tesseract() or shutil.which("tesseract") or ""
     if not binary:
@@ -798,7 +798,7 @@ def _scan_electrical(images: list[tuple[str, str, Path, dict[str, Any], Any]]) -
 
 
 def _scan_tesseract(images: list[tuple[str, str, Path, dict[str, Any], Any]]) -> dict[tuple[str, str], dict[str, Any]]:
-    from panelcad.importer.raster import configure_tesseract, find_tesseract
+    from panelcad.ocr.tesseract_runtime import configure_tesseract, find_tesseract
 
     found: dict[tuple[str, str], dict[str, Any]] = {}
     if not find_tesseract():

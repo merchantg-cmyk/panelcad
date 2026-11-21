@@ -13,7 +13,7 @@ from panelcad.core.models import Project
 from panelcad.library.catalog import Catalog
 from panelcad.library.parts import PartsCatalog
 from panelcad.quote.build import build_quote
-from panelcad.quote.labor import EXAMPLE_LABEL, FILES_ONLY, count_phrase
+from panelcad.quote.labor import FILES_ONLY, count_phrase
 from panelcad.quote.money import Money, cents, format_amount, format_percent, format_unit_price, to_decimal
 from panelcad.quote.xlsx_io import SheetNumber, write_xlsx
 
@@ -559,30 +559,25 @@ def _write_csv(path: Path, quote: dict[str, Any], view: str) -> None:
 
 
 def _write_pdf(path: Path, quote: dict[str, Any], view: str) -> int:
-    from PySide6.QtGui import QColor, QPainter, QPdfWriter
-
     from panelcad.api.session import _ensure_qt_app
-    from panelcad.render.page import configure_full_page
+    from panelcad.render.pdf import atomic_pdf_writer
     from panelcad.render.qt_painter import QtPainter
 
     # QFontDatabase needs an application. Offscreen when nothing is on screen.
     _ensure_qt_app()
-    writer = QPdfWriter(str(path))
-    writer.setResolution(300)
     title = quote["project"] or "PanelCAD quote"
-    writer.setTitle(title)
-    if hasattr(writer, "setCreator"):
-        writer.setCreator("PanelCAD")
-    configure_full_page(writer, PAGE_W, PAGE_H)
-    painter = QPainter(writer)
-    try:
+    with atomic_pdf_writer(
+        path,
+        resolution=300,
+        title=title,
+        creator="PanelCAD",
+        width_mm=PAGE_W,
+        height_mm=PAGE_H,
+    ) as (writer, painter):
         dpi_x = float(writer.logicalDpiX() or 72)
         dpi_y = float(writer.logicalDpiY() or 72)
         painter.scale(dpi_x / 25.4, dpi_y / 25.4)
         pages = _paint_quote(painter, writer, QtPainter(painter, print_paper=True), quote, view)
-    finally:
-        if painter.isActive():
-            painter.end()
     return pages
 
 

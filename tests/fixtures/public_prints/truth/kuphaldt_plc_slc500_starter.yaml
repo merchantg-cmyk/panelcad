@@ -1,0 +1,26 @@
+id: kuphaldt_plc_slc500_starter
+source_id: kuphaldt_plc_discrete
+kind: schematic
+standard: "NEMA/ANSI"
+devices:
+  - F1
+  - F2
+  - F3
+  - F4
+  - F5
+  - F6
+  - F7
+wire_numbers: []
+terminal_labels:
+  - "L1"
+  - "L2/N"
+  - "H1"
+  - "H2"
+  - "H3"
+  - "H4"
+  - "X1"
+  - "X2"
+  - "T1"
+  - "T2"
+  - "T3"
+notes: "SLC 500 I/O and 480 VAC motor starter pictorial wiring with fuses F1-F7 and power/motor/transformer terminal labels."

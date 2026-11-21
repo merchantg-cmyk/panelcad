@@ -1,0 +1,21 @@
+# Tested runtime dependency pins for PanelCAD Windows installs and upgrades.
+# Versions for the electrical OCR stack match packaging/electrical-ocr.lock.json
+# so pip install -e does not upgrade past the bundled offline ONNX Runtime wheels.
+ezdxf==1.4.5
+flatbuffers==25.12.19
+numpy==2.3.5
+onnxruntime==1.31.1
+opencv-python-headless>=4.9,<5
+openpyxl==3.1.5
+packaging==26.3
+paddleocr==3.7.0
+pillow==13.0.0
+protobuf==5.29.5
+pydantic==2.14.3
+pydantic-ai==2.70.0
+pymupdf==2.1
+pypdf==7.1.1
+PySide6==6.12.0
+pytesseract==0.3.13
+PyYAML==6.0.2
+typer==0.29.2

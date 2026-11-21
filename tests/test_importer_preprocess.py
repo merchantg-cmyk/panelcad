@@ -8,12 +8,10 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-import pytest
 from PIL import Image, ImageDraw
 
 from panelcad.examples.dol import build_dol
-from panelcad.importer.imageutil import prepare_scan
-from panelcad.importer.ingest import _ingest_image, ingest_paths, rasterize_pdf, resolve_sheet_size_mm, sheet_size_mm
+from panelcad.importer.ingest import _ingest_image, rasterize_pdf, resolve_sheet_size_mm
 from panelcad.importer.preprocess import (
     PreparedScan,
     detect_sheet_quad,

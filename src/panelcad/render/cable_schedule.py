@@ -7,7 +7,6 @@ from typing import Any
 
 from panelcad.core.cables import gland_text, pull_length, pull_rows, shield_label, termination_rows
 from panelcad.core.models import Cable, Project
-from panelcad.render.page import configure_full_page
 from panelcad.render.qt_painter import QtPainter
 from panelcad.version import __version__
 
@@ -23,19 +22,18 @@ FOOTER_H = 10.0
 def write_cable_schedule_pdf(session: Any, path: Path | str) -> Path:
     """Landscape letter PDF. Page 1 is the schedule and pull list. Later pages list terminations."""
 
-    from PySide6.QtGui import QPainter, QPdfWriter
+    from panelcad.render.pdf import atomic_pdf_writer
 
     dest = Path(path)
-    dest.parent.mkdir(parents=True, exist_ok=True)
     project: Project = session.project
-    writer = QPdfWriter(str(dest))
-    writer.setResolution(300)
-    writer.setTitle(f"{project.name} cable schedule")
-    if hasattr(writer, "setCreator"):
-        writer.setCreator(f"PanelCAD {__version__}")
-    configure_full_page(writer, PAGE_W, PAGE_H)
-    painter = QPainter(writer)
-    try:
+    with atomic_pdf_writer(
+        dest,
+        resolution=300,
+        title=f"{project.name} cable schedule",
+        creator=f"PanelCAD {__version__}",
+        width_mm=PAGE_W,
+        height_mm=PAGE_H,
+    ) as (writer, painter):
         pages = _pages(project)
         for index, paint in enumerate(pages):
             if index:
@@ -46,9 +44,6 @@ def write_cable_schedule_pdf(session: Any, path: Path | str) -> Path:
             painter.scale(dpi_x / 25.4, dpi_y / 25.4)
             qp = QtPainter(painter, print_paper=True)
             paint(qp, project, index + 1, len(pages))
-    finally:
-        if painter.isActive():
-            painter.end()
     return dest
 
 

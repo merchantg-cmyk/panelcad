@@ -978,7 +978,7 @@ def test_dol_starter_does_not_invent_supplies_and_accepts_fla(tmp_path: Path):
     assert plate.field("fla:1") is None
     assert plate.field("voltage:1") is None
     assert not any("24VDC" in line.text or "3.3-27" in line.text for line in plate.lines)
-    assert plate.field("manufacturer").value.startswith("Acme")
+    assert plate.field("manufacturer").value.startswith("Example Controls")
     urls = " ".join(item.get("url") or "" for item in plate.citations)
     assert "mikeholt" not in urls
     assert "industrialmonitordirect" not in urls

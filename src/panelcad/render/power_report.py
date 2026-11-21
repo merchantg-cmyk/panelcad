@@ -26,19 +26,19 @@ def write_power_budget_pdf(path: Path | str, budgets: list[SupplyBudget], *, tit
     """Vector PDF. One page for each supply."""
 
     from PySide6.QtCore import QRectF
-    from PySide6.QtGui import QPainter, QPdfWriter
 
-    from panelcad.render.page import PRINT_PAPER, configure_full_page
+    from panelcad.render.page import PRINT_PAPER
+    from panelcad.render.pdf import atomic_pdf_writer
 
     dest = Path(path)
-    dest.parent.mkdir(parents=True, exist_ok=True)
     pages = list(budgets) or []
-    writer = QPdfWriter(str(dest))
-    writer.setResolution(300)
-    writer.setTitle(title or "Control power budget")
-    configure_full_page(writer, PAGE_W, PAGE_H)
-    painter = QPainter(writer)
-    try:
+    with atomic_pdf_writer(
+        dest,
+        resolution=300,
+        title=title or "Control power budget",
+        width_mm=PAGE_W,
+        height_mm=PAGE_H,
+    ) as (writer, painter):
         if not pages:
             _blank(painter, title or "Control power budget")
         for index, budget in enumerate(pages):
@@ -56,9 +56,6 @@ def write_power_budget_pdf(path: Path | str, budgets: list[SupplyBudget], *, tit
                 page_index=index,
                 page_count=max(1, len(pages)),
             )
-    finally:
-        if painter.isActive():
-            painter.end()
     return dest
 
 
