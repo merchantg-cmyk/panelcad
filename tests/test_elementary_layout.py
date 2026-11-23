@@ -642,3 +642,50 @@ def test_a_fuse_wired_only_to_the_rail_is_not_a_clean_sheet():
     ends = {(wire.frm, wire.to) for wire in sheet.wires}
     assert ("FU2.1", "L2") in ends or ("L2", "FU2.1") in ends
     assert ("FU2.2", "T1.H4") in ends or ("T1.H4", "FU2.2") in ends
+
+
+def test_coil_left_mid_sheet_on_overload_rung_fails_elementary_gate():
+    """Moving coil M1 mid-sheet while OL1 remains next to L2 must fail _loads_on_the_right."""
+
+    from panelcad.examples.scan_ladder_demo import build_scan_ladder_demo
+
+    session = build_scan_ladder_demo()
+    sheet = session.project.sheet("elementary")
+    assert elementary_layout_issues(session, sheet) == []
+    m1 = sheet.component("M1")
+    m1.x = 180.0
+    issues = elementary_layout_issues(session, sheet)
+    assert any("M1 is not next to L2" in item for item in issues), issues
+
+
+def test_control_transformer_primary_on_rail_and_x1_direct_to_l1_fail_elementary_gate():
+    """T1 primary on L1/L2 (directly or through a fuse) and X1 direct to L1 must fail."""
+
+    from panelcad.examples.scan_ladder_demo import build_scan_ladder_demo
+
+    # X1 wired straight to L1 without secondary fuse FU3
+    s_direct = build_scan_ladder_demo()
+    sh = s_direct.project.sheet("elementary")
+    sh.components = [c for c in sh.components if c.id != "FU3"]
+    sh.wires = [w for w in sh.wires if "FU3" not in str(w.frm) and "FU3" not in str(w.to)]
+    s_direct.wire("T1.X1", "L1", number="102", sheet_id="elementary")
+    issues = elementary_layout_issues(s_direct, sh)
+    assert any("secondary fuse" in item for item in issues), issues
+
+    # Primary H1 wired straight to L1
+    s_prim = build_scan_ladder_demo()
+    sh_p = s_prim.project.sheet("elementary")
+    s_prim.wire("T1.H1", "L1", number="100", sheet_id="elementary")
+    issues_p = elementary_layout_issues(s_prim, sh_p)
+    assert any("primary" in item.lower() and "L1" in item for item in issues_p), issues_p
+
+    # Primary fuse FU1 landing on control rail L1 instead of off-page
+    s_pfuse = build_scan_ladder_demo()
+    sh_pf = s_pfuse.project.sheet("elementary")
+    for w in sh_pf.wires:
+        if "OFF1" in str(w.frm):
+            w.frm = "L1"
+        elif "OFF1" in str(w.to):
+            w.to = "L1"
+    issues_pf = elementary_layout_issues(s_pfuse, sh_pf)
+    assert any("primary" in item.lower() and "FU1" in item and "L1" in item for item in issues_pf), issues_pf

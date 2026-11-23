@@ -320,6 +320,8 @@ _CHECK_LABELS = {
     "page_over_dense": "Sheet is too crowded",
     "wire_end_off_pin": "Wire end misses the terminal",
     "label_covered_by_wire": "Wire crosses a label",
+    "device_on_wire_duct": "Device on wire duct",
+    "device_off_din_rail": "Device off DIN rail",
 }
 
 

@@ -401,6 +401,7 @@ def elementary_layout_issues(session: Session, sheet: Sheet) -> list[str]:
     issues.extend(_rail_without_a_load(sheet))
     issues.extend(_rail_gaps(session, sheet, catalog))
     issues.extend(_shorted_numbers(session, sheet))
+    issues.extend(_transformer_control_rules(session, sheet))
     return issues
 
 
@@ -433,7 +434,7 @@ def _place_power(sheet, session, by_id, devices, placed) -> int:
     _wx, wy, _ww, _wh = _working_rect(sheet)
     h1_probe = _pin_named(device, "H1", "left")
     if h1_probe is not None:
-        min_body_y = float(wy) + float(TAG_DY) + float(TAG_SIZE) * float(TEXT_ASCENT)
+        min_body_y = float(wy) + float(TAG_DY) + float(TAG_SIZE) * float(TEXT_ASCENT) + 2.5
         min_pin_y = min_body_y + float(h1_probe.y)
         if y < min_pin_y:
             y = min_pin_y
@@ -2543,6 +2544,17 @@ def _rail_gaps(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
     return issues
 
 
+def _transformer_control_rules(session: Session, sheet: Sheet) -> list[str]:
+    """Control transformer primary never lands on L1/L2; X1 feeds L1 through a secondary fuse."""
+
+    from panelcad.core.ladder import rail_names
+    from panelcad.importer.electrical_rules import validate_transformer_control_rules
+
+    hot, ret = rail_names(sheet, session.project)
+    violations = validate_transformer_control_rules(sheet, hot_rail=hot, return_rail=ret)
+    return [f"{sheet.id}: {item.message}" for item in violations]
+
+
 def _loads_on_the_right(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
     """A coil, overload, or pilot belongs just left of L2, not mid-sheet."""
 
@@ -2551,7 +2563,8 @@ def _loads_on_the_right(session: Session, sheet: Sheet, catalog: Catalog) -> lis
 
     _left, right = rail_xs(sheet)
     issues: list[str] = []
-    by_y: dict[float, list[tuple[str, float, bool]]] = {}
+    # (comp.id, left_x, right_x, is_load)
+    by_y: dict[float, list[tuple[str, float, float, bool]]] = {}
     for comp in sheet.components:
         device = _device(catalog, comp)
         if device is None:
@@ -2567,23 +2580,32 @@ def _loads_on_the_right(session: Session, sheet: Sheet, catalog: Catalog) -> lis
             if not pins:
                 continue
             px, py = pin_world(comp, pins[-1])
+            left_pin = _pin_named(device, "", "left")
+            lx = pin_world(comp, left_pin)[0] if left_pin is not None else float(comp.x)
+            by_y.setdefault(round(py, 1), []).append((comp.id, min(float(comp.x), lx), px, True))
         else:
             left_pin = _pin_named(device, "", "left")
             if left_pin is None:
                 continue
             px, py = pin_world(comp, left_pin)
-        key = round(py, 1)
-        by_y.setdefault(key, []).append((comp.id, px, load))
+            by_y.setdefault(round(py, 1), []).append((comp.id, px, px, False))
     for group in by_y.values():
-        loads = [item for item in group if item[2]]
+        loads = sorted((item for item in group if item[3]), key=lambda item: item[2])
         if not loads:
             continue
-        rightmost = max(loads, key=lambda item: item[1])
-        if right - rightmost[1] > 36.0:
+        rightmost = loads[-1]
+        if right - rightmost[2] > 36.0:
             issues.append(f"{sheet.id}: {rightmost[0]} is not next to L2")
-        for name, px, is_load in group:
+        # Every load in the right-hand cluster (e.g. coil M1 to the left of OL1)
+        # must sit beside its right neighbor, never parked mid-sheet.
+        for idx in range(len(loads) - 2, -1, -1):
+            cur = loads[idx]
+            nxt = loads[idx + 1]
+            if nxt[1] - cur[2] > 36.0:
+                issues.append(f"{sheet.id}: {cur[0]} is not next to L2")
+        for name, lx, _rx, is_load in group:
             if is_load:
                 continue
-            if px > rightmost[1] + 2.0:
+            if lx > rightmost[2] + 2.0:
                 issues.append(f"{sheet.id}: {name} sits to the right of the coil")
     return issues

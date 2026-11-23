@@ -85,6 +85,8 @@ CHECK_IDS: tuple[str, ...] = (
     "overload_outside_fla",
     "coil_voltage_mismatch",
     "outside_enclosure",
+    "device_on_wire_duct",
+    "device_off_din_rail",
     "panel_needs_enclosure",
     "panel_enclosure_tight",
     "heat_rise_over_limit",
@@ -436,6 +438,7 @@ def run_checks(
     findings.extend(_coil_voltage_mismatch(project, catalog))
     findings.extend(_unwired_coils(project, catalog))
     findings.extend(_outside_enclosure(project, catalog))
+    findings.extend(_panel_mounting_findings(project, catalog))
     findings.extend(_panel_enclosure_findings(project, catalog))
     findings.extend(_on_title_block(project, catalog))
     findings.extend(_heat_rise_over_limit(project, catalog))
@@ -2216,6 +2219,60 @@ def _outside_enclosure(project: Project, catalog: Catalog) -> list[Finding]:
                         "outside_enclosure",
                         "warning",
                         f"{sheet.id}:{comp.id} does not fit the {place}",
+                        sheet=sheet.id,
+                        ref=comp.id,
+                        x=comp.x,
+                        y=comp.y,
+                    )
+                )
+    return findings
+
+
+def _panel_mounting_findings(project: Project, catalog: Catalog) -> list[Finding]:
+    """Error when a panel device overlaps wire duct or a DIN device sits off its rail."""
+
+    from panelcad.core.layout import (
+        footprint_overlaps_tray,
+        is_rail_module,
+        sits_fully_on_a_rail,
+    )
+    from panelcad.library.panel import is_info_needed_placeholder
+
+    findings: list[Finding] = []
+    for sheet in project.sheets:
+        if sheet.kind != "panel_layout":
+            continue
+        trays = list(sheet.trays or [])
+        rails = list(sheet.rails or [])
+        for comp in sheet.components:
+            device = _device(catalog, comp)
+            if device is None or _skip_device(device):
+                continue
+            if is_info_needed_placeholder(comp, device):
+                continue
+            if not is_incabinet(device, comp) and effective_footprint(device, comp).mount in {"none", "field"}:
+                continue
+            w, h = footprint_size(device, comp)
+            if w <= 0.0 or h <= 0.0:
+                continue
+            if trays and footprint_overlaps_tray(comp.x, comp.y, w, h, trays):
+                findings.append(
+                    Finding(
+                        "device_on_wire_duct",
+                        "error",
+                        f"{sheet.id}:{comp.id} sits on a wire duct",
+                        sheet=sheet.id,
+                        ref=comp.id,
+                        x=comp.x,
+                        y=comp.y,
+                    )
+                )
+            if is_rail_module(device, comp) and not sits_fully_on_a_rail(comp, device, rails):
+                findings.append(
+                    Finding(
+                        "device_off_din_rail",
+                        "error",
+                        f"{sheet.id}:{comp.id} is not seated on a DIN rail",
                         sheet=sheet.id,
                         ref=comp.id,
                         x=comp.x,

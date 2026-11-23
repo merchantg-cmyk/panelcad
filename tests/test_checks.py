@@ -317,3 +317,25 @@ def test_large_generated_project_stays_under_a_second():
     assert elapsed < 1.0, elapsed
     assert isinstance(rows, list)
     assert len(sheet.components) == 250
+
+
+def test_panel_device_on_wire_duct_and_off_din_rail_are_errors():
+    """Issued panels must seat DIN devices on rails and keep all devices off wire duct."""
+
+    from panelcad.examples.scan_ladder_demo import build_scan_ladder_demo
+
+    # Clean demo panel and DOL panel have neither error.
+    for session in (build_scan_ladder_demo(), build_dol()):
+        assert _by_check(session, "device_on_wire_duct") == []
+        assert _by_check(session, "device_off_din_rail") == []
+
+    # Moving a DIN device onto the top wire duct triggers both errors with severity == "error".
+    dirty = build_scan_ladder_demo()
+    panel = dirty.project.sheet("backplate")
+    disc = panel.component("DISC1")
+    top_tray = panel.trays[0]
+    disc.y = top_tray.y
+    duct_rows = _by_check(dirty, "device_on_wire_duct")
+    rail_rows = _by_check(dirty, "device_off_din_rail")
+    assert any(row["ref"] == "DISC1" and row["severity"] == "error" for row in duct_rows), duct_rows
+    assert any(row["ref"] == "DISC1" and row["severity"] == "error" for row in rail_rows), rail_rows

@@ -90,6 +90,9 @@ def validate_transformer_control_rules(
         return []
 
     violations: list[TransformerRuleViolation] = []
+    # Track fuses directly connected to a transformer primary pin (H1..H4).
+    primary_fuses: dict[str, tuple[str, str]] = {}
+    rail_wires_on_fuse: dict[str, list[tuple[str, str]]] = {}
     for wire in getattr(sheet, "wires", None) or []:
         wid = str(getattr(wire, "id", "") or "")
         a_ref, a_pin = _split_end(getattr(wire, "frm", ""))
@@ -98,10 +101,18 @@ def validate_transformer_control_rules(
             (a_ref, a_pin, b_ref, b_pin),
             (b_ref, b_pin, a_ref, a_pin),
         ):
+            if t_ref in by_id and is_fuse_library(getattr(by_id[t_ref], "library_id", "")):
+                other_upper = other_ref.upper()
+                if not other_pin and other_upper in rails:
+                    rail_wires_on_fuse.setdefault(t_ref, []).append((wid, other_ref))
             if t_ref not in transformers:
                 continue
             other_upper = other_ref.upper()
             is_rail = not other_pin and other_upper in rails
+            if is_transformer_primary_pin(t_pin) and other_ref in by_id and is_fuse_library(
+                getattr(by_id[other_ref], "library_id", "")
+            ):
+                primary_fuses.setdefault(other_ref, (t_ref, t_pin))
             if is_transformer_primary_pin(t_pin) and is_rail:
                 violations.append(
                     TransformerRuleViolation(
@@ -137,4 +148,17 @@ def validate_transformer_control_rules(
                         ),
                     )
                 )
+    for fuse_ref, (t_ref, t_pin) in primary_fuses.items():
+        for wid, rail_ref in rail_wires_on_fuse.get(fuse_ref, ()):
+            violations.append(
+                TransformerRuleViolation(
+                    code="transformer_primary_on_control_rail",
+                    device=t_ref,
+                    wire_id=wid,
+                    message=(
+                        f"{t_ref}.{t_pin} (primary) through {fuse_ref} must go off-page, "
+                        f"not to control rail {rail_ref}."
+                    ),
+                )
+            )
     return violations
