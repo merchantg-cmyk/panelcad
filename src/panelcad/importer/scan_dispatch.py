@@ -100,12 +100,13 @@ def raw_has_terminal_strip(image: Image.Image, width_mm: float, height_mm: float
 
 
 def peek_layout_page_kind(image: Image.Image, width_mm: float, height_mm: float) -> str:
-    """Title-band page kind via Tesseract. Empty when the band cannot be read."""
+    """Title-band page kind via Tesseract, or bundled electrical OCR when Tesseract is absent."""
 
     from panelcad.importer.tesseract_runtime import find_tesseract
-    from panelcad.ocr.backend import ocr_scope
+    from panelcad.ocr.backend import ocr_scope, page_engine_ready
 
-    if not find_tesseract():
+    has_tess = bool(find_tesseract())
+    if not has_tess and not page_engine_ready():
         return ""
     import numpy as np
 
@@ -114,7 +115,8 @@ def peek_layout_page_kind(image: Image.Image, width_mm: float, height_mm: float)
 
     rgb = np.asarray(image.convert("RGB"))
     ppm = rgb.shape[1] / width_mm if width_mm else 1.0
-    with ocr_scope("tesseract"):
+    scope = "tesseract" if has_tess else None
+    with ocr_scope(scope):
         try:
             tokens = _title_tokens(rgb, ppm, width_mm, height_mm)
         except Exception:  # noqa: BLE001 — a title miss leaves the electrical reader
@@ -208,12 +210,14 @@ def read_panel_scan(
     allow_missing_ocr: bool = False,
     strip_image: Image.Image | None = None,
 ) -> dict[str, Any]:
-    """Read a panel/door layout scan pinned to Tesseract."""
+    """Read a panel/door layout scan pinned to Tesseract when installed, else bundled electrical OCR."""
 
     from panelcad.importer.raster import read_pixels
-    from panelcad.ocr.backend import ocr_scope
+    from panelcad.importer.tesseract_runtime import find_tesseract
+    from panelcad.ocr.backend import ocr_scope, page_engine_ready
 
-    with ocr_scope("tesseract"):
+    scope = "tesseract" if (find_tesseract() or not page_engine_ready()) else None
+    with ocr_scope(scope):
         return read_pixels(
             image,
             width_mm,
@@ -235,12 +239,14 @@ def read_terminal_scan(
     allow_missing_ocr: bool = False,
     strip_image: Image.Image | None = None,
 ) -> dict[str, Any]:
-    """Read a terminal-strip scan pinned to Tesseract."""
+    """Read a terminal-strip scan pinned to Tesseract when installed, else bundled electrical OCR."""
 
     from panelcad.importer.raster import read_pixels
-    from panelcad.ocr.backend import ocr_scope
+    from panelcad.importer.tesseract_runtime import find_tesseract
+    from panelcad.ocr.backend import ocr_scope, page_engine_ready
 
-    with ocr_scope("tesseract"):
+    scope = "tesseract" if (find_tesseract() or not page_engine_ready()) else None
+    with ocr_scope(scope):
         return read_pixels(
             image,
             width_mm,

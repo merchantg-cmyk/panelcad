@@ -369,7 +369,13 @@ def _classify_device_role_and_library(
         lid = f"{prefix}.protection.ol_contact"
         return "control_ol_contact", lid, ["95", "96"]
 
-    if "pilot_light" in low_type or "indicator" in low_type or "lamp" in low_type or re.match(r"^(LT|PL|HL|H)\d+$", up_tag):
+    if (
+        "pilot_light" in low_type
+        or "indicator" in low_type
+        or "lamp" in low_type
+        or re.match(r"^(LT|PL|HL)\d+$", up_tag)
+        or (is_iec and re.match(r"^H\d+$", up_tag))
+    ):
         lid = f"{prefix}.operators.pilot_light"
         return "control_output", lid, ["X1", "X2"]
 
@@ -3020,7 +3026,8 @@ def _layout_and_wire_control_sheet(
             comp_by_tag[par_d.tag] = comp
             has_subrow = True
 
-        # Place outputs on the right (leaving room on the right if a return-side overload contact is present)
+        # Place outputs on the right (leaving room on the right if a return-side overload contact is present).
+        # A control transformer belongs in the power block on the left, never stacked into the L2 load column.
         out_base_x = (wx + ww - 102.0) if ret_ol else (wx + ww - 58.0)
         # Ensure outputs stay strictly to the right of the rightmost series contact
         if main_contacts:
@@ -3028,14 +3035,25 @@ def _layout_and_wire_control_sheet(
             if out_base_x < min_out_x:
                 out_base_x = min(min_out_x, wx + ww - 54.0)
 
+        max_body_bottom = wy + wh - 16.0
+        output_bottom_y = rung_y
         for o_idx, out_d in enumerate(outputs):
             oy_line = rung_y + (20.0 * o_idx)
             if o_idx > 0:
                 has_subrow = True
+            is_xfmr = "transformer" in str(out_d.library_id or "").lower()
+            ox = (wx + 64.0) if is_xfmr else out_base_x
             cy = oy_line - _default_pin_y(catalog, out_d.library_id)
-            comp = _make_synth_component(out_d, out_base_x, cy, catalog)
+            try:
+                dev_h = float(catalog.get(out_d.library_id).schematic_height)
+            except KeyError:
+                dev_h = 16.0
+            if cy + dev_h > max_body_bottom:
+                cy = max(wy + 6.0, max_body_bottom - dev_h)
+            comp = _make_synth_component(out_d, ox, cy, catalog)
             sheet.components.append(comp)
             comp_by_tag[out_d.tag] = comp
+            output_bottom_y = max(output_bottom_y, cy + dev_h)
 
         # Place return-side overload contacts between output A2 and right rail
         for r_idx, ol_d in enumerate(ret_ol):
@@ -3045,17 +3063,32 @@ def _layout_and_wire_control_sheet(
             comp = _make_synth_component(ol_d, cx, cy, catalog)
             sheet.components.append(comp)
             comp_by_tag[ol_d.tag] = comp
+            output_bottom_y = max(output_bottom_y, cy + 16.0)
 
         # Terminal strip: one right-hand column (panel A toward the rungs,
-        # field B toward L2). Never left-contact placement next to L1.
+        # field B toward L2). Never left-contact placement next to L1, and never
+        # stacked on top of a load/transformer already sitting in that column.
         if terminals:
             term_base_x = min(right_rail_x - 36.0, wx + ww - 40.0)
+            term_start_y = rung_y
+            right_col_occupied = any(
+                "transformer" not in str(o.library_id or "").lower() and abs(out_base_x - term_base_x) < 28.0
+                for o in outputs
+            ) or bool(ret_ol)
+            if right_col_occupied:
+                term_start_y = max(rung_y, output_bottom_y + 12.0)
             for t_idx, term_d in enumerate(terminals):
-                cy = (rung_y + (18.0 * t_idx)) - _default_pin_y(catalog, term_d.library_id)
+                try:
+                    dev_h = float(catalog.get(term_d.library_id).schematic_height)
+                except KeyError:
+                    dev_h = 12.0
+                cy = (term_start_y + (18.0 * t_idx)) - _default_pin_y(catalog, term_d.library_id)
+                if cy + dev_h > max_body_bottom:
+                    cy = max(wy + 6.0, max_body_bottom - dev_h)
                 comp = _make_synth_component(term_d, term_base_x, cy, catalog)
                 sheet.components.append(comp)
                 comp_by_tag[term_d.tag] = comp
-                if t_idx:
+                if t_idx or right_col_occupied:
                     has_subrow = True
 
         # Advance cur_y for next rung

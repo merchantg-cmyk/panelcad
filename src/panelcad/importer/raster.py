@@ -2261,11 +2261,14 @@ def _drop_ocr_ghosts_on_transformers(devices: list[dict[str, Any]]) -> None:
     hosts = [
         d
         for d in devices
-        if d.get("library_id")
-        and (
-            "transformer" in str(d.get("library_id") or "").lower()
-            or "ol_contact" in str(d.get("library_id") or "").lower()
+        if (
+            d.get("library_id")
+            and (
+                "transformer" in str(d.get("library_id") or "").lower()
+                or "ol_contact" in str(d.get("library_id") or "").lower()
+            )
         )
+        or re.match(r"^T\d+$", str(d.get("tag") or "").strip().upper())
     ]
     if not hosts:
         return
@@ -2279,10 +2282,13 @@ def _drop_ocr_ghosts_on_transformers(devices: list[dict[str, Any]]) -> None:
         if not (device.get("unconfirmed") or source == "ocr" or device.get("guess")):
             kept.append(device)
             continue
+        tag = str(device.get("tag") or "").strip().upper()
         x = float(device.get("x") or 0)
         y = float(device.get("y") or 0)
         on_body = False
         for host in hosts:
+            if host is device:
+                continue
             hx = float(host.get("x") or 0)
             hy = float(host.get("y") or 0)
             host_lib = str(host.get("library_id") or "").lower()
@@ -2294,6 +2300,11 @@ def _drop_ocr_ghosts_on_transformers(devices: list[dict[str, Any]]) -> None:
                     break
             elif "ol_contact" in host_lib:
                 if abs(x - hx) <= 18.0 and abs(y - hy) <= 12.0:
+                    on_body = True
+                    break
+            elif re.match(r"^(H[1-4]|X[1-2])$", tag):
+                # Unconfirmed H1..H4 / X1..X2 pin labels sitting under an OCR T1 tag.
+                if hx - 12.0 <= x <= hx + 52.0 and hy - 8.0 <= y <= hy + 62.0:
                     on_body = True
                     break
         if not on_body:

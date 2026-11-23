@@ -205,3 +205,47 @@ def test_preserve_mode_quarantine_defaults_and_issue_block() -> None:
     assert preserve_scan_issue_blocked(session.project) is True
     session.project.properties["print_import"]["layout_mode"] = "ladder"
     assert preserve_scan_issue_blocked(session.project) is False
+
+
+def test_nema_transformer_primary_pin_tags_are_not_classified_as_pilot_lights() -> None:
+    """H1..H4 on a NEMA/ANSI sheet are transformer primary terminals, never pilot lights."""
+
+    from panelcad.importer.ladder_synth import _classify_device_role_and_library
+
+    catalog = Session.create("H-tags").catalog
+    for tag in ("H1", "H2", "H3", "H4"):
+        role_nema, lid_nema, _pins = _classify_device_role_and_library(
+            tag, "", "", "", [], "NEMA/ANSI", catalog
+        )
+        assert "pilot_light" not in lid_nema, (tag, role_nema, lid_nema)
+    role_iec, lid_iec, _pins = _classify_device_role_and_library(
+        "H1", "", "", "", [], "IEC", catalog
+    )
+    assert lid_iec == "iec.operators.pilot_light"
+
+
+def test_panel_and_terminal_readers_fall_back_to_electrical_when_tesseract_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without a Tesseract binary, bundled electrical OCR must still route and read panel/terminal scans."""
+
+    from panelcad.importer import scan_dispatch, tesseract_runtime
+    from panelcad.ocr.backend import active_backend, page_engine_ready
+
+    if not page_engine_ready():
+        pytest.skip("electrical OCR weights are not installed")
+
+    monkeypatch.setattr(tesseract_runtime, "find_tesseract", lambda: None)
+    seen_backends: list[str] = []
+
+    def _fake_read_pixels(*_args, **_kwargs):
+        seen_backends.append(active_backend())
+        return {"devices": [], "wires": [], "xrefs": []}
+
+    from panelcad.importer import raster
+
+    monkeypatch.setattr(raster, "read_pixels", _fake_read_pixels)
+    dummy = Image.new("RGB", (200, 100), "white")
+    scan_dispatch.read_panel_scan(dummy, width_mm=200.0, height_mm=100.0, catalog=None)
+    scan_dispatch.read_terminal_scan(dummy, width_mm=200.0, height_mm=100.0, catalog=None)
+    assert seen_backends == ["electrical", "electrical"]
