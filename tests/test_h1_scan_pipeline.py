@@ -423,3 +423,271 @@ def test_scan_dispatch_surfaces_onnx_runtime_failure_and_peek_logging(
     with ocr_backend.ocr_scope("tesseract"):
         with pytest.raises(TesseractMissing):
             scan_dispatch.peek_layout_page_kind(img, 200.0, 200.0)
+
+
+def test_unreadable_question_mark_tags_classify_as_unresolved_never_pb_no() -> None:
+    """Empty, '?', and '?' -prefixed tags (e.g. '??', '?1') must stay unresolved and never become pb_no."""
+
+    from panelcad.importer.agent_questions import questions_for
+    from panelcad.importer.ladder_synth import (
+        _classify_device_role_and_library,
+        extract_import_from_to,
+        synthesize_imported_ladder,
+    )
+
+    catalog = Session.create("Unreadable").catalog
+    unreadable_tags = ("", " ", "?", "??", "?1", "?PB1", "-?")
+    hint_cases = (
+        ("", "", "", []),
+        ("pushbutton", "pb_no", "nema.operators.pb_no", ["3", "4"]),
+        ("coil", "coil", "", ["A1", "A2"]),
+        ("", "", "", ["95", "96"]),
+    )
+    for std in ("NEMA/ANSI", "IEC"):
+        for tag in unreadable_tags:
+            for raw_type, raw_sym, raw_lid, pins in hint_cases:
+                role, lid, dpins = _classify_device_role_and_library(
+                    tag, raw_type, raw_sym, raw_lid, pins, std, catalog
+                )
+                assert role == "unresolved", (std, tag, raw_type, role, lid)
+                assert lid == "reconstruct.needs_info", (std, tag, raw_type, role, lid)
+                assert dpins == [], (std, tag, dpins)
+
+    # End-to-end extraction & synthesis: unreadable OCR tags stay unresolved/needs_info,
+    # never place fake pb_no components, never invent DEV* tags or wires.
+    facts = {
+        "title_block": {"standard": "NEMA/ANSI", "rail_hot": "L1", "rail_return": "L2"},
+        "devices": [
+            {
+                "tag": "PB1",
+                "library_id": "nema.operators.pb_no",
+                "type": "pushbutton",
+                "symbol": "pushbutton",
+                "x": 90.0,
+                "y": 110.0,
+                "confidence": 0.9,
+            },
+            {
+                "tag": "M1",
+                "library_id": "nema.contactors.coil",
+                "type": "coil",
+                "symbol": "coil",
+                "x": 300.0,
+                "y": 110.0,
+                "confidence": 0.9,
+            },
+            {"tag": "", "library_id": "", "type": "", "symbol": "", "source": "ocr", "unconfirmed": True, "x": 110.0, "y": 40.0, "confidence": 0.35},
+            {"tag": "?", "library_id": "", "type": "", "symbol": "", "source": "ocr", "unconfirmed": True, "x": 130.0, "y": 40.0, "confidence": 0.35},
+            {"tag": "??", "library_id": "", "type": "", "symbol": "", "source": "ocr", "unconfirmed": True, "x": 150.0, "y": 40.0, "confidence": 0.35},
+            {"tag": "?1", "library_id": "", "type": "", "symbol": "", "source": "ocr", "unconfirmed": True, "x": 170.0, "y": 40.0, "confidence": 0.35},
+        ],
+        "wires": [
+            {"from": "L1", "to": "PB1.3", "number": "102"},
+            {"from": "PB1.4", "to": "M1.A1", "number": "107"},
+            {"from": "M1.A2", "to": "L2", "number": "104"},
+            {"from": "?1", "to": "??", "number": "101"},
+        ],
+    }
+    sched = extract_import_from_to(facts, catalog=catalog)
+    unresolved = [d for d in sched.devices if d.role == "unresolved"]
+    assert {d.tag for d in unresolved} == {"?", "??", "?1"}, [(d.tag, d.role, d.library_id) for d in sched.devices]
+    assert all(d.library_id == "reconstruct.needs_info" for d in unresolved)
+    assert not any(d.tag.startswith("DEV") for d in sched.devices), [d.tag for d in sched.devices]
+
+    synth = synthesize_imported_ladder(facts, target_standard="NEMA/ANSI", catalog=catalog)
+    placed_tags = {c.id for sh in synth.project.sheets for c in sh.components}
+    assert placed_tags == {"PB1", "M1"}, placed_tags
+    for sh in synth.project.sheets:
+        for w in sh.wires:
+            assert not str(w.frm).startswith("?") and not str(w.to).startswith("?"), w
+    pi_items = (synth.project.properties.get("print_import") or {}).get("items") or []
+    pi_tags = {
+        str(it.get("tag") or it.get("text") or "")
+        for it in pi_items
+        if isinstance(it, dict) and it.get("reason") == "needs_info"
+    }
+    assert {"?", "??", "?1"} <= pi_tags, pi_items
+    q_refs = {str(q.get("ref") or "").upper() for q in questions_for(synth)}
+    assert {"?", "?1"} <= q_refs, q_refs
+
+    # A standalone "??" OCR tag also surfaces directly to questions_for without placing pb_no.
+    solo_facts = {
+        "title_block": {"standard": "NEMA/ANSI", "rail_hot": "L1", "rail_return": "L2"},
+        "devices": [
+            {"tag": "PB1", "library_id": "nema.operators.pb_no", "type": "pushbutton", "symbol": "pushbutton", "x": 90.0, "y": 110.0, "confidence": 0.9},
+            {"tag": "M1", "library_id": "nema.contactors.coil", "type": "coil", "symbol": "coil", "x": 300.0, "y": 110.0, "confidence": 0.9},
+            {"tag": "??", "library_id": "", "type": "", "symbol": "", "source": "ocr", "unconfirmed": True, "x": 150.0, "y": 40.0, "confidence": 0.35},
+        ],
+        "wires": [
+            {"from": "L1", "to": "PB1.3", "number": "102"},
+            {"from": "PB1.4", "to": "M1.A1", "number": "107"},
+            {"from": "M1.A2", "to": "L2", "number": "104"},
+        ],
+    }
+    solo_synth = synthesize_imported_ladder(solo_facts, target_standard="NEMA/ANSI", catalog=catalog)
+    assert {c.id for sh in solo_synth.project.sheets for c in sh.components} == {"PB1", "M1"}
+    assert "??" in {str(q.get("ref") or "") for q in questions_for(solo_synth)}
+
+
+def test_electrical_rules_catalog_loads_and_estop_2nc_pole_isolation() -> None:
+    """Catalog-derived loads cover all relay/coil loads; 2-NC E-stops isolate 11/12 from 21/22."""
+
+    from panelcad.core.models import Component, Sheet, Wire
+    from panelcad.importer.electrical_rules import _internal_peer_pins, _is_load_library
+    from panelcad.library.catalog import default_catalog
+
+    cat = default_catalog()
+
+    # 1. Every catalog relay/coil/timer/light/horn/load library ID is recognized as a load,
+    #    while contacts and 3-phase power contactors stay non-load pass-throughs.
+    for lid in (
+        "nema.relays.cr",
+        "iec.relays.cr",
+        "nema.relays.alternating",
+        "iec.relays.alternating",
+        "nema.relays.k_4co_24vdc",
+        "iec.relays.k_4co_24vdc",
+        "nema.relays.safety_24vdc",
+        "iec.relays.safety_24vdc",
+        "nema.contactors.coil",
+        "iec.contactors.coil",
+        "nema.operators.stack_light",
+        "iec.operators.stack_light",
+        "oem.patlite.lr4_302wjnw_ryg",
+        "iec.power.load_24v",
+    ):
+        assert lid in cat.devices, lid
+        assert _is_load_library(lid) is True, lid
+
+    for non_load in (
+        "nema.contactors.ac3_9a",
+        "iec.contactors.ac3_32a",
+        "nema.contactors.aux_no",
+        "iec.contactors.aux_nc",
+        "nema.protection.ol_contact",
+        "nema.timers.contact_noto",
+        "nema.operators.estop_2nc",
+        "iec.operators.estop",
+    ):
+        assert _is_load_library(non_load) is False, non_load
+
+    # Every catalog device in switching.relay / switching.alternating / switching.safety must be a load.
+    for lid, dev in cat.devices.items():
+        if dev.category in {"switching.relay", "switching.alternating", "switching.safety"}:
+            assert _is_load_library(lid) is True, (lid, dev.category)
+
+    # 2. Dual-wired protected (X1->FU3->L1) + unprotected bypass (X1->K1.A1) flags every relay load.
+    for relay_lid in (
+        "nema.relays.alternating",
+        "iec.relays.alternating",
+        "nema.relays.k_4co_24vdc",
+        "iec.relays.k_4co_24vdc",
+        "nema.relays.safety_24vdc",
+        "iec.relays.safety_24vdc",
+    ):
+        sh_bypass = Sheet(
+            id="s1",
+            name="s1",
+            kind="schematic",
+            drawing_style="ladder",
+            rail_hot="L1",
+            rail_return="L2",
+            components=[
+                Component(id="T1", library_id="nema.power.control_transformer", x=50, y=50),
+                Component(id="FU3", library_id="nema.protection.fuse_10a", x=100, y=50),
+                Component(id="K1", library_id=relay_lid, x=220, y=80),
+            ],
+            wires=[
+                Wire(id="w1", frm="T1.X1", to="FU3.1", number="100"),
+                Wire(id="w2", frm="FU3.2", to="L1", number="102"),
+                Wire(id="w3", frm="T1.X1", to="K1.A1", number="100"),
+                Wire(id="w4", frm="K1.A2", to="L2", number="104"),
+                Wire(id="w5", frm="T1.X2", to="L2", number="104"),
+            ],
+        )
+        viols = validate_transformer_control_rules(sh_bypass)
+        assert any(v.code == "transformer_x1_unprotected" and "K1" in v.message for v in viols), (relay_lid, viols)
+
+    # 3. 2-NC E-stop pole mates: 11<->12 and 21<->22 only; poles are never treated as connected.
+    all_pins = {"11", "12", "21", "22"}
+    for estop_lid in ("iec.operators.estop", "iec.operators.estop_2nc", "nema.operators.estop_2nc"):
+        assert _internal_peer_pins(estop_lid, "11", all_pins) == ["12"], estop_lid
+        assert _internal_peer_pins(estop_lid, "12", all_pins) == ["11"], estop_lid
+        assert _internal_peer_pins(estop_lid, "21", all_pins) == ["22"], estop_lid
+        assert _internal_peer_pins(estop_lid, "22", all_pins) == ["21"], estop_lid
+        assert _internal_peer_pins(estop_lid, "11", {"11", "21"}) == [], estop_lid
+
+        # Isolated poles: pole 1 (11/12) on primary, pole 2 (21/22) on secondary control circuit -> valid.
+        sh_iso = Sheet(
+            id="s1",
+            name="s1",
+            kind="schematic",
+            drawing_style="ladder",
+            rail_hot="L1",
+            rail_return="L2",
+            components=[
+                Component(id="T1", library_id="nema.power.control_transformer", x=50, y=50),
+                Component(id="FU3", library_id="nema.protection.fuse_10a", x=100, y=50),
+                Component(id="ES1", library_id=estop_lid, x=150, y=50),
+                Component(id="OFF1", library_id="iec.connection.offpage", x=20, y=50),
+                Component(id="PB1", library_id="nema.operators.pb_no", x=200, y=80),
+            ],
+            wires=[
+                Wire(id="w1", frm="OFF1.A", to="ES1.11", number="480A"),
+                Wire(id="w2", frm="ES1.12", to="T1.H1", number="101"),
+                Wire(id="w3", frm="L1", to="ES1.21", number="102"),
+                Wire(id="w4", frm="ES1.22", to="PB1.3", number="105"),
+                Wire(id="w5", frm="T1.X1", to="FU3.1", number="100"),
+                Wire(id="w6", frm="FU3.2", to="L1", number="102"),
+                Wire(id="w7", frm="T1.X2", to="L2", number="104"),
+            ],
+        )
+        assert validate_transformer_control_rules(sh_iso) == [], estop_lid
+
+        # Same-pole fault (primary through pole 1 straight to L1) MUST still fail.
+        sh_prim_fault = Sheet(
+            id="s1",
+            name="s1",
+            kind="schematic",
+            drawing_style="ladder",
+            rail_hot="L1",
+            rail_return="L2",
+            components=[
+                Component(id="T1", library_id="nema.power.control_transformer", x=50, y=50),
+                Component(id="FU3", library_id="nema.protection.fuse_10a", x=100, y=50),
+                Component(id="ES1", library_id=estop_lid, x=150, y=50),
+            ],
+            wires=[
+                Wire(id="w1", frm="T1.H1", to="ES1.11", number="101"),
+                Wire(id="w2", frm="ES1.12", to="L1", number="102"),
+                Wire(id="w3", frm="T1.X1", to="FU3.1", number="100"),
+                Wire(id="w4", frm="FU3.2", to="L1", number="102"),
+                Wire(id="w5", frm="T1.X2", to="L2", number="104"),
+            ],
+        )
+        prim_codes = {v.code for v in validate_transformer_control_rules(sh_prim_fault)}
+        assert "transformer_primary_on_control_rail" in prim_codes, (estop_lid, prim_codes)
+
+        # Same-pole unprotected X1 fault (X1 through pole 2 straight to L1 without OCPD) MUST still fail.
+        sh_x1_fault = Sheet(
+            id="s1",
+            name="s1",
+            kind="schematic",
+            drawing_style="ladder",
+            rail_hot="L1",
+            rail_return="L2",
+            components=[
+                Component(id="T1", library_id="nema.power.control_transformer", x=50, y=50),
+                Component(id="ES1", library_id=estop_lid, x=150, y=50),
+            ],
+            wires=[
+                Wire(id="w1", frm="T1.X1", to="ES1.21", number="100"),
+                Wire(id="w2", frm="ES1.22", to="L1", number="102"),
+                Wire(id="w3", frm="T1.X2", to="L2", number="104"),
+            ],
+        )
+        x1_codes = {v.code for v in validate_transformer_control_rules(sh_x1_fault)}
+        assert "transformer_x1_unprotected" in x1_codes, (estop_lid, x1_codes)
+
+    # 1-NC E-stop (pins 1/2) continues to connect 1 <-> 2.
+    assert _internal_peer_pins("nema.operators.estop", "1", {"1", "2"}) == ["2"]

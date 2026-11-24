@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
 TRANSFORMER_PRIMARY_PINS: frozenset[str] = frozenset({"H1", "H2", "H3", "H4"})
@@ -29,6 +30,12 @@ _MULTIPOLE_PIN_MATES: dict[str, str] = {
     "4": "3",
     "5": "6",
     "6": "5",
+    "11": "12",
+    "12": "11",
+    "13": "14",
+    "14": "13",
+    "21": "22",
+    "22": "21",
     "L1": "T1",
     "T1": "L1",
     "L2": "T2",
@@ -36,6 +43,54 @@ _MULTIPOLE_PIN_MATES: dict[str, str] = {
     "L3": "T3",
     "T3": "L3",
 }
+
+_CATALOG_LOAD_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "power.load",
+        "operator.light",
+        "operator.horn",
+        "switching.relay",
+        "switching.alternating",
+        "switching.safety",
+        "timing.timer",
+    }
+)
+
+
+def _derive_catalog_sets(catalog: Any) -> tuple[frozenset[str], frozenset[str]]:
+    """Derive ``(load_library_ids, multipole_estop_library_ids)`` from a Catalog."""
+
+    load_ids: set[str] = set()
+    multipole_estop_ids: set[str] = set()
+    devices = getattr(catalog, "devices", None) or {}
+    for lid, dev in devices.items():
+        low = str(lid or "").strip().lower()
+        if not low:
+            continue
+        cat_low = str(getattr(dev, "category", "") or "").strip().lower()
+        pin_ids = {
+            str(getattr(p, "id", "")).strip().upper()
+            for p in (getattr(dev, "pins", None) or [])
+        }
+        has_3ph_poles = ({"L1", "L2", "L3"} <= pin_ids and {"T1", "T2", "T3"} <= pin_ids) or (
+            {"1", "3", "5"} <= pin_ids and {"2", "4", "6"} <= pin_ids
+        )
+        if (
+            cat_low.startswith("load.")
+            or cat_low in _CATALOG_LOAD_CATEGORIES
+            or (cat_low == "switching.contactor" and {"A1", "A2"} <= pin_ids and not has_3ph_poles)
+        ):
+            load_ids.add(low)
+        if cat_low == "operator.estop" and {"11", "12", "21", "22"} <= pin_ids:
+            multipole_estop_ids.add(low)
+    return frozenset(load_ids), frozenset(multipole_estop_ids)
+
+
+@lru_cache(maxsize=1)
+def _default_catalog_sets() -> tuple[frozenset[str], frozenset[str]]:
+    from panelcad.library.catalog import default_catalog
+
+    return _derive_catalog_sets(default_catalog())
 
 
 @dataclass(frozen=True)
@@ -78,6 +133,9 @@ def _is_load_library(library_id: str | None) -> bool:
     low = str(library_id or "").strip().lower()
     if not low or "aux_" in low or "ol_contact" in low or "contact_" in low:
         return False
+    catalog_loads, _ = _default_catalog_sets()
+    if low in catalog_loads:
+        return True
     return any(
         tok in low
         for tok in (
@@ -87,7 +145,7 @@ def _is_load_library(library_id: str | None) -> bool:
             "horn",
             "solenoid",
             "motor",
-            "relays.cr",
+            "relays.",
             "timers.",
             "heater",
             "loads.",
@@ -115,6 +173,16 @@ def _is_passthrough_library(library_id: str | None) -> bool:
     )
 
 
+def _is_multipole_estop_library(library_id: str | None, comp_pins: set[str]) -> bool:
+    low = str(library_id or "").strip().lower()
+    if not low:
+        return False
+    _, catalog_estops = _default_catalog_sets()
+    if low in catalog_estops or "estop_2nc" in low:
+        return True
+    return "estop" in low and bool(comp_pins & {"11", "12"}) and bool(comp_pins & {"21", "22"})
+
+
 def _internal_peer_pins(library_id: str | None, pin: str, comp_pins: set[str]) -> list[str]:
     """Pins on the same pass-through device reachable internally from ``pin``."""
 
@@ -122,7 +190,7 @@ def _internal_peer_pins(library_id: str | None, pin: str, comp_pins: set[str]) -
         return []
     low = str(library_id or "").strip().lower()
     pin_up = pin.upper()
-    if "_3p" in low or "ac3_" in low:
+    if "_3p" in low or "ac3_" in low or _is_multipole_estop_library(low, comp_pins):
         mate = _MULTIPOLE_PIN_MATES.get(pin_up)
         return [mate] if mate and mate in comp_pins else []
     return sorted(other for other in comp_pins if other != pin_up)
@@ -322,7 +390,10 @@ def validate_transformer_control_rules(
                         nxt_lib = getattr(by_id[nxt[0]], "library_id", "")
                         if is_ocpd_library(nxt_lib):
                             reached_any_ocpd = True
-                        if not has_ocpd and _is_load_library(nxt_lib):
+                        if not has_ocpd and (
+                            _is_load_library(nxt_lib)
+                            or ("ac3_" in str(nxt_lib or "").lower() and nxt[1] in {"A1", "A2"})
+                        ):
                             unprotected_load_hits.append((nxt[0], wid))
                     state = (nxt, has_ocpd)
                     if state not in seen2:

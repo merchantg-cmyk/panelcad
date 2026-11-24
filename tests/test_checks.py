@@ -429,3 +429,11 @@ def test_run_checks_surfaces_transformer_control_rule_violations():
     ret_rows = _by_check(bad, "transformer_x1_on_return_rail")
     assert any(r["ref"] == "T1" and r["severity"] == "error" for r in prim_rows), prim_rows
     assert any(r["ref"] == "T1" and r["severity"] == "error" for r in ret_rows), ret_rows
+
+    # Dual-wired X1->FU3->L1 plus unprotected X1->safety relay coil bypass must surface in run_checks.
+    bypass = build_scan_ladder_demo()
+    bypass.place("nema.relays.safety_24vdc", ref="SR1", x=280, y=140, snap=False, sheet_id="elementary")
+    bypass.wire("T1.X1", "SR1.A1", number="100", sheet_id="elementary")
+    bypass.wire("SR1.A2", "L2", number="104", sheet_id="elementary")
+    unprot_rows = _by_check(bypass, "transformer_x1_unprotected")
+    assert any(r["ref"] == "T1" and "SR1" in r["message"] and r["severity"] == "error" for r in unprot_rows), unprot_rows

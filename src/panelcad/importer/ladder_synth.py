@@ -267,6 +267,11 @@ def _classify_device_role_and_library(
     prefix = "iec" if is_iec else "nema"
     clean_tag = str(tag or "").strip().lstrip("-+")
     up_tag = clean_tag.upper()
+    # Any unreadable tag (empty, "?", or "?"-prefixed such as "??", "?1") must
+    # classify as unresolved / reconstruct.needs_info and never fall through to
+    # pb_no or any other device (aligned with ladder_synth.py:2396 and scan_ladder.py:522).
+    if not up_tag or up_tag.startswith("?"):
+        return "unresolved", "reconstruct.needs_info", []
     low_type = f"{raw_type or ''} {raw_symbol or ''} {raw_library_id or ''}".lower()
     pin_set = {str(p).strip().upper() for p in (pins or []) if str(p).strip()}
 
@@ -523,10 +528,11 @@ def _classify_device_role_and_library(
             pass
 
     # Unconfirmed NEMA transformer primary pin tags (H1..H4), explicit needs_info,
-    # and unreadable "?" tags must never fall through to fake pb_no pushbuttons.
+    # and unreadable empty/"?"/"?"-prefixed tags must never fall through to fake pb_no pushbuttons.
     if (
         raw_library_id == "reconstruct.needs_info"
-        or up_tag in {"", "?"}
+        or not up_tag
+        or up_tag.startswith("?")
         or (not is_iec and re.match(r"^H[1-4]$", up_tag))
     ):
         return "unresolved", "reconstruct.needs_info", []
@@ -832,7 +838,16 @@ def extract_import_from_to(
     used_unique_tags_per_sheet: dict[str, set[str]] = {}
 
     for idx, d in enumerate(raw_devices):
-        raw_tag = str(d.get("tag") or d.get("id") or f"DEV{idx + 1}").strip().lstrip("-+")
+        has_explicit_empty_tag = (
+            "tag" in d
+            and not str(d.get("tag") or "").strip()
+            and not str(d.get("id") or "").strip()
+        )
+        raw_tag = (
+            "?"
+            if has_explicit_empty_tag
+            else str(d.get("tag") or d.get("id") or f"DEV{idx + 1}").strip().lstrip("-+")
+        )
         if not raw_tag:
             continue
         raw_lid = str(d.get("library_id") or "")
@@ -870,10 +885,10 @@ def extract_import_from_to(
                 or str(d.get("source") or "") == "needs_info"
             )
             if not keep_unread:
-                if std != "IEC" and re.match(r"^H[1-4]$", tag_u):
+                if (not tag_u or tag_u.startswith("?")) or (std != "IEC" and re.match(r"^H[1-4]$", tag_u)):
                     devices.append(
                         ImportDeviceEntry(
-                            tag=raw_tag,
+                            tag=raw_tag or "?",
                             symbol="unresolved",
                             library_id="reconstruct.needs_info",
                             description=str(d.get("description") or ""),
@@ -950,32 +965,34 @@ def extract_import_from_to(
 
         sheet_used = used_unique_tags_per_sheet.setdefault(sid, set())
         unique_tag = raw_tag
-        if unique_tag in sheet_used or (is_left_duplicate and role == "control_contact"):
-            if role == "control_contact":
-                suffix = dpins[0] if dpins else "3"
-                cand = f"{raw_tag}-{suffix}"
-                seq = 1
-                while cand in sheet_used:
-                    seq += 1
-                    cand = f"{raw_tag}-{suffix}-{seq}"
-                unique_tag = cand
-            elif role == "control_ol_contact":
-                cand = f"{raw_tag}-95"
-                seq = 1
-                while cand in sheet_used:
-                    seq += 1
-                    cand = f"{raw_tag}-95-{seq}"
-                unique_tag = cand
-            elif unique_tag in sheet_used:
-                # A second coil of the same tag used to become M1_2 and then
-                # get invented rail wires. Drop it — facts only, no ghost coil.
-                if role == "control_output":
-                    continue
-                seq = 2
-                while f"{raw_tag}_{seq}" in sheet_used:
-                    seq += 1
-                unique_tag = f"{raw_tag}_{seq}"
-        sheet_used.add(unique_tag)
+        is_unreadable_unresolved = role == "unresolved" and (not raw_tag or raw_tag.startswith("?"))
+        if not is_unreadable_unresolved:
+            if unique_tag in sheet_used or (is_left_duplicate and role == "control_contact"):
+                if role == "control_contact":
+                    suffix = dpins[0] if dpins else "3"
+                    cand = f"{raw_tag}-{suffix}"
+                    seq = 1
+                    while cand in sheet_used:
+                        seq += 1
+                        cand = f"{raw_tag}-{suffix}-{seq}"
+                    unique_tag = cand
+                elif role == "control_ol_contact":
+                    cand = f"{raw_tag}-95"
+                    seq = 1
+                    while cand in sheet_used:
+                        seq += 1
+                        cand = f"{raw_tag}-95-{seq}"
+                    unique_tag = cand
+                elif unique_tag in sheet_used:
+                    # A second coil of the same tag used to become M1_2 and then
+                    # get invented rail wires. Drop it — facts only, no ghost coil.
+                    if role == "control_output":
+                        continue
+                    seq = 2
+                    while f"{raw_tag}_{seq}" in sheet_used:
+                        seq += 1
+                    unique_tag = f"{raw_tag}_{seq}"
+            sheet_used.add(unique_tag)
 
         entry = ImportDeviceEntry(
             tag=unique_tag,
