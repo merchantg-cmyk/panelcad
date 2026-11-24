@@ -1557,15 +1557,28 @@ class EnclosureItem(QGraphicsItem):
     def __init__(self, enc: Enclosure) -> None:
         super().__init__()
         self.enc = enc
+        self._rect = self._compute_rect()
         self.setZValue(-6)
         self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
 
-    def boundingRect(self) -> QRectF:
+    def _compute_rect(self) -> QRectF:
         from panelcad.core.layout import enclosure_drawn_size
 
         dw, dh, _s = enclosure_drawn_size(self.enc)
         return QRectF(self.enc.x, self.enc.y, dw, dh)
+
+    def sync_geometry(self) -> None:
+        """Refresh cached bounds from ``self.enc`` while keeping the BSP index valid."""
+        rect = self._compute_rect()
+        if rect == self._rect:
+            return
+        self.prepareGeometryChange()
+        self._rect = rect
+        self.update()
+
+    def boundingRect(self) -> QRectF:
+        return QRectF(self._rect)
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None) -> None:
 
@@ -1580,15 +1593,28 @@ class TrayItem(QGraphicsItem):
         super().__init__()
         self.tray = tray
         self.mm_scale = mm_scale
+        self._rect = self._compute_rect()
         self.setZValue(-2)
         self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
 
-    def boundingRect(self) -> QRectF:
+    def _compute_rect(self) -> QRectF:
         t = self.tray
         if t.orientation == "v":
             return QRectF(t.x, t.y, t.width_mm, t.length_mm)
         return QRectF(t.x, t.y, t.length_mm, t.width_mm)
+
+    def sync_geometry(self) -> None:
+        """Refresh cached bounds from ``self.tray`` while keeping the BSP index valid."""
+        rect = self._compute_rect()
+        if rect == self._rect:
+            return
+        self.prepareGeometryChange()
+        self._rect = rect
+        self.update()
+
+    def boundingRect(self) -> QRectF:
+        return QRectF(self._rect)
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None) -> None:
         from panelcad.render.layout import draw_tray
@@ -1602,14 +1628,27 @@ class RailItem(QGraphicsItem):
         super().__init__()
         self.rail = rail
         self.mm_scale = mm_scale
+        self._rect = self._compute_rect()
         self.setZValue(0)
         self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
 
-    def boundingRect(self) -> QRectF:
+    def _compute_rect(self) -> QRectF:
         h = rail_height(self.rail)
         half = h / 2.0
         return QRectF(self.rail.x, self.rail.y - half, self.rail.length_mm, h)
+
+    def sync_geometry(self) -> None:
+        """Refresh cached bounds from ``self.rail`` while keeping the BSP index valid."""
+        rect = self._compute_rect()
+        if rect == self._rect:
+            return
+        self.prepareGeometryChange()
+        self._rect = rect
+        self.update()
+
+    def boundingRect(self) -> QRectF:
+        return QRectF(self._rect)
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None) -> None:
         from panelcad.render.layout import draw_rail

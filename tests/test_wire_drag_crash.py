@@ -18,6 +18,7 @@ non-GUI thread.
 
 from __future__ import annotations
 
+import gc
 import logging
 import threading
 import time
@@ -32,11 +33,15 @@ from PySide6.QtWidgets import QApplication, QGraphicsScene
 from panelcad.api.session import Session
 from panelcad.core.checks import run_checks
 from panelcad.core.geometry import Point
+from panelcad.core.models import Enclosure, Rail, WireTray
 from panelcad.electrical.nameplate import build_nameplate
 from panelcad.gui.canvas import (
     ComponentItem,
+    EnclosureItem,
     PinItem,
+    RailItem,
     SchematicView,
+    TrayItem,
     WireHandleItem,
     WireItem,
 )
@@ -758,3 +763,63 @@ def test_deleted_graphics_items_are_pruned_and_real_runtime_errors_propagate(mon
         canvas_log.setLevel(prev_level)
         view.release_scenes()
         view.close()
+
+
+def test_layout_items_cache_bounding_rect_and_prepare_geometry_change() -> None:
+    """EnclosureItem, TrayItem, and RailItem must never change boundingRect() without prepareGeometryChange()."""
+    _app()
+    scene = QGraphicsScene(0, 0, 600, 600)
+
+    enc = Enclosure(x=20.0, y=20.0, width_mm=200.0, height_mm=250.0, depth_mm=150.0)
+    tray = WireTray(id="D1", x=30.0, y=40.0, length_mm=180.0, width_mm=25.0, orientation="h")
+    rail = Rail(id="R1", x=35.0, y=120.0, length_mm=160.0, height_mm=35.0)
+
+    enc_item = EnclosureItem(enc)
+    tray_item = TrayItem(tray, mm_scale=1.0)
+    rail_item = RailItem(rail, mm_scale=1.0)
+    for item in (enc_item, tray_item, rail_item):
+        scene.addItem(item)
+    _ = scene.items(QRectF(0, 0, 600, 600))
+
+    enc_before = enc_item.boundingRect()
+    tray_before = tray_item.boundingRect()
+    rail_before = rail_item.boundingRect()
+
+    # Mutate all three models in place: boundingRect() must stay cached until sync_geometry().
+    enc.x = 40.0
+    enc.width_mm = 120.0
+    enc.height_mm = 140.0
+    tray.orientation = "v"
+    tray.length_mm = 90.0
+    rail.y = 150.0
+    rail.length_mm = 80.0
+    rail.height_mm = 20.0
+
+    assert enc_item.boundingRect() == enc_before
+    assert tray_item.boundingRect() == tray_before
+    assert rail_item.boundingRect() == rail_before
+
+    # sync_geometry() must invoke prepareGeometryChange() BEFORE mutating cached bounds.
+    for item, before in ((enc_item, enc_before), (tray_item, tray_before), (rail_item, rail_before)):
+        events: list[QRectF] = []
+        orig_pgc = item.prepareGeometryChange
+
+        def spy_pgc(it=item, orig=orig_pgc, ev=events) -> None:
+            ev.append(it.boundingRect())
+            orig()
+
+        item.prepareGeometryChange = spy_pgc  # type: ignore[method-assign]
+        item.sync_geometry()
+        assert events == [before]
+        assert item.boundingRect() != before
+
+        # Idempotent when geometry has not changed again.
+        item.sync_geometry()
+        assert len(events) == 1
+
+    # Removing items after shrink/move and querying the BSP tree must stay healthy.
+    for item in (enc_item, tray_item, rail_item):
+        scene.removeItem(item)
+    del enc_item, tray_item, rail_item
+    gc.collect()
+    assert scene.items(QRectF(0, 0, 600, 600)) == []
