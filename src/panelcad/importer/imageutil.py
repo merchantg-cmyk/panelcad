@@ -658,6 +658,17 @@ def choose_quarter(scores: list[float], glyph: int | None) -> int | None:
     # whose runner-up is still on the other axis stays under this bar.
     if values[other] <= 0.0 or values[winner] >= values[other] * 2.0:
         return winner
+    # When both quarters on glyph's axis beat both perpendicular quarters and
+    # glyph itself achieves the strongest text score (including an exact tie
+    # with its opposite), both text axis and letter shape confirm glyph; do not
+    # flip 180° on a minor dip between the two weaker side quarters.
+    if glyph in {0, 1, 2, 3} and values[glyph] >= strongest:
+        opposite = (glyph + 2) % 4
+        if min(values[glyph], values[opposite]) > max(
+            values[(glyph + 1) % 4],
+            values[(glyph + 3) % 4],
+        ):
+            return glyph
     weakest = min(values)
     # All four quarters read, and the low one is not a tie. It sits one
     # turn clockwise of upright.

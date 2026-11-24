@@ -39,10 +39,21 @@ _LAST_ERROR: str = ""
 _MAX_FINE_CROPS = 2
 
 
+class OcrRuntimeError(RuntimeError):
+    """Raised when the bundled electrical ONNX OCR engine fails to load or run."""
+
+
 def last_error() -> str:
     """Most recent PP-OCR load or inference error, or empty string when clean."""
 
     return _LAST_ERROR
+
+
+def clear_last_error() -> None:
+    """Reset the recorded PP-OCR load or inference error before a new read."""
+
+    global _LAST_ERROR
+    _LAST_ERROR = ""
 
 
 def runtime_packages() -> list[str]:

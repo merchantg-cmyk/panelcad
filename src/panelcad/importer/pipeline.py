@@ -2081,7 +2081,13 @@ class ImportJob:
             ocr_backend=pinned or "",
             strip_image=strip_image,
         )
-        if facts.get("ocr_skipped"):
+        if facts.get("ocr_error"):
+            err_note = f"Electrical ONNX OCR failed: {facts['ocr_error']}"
+            page["ocr_error"] = str(facts["ocr_error"])
+            page["ocr_skipped"] = err_note
+            existing_warn = str(self.manifest.get("warning") or "").strip()
+            self.manifest["warning"] = f"{existing_warn}; {err_note}" if existing_warn else err_note
+        elif facts.get("ocr_skipped"):
             from panelcad.importer.raster import TESSERACT_MESSAGE
 
             page["ocr_skipped"] = TESSERACT_MESSAGE

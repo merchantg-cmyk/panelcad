@@ -220,10 +220,29 @@ def read_pixels(
     rgb = np.asarray(image.convert("RGB"))
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     ppm = rgb.shape[1] / width_mm if width_mm else 1.0
+    from panelcad.ocr import ppocr
+    from panelcad.ocr.dispatch import tesseract_required
+
     ocr_skipped = False
+    ocr_error = ""
+    using_electrical = not tesseract_required()
+    if using_electrical:
+        ppocr.clear_last_error()
     try:
         tokens = _ocr_tokens(gray, rgb, ppm, width_mm, height_mm)
-        tokens.extend(_title_tokens(rgb, ppm, width_mm, height_mm))
+        if using_electrical and ppocr.last_error():
+            ocr_error = ppocr.last_error()
+            ocr_skipped = True
+            if not allow_missing_ocr:
+                raise ppocr.OcrRuntimeError(f"Electrical ONNX OCR failed: {ocr_error}")
+            tokens = []
+        else:
+            tokens.extend(_title_tokens(rgb, ppm, width_mm, height_mm))
+            if using_electrical and ppocr.last_error():
+                ocr_error = ppocr.last_error()
+                ocr_skipped = True
+                if not allow_missing_ocr:
+                    raise ppocr.OcrRuntimeError(f"Electrical ONNX OCR failed: {ocr_error}")
     except TesseractMissing:
         if not allow_missing_ocr:
             raise
@@ -250,12 +269,12 @@ def read_pixels(
         _match_symbol(tok, match_ink, ppm, rgb.shape, catalog, standard, height_mm=height_mm)
         for tok in labeled["tags"]
     ]
-    if not is_layout:
+    if not is_layout and not ocr_error:
         devices.extend(_coils_from_ink(gray, binary, devices, ppm, catalog, standard))
         devices.extend(_fuses_from_ink(gray, match_ink, devices, ppm, catalog, standard))
         _land_body_symbols(binary, devices, ppm, catalog, standard)
         _mark_secondary_fuses(devices)
-        _drop_ocr_ghosts_on_transformers(devices)
+        _drop_ocr_ghosts_on_transformers(devices, standard=standard)
     _sibling_terminal_captions(gray, devices, ppm, catalog)
     _mark_caption_tags(devices, tokens)
     # Rotation first, so the trace sees line pins on the bus side. Spread after
@@ -267,7 +286,9 @@ def read_pixels(
     orient_ladder_devices(devices, catalog, spread=True, page_width=width_mm)
     from panelcad.importer.strip_scan import read_terminal_strip
 
-    if strip_image is not None:
+    if ocr_error:
+        strip_devices = []
+    elif strip_image is not None:
         strip_up = _upscale_low_res(strip_image, width_mm, height_mm)
         strip_rgb = np.asarray(strip_up.convert("RGB"))
         strip_gray = cv2.cvtColor(strip_rgb, cv2.COLOR_RGB2GRAY)
@@ -336,7 +357,7 @@ def read_pixels(
     ]
     if strip_devices and not non_terminal and str(kind or "").strip().lower() in {"", "other"}:
         kind = "terminal_plan"
-    return {
+    result = {
         "devices": devices,
         "wires": wires,
         "xrefs": [],
@@ -352,6 +373,9 @@ def read_pixels(
         ],
         "frame_insets": list(insets) if insets else None,
     }
+    if ocr_error:
+        result["ocr_error"] = ocr_error
+    return result
 
 
 def refine_with_model(
@@ -728,15 +752,21 @@ def _sparse_tokens(canvas: np.ndarray, ppm: float, height_mm: float, pytesseract
     else:
         y_strip = height
         y_step = height
+    from panelcad.ocr import ppocr
+
     found: list[dict[str, Any]] = []
     y = 0
-    while y < height:
+    onnx_failed = False
+    while y < height and not onnx_failed:
         y_end = min(height, y + y_strip)
         x = 0
         while x < width:
             piece = np.ascontiguousarray(canvas[y:y_end, x : min(width, x + strip)])
             if height_mm <= 360.0 or float((piece < 235).mean()) >= 0.0002:
                 found.extend(_tokens_in_band(piece, ppm, y, x, pytesseract))
+                if pytesseract is None and ppocr.last_error():
+                    onnx_failed = True
+                    break
             if x + strip >= width:
                 break
             x += step
@@ -2250,7 +2280,7 @@ def _mark_secondary_fuses(devices: list[dict[str, Any]]) -> None:
                 fuse["open_stubs"] = []
 
 
-def _drop_ocr_ghosts_on_transformers(devices: list[dict[str, Any]]) -> None:
+def _drop_ocr_ghosts_on_transformers(devices: list[dict[str, Any]], *, standard: str = "") -> None:
     """Drop unconfirmed OCR tags that sit on a transformer body (H/X pin misreads).
 
     Facts only: a caption that did not match a symbol and lands inside T1 is not
@@ -2258,14 +2288,35 @@ def _drop_ocr_ghosts_on_transformers(devices: list[dict[str, Any]]) -> None:
     ghost and demote the real coil.
     """
 
+    std_up = str(standard or "").strip().upper()
+    if "IEC" in std_up:
+        is_iec = True
+    elif any(tok in std_up for tok in ("NEMA", "ANSI", "UL")):
+        is_iec = False
+    else:
+        iec_libs = sum(1 for d in devices if str(d.get("library_id") or "").lower().startswith("iec."))
+        nema_libs = sum(1 for d in devices if str(d.get("library_id") or "").lower().startswith("nema."))
+        is_iec = iec_libs > nema_libs
+
+    def _is_ocr_transformer_host(d: dict[str, Any]) -> bool:
+        if d.get("library_id"):
+            return False
+        sym = f"{d.get('type') or ''} {d.get('symbol') or ''}".lower()
+        if any(tok in sym for tok in ("timer", "on_delay", "off_delay", "relay", "contact")):
+            return False
+        return bool(re.match(r"^T\d+$", str(d.get("tag") or "").strip().upper()))
+
     hosts = [
         d
         for d in devices
-        if d.get("library_id")
-        and (
-            "transformer" in str(d.get("library_id") or "").lower()
-            or "ol_contact" in str(d.get("library_id") or "").lower()
+        if (
+            d.get("library_id")
+            and (
+                "transformer" in str(d.get("library_id") or "").lower()
+                or "ol_contact" in str(d.get("library_id") or "").lower()
+            )
         )
+        or _is_ocr_transformer_host(d)
     ]
     if not hosts:
         return
@@ -2279,10 +2330,13 @@ def _drop_ocr_ghosts_on_transformers(devices: list[dict[str, Any]]) -> None:
         if not (device.get("unconfirmed") or source == "ocr" or device.get("guess")):
             kept.append(device)
             continue
+        tag = str(device.get("tag") or "").strip().upper()
         x = float(device.get("x") or 0)
         y = float(device.get("y") or 0)
         on_body = False
         for host in hosts:
+            if host is device:
+                continue
             hx = float(host.get("x") or 0)
             hy = float(host.get("y") or 0)
             host_lib = str(host.get("library_id") or "").lower()
@@ -2294,6 +2348,12 @@ def _drop_ocr_ghosts_on_transformers(devices: list[dict[str, Any]]) -> None:
                     break
             elif "ol_contact" in host_lib:
                 if abs(x - hx) <= 18.0 and abs(y - hy) <= 12.0:
+                    on_body = True
+                    break
+            elif re.match(r"^X[1-2]$", tag) or (not is_iec and re.match(r"^H[1-4]$", tag)):
+                # Unconfirmed H1..H4 / X1..X2 pin labels sitting under an OCR T1 caption
+                # (centered above a 40 mm body, so left-side H pins extend ~15-24 mm left).
+                if hx - 28.0 <= x <= hx + 48.0 and hy - 8.0 <= y <= hy + 62.0:
                     on_body = True
                     break
         if not on_body:

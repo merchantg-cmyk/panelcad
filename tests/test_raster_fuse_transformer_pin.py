@@ -166,3 +166,34 @@ def test_pin_links_prefers_h4_to_fuse_pin_2_when_t1_is_on_the_right():
     ends |= {(b, a) for a, b, _s, _e in links}
     assert (("FU2", "2"), ("T1", "H4")) in ends or (("T1", "H4"), ("FU2", "2")) in ends
     assert (("FU2", "1"), ("T1", "H4")) not in ends and (("T1", "H4"), ("FU2", "1")) not in ends
+
+
+def test_drop_ocr_ghosts_handles_ocr_t1_width_and_preserves_iec_pilots_and_timers():
+    """OCR T1 drops left-side NEMA H1..H4 pins, never drops IEC H1 pilot lights or timer neighbors."""
+
+    # 1. Centered OCR-only T1 caption on NEMA sheet drops H1..H4 up to 24 mm left of hx.
+    nema_devices = [
+        {"tag": "T1", "library_id": "", "source": "ocr", "x": 120.0, "y": 20.0, "unconfirmed": True},
+        {"tag": "H1", "library_id": "", "source": "ocr", "x": 96.0, "y": 32.0, "unconfirmed": True},
+        {"tag": "H4", "library_id": "", "source": "ocr", "x": 98.0, "y": 56.0, "unconfirmed": True},
+        {"tag": "X1", "library_id": "", "source": "ocr", "x": 144.0, "y": 32.0, "unconfirmed": True},
+        {"tag": "PB1", "library_id": "nema.operators.pb_no", "source": "symbol", "x": 80.0, "y": 110.0},
+    ]
+    _drop_ocr_ghosts_on_transformers(nema_devices, standard="NEMA/ANSI")
+    assert [d["tag"] for d in nema_devices] == ["T1", "PB1"]
+
+    # 2. Confirmed non-transformer timer tagged T1 must NEVER act as a transformer host.
+    timer_devices = [
+        {"tag": "T1", "library_id": "iec.timers.on_delay", "source": "symbol", "x": 120.0, "y": 20.0},
+        {"tag": "H1", "library_id": "", "source": "ocr", "x": 125.0, "y": 32.0, "unconfirmed": True},
+    ]
+    _drop_ocr_ghosts_on_transformers(timer_devices, standard="IEC")
+    assert [d["tag"] for d in timer_devices] == ["T1", "H1"]
+
+    # 3. OCR-only T1 on an IEC sheet must NOT silently drop unconfirmed IEC H1 pilot light.
+    iec_devices = [
+        {"tag": "T1", "library_id": "", "source": "ocr", "x": 120.0, "y": 20.0, "unconfirmed": True},
+        {"tag": "H1", "library_id": "", "source": "ocr", "x": 115.0, "y": 32.0, "unconfirmed": True},
+    ]
+    _drop_ocr_ghosts_on_transformers(iec_devices, standard="IEC")
+    assert [d["tag"] for d in iec_devices] == ["T1", "H1"]

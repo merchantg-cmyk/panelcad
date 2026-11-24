@@ -642,3 +642,129 @@ def test_a_fuse_wired_only_to_the_rail_is_not_a_clean_sheet():
     ends = {(wire.frm, wire.to) for wire in sheet.wires}
     assert ("FU2.1", "L2") in ends or ("L2", "FU2.1") in ends
     assert ("FU2.2", "T1.H4") in ends or ("T1.H4", "FU2.2") in ends
+
+
+def test_coil_left_mid_sheet_on_overload_rung_fails_elementary_gate():
+    """Moving coil M1 mid-sheet while OL1 remains next to L2 must fail _loads_on_the_right."""
+
+    from panelcad.examples.scan_ladder_demo import build_scan_ladder_demo
+
+    session = build_scan_ladder_demo()
+    sheet = session.project.sheet("elementary")
+    assert elementary_layout_issues(session, sheet) == []
+    m1 = sheet.component("M1")
+    m1.x = 180.0
+    issues = elementary_layout_issues(session, sheet)
+    assert any("M1 is not next to L2" in item for item in issues), issues
+
+
+def test_control_transformer_primary_on_rail_and_x1_direct_to_l1_fail_elementary_gate():
+    """T1 primary on L1/L2 (directly or through a fuse) and X1 direct to L1 must fail."""
+
+    from panelcad.examples.scan_ladder_demo import build_scan_ladder_demo
+
+    # X1 wired straight to L1 without secondary fuse FU3
+    s_direct = build_scan_ladder_demo()
+    sh = s_direct.project.sheet("elementary")
+    sh.components = [c for c in sh.components if c.id != "FU3"]
+    sh.wires = [w for w in sh.wires if "FU3" not in str(w.frm) and "FU3" not in str(w.to)]
+    s_direct.wire("T1.X1", "L1", number="102", sheet_id="elementary")
+    issues = elementary_layout_issues(s_direct, sh)
+    assert any("secondary fuse" in item for item in issues), issues
+
+    # Primary H1 wired straight to L1
+    s_prim = build_scan_ladder_demo()
+    sh_p = s_prim.project.sheet("elementary")
+    s_prim.wire("T1.H1", "L1", number="100", sheet_id="elementary")
+    issues_p = elementary_layout_issues(s_prim, sh_p)
+    assert any("primary" in item.lower() and "L1" in item for item in issues_p), issues_p
+
+    # Primary fuse FU1 landing on control rail L1 instead of off-page
+    s_pfuse = build_scan_ladder_demo()
+    sh_pf = s_pfuse.project.sheet("elementary")
+    for w in sh_pf.wires:
+        if "OFF1" in str(w.frm):
+            w.frm = "L1"
+        elif "OFF1" in str(w.to):
+            w.to = "L1"
+    issues_pf = elementary_layout_issues(s_pfuse, sh_pf)
+    assert any("primary" in item.lower() and "FU1" in item and "L1" in item for item in issues_pf), issues_pf
+
+    # Primary through a circuit breaker (CB1) landing on L1 must fail.
+    s_pcb = build_scan_ladder_demo()
+    sh_pcb = s_pcb.project.sheet("elementary")
+    s_pcb.place("nema.breakers.mcb_1p_16a", ref="CB1", x=60, y=40, snap=False, sheet_id="elementary")
+    s_pcb.wire("T1.H2", "CB1.1", number="101", sheet_id="elementary")
+    s_pcb.wire("CB1.2", "L1", number="102", sheet_id="elementary")
+    issues_pcb = elementary_layout_issues(s_pcb, sh_pcb)
+    assert any("primary" in item.lower() and "CB1" in item and "L1" in item for item in issues_pcb), issues_pcb
+
+    # Primary multi-hop through fuse + terminal block landing on L2 must fail.
+    s_pmulti = build_scan_ladder_demo()
+    sh_pm = s_pmulti.project.sheet("elementary")
+    s_pmulti.place("nema.terminals.feed_through", ref="X9-1", x=30, y=40, snap=False, sheet_id="elementary")
+    for w in sh_pm.wires:
+        if "OFF2" in str(w.frm):
+            w.frm = "X9-1.A"
+        elif "OFF2" in str(w.to):
+            w.to = "X9-1.A"
+    s_pmulti.wire("X9-1.B", "L2", number="104", sheet_id="elementary")
+    issues_pm = elementary_layout_issues(s_pmulti, sh_pm)
+    assert any("primary" in item.lower() and "FU2" in item and "X9-1" in item and "L2" in item for item in issues_pm), issues_pm
+
+    # Secondary X1 wired to L2 (return rail) must fail.
+    s_x1_l2 = build_scan_ladder_demo()
+    sh_x1_l2 = s_x1_l2.project.sheet("elementary")
+    sh_x1_l2.components = [c for c in sh_x1_l2.components if c.id != "FU3"]
+    sh_x1_l2.wires = [w for w in sh_x1_l2.wires if "FU3" not in str(w.frm) and "FU3" not in str(w.to)]
+    s_x1_l2.wire("T1.X1", "L2", number="104", sheet_id="elementary")
+    issues_x1_l2 = elementary_layout_issues(s_x1_l2, sh_x1_l2)
+    assert any("X1" in item and "L2" in item for item in issues_x1_l2), issues_x1_l2
+
+    # Secondary X1 reaching L1 only through a terminal block (no fuse/breaker) must fail.
+    s_x1_tb = build_scan_ladder_demo()
+    sh_x1_tb = s_x1_tb.project.sheet("elementary")
+    sh_x1_tb.components = [c for c in sh_x1_tb.components if c.id != "FU3"]
+    sh_x1_tb.wires = [w for w in sh_x1_tb.wires if "FU3" not in str(w.frm) and "FU3" not in str(w.to)]
+    s_x1_tb.place("nema.terminals.feed_through", ref="X9-2", x=180, y=50, snap=False, sheet_id="elementary")
+    s_x1_tb.wire("T1.X1", "X9-2.A", number="100", sheet_id="elementary")
+    s_x1_tb.wire("X9-2.B", "L1", number="102", sheet_id="elementary")
+    issues_x1_tb = elementary_layout_issues(s_x1_tb, sh_x1_tb)
+    assert any("X1" in item and "X9-2" in item and "secondary fuse or breaker" in item for item in issues_x1_tb), issues_x1_tb
+
+    # Secondary X1 wired straight to a load (bypassing fuse/breaker) must fail.
+    s_x1_load = build_scan_ladder_demo()
+    sh_x1_load = s_x1_load.project.sheet("elementary")
+    sh_x1_load.components = [c for c in sh_x1_load.components if c.id != "FU3"]
+    sh_x1_load.wires = [w for w in sh_x1_load.wires if "FU3" not in str(w.frm) and "FU3" not in str(w.to)]
+    s_x1_load.wire("T1.X1", "CR1.A1", number="109", sheet_id="elementary")
+    issues_x1_load = elementary_layout_issues(s_x1_load, sh_x1_load)
+    assert any("X1" in item and "secondary fuse or breaker" in item for item in issues_x1_load), issues_x1_load
+
+    # Secondary X1 through a 1P circuit breaker (CB3) to L1 is valid OCPD protection.
+    s_x1_cb = build_scan_ladder_demo()
+    sh_x1_cb = s_x1_cb.project.sheet("elementary")
+    sh_x1_cb.components = [c for c in sh_x1_cb.components if c.id != "FU3"]
+    sh_x1_cb.wires = [w for w in sh_x1_cb.wires if "FU3" not in str(w.frm) and "FU3" not in str(w.to)]
+    s_x1_cb.place("nema.breakers.mcb_1p_16a", ref="CB3", x=180, y=50, snap=False, sheet_id="elementary")
+    s_x1_cb.wire("T1.X1", "CB3.1", number="100", sheet_id="elementary")
+    s_x1_cb.wire("CB3.2", "L1", number="102", sheet_id="elementary")
+    from panelcad.importer.electrical_rules import validate_transformer_control_rules
+
+    assert validate_transformer_control_rules(sh_x1_cb) == []
+
+
+def test_transformer_top_tag_keeps_extra_clearance_below_working_rect() -> None:
+    """_place_power reserves +2.5 mm extra top clearance so T1's tag never clips the sheet border."""
+
+    from panelcad.core.ink import TAG_DY, TAG_SIZE, TEXT_ASCENT
+    from panelcad.examples.scan_ladder_demo import build_scan_ladder_demo
+    from panelcad.render.titleblock import working_rect
+
+    session = build_scan_ladder_demo()
+    sheet = session.project.sheet("elementary")
+    layout_elementary(session, sheet)
+    t1 = sheet.component("T1")
+    _wx, wy, _ww, _wh = working_rect(sheet)
+    tag_top = float(t1.y) - float(TAG_DY) - float(TAG_SIZE) * float(TEXT_ASCENT)
+    assert tag_top >= float(wy) + 2.5 - 1e-6, (t1.y, wy, tag_top)

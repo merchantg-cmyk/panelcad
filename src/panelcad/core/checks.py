@@ -85,6 +85,8 @@ CHECK_IDS: tuple[str, ...] = (
     "overload_outside_fla",
     "coil_voltage_mismatch",
     "outside_enclosure",
+    "device_on_wire_duct",
+    "device_off_din_rail",
     "panel_needs_enclosure",
     "panel_enclosure_tight",
     "heat_rise_over_limit",
@@ -101,6 +103,11 @@ CHECK_IDS: tuple[str, ...] = (
     "control_power_inrush",
     "control_power_protection",
     "control_power_method",
+    "transformer_primary_on_control_rail",
+    "transformer_x1_direct_to_l1",
+    "transformer_x1_unprotected",
+    "transformer_x1_on_return_rail",
+    "transformer_x2_on_hot_rail",
     "sccr_below_available",
     "shield_ungrounded",
     "instrument_shield_both_ends",
@@ -436,6 +443,7 @@ def run_checks(
     findings.extend(_coil_voltage_mismatch(project, catalog))
     findings.extend(_unwired_coils(project, catalog))
     findings.extend(_outside_enclosure(project, catalog))
+    findings.extend(_panel_mounting_findings(project, catalog))
     findings.extend(_panel_enclosure_findings(project, catalog))
     findings.extend(_on_title_block(project, catalog))
     findings.extend(_heat_rise_over_limit(project, catalog))
@@ -444,6 +452,7 @@ def run_checks(
     findings.extend(_soft_starter_without_overload(project))
     findings.extend(_xref_findings(project, catalog))
     findings.extend(_control_power_findings(project, catalog, parts))
+    findings.extend(_transformer_control_findings(project, catalog))
     findings.extend(_sccr_findings(project, catalog))
     findings.extend(_cable_shield_findings(project))
     findings.extend(_sizing_findings(project, catalog, parts))
@@ -2216,6 +2225,98 @@ def _outside_enclosure(project: Project, catalog: Catalog) -> list[Finding]:
                         "outside_enclosure",
                         "warning",
                         f"{sheet.id}:{comp.id} does not fit the {place}",
+                        sheet=sheet.id,
+                        ref=comp.id,
+                        x=comp.x,
+                        y=comp.y,
+                    )
+                )
+    return findings
+
+
+def _transformer_control_findings(project: Project, catalog: Catalog) -> list[Finding]:
+    """Error when a control transformer breaks primary/secondary rail wiring rules."""
+
+    from panelcad.core.ladder import is_ladder_sheet, rail_names
+    from panelcad.importer.electrical_rules import validate_transformer_control_rules
+
+    findings: list[Finding] = []
+    for sheet in project.sheets:
+        if sheet.kind in LAYOUT_KINDS or sheet.kind == "terminal":
+            continue
+        hot, ret = rail_names(sheet, project)
+        rail_tokens = {str(hot or "").strip().upper(), str(ret or "").strip().upper()}
+        has_rails = is_ladder_sheet(sheet, project) or any(
+            str(end or "").strip().upper() in rail_tokens
+            for wire in (sheet.wires or [])
+            for end in (wire.frm, wire.to)
+            if "." not in str(end or "")
+        )
+        if not has_rails:
+            continue
+        by_id = {comp.id: comp for comp in sheet.components}
+        for viol in validate_transformer_control_rules(sheet, hot_rail=hot, return_rail=ret):
+            comp = by_id.get(viol.device)
+            findings.append(
+                Finding(
+                    viol.code,
+                    "error",
+                    f"{sheet.id}: {viol.message}",
+                    sheet=sheet.id,
+                    ref=viol.device,
+                    target=viol.wire_id,
+                    x=comp.x if comp is not None else None,
+                    y=comp.y if comp is not None else None,
+                )
+            )
+    return findings
+
+
+def _panel_mounting_findings(project: Project, catalog: Catalog) -> list[Finding]:
+    """Error when a panel device overlaps wire duct or a DIN device sits off its rail."""
+
+    from panelcad.core.layout import (
+        footprint_overlaps_tray,
+        is_rail_module,
+        sits_fully_on_a_rail,
+    )
+    from panelcad.library.panel import is_info_needed_placeholder
+
+    findings: list[Finding] = []
+    for sheet in project.sheets:
+        if sheet.kind != "panel_layout":
+            continue
+        trays = list(sheet.trays or [])
+        rails = list(sheet.rails or [])
+        for comp in sheet.components:
+            device = _device(catalog, comp)
+            if device is None or _skip_device(device):
+                continue
+            if is_info_needed_placeholder(comp, device):
+                continue
+            if not is_incabinet(device, comp) and effective_footprint(device, comp).mount in {"none", "field"}:
+                continue
+            w, h = footprint_size(device, comp)
+            if w <= 0.0 or h <= 0.0:
+                continue
+            if trays and footprint_overlaps_tray(comp.x, comp.y, w, h, trays):
+                findings.append(
+                    Finding(
+                        "device_on_wire_duct",
+                        "error",
+                        f"{sheet.id}:{comp.id} sits on a wire duct",
+                        sheet=sheet.id,
+                        ref=comp.id,
+                        x=comp.x,
+                        y=comp.y,
+                    )
+                )
+            if is_rail_module(device, comp) and not sits_fully_on_a_rail(comp, device, rails):
+                findings.append(
+                    Finding(
+                        "device_off_din_rail",
+                        "error",
+                        f"{sheet.id}:{comp.id} is not seated on a DIN rail",
                         sheet=sheet.id,
                         ref=comp.id,
                         x=comp.x,

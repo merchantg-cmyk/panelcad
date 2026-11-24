@@ -7,12 +7,16 @@ schematic tuning cannot regress panel or terminal-strip reading.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from PIL import Image
 
 from panelcad.importer.preserve_mode import PRESERVE_SCAN_PAGE_KINDS
+from panelcad.ocr.ppocr import OcrRuntimeError
+
+log = logging.getLogger(__name__)
 
 ReaderKind = Literal["schematic", "panel", "terminal"]
 
@@ -23,7 +27,7 @@ class ScanPageRoute:
 
     reader_kind: ReaderKind
     page_kind: str
-    ocr_backend: str | None  # "tesseract" or None (keep default electrical)
+    ocr_backend: str | None  # "tesseract", "electrical", or None (keep default electrical)
     layout_mode: Literal["ladder", "preserve"]
 
 
@@ -99,13 +103,25 @@ def raw_has_terminal_strip(image: Image.Image, width_mm: float, height_mm: float
     return False
 
 
-def peek_layout_page_kind(image: Image.Image, width_mm: float, height_mm: float) -> str:
-    """Title-band page kind via Tesseract. Empty when the band cannot be read."""
+def _layout_ocr_backend() -> str:
+    """OCR engine actually used for panel/terminal scans: Tesseract if present or ONNX unavailable, else electrical."""
 
     from panelcad.importer.tesseract_runtime import find_tesseract
-    from panelcad.ocr.backend import ocr_scope
+    from panelcad.ocr.backend import page_engine_ready
 
-    if not find_tesseract():
+    return "tesseract" if (find_tesseract() or not page_engine_ready()) else "electrical"
+
+
+def peek_layout_page_kind(image: Image.Image, width_mm: float, height_mm: float) -> str:
+    """Title-band page kind via Tesseract, or bundled electrical OCR when Tesseract is absent."""
+
+    from panelcad.importer.tesseract_runtime import TesseractMissing, find_tesseract
+    from panelcad.ocr import ppocr
+    from panelcad.ocr.backend import active_backend, ocr_scope, page_engine_ready
+
+    has_tess = bool(find_tesseract())
+    explicit_tess = active_backend() == "tesseract"
+    if not has_tess and not explicit_tess and not page_engine_ready():
         return ""
     import numpy as np
 
@@ -114,11 +130,22 @@ def peek_layout_page_kind(image: Image.Image, width_mm: float, height_mm: float)
 
     rgb = np.asarray(image.convert("RGB"))
     ppm = rgb.shape[1] / width_mm if width_mm else 1.0
-    with ocr_scope("tesseract"):
+    scope = "tesseract" if (has_tess or explicit_tess) else "electrical"
+    if scope == "electrical":
+        ppocr.clear_last_error()
+    with ocr_scope(scope):
         try:
             tokens = _title_tokens(rgb, ppm, width_mm, height_mm)
-        except Exception:  # noqa: BLE001 — a title miss leaves the electrical reader
+        except TesseractMissing:
+            if explicit_tess:
+                raise
+            log.warning("peek_layout_page_kind: Tesseract missing during title peek")
             return ""
+        except Exception as exc:  # noqa: BLE001 — a title miss leaves the electrical reader
+            log.warning("peek_layout_page_kind failed: %s: %s", type(exc).__name__, exc)
+            return ""
+    if scope == "electrical" and ppocr.last_error():
+        log.warning("peek_layout_page_kind electrical ONNX error: %s", ppocr.last_error())
     title = read_title_block(tokens, height_mm)
     return str(page_kind_from_title(title, str(title.get("text") or "")) or "")
 
@@ -137,18 +164,19 @@ def route_scan_page(image: Image.Image, width_mm: float, height_mm: float) -> Sc
         )
     kind = peek_layout_page_kind(image, width_mm, height_mm)
     low = str(kind or "").strip().lower()
+    layout_backend = _layout_ocr_backend()
     if low == "terminal_plan":
         return ScanPageRoute(
             reader_kind="terminal",
             page_kind=low,
-            ocr_backend="tesseract",
+            ocr_backend=layout_backend,
             layout_mode="preserve",
         )
     if low in PRESERVE_SCAN_PAGE_KINDS:
         return ScanPageRoute(
             reader_kind="panel",
             page_kind=low,
-            ocr_backend="tesseract",
+            ocr_backend=layout_backend,
             layout_mode="preserve",
         )
     if low.startswith("schematic"):
@@ -162,7 +190,7 @@ def route_scan_page(image: Image.Image, width_mm: float, height_mm: float) -> Sc
         return ScanPageRoute(
             reader_kind="terminal",
             page_kind="terminal_plan",
-            ocr_backend="tesseract",
+            ocr_backend=layout_backend,
             layout_mode="preserve",
         )
     return ScanPageRoute(
@@ -171,6 +199,52 @@ def route_scan_page(image: Image.Image, width_mm: float, height_mm: float) -> Sc
         ocr_backend=None,
         layout_mode="ladder",
     )
+
+
+def _read_pixels_checked(
+    image: Image.Image,
+    *,
+    width_mm: float,
+    height_mm: float,
+    catalog: Any,
+    standard: str,
+    allow_missing_ocr: bool,
+    strip_image: Image.Image | None,
+    scope: str | None,
+    reader_kind: ReaderKind,
+) -> dict[str, Any]:
+    """Run ``read_pixels`` under ``scope`` and surface any electrical ONNX runtime failure."""
+
+    from panelcad.importer.raster import read_pixels
+    from panelcad.ocr import ppocr
+    from panelcad.ocr.backend import active_backend, ocr_scope
+
+    with ocr_scope(scope):
+        effective = active_backend()
+        if effective == "electrical":
+            ppocr.clear_last_error()
+        facts = read_pixels(
+            image,
+            width_mm,
+            height_mm,
+            catalog,
+            standard=standard,
+            allow_missing_ocr=allow_missing_ocr,
+            strip_image=strip_image,
+        )
+        if effective == "electrical":
+            onnx_err = str(facts.get("ocr_error") or ppocr.last_error() or "").strip()
+            if onnx_err:
+                log.warning(
+                    "electrical ONNX OCR failed during %s scan read: %s",
+                    reader_kind,
+                    onnx_err,
+                )
+                if not allow_missing_ocr:
+                    raise OcrRuntimeError(f"Electrical ONNX OCR failed: {onnx_err}")
+                facts["ocr_error"] = onnx_err
+                facts["ocr_skipped"] = True
+        return facts
 
 
 def read_schematic_scan(
@@ -182,19 +256,20 @@ def read_schematic_scan(
     standard: str = "",
     allow_missing_ocr: bool = False,
     strip_image: Image.Image | None = None,
+    ocr_backend: str | None = None,
 ) -> dict[str, Any]:
     """Read a schematic scan on the default electrical OCR backend."""
 
-    from panelcad.importer.raster import read_pixels
-
-    return read_pixels(
+    return _read_pixels_checked(
         image,
-        width_mm,
-        height_mm,
-        catalog,
+        width_mm=width_mm,
+        height_mm=height_mm,
+        catalog=catalog,
         standard=standard,
         allow_missing_ocr=allow_missing_ocr,
         strip_image=strip_image,
+        scope=ocr_backend,
+        reader_kind="schematic",
     )
 
 
@@ -207,22 +282,22 @@ def read_panel_scan(
     standard: str = "",
     allow_missing_ocr: bool = False,
     strip_image: Image.Image | None = None,
+    strict_tesseract: bool = False,
 ) -> dict[str, Any]:
-    """Read a panel/door layout scan pinned to Tesseract."""
+    """Read a panel/door layout scan pinned to Tesseract when installed (or strict), else bundled electrical OCR."""
 
-    from panelcad.importer.raster import read_pixels
-    from panelcad.ocr.backend import ocr_scope
-
-    with ocr_scope("tesseract"):
-        return read_pixels(
-            image,
-            width_mm,
-            height_mm,
-            catalog,
-            standard=standard,
-            allow_missing_ocr=allow_missing_ocr,
-            strip_image=strip_image,
-        )
+    scope = "tesseract" if strict_tesseract else _layout_ocr_backend()
+    return _read_pixels_checked(
+        image,
+        width_mm=width_mm,
+        height_mm=height_mm,
+        catalog=catalog,
+        standard=standard,
+        allow_missing_ocr=allow_missing_ocr,
+        strip_image=strip_image,
+        scope=scope,
+        reader_kind="panel",
+    )
 
 
 def read_terminal_scan(
@@ -234,22 +309,22 @@ def read_terminal_scan(
     standard: str = "",
     allow_missing_ocr: bool = False,
     strip_image: Image.Image | None = None,
+    strict_tesseract: bool = False,
 ) -> dict[str, Any]:
-    """Read a terminal-strip scan pinned to Tesseract."""
+    """Read a terminal-strip scan pinned to Tesseract when installed (or strict), else bundled electrical OCR."""
 
-    from panelcad.importer.raster import read_pixels
-    from panelcad.ocr.backend import ocr_scope
-
-    with ocr_scope("tesseract"):
-        return read_pixels(
-            image,
-            width_mm,
-            height_mm,
-            catalog,
-            standard=standard,
-            allow_missing_ocr=allow_missing_ocr,
-            strip_image=strip_image,
-        )
+    scope = "tesseract" if strict_tesseract else _layout_ocr_backend()
+    return _read_pixels_checked(
+        image,
+        width_mm=width_mm,
+        height_mm=height_mm,
+        catalog=catalog,
+        standard=standard,
+        allow_missing_ocr=allow_missing_ocr,
+        strip_image=strip_image,
+        scope=scope,
+        reader_kind="terminal",
+    )
 
 
 def dispatch_scan_read(
@@ -266,14 +341,25 @@ def dispatch_scan_read(
 ) -> ScanReadResult:
     """Route and execute the right reader (schematic / panel / terminal) for one scan."""
 
+    strict_tess = False
+    explicit_electrical = False
     if ocr_backend is None:
         route = route_scan_page(peek_image or image, width_mm, height_mm)
     elif ocr_backend == "tesseract":
+        strict_tess = True
         route = ScanPageRoute(
             reader_kind="panel",
             page_kind="",
             ocr_backend="tesseract",
             layout_mode="preserve",
+        )
+    elif ocr_backend == "electrical":
+        explicit_electrical = True
+        route = ScanPageRoute(
+            reader_kind="schematic",
+            page_kind="",
+            ocr_backend="electrical",
+            layout_mode="ladder",
         )
     else:
         route = ScanPageRoute(
@@ -292,6 +378,7 @@ def dispatch_scan_read(
             standard=standard,
             allow_missing_ocr=allow_missing_ocr,
             strip_image=strip_image,
+            strict_tesseract=strict_tess,
         )
     elif route.reader_kind == "panel":
         facts = read_panel_scan(
@@ -302,6 +389,7 @@ def dispatch_scan_read(
             standard=standard,
             allow_missing_ocr=allow_missing_ocr,
             strip_image=strip_image,
+            strict_tesseract=strict_tess,
         )
     else:
         facts = read_schematic_scan(
@@ -312,5 +400,6 @@ def dispatch_scan_read(
             standard=standard,
             allow_missing_ocr=allow_missing_ocr,
             strip_image=strip_image,
+            ocr_backend="electrical" if explicit_electrical else None,
         )
     return ScanReadResult(route=route, facts=facts)

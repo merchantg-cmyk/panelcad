@@ -107,16 +107,18 @@ def test_raster_ocr_backend_pins_terminal_not_schematic():
     from PIL import Image
 
     from panelcad.importer.imageutil import auto_rotate
-    from panelcad.ocr.backend import active_backend
+    from panelcad.importer.tesseract_runtime import find_tesseract
+    from panelcad.ocr.backend import active_backend, page_engine_ready
 
     assert active_backend() == "electrical"
+    expected_layout_backend = "tesseract" if (find_tesseract() or not page_engine_ready()) else "electrical"
     term, _ = auto_rotate(Image.open(_fixture("terminal", "dpi_200")).convert("RGB"))
     dpi = Image.open(_fixture("terminal", "dpi_200")).info.get("dpi", (200, 200))
     dx = float(dpi[0] if isinstance(dpi, tuple) else dpi)
     w = term.size[0] * 25.4 / dx
     h = term.size[1] * 25.4 / dx
     assert _raw_has_terminal_strip(term, w, h)
-    assert _choose_raster_ocr_backend(term, w, h) == "tesseract"
+    assert _choose_raster_ocr_backend(term, w, h) == expected_layout_backend
 
     schem, _ = auto_rotate(Image.open(_fixture("schematic", "clean_300")).convert("RGB"))
     sdpi = Image.open(_fixture("schematic", "clean_300")).info.get("dpi", (300, 300))
