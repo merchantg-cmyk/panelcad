@@ -4889,16 +4889,36 @@ class MainWindow(MainWindowLifecycleMixin, QMainWindow):
         if not due:
             return
 
-        def work() -> None:
-            try:
-                report = check_for_update()
-            except Exception as exc:  # noqa: BLE001 — startup check must not take down the window
-                report = {"enabled": True, "error": str(exc)}
-            self._startup_update_bridge.finished.emit(report)
-
         import threading
 
-        threading.Thread(target=work, daemon=True).start()
+        done = threading.Event()
+        outcome: dict[str, object] = {}
+
+        def work() -> None:
+            try:
+                outcome["report"] = check_for_update()
+            except Exception as exc:  # noqa: BLE001 — startup check must not take down the window
+                outcome["report"] = {"enabled": True, "error": str(exc)}
+            finally:
+                done.set()
+
+        # Keep Qt object access on the GUI thread; a closed window must not be
+        # signalled from a daemon thread while its child QObjects are freed.
+        threading.Thread(target=work, name="panelcad-startup-update", daemon=True).start()
+        timer = QTimer(self)
+        timer.setInterval(50)
+
+        def _poll() -> None:
+            if not done.is_set():
+                return
+            timer.stop()
+            timer.deleteLater()
+            if not _qt_alive(self) or self._closing:
+                return
+            self._on_startup_update_report(outcome.get("report"))
+
+        timer.timeout.connect(_poll)
+        timer.start()
 
     def _on_startup_update_report(self, report: object) -> None:
         if isinstance(report, dict):

@@ -743,7 +743,12 @@ def _load_voltage(props: dict[str, Any]) -> float | None:
     return _num(_first(props, "voltage", "volts", "Un", "Vin", "primary"))
 
 
-def build_nameplate(project: Project, catalog: Catalog | None = None) -> Nameplate:
+def build_nameplate(
+    project: Project,
+    catalog: Catalog | None = None,
+    *,
+    include_marks: bool = True,
+) -> Nameplate:
     """Read the drawing and the nameplate overrides. Does not write the project."""
 
     from panelcad.core.motor_sizing import is_iec_standard, motor_flc
@@ -1120,19 +1125,20 @@ def build_nameplate(project: Project, catalog: Catalog | None = None) -> Namepla
         available_fault_ka=available_fault,
         calculated_sccr_ka=sccr_ka,
     )
-    hole_d = _num(store.get("hole_diameter_in"))
-    hole_inset = _num(store.get("hole_inset_in"))
-    plate.marks = layout_holes(
-        layout_marks(plate, _content_margin(width_mm, height_mm, hole_d, hole_inset)),
-        width_mm,
-        height_mm,
-        hole_d,
-        hole_inset,
-    )
-    if caution:
-        plate.caution_marks, plate.caution_size_mm = layout_caution(
-            locations, text=caution_text, confirmed=caution_confirmed
+    if include_marks:
+        hole_d = _num(store.get("hole_diameter_in"))
+        hole_inset = _num(store.get("hole_inset_in"))
+        plate.marks = layout_holes(
+            layout_marks(plate, _content_margin(width_mm, height_mm, hole_d, hole_inset)),
+            width_mm,
+            height_mm,
+            hole_d,
+            hole_inset,
         )
+        if caution:
+            plate.caution_marks, plate.caution_size_mm = layout_caution(
+                locations, text=caution_text, confirmed=caution_confirmed
+            )
     plate.issues = collect_issues(
         plate,
         ocpd_amp,
@@ -2386,7 +2392,7 @@ def title_block_lines(project: Project, catalog: Catalog | None) -> list[str]:
 
     if catalog is None:
         return []
-    plate = build_nameplate(project, catalog)
+    plate = build_nameplate(project, catalog, include_marks=False)
     voltage = _first_value(plate, "voltage")
     phases = _first_value(plate, "phases")
     frequency = _first_value(plate, "frequency")
@@ -2562,7 +2568,7 @@ def nameplate_findings(project: Project, catalog: Catalog | None = None) -> list
                 target="nameplate",
             )
         ]
-    plate = build_nameplate(project, catalog)
+    plate = build_nameplate(project, catalog, include_marks=False)
     findings = []
     for issue in plate.issues:
         findings.append(

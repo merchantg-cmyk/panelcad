@@ -219,6 +219,8 @@ class SchematicView(QGraphicsView):
 
     def _add(self, item: QGraphicsItem) -> QGraphicsItem:
         """Add *item* to the scene and hold a Python reference so PySide cannot GC it."""
+        if isinstance(item, WireItem):
+            item.set_hit_width_scene(wire_hit_width_scene(self))
         self._items.append(item)
         self.scene.addItem(item)
         return item
@@ -387,6 +389,8 @@ class SchematicView(QGraphicsView):
         finally:
             slot.scene.blockSignals(False)
         self._clear_wire_handles()
+        self._wire_hit_scale = -1.0
+        self._refresh_wire_hit_geometry()
         # The parked picture can still sit where a drag left it. The model wins.
         self._resync_items_from_model()
 
@@ -755,16 +759,32 @@ class SchematicView(QGraphicsView):
 
     def _redraw_wire_items(self) -> None:
         self._clear_wire_hover()
+        self._clear_route_rail_preview()
+        self._clear_wire_handles()
         self._wire_hit_scale = -1.0
-        self._wire_handles.clear()
+        to_remove: list[QGraphicsItem] = []
         kept: list[QGraphicsItem] = []
         for item in self._items:
             if isinstance(item, (WireItem, WireHandleItem, PhaseLeadItem, PhaseCalloutItem, RailJunctionItem)):
-                if item.scene() is self.scene:
-                    self.scene.removeItem(item)
+                to_remove.append(item)
             else:
                 kept.append(item)
+        # Rebind self._items and any cached scene slot BEFORE removeItem(),
+        # because removing a selected WireItem synchronously emits
+        # selectionChanged -> _sync_wire_handles().
         self._items = kept
+        for slot in self._sheet_scenes.values():
+            if slot.scene is self.scene:
+                slot.items = self._items
+                slot.stamp = ""
+        for item in to_remove:
+            try:
+                if item.scene() is self.scene:
+                    self.scene.removeItem(item)
+            except RuntimeError:
+                continue
+        to_remove.clear()
+        self._clear_wire_handles()
         sheet = self.session.sheet()
         created: list[WireItem] = []
         from panelcad.core.ladder import sheet_drawing_style
@@ -901,6 +921,7 @@ class SchematicView(QGraphicsView):
         for jx, jy in rail_landing_points(sheet, routes, self.session.project):
             self._add(RailJunctionItem(jx, jy))
         self._redraw_xref(ladder=elementary)
+        self._wire_hit_scale = _pixels_per_scene(self)
         self._sync_wire_handles(routes=routes)
         # In-place wire redraw changed the scene's picture and rebound self._items;
         # clear the cached stamp so an Undo back to the prior state does not reuse stale wires.
@@ -1480,10 +1501,18 @@ class SchematicView(QGraphicsView):
         if abs(scale - self._wire_hit_scale) < 1e-9:
             return
         self._wire_hit_scale = scale
-        for item in self._items:
-            if isinstance(item, (WireItem, WireHandleItem)):
-                item.prepareGeometryChange()
-                item.update()
+        width = wire_hit_width_scene(self)
+        for item in list(self._items):
+            if isinstance(item, WireItem):
+                try:
+                    item.set_hit_width_scene(width)
+                except RuntimeError:
+                    continue
+            elif isinstance(item, WireHandleItem):
+                try:
+                    item.update()
+                except RuntimeError:
+                    continue
 
     def wire_at_scene(self, scene_pos: QPointF) -> WireItem | None:
         """Closest wire whose screen hit contains ``scene_pos``, or None."""
@@ -1664,10 +1693,14 @@ class SchematicView(QGraphicsView):
     def _select_wire_item(self, wire_id: str) -> None:
         if self.scene is None or not wire_id:
             return
-        for item in self._items:
-            if isinstance(item, WireItem) and item.wire_id == wire_id and item.scene() is self.scene:
-                item.setSelected(True)
-                return
+        for item in list(self._items):
+            if isinstance(item, WireItem) and item.wire_id == wire_id:
+                try:
+                    if item.scene() is self.scene:
+                        item.setSelected(True)
+                        return
+                except RuntimeError:
+                    continue
 
     @staticmethod
     def _pts_equal(a: list[Point], b: list[Point], tol: float = 1e-4) -> bool:
