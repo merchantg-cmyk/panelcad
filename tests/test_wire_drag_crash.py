@@ -162,9 +162,10 @@ def test_wire_corner_drag_after_fit_page_and_zoom_in_does_not_crash() -> None:
 
     view = SchematicView(session)
     try:
-        # 1100x550 mirrors a 1080p shop viewport where fit_page scale (~1.74 px/mm)
-        # gives wire/handle hit pads larger than the 3.0 mm floor.
-        view.resize(1100, 550)
+        # 640x360 mirrors a docked 1080p shop canvas; indexing the scene while
+        # zoomed out and then zooming in before a corner drag shrinks WireItem
+        # hit pads across BSP tree partitions if prepareGeometryChange() is missing.
+        view.resize(640, 360)
         view.show()
         view.fit_page()
         app.processEvents()
@@ -172,16 +173,20 @@ def test_wire_corner_drag_after_fit_page_and_zoom_in_does_not_crash() -> None:
         dragged_any = 0
         for w in list(session.sheet().wires):
             view.fit_page()
+            for _ in range(3):
+                view.zoom_by(0.8)
             app.processEvents()
+            # Populate the scene BSP tree while WireItem hit pads are large.
+            _ = view.scene.items(QRectF(0, 0, 420, 297))
             view.select_ref(w.id)
             app.processEvents()
             corners = [h for h in _handles(view, w.id) if h.kind == "corner"]
             if not corners:
                 continue
-            # Wheel-zoom in 6 ticks: before the fix this shrank WireItem/WireHandleItem
+            # Wheel-zoom in 8 ticks: before the fix this shrank WireItem/WireHandleItem
             # boundingRect() before prepareGeometryChange() and corrupted the BSP tree.
-            for _ in range(6):
-                view.zoom_by(1.15)
+            for _ in range(8):
+                view.zoom_by(1.25)
             c = corners[0]
             view.centerOn(c.pos())
             app.processEvents()
@@ -194,6 +199,7 @@ def test_wire_corner_drag_after_fit_page_and_zoom_in_does_not_crash() -> None:
             QTest.mousePress(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p0)
             QTest.mouseMove(view.viewport(), p1)
             QTest.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p1)
+            gc.collect()
             app.processEvents()
             # Full-scene BSP query must never hit freed items.
             _ = view.scene.items(QRectF(0, 0, 420, 297))
@@ -202,7 +208,7 @@ def test_wire_corner_drag_after_fit_page_and_zoom_in_does_not_crash() -> None:
             if _dump(session) != before:
                 assert session.undo()
                 assert _dump(session) == before
-                view.reload()
+                view._redraw_wires()
                 app.processEvents()
             dragged_any += 1
         assert dragged_any >= 3
