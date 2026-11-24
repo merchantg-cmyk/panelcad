@@ -20,10 +20,11 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QPoint, QPointF, QRectF, Qt
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import QMouseEvent, QPainterPath
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QGraphicsScene
@@ -635,6 +636,62 @@ def test_multi_wire_selection_redraw_creates_no_transient_handles(monkeypatch) -
     finally:
         view.release_scenes()
         view.close()
+
+
+def test_startup_update_poll_stops_on_close_without_waiting_and_no_dead_bridge() -> None:
+    """Dead _StartupUpdateBridge is removed and _poll stops its timer immediately on close."""
+    import panelcad.gui.main_window as mw_mod
+
+    assert not hasattr(mw_mod, "_StartupUpdateBridge")
+
+    app = _app()
+    session = Session.create("StartupUpdatePoll")
+    win = MainWindow(session)
+    release = threading.Event()
+    started = threading.Event()
+    delivered: list[object] = []
+
+    def blocked_check() -> dict:
+        started.set()
+        release.wait(timeout=5.0)
+        return {"enabled": True, "update_available": False}
+
+    try:
+        assert not hasattr(win, "_startup_update_bridge")
+        win._on_startup_update_report = lambda report: delivered.append(report)  # type: ignore[method-assign]
+
+        before_timers = set(win.findChildren(QTimer))
+        win._run_startup_updates(
+            consume_notice=lambda: None,
+            startup_check_due=lambda: True,
+            check_for_update=blocked_check,
+            update_error=RuntimeError,
+        )
+        assert started.wait(timeout=2.0)
+        new_timers = [t for t in win.findChildren(QTimer) if t not in before_timers]
+        assert len(new_timers) == 1
+        poll_timer = new_timers[0]
+        assert poll_timer.isActive()
+
+        # Mark window closing while worker I/O is still blocked: _poll must stop the timer
+        # on the very next tick instead of waiting for done.is_set().
+        win._closing = True
+        deadline = time.monotonic() + 1.0
+        while poll_timer.isActive() and time.monotonic() < deadline:
+            app.processEvents()
+            time.sleep(0.01)
+        assert not poll_timer.isActive()
+
+        # Unblock worker and verify no report is delivered after close.
+        release.set()
+        for _ in range(10):
+            app.processEvents()
+            time.sleep(0.01)
+        assert delivered == []
+    finally:
+        release.set()
+        win.close()
+        app.processEvents()
 
 
 def test_deleted_graphics_items_are_pruned_and_real_runtime_errors_propagate(monkeypatch) -> None:
