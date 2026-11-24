@@ -18,13 +18,15 @@ non-GUI thread.
 
 from __future__ import annotations
 
+import logging
 import threading
 from pathlib import Path
 
+import pytest
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtGui import QMouseEvent, QPainterPath
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QGraphicsScene
 
 from panelcad.api.session import Session
 from panelcad.core.checks import run_checks
@@ -581,3 +583,121 @@ def test_two_windows_concurrent_wire_drags_and_live_checks() -> None:
         w2.close()
         w1.close()
         app.processEvents()
+
+
+def test_multi_wire_selection_redraw_creates_no_transient_handles(monkeypatch) -> None:
+    """Redrawing a multi-wire selection must not allocate transient WireHandleItems mid-loop."""
+    app = _app()
+    session = Session.create("MultiWireRedraw")
+    session.set_title_block(drawing_style="ladder", rails="L1/L2")
+    session.place("nema.operators.pb_no", ref="PB1", x=60, y=60)
+    session.place("nema.operators.pb_no", ref="PB2", x=60, y=110)
+    session.place("nema.contactors.coil", ref="M1", x=180, y=60)
+    session.place("nema.contactors.coil", ref="M2", x=180, y=110)
+    w1 = session.wire("PB1.4", "M1.A1", number="101")
+    w2 = session.wire("PB2.4", "M2.A1", number="102")
+    session.set_wire_route(w1.id, [Point(x=110, y=84), Point(x=110, y=96), Point(x=155, y=96)])
+    session.set_wire_route(w2.id, [Point(x=110, y=134), Point(x=110, y=146), Point(x=155, y=146)])
+
+    view = SchematicView(session)
+    try:
+        view.resize(1100, 550)
+        view.show()
+        view.fit_page()
+        app.processEvents()
+
+        wi1 = _wire_item(view, w1.id)
+        wi2 = _wire_item(view, w2.id)
+        wi1.setSelected(True)
+        wi2.setSelected(True)
+        app.processEvents()
+        assert len(view.scene.selectedItems()) == 2
+        assert _handles(view) == []
+
+        created_handles: list[str] = []
+        orig_init = WireHandleItem.__init__
+
+        def spy_init(self, wire_id: str, *args, **kwargs) -> None:
+            created_handles.append(wire_id)
+            orig_init(self, wire_id, *args, **kwargs)
+
+        monkeypatch.setattr(WireHandleItem, "__init__", spy_init)
+        view._redraw_wires()
+        app.processEvents()
+        assert created_handles == []
+        assert _handles(view) == []
+
+        # Single-wire selection after redraw still creates handles normally.
+        view.select_ref(w1.id)
+        app.processEvents()
+        assert len(created_handles) >= 3
+        assert len(_handles(view, w1.id)) == len(created_handles)
+    finally:
+        view.release_scenes()
+        view.close()
+
+
+def test_deleted_graphics_items_are_pruned_and_real_runtime_errors_propagate(monkeypatch) -> None:
+    """Deleted C++ wrappers are detected via shiboken6.isValid, logged, and pruned without masking real errors."""
+    app = _app()
+    session = Session.create("DeletedItemCheck")
+    session.set_title_block(drawing_style="ladder", rails="L1/L2")
+    session.place("nema.operators.pb_no", ref="PB1", x=60, y=70)
+    session.place("nema.contactors.coil", ref="M1", x=180, y=70)
+    w = session.wire("PB1.4", "M1.A1", number="101")
+
+    messages: list[str] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            messages.append(record.getMessage())
+
+    canvas_log = logging.getLogger("panelcad.gui.canvas")
+    handler = _Capture(logging.DEBUG)
+    prev_level = canvas_log.level
+    canvas_log.addHandler(handler)
+    canvas_log.setLevel(logging.DEBUG)
+
+    view = SchematicView(session)
+    try:
+        view.resize(1100, 550)
+        view.show()
+        view.fit_page()
+        app.processEvents()
+
+        # Construct a real WireItem whose underlying C++ object is then deleted by clearing a temp scene.
+        temp_scene = QGraphicsScene()
+        dead_wire = WireItem(QPainterPath(), wire_id=w.id)
+        temp_scene.addItem(dead_wire)
+        temp_scene.clear()
+
+        messages.clear()
+        view._items.insert(0, dead_wire)
+        view._wire_hit_scale = -1.0
+        view._refresh_wire_hit_geometry()
+        assert dead_wire not in view._items
+        assert any("Pruning deleted WireItem in _refresh_wire_hit_geometry" in msg for msg in messages)
+
+        # Also verify _select_wire_item skips/prunes a deleted WireItem and selects the live one.
+        messages.clear()
+        view._items.insert(0, dead_wire)
+        view._select_wire_item(w.id)
+        assert dead_wire not in view._items
+        assert _wire_item(view, w.id).isSelected()
+        assert any("Pruning deleted WireItem in _select_wire_item" in msg for msg in messages)
+
+        # A real RuntimeError raised by a live WireItem must NOT be silently swallowed.
+        live_wire = _wire_item(view, w.id)
+
+        def boom(_width: float) -> None:
+            raise RuntimeError("real bug")
+
+        monkeypatch.setattr(live_wire, "set_hit_width_scene", boom)
+        view._wire_hit_scale = -1.0
+        with pytest.raises(RuntimeError, match="real bug"):
+            view._refresh_wire_hit_geometry()
+    finally:
+        canvas_log.removeHandler(handler)
+        canvas_log.setLevel(prev_level)
+        view.release_scenes()
+        view.close()

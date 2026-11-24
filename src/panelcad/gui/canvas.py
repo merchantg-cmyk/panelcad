@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
 import math
 from collections import OrderedDict
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, Qt, QTimer, Signal
+from shiboken6 import isValid as _qt_is_valid
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -104,6 +106,13 @@ from panelcad.render.titleblock import (
     title_block_rect,
     working_rect,
 )
+
+_log = logging.getLogger(__name__)
+
+
+def _qt_item_alive(item: object | None) -> bool:
+    """True when *item* is non-None and its underlying C++ Qt object still exists."""
+    return item is not None and bool(_qt_is_valid(item))
 
 
 class SchematicView(QGraphicsView):
@@ -777,14 +786,22 @@ class SchematicView(QGraphicsView):
             if slot.scene is self.scene:
                 slot.items = self._items
                 slot.stamp = ""
-        for item in to_remove:
-            try:
+        # Suppress handle re-creation while removing old wires one by one:
+        # when >=2 WireItems are selected, removing the first leaves another
+        # stale WireItem selected and would transiently build handles mid-loop.
+        prev_syncing = self._syncing_wire_handles
+        self._syncing_wire_handles = True
+        try:
+            for item in to_remove:
+                if not _qt_item_alive(item):
+                    _log.debug("Skipping deleted %s in _redraw_wire_items", type(item).__name__)
+                    continue
                 if item.scene() is self.scene:
                     self.scene.removeItem(item)
-            except RuntimeError:
-                continue
-        to_remove.clear()
-        self._clear_wire_handles()
+            to_remove.clear()
+            self._clear_wire_handles()
+        finally:
+            self._syncing_wire_handles = prev_syncing
         sheet = self.session.sheet()
         created: list[WireItem] = []
         from panelcad.core.ladder import sheet_drawing_style
@@ -1502,17 +1519,20 @@ class SchematicView(QGraphicsView):
             return
         self._wire_hit_scale = scale
         width = wire_hit_width_scene(self)
+        stale: list[QGraphicsItem] = []
         for item in list(self._items):
-            if isinstance(item, WireItem):
-                try:
+            if isinstance(item, (WireItem, WireHandleItem)):
+                if not _qt_item_alive(item):
+                    _log.debug("Pruning deleted %s in _refresh_wire_hit_geometry", type(item).__name__)
+                    stale.append(item)
+                    continue
+                if isinstance(item, WireItem):
                     item.set_hit_width_scene(width)
-                except RuntimeError:
-                    continue
-            elif isinstance(item, WireHandleItem):
-                try:
+                else:
                     item.update()
-                except RuntimeError:
-                    continue
+        if stale:
+            stale_ids = {id(item) for item in stale}
+            self._items[:] = [item for item in self._items if id(item) not in stale_ids]
 
     def wire_at_scene(self, scene_pos: QPointF) -> WireItem | None:
         """Closest wire whose screen hit contains ``scene_pos``, or None."""
@@ -1559,13 +1579,12 @@ class SchematicView(QGraphicsView):
     def _clear_wire_hover(self) -> None:
         item = self._hover_wire
         self._hover_wire = None
-        if item is None:
+        if not _qt_item_alive(item):
+            if item is not None:
+                _log.debug("Skipping deleted %s in _clear_wire_hover", type(item).__name__)
             return
-        try:
-            if item.scene() is not None:
-                item.set_hovered(False)
-        except RuntimeError:
-            return
+        if item.scene() is not None:
+            item.set_hovered(False)
 
     def _set_wire_hover(self, item: WireItem | None) -> None:
         if item is self._hover_wire:
@@ -1584,12 +1603,12 @@ class SchematicView(QGraphicsView):
         best: WireHandleItem | None = None
         best_d = limit
         for item in self._wire_handles:
-            try:
-                if item.scene() is not self.scene or not item.isVisible():
-                    continue
-                hx, hy = float(item.pos().x()), float(item.pos().y())
-            except RuntimeError:
+            if not _qt_item_alive(item):
+                _log.debug("Skipping deleted %s in _wire_handle_at", type(item).__name__)
                 continue
+            if item.scene() is not self.scene or not item.isVisible():
+                continue
+            hx, hy = float(item.pos().x()), float(item.pos().y())
             d = math.hypot(px - hx, py - hy)
             if d > limit + 1e-6:
                 continue
@@ -1605,20 +1624,19 @@ class SchematicView(QGraphicsView):
             if getattr(handle, "_hovered", False):
                 pin_ref = getattr(handle, "_unlocked_pin", None)
                 pin = pin_ref() if pin_ref is not None else None
-                if pin is not None:
-                    try:
-                        if pin.scene() is not None:
-                            pin._hot = False
-                            pin.update()
-                    except RuntimeError:
-                        pass
+                if _qt_item_alive(pin):
+                    if pin.scene() is not None:
+                        pin._hot = False
+                        pin.update()
+                elif pin is not None:
+                    _log.debug("Skipping deleted %s in _clear_wire_handles", type(pin).__name__)
             if handle in self._items:
                 self._items.remove(handle)
-            try:
-                if handle.scene() is self.scene and self.scene is not None:
-                    self.scene.removeItem(handle)
-            except RuntimeError:
+            if not _qt_item_alive(handle):
+                _log.debug("Skipping deleted %s in _clear_wire_handles", type(handle).__name__)
                 continue
+            if self.scene is not None and _qt_item_alive(self.scene) and handle.scene() is self.scene:
+                self.scene.removeItem(handle)
 
     def _sync_wire_handles(self, *, routes: dict[str, list[Point]] | None = None) -> None:
         if self._syncing_wire_handles or self.scene is None:
@@ -1693,14 +1711,19 @@ class SchematicView(QGraphicsView):
     def _select_wire_item(self, wire_id: str) -> None:
         if self.scene is None or not wire_id:
             return
+        stale: list[QGraphicsItem] = []
         for item in list(self._items):
-            if isinstance(item, WireItem) and item.wire_id == wire_id:
-                try:
-                    if item.scene() is self.scene:
-                        item.setSelected(True)
-                        return
-                except RuntimeError:
+            if isinstance(item, WireItem):
+                if not _qt_item_alive(item):
+                    _log.debug("Pruning deleted %s in _select_wire_item(%s)", type(item).__name__, wire_id)
+                    stale.append(item)
                     continue
+                if item.wire_id == wire_id and item.scene() is self.scene:
+                    item.setSelected(True)
+                    break
+        if stale:
+            stale_ids = {id(item) for item in stale}
+            self._items[:] = [item for item in self._items if id(item) not in stale_ids]
 
     @staticmethod
     def _pts_equal(a: list[Point], b: list[Point], tol: float = 1e-4) -> bool:
@@ -1749,19 +1772,19 @@ class SchematicView(QGraphicsView):
         if dot is not None:
             if dot in self._items:
                 self._items.remove(dot)
-            try:
-                if dot.scene() is not None and self.scene is not None:
+            if _qt_item_alive(dot):
+                if dot.scene() is not None and self.scene is not None and _qt_item_alive(self.scene):
                     self.scene.removeItem(dot)
-            except RuntimeError:
-                pass
+            else:
+                _log.debug("Skipping deleted %s in _clear_route_rail_preview", type(dot).__name__)
         hidden = self._route_rail_hidden
         self._route_rail_hidden = None
         if hidden is not None:
-            try:
+            if _qt_item_alive(hidden):
                 if hidden.scene() is self.scene:
                     hidden.setVisible(True)
-            except RuntimeError:
-                pass
+            else:
+                _log.debug("Skipping deleted %s in _clear_route_rail_preview", type(hidden).__name__)
 
     def _update_route_rail_preview(self, wire_id: str, orig_pt: Point, cur_pt: Point) -> None:
         if abs(cur_pt.x - orig_pt.x) <= 1e-4 and abs(cur_pt.y - orig_pt.y) <= 1e-4:
@@ -1799,12 +1822,12 @@ class SchematicView(QGraphicsView):
                 for item in self._items:
                     if not isinstance(item, RailJunctionItem) or item is self._route_rail_dot:
                         continue
-                    try:
-                        if item.scene() is not self.scene:
-                            continue
-                        center = item.rect().center()
-                    except RuntimeError:
+                    if not _qt_item_alive(item):
+                        _log.debug("Skipping deleted %s in _update_route_rail_preview", type(item).__name__)
                         continue
+                    if item.scene() is not self.scene:
+                        continue
+                    center = item.rect().center()
                     if abs(center.x() - orig_pt.x) <= 0.5 and abs(center.y() - orig_pt.y) <= 0.5:
                         self._route_rail_hidden = item
                         item.setVisible(False)
@@ -1960,11 +1983,11 @@ class SchematicView(QGraphicsView):
             return False
         if not moved or not pts or len(pts) < 2:
             if orig_pts and len(orig_pts) >= 2:
-                try:
+                if _qt_item_alive(item):
                     if item.scene() is self.scene:
                         self._set_wire_item_path(item, orig_pts)
-                except RuntimeError:
-                    pass
+                else:
+                    _log.debug("Skipping deleted %s in _finalize_wire_route_drag", type(item).__name__)
             self._sync_wire_handles()
             self.status.emit(self._status_text())
             return False
@@ -2131,12 +2154,12 @@ class SchematicView(QGraphicsView):
         if isinstance(drag, dict):
             hot_pin = drag.get("hot_pin")
             if hot_pin is not None:
-                try:
+                if _qt_item_alive(hot_pin):
                     if hot_pin.scene() is not None:
                         hot_pin._hot = False
                         hot_pin.update()
-                except RuntimeError:
-                    pass
+                else:
+                    _log.debug("Skipping deleted %s in _clear_wire_end_visuals", type(hot_pin).__name__)
                 drag["hot_pin"] = None
         for attr in ("_wire_end_preview", "_wire_end_snap"):
             item = getattr(self, attr, None)
@@ -2144,11 +2167,11 @@ class SchematicView(QGraphicsView):
                 continue
             if item in self._items:
                 self._items.remove(item)
-            try:
-                if item.scene() is not None and self.scene is not None:
+            if _qt_item_alive(item):
+                if item.scene() is not None and self.scene is not None and _qt_item_alive(self.scene):
                     self.scene.removeItem(item)
-            except RuntimeError:
-                pass
+            else:
+                _log.debug("Skipping deleted %s (%s) in _clear_wire_end_visuals", attr, type(item).__name__)
             setattr(self, attr, None)
 
     def _cancel_wire_end_drag(self, *, resync: bool = True) -> None:
@@ -2305,12 +2328,12 @@ class SchematicView(QGraphicsView):
         old_hot = drag.get("hot_pin")
         new_hot = pin if target_ref is not None and pin is not None else None
         if old_hot is not None and old_hot is not new_hot:
-            try:
+            if _qt_item_alive(old_hot):
                 if old_hot.scene() is not None:
                     old_hot._hot = False
                     old_hot.update()
-            except RuntimeError:
-                pass
+            else:
+                _log.debug("Skipping deleted %s in _update_wire_end_drag", type(old_hot).__name__)
         if new_hot is not None:
             new_hot._hot = True
             new_hot.update()
