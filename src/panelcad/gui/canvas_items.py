@@ -309,7 +309,12 @@ class PinItem(QGraphicsItem):
         return f"{self.component_id}.{self.pin_id}"
 
     def set_locked(self, locked: bool) -> None:
-        self._locked = bool(locked)
+        locked = bool(locked)
+        if locked != self._locked:
+            # PinItem.boundingRect() grows when unlocked and shrinks when locked;
+            # notify QGraphicsScene's BSP index before changing _locked.
+            self.prepareGeometryChange()
+            self._locked = locked
         if self._locked:
             self.setCursor(Qt.CursorShape.CrossCursor)
             self.setToolTip(
@@ -1181,6 +1186,11 @@ class WireItem(QGraphicsPathItem):
         self._outline: QColor | None = None
         self._base_pen = QPen(self._core, self._idle_width)
         self._hovered = False
+        # Stored scene hit width used by boundingRect()/shape(). Never read
+        # view.transform() directly inside boundingRect(): zooming in would
+        # shrink boundingRect() before prepareGeometryChange(), leaving raw
+        # QGraphicsItem* pointers dangling in QGraphicsScene's BSP tree.
+        self._hit_width_scene = wire_hit_width_scene(None)
         # Must accept the click so it is not treated as empty paper / a device under the stroke.
         self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton | Qt.MouseButton.RightButton)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
@@ -1194,8 +1204,17 @@ class WireItem(QGraphicsPathItem):
         view = scene.views()[0]
         return view if _is_schematic_view(view) else None
 
+    def set_hit_width_scene(self, width: float) -> None:
+        """Update the hit/bounding pad width while keeping the BSP index valid."""
+        width = max(WIRE_HIT_MM * 2.0, float(width))
+        if abs(width - self._hit_width_scene) < 1e-9:
+            return
+        self.prepareGeometryChange()
+        self._hit_width_scene = width
+        self.update()
+
     def hit_width_scene(self) -> float:
-        return wire_hit_width_scene(self._view())
+        return self._hit_width_scene
 
     def _label_rect(self) -> QRectF | None:
         if not self._label:
@@ -1371,7 +1390,9 @@ class WireHandleItem(QGraphicsItem):
         return handle_hit_radius_scene(view if view is not None else self._view())
 
     def boundingRect(self) -> QRectF:
-        pad = self.hit_radius_scene() + 0.5
+        # Constant bounds covering the maximum capped hit radius so view zoom
+        # changes can never shrink boundingRect() behind QGraphicsScene's BSP index.
+        pad = self.HIT_MAX + 0.5
         return QRectF(-pad, -pad, pad * 2.0, pad * 2.0)
 
     def shape(self) -> QPainterPath:
@@ -1536,15 +1557,28 @@ class EnclosureItem(QGraphicsItem):
     def __init__(self, enc: Enclosure) -> None:
         super().__init__()
         self.enc = enc
+        self._rect = self._compute_rect()
         self.setZValue(-6)
         self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
 
-    def boundingRect(self) -> QRectF:
+    def _compute_rect(self) -> QRectF:
         from panelcad.core.layout import enclosure_drawn_size
 
         dw, dh, _s = enclosure_drawn_size(self.enc)
         return QRectF(self.enc.x, self.enc.y, dw, dh)
+
+    def sync_geometry(self) -> None:
+        """Refresh cached bounds from ``self.enc`` while keeping the BSP index valid."""
+        rect = self._compute_rect()
+        if rect == self._rect:
+            return
+        self.prepareGeometryChange()
+        self._rect = rect
+        self.update()
+
+    def boundingRect(self) -> QRectF:
+        return QRectF(self._rect)
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None) -> None:
 
@@ -1559,15 +1593,28 @@ class TrayItem(QGraphicsItem):
         super().__init__()
         self.tray = tray
         self.mm_scale = mm_scale
+        self._rect = self._compute_rect()
         self.setZValue(-2)
         self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
 
-    def boundingRect(self) -> QRectF:
+    def _compute_rect(self) -> QRectF:
         t = self.tray
         if t.orientation == "v":
             return QRectF(t.x, t.y, t.width_mm, t.length_mm)
         return QRectF(t.x, t.y, t.length_mm, t.width_mm)
+
+    def sync_geometry(self) -> None:
+        """Refresh cached bounds from ``self.tray`` while keeping the BSP index valid."""
+        rect = self._compute_rect()
+        if rect == self._rect:
+            return
+        self.prepareGeometryChange()
+        self._rect = rect
+        self.update()
+
+    def boundingRect(self) -> QRectF:
+        return QRectF(self._rect)
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None) -> None:
         from panelcad.render.layout import draw_tray
@@ -1581,14 +1628,27 @@ class RailItem(QGraphicsItem):
         super().__init__()
         self.rail = rail
         self.mm_scale = mm_scale
+        self._rect = self._compute_rect()
         self.setZValue(0)
         self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
 
-    def boundingRect(self) -> QRectF:
+    def _compute_rect(self) -> QRectF:
         h = rail_height(self.rail)
         half = h / 2.0
         return QRectF(self.rail.x, self.rail.y - half, self.rail.length_mm, h)
+
+    def sync_geometry(self) -> None:
+        """Refresh cached bounds from ``self.rail`` while keeping the BSP index valid."""
+        rect = self._compute_rect()
+        if rect == self._rect:
+            return
+        self.prepareGeometryChange()
+        self._rect = rect
+        self.update()
+
+    def boundingRect(self) -> QRectF:
+        return QRectF(self._rect)
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None) -> None:
         from panelcad.render.layout import draw_rail

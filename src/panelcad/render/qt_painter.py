@@ -69,12 +69,28 @@ def text_width_mm(text: str, size_mm: float, *, bold: bool = False) -> float:
     return text_advance_mm(text, size_mm, bold=bold)
 
 
+def _on_gui_thread() -> bool:
+    import threading
+    from PySide6.QtCore import QCoreApplication, QThread
+
+    app = QCoreApplication.instance()
+    if app is not None:
+        return QThread.currentThread() is app.thread()
+    return threading.current_thread() is threading.main_thread()
+
+
 def text_advance_mm(text: str, size_mm: float, *, bold: bool = False) -> float:
     """Width of ``text`` in millimetres, using the same font the page draws."""
 
     if not text:
         return 0.0
     size_mm = max(0.9, float(size_mm))
+    if not _on_gui_thread():
+        # QFont/QFontMetricsF/QFontDatabase are not thread-safe on Windows
+        # platform font engines; never construct Qt font objects off the GUI thread.
+        from panelcad.core.ink import TEXT_ADVANCE
+
+        return float(len(text)) * size_mm * (TEXT_ADVANCE * (1.06 if bold else 1.0))
     font = QFont(_font_family())
     font.setPixelSize(_GLYPH_PX)
     if bold:

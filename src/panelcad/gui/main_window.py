@@ -4,7 +4,7 @@ import errno
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QObject, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QBrush, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -225,12 +225,6 @@ def save_as_start(current: Path | None) -> str:
         return str(current)
     except (OSError, ValueError):
         return str(documents / current.name)
-
-
-class _StartupUpdateBridge(QObject):
-    """Carries a startup feed result back to the window thread."""
-
-    finished = Signal(object)
 
 
 def _shop_warning(line: str) -> str:
@@ -688,8 +682,6 @@ class MainWindow(MainWindowLifecycleMixin, QMainWindow):
             "Hover a terminal and click or drag to the next one."
         )
         self.props.show_project(self.session)
-        self._startup_update_bridge = _StartupUpdateBridge(self)
-        self._startup_update_bridge.finished.connect(self._on_startup_update_report)
         self._saved_snapshot = ""
         self._remember_saved_project()
         from panelcad.gui.splash import splash_is_visible
@@ -4889,16 +4881,37 @@ class MainWindow(MainWindowLifecycleMixin, QMainWindow):
         if not due:
             return
 
+        done = threading.Event()
+        outcome: dict[str, object] = {}
+
         def work() -> None:
             try:
-                report = check_for_update()
+                outcome["report"] = check_for_update()
             except Exception as exc:  # noqa: BLE001 — startup check must not take down the window
-                report = {"enabled": True, "error": str(exc)}
-            self._startup_update_bridge.finished.emit(report)
+                outcome["report"] = {"enabled": True, "error": str(exc)}
+            finally:
+                done.set()
 
-        import threading
+        # Keep Qt object access on the GUI thread; a closed window must not be
+        # signalled from a daemon thread while its child QObjects are freed.
+        threading.Thread(target=work, name="panelcad-startup-update", daemon=True).start()
+        timer = QTimer(self)
+        timer.setInterval(50)
 
-        threading.Thread(target=work, daemon=True).start()
+        def _poll() -> None:
+            if not _qt_alive(self) or self._closing:
+                if _qt_alive(timer):
+                    timer.stop()
+                    timer.deleteLater()
+                return
+            if not done.is_set():
+                return
+            timer.stop()
+            timer.deleteLater()
+            self._on_startup_update_report(outcome.get("report"))
+
+        timer.timeout.connect(_poll)
+        timer.start()
 
     def _on_startup_update_report(self, report: object) -> None:
         if isinstance(report, dict):
