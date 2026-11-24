@@ -322,6 +322,11 @@ _CHECK_LABELS = {
     "label_covered_by_wire": "Wire crosses a label",
     "device_on_wire_duct": "Device on wire duct",
     "device_off_din_rail": "Device off DIN rail",
+    "transformer_primary_on_control_rail": "Transformer primary on control rail",
+    "transformer_x1_direct_to_l1": "Transformer X1 straight to L1",
+    "transformer_x1_unprotected": "Transformer X1 missing secondary protection",
+    "transformer_x1_on_return_rail": "Transformer X1 on return rail",
+    "transformer_x2_on_hot_rail": "Transformer X2 on hot rail",
 }
 
 

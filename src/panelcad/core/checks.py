@@ -103,6 +103,11 @@ CHECK_IDS: tuple[str, ...] = (
     "control_power_inrush",
     "control_power_protection",
     "control_power_method",
+    "transformer_primary_on_control_rail",
+    "transformer_x1_direct_to_l1",
+    "transformer_x1_unprotected",
+    "transformer_x1_on_return_rail",
+    "transformer_x2_on_hot_rail",
     "sccr_below_available",
     "shield_ungrounded",
     "instrument_shield_both_ends",
@@ -447,6 +452,7 @@ def run_checks(
     findings.extend(_soft_starter_without_overload(project))
     findings.extend(_xref_findings(project, catalog))
     findings.extend(_control_power_findings(project, catalog, parts))
+    findings.extend(_transformer_control_findings(project, catalog))
     findings.extend(_sccr_findings(project, catalog))
     findings.extend(_cable_shield_findings(project))
     findings.extend(_sizing_findings(project, catalog, parts))
@@ -2225,6 +2231,44 @@ def _outside_enclosure(project: Project, catalog: Catalog) -> list[Finding]:
                         y=comp.y,
                     )
                 )
+    return findings
+
+
+def _transformer_control_findings(project: Project, catalog: Catalog) -> list[Finding]:
+    """Error when a control transformer breaks primary/secondary rail wiring rules."""
+
+    from panelcad.core.ladder import is_ladder_sheet, rail_names
+    from panelcad.importer.electrical_rules import validate_transformer_control_rules
+
+    findings: list[Finding] = []
+    for sheet in project.sheets:
+        if sheet.kind in LAYOUT_KINDS or sheet.kind == "terminal":
+            continue
+        hot, ret = rail_names(sheet, project)
+        rail_tokens = {str(hot or "").strip().upper(), str(ret or "").strip().upper()}
+        has_rails = is_ladder_sheet(sheet, project) or any(
+            str(end or "").strip().upper() in rail_tokens
+            for wire in (sheet.wires or [])
+            for end in (wire.frm, wire.to)
+            if "." not in str(end or "")
+        )
+        if not has_rails:
+            continue
+        by_id = {comp.id: comp for comp in sheet.components}
+        for viol in validate_transformer_control_rules(sheet, hot_rail=hot, return_rail=ret):
+            comp = by_id.get(viol.device)
+            findings.append(
+                Finding(
+                    viol.code,
+                    "error",
+                    f"{sheet.id}: {viol.message}",
+                    sheet=sheet.id,
+                    ref=viol.device,
+                    target=viol.wire_id,
+                    x=comp.x if comp is not None else None,
+                    y=comp.y if comp is not None else None,
+                )
+            )
     return findings
 
 

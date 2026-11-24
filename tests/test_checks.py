@@ -339,3 +339,93 @@ def test_panel_device_on_wire_duct_and_off_din_rail_are_errors():
     rail_rows = _by_check(dirty, "device_off_din_rail")
     assert any(row["ref"] == "DISC1" and row["severity"] == "error" for row in duct_rows), duct_rows
     assert any(row["ref"] == "DISC1" and row["severity"] == "error" for row in rail_rows), rail_rows
+
+    # (a) Non-DIN panel device (backplate-mounted VFD) placed onto wire duct -> duct error ONLY.
+    non_din = build_scan_ladder_demo()
+    p_nd = non_din.project.sheet("backplate")
+    p_nd.components.append(
+        Component(
+            id="VFD1",
+            library_id="iec.drives.vfd_1k5",
+            x=p_nd.trays[0].x,
+            y=p_nd.trays[0].y,
+        )
+    )
+    assert any(row["ref"] == "VFD1" and row["severity"] == "error" for row in _by_check(non_din, "device_on_wire_duct"))
+    assert not any(row["ref"] == "VFD1" for row in _by_check(non_din, "device_off_din_rail"))
+
+    # (b) DIN device moved off its rail into clear space away from ducts -> rail error ONLY.
+    off_rail = build_scan_ladder_demo()
+    p_or = off_rail.project.sheet("backplate")
+    disc_or = p_or.component("DISC1")
+    # Shift slightly off the rail center without intersecting any duct.
+    disc_or.y = float(disc_or.y) + 14.0
+    # Ensure clear of all trays in case enclosure proportions change.
+    from panelcad.core.layout import footprint_overlaps_tray, footprint_size
+
+    disc_dev = off_rail.catalog.get(disc_or.library_id)
+    dw, dh = footprint_size(disc_dev, disc_or)
+    if footprint_overlaps_tray(disc_or.x, disc_or.y, dw, dh, p_or.trays):
+        p_or.trays = []
+    assert not any(row["ref"] == "DISC1" for row in _by_check(off_rail, "device_on_wire_duct"))
+    assert any(row["ref"] == "DISC1" and row["severity"] == "error" for row in _by_check(off_rail, "device_off_din_rail"))
+
+    # (c) reconstruct.needs_info placeholder and field-mount device exclusions trigger neither check.
+    excl = build_scan_ladder_demo()
+    p_ex = excl.project.sheet("backplate")
+    tray0 = p_ex.trays[0]
+    p_ex.components.append(
+        Component(
+            id="NI1",
+            library_id="reconstruct.needs_info",
+            x=tray0.x,
+            y=tray0.y,
+            properties={"reconstruct_needs_info": "yes"},
+        )
+    )
+    p_ex.components.append(
+        Component(
+            id="MTR1",
+            library_id="nema.loads.motor_3ph",
+            x=tray0.x,
+            y=tray0.y,
+        )
+    )
+    for check_name in ("device_on_wire_duct", "device_off_din_rail"):
+        refs = {row["ref"] for row in _by_check(excl, check_name)}
+        assert "NI1" not in refs, (check_name, refs)
+        assert "MTR1" not in refs, (check_name, refs)
+
+    # (d) panel_layout sheet with rails == [] still flags DIN modules as off DIN rail.
+    no_rails = build_scan_ladder_demo()
+    p_nr = no_rails.project.sheet("backplate")
+    p_nr.rails = []
+    nr_rows = _by_check(no_rails, "device_off_din_rail")
+    assert any(row["ref"] == "DISC1" and row["severity"] == "error" for row in nr_rows), nr_rows
+
+
+def test_run_checks_surfaces_transformer_control_rule_violations():
+    """Session.design_checks() / run_checks() must report control transformer wiring violations."""
+
+    from panelcad.examples.scan_ladder_demo import build_scan_ladder_demo
+
+    clean = build_scan_ladder_demo()
+    for cid in (
+        "transformer_primary_on_control_rail",
+        "transformer_x1_direct_to_l1",
+        "transformer_x1_unprotected",
+        "transformer_x1_on_return_rail",
+        "transformer_x2_on_hot_rail",
+    ):
+        assert _by_check(clean, cid) == [], cid
+
+    bad = build_scan_ladder_demo()
+    sh = bad.project.sheet("elementary")
+    sh.components = [c for c in sh.components if c.id != "FU3"]
+    sh.wires = [w for w in sh.wires if "FU3" not in str(w.frm) and "FU3" not in str(w.to)]
+    bad.wire("T1.H1", "L1", number="100", sheet_id="elementary")
+    bad.wire("T1.X1", "L2", number="104", sheet_id="elementary")
+    prim_rows = _by_check(bad, "transformer_primary_on_control_rail")
+    ret_rows = _by_check(bad, "transformer_x1_on_return_rail")
+    assert any(r["ref"] == "T1" and r["severity"] == "error" for r in prim_rows), prim_rows
+    assert any(r["ref"] == "T1" and r["severity"] == "error" for r in ret_rows), ret_rows
