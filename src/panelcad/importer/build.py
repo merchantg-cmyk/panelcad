@@ -2974,10 +2974,27 @@ def _stamp_properties(
     sheet_needs_info = [
         str(sheet.get("id") or "") for sheet in stitched.get("sheets") or [] if sheet.get("sheet_number_needs_info")
     ]
+    existing_pi = (session.project.properties or {}).get("print_import")
+    if isinstance(existing_pi, dict):
+        seen_keys = {
+            (str(it.get("kind") or ""), str(it.get("sheet") or ""), str(it.get("tag") or it.get("text") or "").upper())
+            for it in items
+            if isinstance(it, dict)
+        }
+        for prev_item in existing_pi.get("items") or []:
+            if not isinstance(prev_item, dict):
+                continue
+            pkey = (
+                str(prev_item.get("kind") or ""),
+                str(prev_item.get("sheet") or ""),
+                str(prev_item.get("tag") or prev_item.get("text") or "").upper(),
+            )
+            if pkey not in seen_keys:
+                seen_keys.add(pkey)
+                items.append(dict(prev_item))
     needs_info = any(str(row.get("reason") or "") == "needs_info" for row in report["skipped"]) or any(
         str(item.get("reason") or "") == "needs_info" for item in items
     )
-    existing_pi = (session.project.properties or {}).get("print_import")
     from_to_sched = None
     if isinstance(existing_pi, dict) and isinstance(existing_pi.get("from_to_schedule"), dict):
         from_to_sched = existing_pi["from_to_schedule"]

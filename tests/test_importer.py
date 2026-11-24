@@ -3780,6 +3780,31 @@ def test_recorded_scores_keep_quarter_turns_and_upright_pages() -> None:
     assert choose_quarter([280.0, 10.0, 200.0, 10.0], 0) == 0
 
 
+def test_choose_quarter_tie_break_keeps_upright_terminals_and_panel_faded_symmetric() -> None:
+    """PR 8 tie-break must protect panel/faded without rotating upright terminal strips."""
+
+    from panelcad.importer.imageutil import choose_quarter
+
+    # Panel/faded vector (both quarters on glyph's axis beat both side quarters):
+    # must stay upright at 0 (not flip 180° on the side dip), symmetrically across turns.
+    faded = [1026.0, 682.1, 904.0, 782.1]
+    for rot in range(4):
+        rotated = faded[-rot:] + faded[:-rot] if rot else list(faded)
+        assert choose_quarter(rotated, rot) == rot
+
+    # Upright terminal-strip scans whose vertical strip labels bias a side quarter
+    # while the weakest quarter still identifies upright: must NOT flip sideways/180°.
+    assert choose_quarter([1562.3, 2330.7, 2200.5, 991.4], 1) == 0  # terminal/skew
+    assert choose_quarter([1748.1, 2648.3, 2524.5, 1551.7], 1) == 0  # terminal/speckle
+    assert choose_quarter([1873.2, 2607.1, 2847.2, 1966.5], 2) == 1  # terminal/cropped_edge
+
+    # Exact tied-strongest symmetry: list order must never override glyph.
+    assert choose_quarter([1000.0, 700.0, 1000.0, 600.0], 2) == 2
+    assert choose_quarter([1000.0, 600.0, 1000.0, 700.0], 0) == 0
+    assert choose_quarter([600.0, 1000.0, 700.0, 1000.0], 3) == 3
+    assert choose_quarter([700.0, 1000.0, 600.0, 1000.0], 1) == 1
+
+
 _ORIENTATION_CASES = json.loads(
     (
         Path(__file__).resolve().parent / "fixtures" / "orientation" / "orientation-scores-cecec57.json"

@@ -637,3 +637,153 @@ def test_second_coil_same_tag_is_dropped_not_m1_2() -> None:
         if row.source == "rung_inferred" and "M1_2" in {row.from_tag, row.to_tag}
     ]
     assert invented_ghost == []
+
+
+def _assert_zero_symbol_overlaps(session: Session) -> None:
+    from panelcad.core.layout import rects_overlap
+
+    cat = session.catalog
+    for sh in session.project.sheets:
+        boxes: list[tuple[str, float, float, float, float]] = []
+        for comp in sh.components:
+            dev = cat.get(comp.library_id)
+            boxes.append((comp.id, float(comp.x), float(comp.y), float(dev.schematic_width), float(dev.schematic_height)))
+        for i in range(len(boxes)):
+            a_id, ax, ay, aw, ah = boxes[i]
+            for j in range(i + 1, len(boxes)):
+                b_id, bx, by, bw, bh = boxes[j]
+                assert not rects_overlap(ax, ay, aw, ah, bx, by, bw, bh), (
+                    f"{sh.id}: {a_id} ({ax},{ay},{aw},{ah}) overlaps {b_id} ({bx},{by},{bw},{bh})"
+                )
+
+
+def test_control_sheet_transformer_contacts_and_next_rung_have_zero_overlaps() -> None:
+    """T1 must never overlap FU1/FU2/FU3/M1-33 on its rung or ES1 on the rung below."""
+
+    from panelcad.core.models import Project
+    from panelcad.importer.ladder_synth import _build_clean_control_ladder_sheets
+    from panelcad.library.catalog import default_catalog
+
+    cat = default_catalog()
+    project = Project(name="Transformer Layout")
+    ctrl_devs = [
+        ImportDeviceEntry(tag="FU1", library_id="nema.protection.fuse_10a", pins=["1", "2"], x=40, y=30, role="control_contact"),
+        ImportDeviceEntry(tag="FU2", library_id="nema.protection.fuse_10a", pins=["1", "2"], x=80, y=30, role="control_contact"),
+        ImportDeviceEntry(tag="FU3", library_id="nema.protection.fuse_10a", pins=["1", "2"], x=160, y=30, role="control_contact"),
+        ImportDeviceEntry(tag="M1-33", library_id="nema.contactors.aux_no", pins=["3", "4"], x=200, y=30, role="control_contact"),
+        ImportDeviceEntry(tag="T1", library_id="nema.power.control_transformer", pins=["H1", "H2", "H3", "H4", "X1", "X2"], x=120, y=30, role="control_output"),
+        ImportDeviceEntry(tag="ES1", library_id="nema.operators.estop", pins=["1", "2"], x=50, y=100, role="control_contact"),
+        ImportDeviceEntry(tag="M1", library_id="nema.contactors.coil", pins=["A1", "A2"], x=300, y=100, role="control_output"),
+    ]
+    ctrl_rows = [
+        ImportFromToRow(wire_number="103", from_tag="FU1", from_pin="2", to_tag="T1", to_pin="H1", rung=1),
+        ImportFromToRow(wire_number="101", from_tag="FU2", from_pin="2", to_tag="T1", to_pin="H4", rung=1),
+        ImportFromToRow(wire_number="100", from_tag="T1", from_pin="X1", to_tag="FU3", to_pin="1", rung=1),
+        ImportFromToRow(wire_number="102", from_tag="FU3", from_pin="2", to_tag="M1-33", to_pin="3", rung=1),
+        ImportFromToRow(wire_number="105", from_tag="ES1", from_pin="2", to_tag="M1", to_pin="A1", rung=2),
+    ]
+    _build_clean_control_ladder_sheets(
+        project=project,
+        base_sheet_id="page-001",
+        base_sheet_name="Control",
+        ctrl_devs=ctrl_devs,
+        ctrl_rows=ctrl_rows,
+        std="NEMA/ANSI",
+        rail_hot="L1",
+        rail_ret="L2",
+        catalog=cat,
+    )
+    session = Session(project=project, catalog=cat)
+    _assert_zero_symbol_overlaps(session)
+    sh = project.sheets[0]
+    t1 = sh.component("T1")
+    es1 = sh.component("ES1")
+    t1_h = float(cat.get("nema.power.control_transformer").schematic_height)
+    assert float(es1.y) > float(t1.y) + t1_h
+
+
+def test_control_sheet_terminals_never_stack_and_left_xfmr_does_not_pollute_right_col() -> None:
+    """Multi-terminal bottom rungs must paginate or keep pitch (never clamp-stack), and T1 must not push X1 down."""
+
+    from panelcad.core.models import Project
+    from panelcad.importer.ladder_synth import _build_clean_control_ladder_sheets
+    from panelcad.library.catalog import default_catalog
+
+    cat = default_catalog()
+
+    # Case 1: 4 normal rungs + bottom rung with 4 terminals (X1-1..X1-4) -> zero stacking, zero overlaps.
+    project = Project(name="Multi Terminals")
+    ctrl_devs: list[ImportDeviceEntry] = []
+    ctrl_rows: list[ImportFromToRow] = []
+    for r in range(1, 5):
+        pb = f"PB{r}"
+        cr = f"CR{r}"
+        ctrl_devs.append(ImportDeviceEntry(tag=pb, library_id="nema.operators.pb_no", pins=["3", "4"], x=80, y=r * 35.0, role="control_contact"))
+        ctrl_devs.append(ImportDeviceEntry(tag=cr, library_id="nema.relays.cr", pins=["A1", "A2"], x=300, y=r * 35.0, role="control_output"))
+        ctrl_rows.append(ImportFromToRow(wire_number=f"{100 + r}", from_tag=pb, from_pin="4", to_tag=cr, to_pin="A1", rung=r))
+    for idx in range(1, 5):
+        ctrl_devs.append(
+            ImportDeviceEntry(
+                tag=f"X1-{idx}",
+                library_id="nema.terminals.feed_through",
+                pins=["A", "B"],
+                x=320,
+                y=190.0 + idx * 14.0,
+                role="control_terminal",
+            )
+        )
+    _build_clean_control_ladder_sheets(
+        project=project,
+        base_sheet_id="page-001",
+        base_sheet_name="Control",
+        ctrl_devs=ctrl_devs,
+        ctrl_rows=ctrl_rows,
+        std="NEMA/ANSI",
+        rail_hot="L1",
+        rail_ret="L2",
+        catalog=cat,
+    )
+    session = Session(project=project, catalog=cat)
+    _assert_zero_symbol_overlaps(session)
+    term_coords = [
+        (sh.id, round(float(c.x), 2), round(float(c.y), 2))
+        for sh in project.sheets
+        for c in sh.components
+        if c.id.startswith("X1-")
+    ]
+    assert len(term_coords) == 4
+    assert len(set(term_coords)) == 4, f"Stacked terminal coordinates: {term_coords}"
+
+    # Case 2: Left-column T1 (52 mm tall) must not pollute right-column output_bottom_y for X1-1.
+    proj2 = Project(name="No Cross-Column Pollution")
+    devs2 = [
+        ImportDeviceEntry(tag="T1", library_id="nema.power.control_transformer", pins=["H1", "H2", "H3", "H4", "X1", "X2"], x=90, y=30, role="control_output"),
+        ImportDeviceEntry(tag="CR1", library_id="nema.relays.cr", pins=["A1", "A2"], x=300, y=30, role="control_output"),
+        ImportDeviceEntry(tag="X1-1", library_id="nema.terminals.feed_through", pins=["A", "B"], x=340, y=30, role="control_terminal"),
+    ]
+    rows2 = [
+        ImportFromToRow(wire_number="102", from_tag="T1", from_pin="X1", to_tag="CR1", to_pin="A1", rung=1),
+        ImportFromToRow(wire_number="104", from_tag="CR1", from_pin="A2", to_tag="X1-1", to_pin="A", rung=1),
+    ]
+    _build_clean_control_ladder_sheets(
+        project=proj2,
+        base_sheet_id="page-001",
+        base_sheet_name="Control",
+        ctrl_devs=devs2,
+        ctrl_rows=rows2,
+        std="NEMA/ANSI",
+        rail_hot="L1",
+        rail_ret="L2",
+        catalog=cat,
+    )
+    sess2 = Session(project=proj2, catalog=cat)
+    _assert_zero_symbol_overlaps(sess2)
+    sh2 = proj2.sheets[0]
+    t1_2 = sh2.component("T1")
+    cr1_2 = sh2.component("CR1")
+    x1_2 = sh2.component("X1-1")
+    cr_h = float(cat.get("nema.relays.cr").schematic_height)
+    t1_h = float(cat.get("nema.power.control_transformer").schematic_height)
+    # X1-1 starts cleanly after CR1 (right column), NOT pushed past T1's 52 mm left-column body.
+    assert float(x1_2.y) >= float(cr1_2.y) + cr_h
+    assert float(x1_2.y) < float(t1_2.y) + t1_h

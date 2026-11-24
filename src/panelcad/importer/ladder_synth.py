@@ -522,6 +522,15 @@ def _classify_device_role_and_library(
         except KeyError:
             pass
 
+    # Unconfirmed NEMA transformer primary pin tags (H1..H4), explicit needs_info,
+    # and unreadable "?" tags must never fall through to fake pb_no pushbuttons.
+    if (
+        raw_library_id == "reconstruct.needs_info"
+        or up_tag in {"", "?"}
+        or (not is_iec and re.match(r"^H[1-4]$", up_tag))
+    ):
+        return "unresolved", "reconstruct.needs_info", []
+
     lid = f"{prefix}.operators.pb_no"
     dpins = ["13", "14"] if is_iec else ["3", "4"]
     return "control_contact", lid, dpins
@@ -848,16 +857,36 @@ def extract_import_from_to(
         dy = float(d.get("text_y") or d.get("y") or (d.get("bbox") or {}).get("y") or 0.0)
         is_wired_tag = raw_tag in wired_tags_by_sheet.get(sid, set())
         if not is_wired_tag and not raw_lid and not raw_sym and bool(sheet_has_confirmed_lib) and not print_tag_placeable(d):
-            # Unconfirmed OCR pilots (PL1) and known OCR misreads of printed
-            # aux tags (UA-22→M1-23) still place — otherwise leftovers never
-            # offer the true name or its pins as connect mates.
+            # Unconfirmed OCR pilots (PL1; H* only on IEC) and known OCR misreads
+            # of printed aux tags (UA-22→M1-23) still place — otherwise leftovers
+            # never offer the true name or its pins as connect mates.
+            # Unconfirmed NEMA H1..H4 transformer pin tags stay unresolved and
+            # route to the question list, never into control_contact / pb_no.
             tag_u = raw_tag.upper()
             keep_unread = (
-                bool(re.match(r"^(LT|PL|HL|H)\d+$", tag_u))
+                bool(re.match(r"^(LT|PL|HL)\d+$", tag_u))
+                or (std == "IEC" and bool(re.match(r"^H\d+$", tag_u)))
                 or tag_u in {"UA-22", "UA22", "1M", "M1-23"}
                 or str(d.get("source") or "") == "needs_info"
             )
             if not keep_unread:
+                if std != "IEC" and re.match(r"^H[1-4]$", tag_u):
+                    devices.append(
+                        ImportDeviceEntry(
+                            tag=raw_tag,
+                            symbol="unresolved",
+                            library_id="reconstruct.needs_info",
+                            description=str(d.get("description") or ""),
+                            pins=[],
+                            sheet_id=sid,
+                            x=dx,
+                            y=dy,
+                            confidence=float(d.get("confidence", 0.48)),
+                            source=str(d.get("source") or "ocr"),
+                            needs_review=True,
+                            role="unresolved",
+                        )
+                    )
                 continue
         # An unwired second hit of the same tag+symbol, sitting on the first, is
         # the same ink read twice. 0.5.26 dropped it. Keeping it made an extra
@@ -914,7 +943,10 @@ def extract_import_from_to(
         )
         conf = float(d.get("confidence", 0.9))
         src = str(d.get("source") or "import")
-        needs_rev = bool(d.get("needs_review", conf < confidence_threshold or bool(d.get("guess"))))
+        needs_rev = bool(
+            role == "unresolved"
+            or d.get("needs_review", conf < confidence_threshold or bool(d.get("guess")))
+        )
 
         sheet_used = used_unique_tags_per_sheet.setdefault(sid, set())
         unique_tag = raw_tag
@@ -2114,7 +2146,7 @@ def _convert_schedule_standard(
 
     pin_remap_by_dev: dict[str, dict[str, str]] = {}
     for dev in schedule.devices:
-        if dev.role == "control_block" or dev.library_id.startswith("adc."):
+        if dev.role in {"control_block", "unresolved"} or dev.library_id.startswith("adc."):
             continue
         old_pins = list(dev.pins)
         role, new_lid, new_dpins = _classify_device_role_and_library(
@@ -2423,7 +2455,33 @@ def synthesize_imported_ladder(
     pi["layout_mode"] = "ladder"
     pi["target_standard"] = std
     pi["from_to_schedule"] = schedule.to_dict()
-    pi.setdefault("items", [])
+    items = list(pi.get("items") or [])
+    seen_items = {
+        (str(it.get("kind") or ""), str(it.get("sheet") or ""), str(it.get("tag") or it.get("text") or "").upper())
+        for it in items
+        if isinstance(it, dict)
+    }
+    for udev in schedule.devices:
+        if udev.role != "unresolved":
+            continue
+        key = ("device", udev.sheet_id, udev.tag.upper())
+        if key in seen_items:
+            continue
+        seen_items.add(key)
+        items.append(
+            {
+                "kind": "device",
+                "tag": udev.tag,
+                "text": udev.tag,
+                "sheet": udev.sheet_id,
+                "reason": "needs_info",
+                "confidence": round(float(udev.confidence), 3),
+                "x": round(float(udev.x), 2),
+                "y": round(float(udev.y), 2),
+                "detail": f"OCR read {udev.tag}; confirm this tag or leave unanswered if it is not a device.",
+            }
+        )
+    pi["items"] = items
 
     return session
 
@@ -2682,6 +2740,8 @@ def _build_clean_control_ladder_sheets(
                     catalog,
                     has_other_coil_or_poles=("-" in tag),
                 )
+                if role == "unresolved":
+                    continue
                 entry = ImportDeviceEntry(
                     tag=tag,
                     symbol=role,
@@ -2828,7 +2888,12 @@ def _build_clean_control_ladder_sheets(
     def _pilot_or_orphan_interlock(dev: Any) -> bool:
         lib = (dev.library_id or "").lower()
         tag = (dev.tag or "").upper()
-        if "pilot" in lib or "light" in lib or re.match(r"^(LT|PL|HL|H)\d+$", tag):
+        if (
+            "pilot" in lib
+            or "light" in lib
+            or re.match(r"^(LT|PL|HL)\d+$", tag)
+            or (std == "IEC" and re.match(r"^H\d+$", tag))
+        ):
             return True
         return tag in {"UA-22", "UA22", "1M", "M1-23"}
 
@@ -2886,7 +2951,9 @@ def _build_clean_control_ladder_sheets(
 
     rung_groups.sort(key=lambda item: (item[0], item[1]))
 
-    # Paginate at max 5 rungs per sheet so lower rungs never enter the bottom-right title block (y >= 229.0)
+    # Paginate at max 5 rungs per sheet AND by actual measured rung heights so
+    # tall symbols (control transformers) and multi-terminal strips never
+    # collide with the next rung, clamp onto the same y, or enter the title block.
     max_rungs_per_sheet = 5
     if not rung_groups:
         empty_sheet = Sheet(
@@ -2900,11 +2967,27 @@ def _build_clean_control_ladder_sheets(
         project.sheets.append(empty_sheet)
         return [empty_sheet]
 
-    created_sheets: list[Sheet] = []
-    total_pages = (len(rung_groups) + max_rungs_per_sheet - 1) // max_rungs_per_sheet
+    probe_sheet = Sheet(
+        id=base_sheet_id,
+        name=base_sheet_name,
+        kind="schematic",
+        drawing_style="ladder",
+        rail_hot=rail_hot,
+        rail_return=rail_ret,
+    )
+    pages_chunks = _paginate_control_rungs(
+        probe_sheet=probe_sheet,
+        rung_groups=rung_groups,
+        rail_hot=rail_hot,
+        rail_ret=rail_ret,
+        catalog=catalog,
+        max_rungs_per_sheet=max_rungs_per_sheet,
+    )
 
-    for page_idx in range(total_pages):
-        chunk = rung_groups[page_idx * max_rungs_per_sheet : (page_idx + 1) * max_rungs_per_sheet]
+    created_sheets: list[Sheet] = []
+    total_pages = len(pages_chunks)
+
+    for page_idx, chunk in enumerate(pages_chunks):
         sid = base_sheet_id if page_idx == 0 else f"{base_sheet_id}-p{page_idx + 1}"
         sname = base_sheet_name if total_pages == 1 else f"{base_sheet_name} ({page_idx + 1}/{total_pages})"
         sheet = Sheet(
@@ -2930,6 +3013,387 @@ def _build_clean_control_ladder_sheets(
     return created_sheets
 
 
+def _dev_schematic_size(catalog: Catalog, library_id: str) -> tuple[float, float]:
+    """Return (width, height) in schematic mm for ``library_id``."""
+    try:
+        dev = catalog.get(library_id)
+        return float(dev.schematic_width), float(dev.schematic_height)
+    except KeyError:
+        return 28.0, 16.0
+
+
+def _partition_rung_devices(
+    c_devs: list[ImportDeviceEntry],
+    c_rows: list[ImportFromToRow],
+    rail_hot: str,
+    rail_ret: str,
+) -> tuple[
+    list[ImportDeviceEntry],
+    dict[str, ImportDeviceEntry],
+    list[ImportDeviceEntry],
+    list[ImportDeviceEntry],
+    list[ImportDeviceEntry],
+    list[ImportDeviceEntry],
+    list[ImportDeviceEntry],
+]:
+    """Split a rung's devices into contacts, parallels, transformers, loads, return OLs, and terminals."""
+    neighbors_map: dict[str, set[str]] = {d.tag: set() for d in c_devs}
+    for r in c_rows:
+        ft = rail_hot if r.from_tag.upper() in (_RAIL_HOT_TOKENS | {rail_hot.upper()}) else r.from_tag
+        tt = rail_ret if r.to_tag.upper() in (_RAIL_RET_TOKENS | {rail_ret.upper()}) else r.to_tag
+        if ft in neighbors_map:
+            neighbors_map[ft].add(tt)
+        if tt in neighbors_map:
+            neighbors_map[tt].add(ft)
+
+    outputs = sorted([d for d in c_devs if d.role == "control_output"], key=lambda d: (d.y, d.x))
+    xfmr_outputs = [d for d in outputs if "transformer" in str(d.library_id or "").lower()]
+    load_outputs = [d for d in outputs if "transformer" not in str(d.library_id or "").lower()]
+    ol_contacts = sorted([d for d in c_devs if d.role == "control_ol_contact"], key=lambda d: d.x)
+    contacts = sorted([d for d in c_devs if d.role == "control_contact"], key=lambda d: (d.x, d.y))
+    terminals = sorted(
+        [d for d in c_devs if d.role == "control_terminal"],
+        key=lambda d: (d.x, d.y),
+    )
+
+    ret_ol: list[ImportDeviceEntry] = []
+    left_ol: list[ImportDeviceEntry] = []
+    for olc in ol_contacts:
+        if rail_ret in neighbors_map.get(olc.tag, set()) or (load_outputs and olc.x > load_outputs[0].x):
+            ret_ol.append(olc)
+        else:
+            left_ol.append(olc)
+
+    all_left_contacts = sorted(contacts + left_ol, key=lambda d: (d.x, d.y))
+    parallel_map: dict[str, ImportDeviceEntry] = {}
+    main_contacts: list[ImportDeviceEntry] = []
+
+    for d in all_left_contacts:
+        nbs = frozenset(neighbors_map.get(d.tag, set()))
+        parent = None
+        for m in main_contacts:
+            m_nbs = frozenset(neighbors_map.get(m.tag, set()))
+            if (len(nbs) >= 2 and nbs == m_nbs) or (abs(d.x - m.x) <= 12.0 and d.y > m.y + 6.0):
+                parent = m
+                break
+        if parent is not None:
+            parallel_map[d.tag] = parent
+        else:
+            main_contacts.append(d)
+
+    return main_contacts, parallel_map, all_left_contacts, xfmr_outputs, load_outputs, ret_ol, terminals
+
+
+def _place_control_rung(
+    *,
+    c_devs: list[ImportDeviceEntry],
+    c_rows: list[ImportFromToRow],
+    rail_hot: str,
+    rail_ret: str,
+    catalog: Catalog,
+    wx: float,
+    wy: float,
+    ww: float,
+    wh: float,
+    prev_rung_y: float | None,
+    prev_bottom_y: float,
+    step_y: float,
+) -> tuple[float, float, list[tuple[ImportDeviceEntry, float, float]], set[str]]:
+    """Compute non-overlapping (x, y) placements for one control rung.
+
+    Returns ``(rung_y, rung_bottom_y, [(dev, x, y), ...], parallel_tags)``.
+    Never hardcodes a transformer inside the contact zone, never lets a
+    left-column transformer pollute the right-column terminal start y, and
+    never clamps multiple overflowing outputs/terminals onto the same y.
+    """
+    left_rail_x = wx + 18.0
+    right_rail_x = wx + ww - 18.0
+    body_top = wy + 10.0
+    max_body_bottom = wy + wh - 16.0
+    rung_clear_gap = 8.0
+    stack_gap = 4.0
+    term_gap = 2.0
+
+    (
+        main_contacts,
+        parallel_map,
+        all_left_contacts,
+        xfmr_outputs,
+        load_outputs,
+        ret_ol,
+        terminals,
+    ) = _partition_rung_devices(c_devs, c_rows, rail_hot, rail_ret)
+
+    # Determine how far the top row of this rung extends above rung_y so it
+    # clears both the top sheet border and the previous rung's tallest body.
+    top_row_devs: list[ImportDeviceEntry] = list(main_contacts)
+    if xfmr_outputs:
+        top_row_devs.append(xfmr_outputs[0])
+    if load_outputs:
+        top_row_devs.append(load_outputs[0])
+    if ret_ol:
+        top_row_devs.append(ret_ol[0])
+    if terminals and not load_outputs and not ret_ol:
+        top_row_devs.append(terminals[0])
+    max_above = max(
+        (_default_pin_y(catalog, d.library_id) for d in top_row_devs),
+        default=14.0,
+    )
+
+    if prev_rung_y is None:
+        rung_y = max(wy + 34.0, body_top + max_above)
+    else:
+        rung_y = max(prev_rung_y + step_y, prev_bottom_y + rung_clear_gap + max_above)
+
+    # Right-column anchors (left of right_rail_x).
+    term_base_x = min(right_rail_x - 36.0, wx + ww - 40.0)
+    ret_ol_x = wx + ww - 52.0
+    max_load_w = max((_dev_schematic_size(catalog, d.library_id)[0] for d in load_outputs), default=28.0)
+    out_base_x = (wx + ww - 102.0) if ret_ol else (wx + ww - 58.0)
+    if ret_ol:
+        out_base_x = min(out_base_x, ret_ol_x - max_load_w - 8.0)
+    else:
+        out_base_x = min(out_base_x, right_rail_x - max_load_w - 4.0)
+
+    # Determine horizontal limit for left-side contacts + transformers.
+    right_limits = [right_rail_x - 8.0]
+    if load_outputs:
+        right_limits.append(out_base_x - 10.0)
+    if ret_ol:
+        right_limits.append(ret_ol_x - 10.0)
+    if terminals:
+        right_limits.append(term_base_x - 10.0)
+    left_zone_limit = min(right_limits)
+
+    max_xfmr_w = max((_dev_schematic_size(catalog, d.library_id)[0] for d in xfmr_outputs), default=0.0)
+
+    def _layout_contacts(start_x: float, min_pitch: float, min_gap: float) -> tuple[dict[str, float], float]:
+        xs: dict[str, float] = {}
+        cursor = start_x
+        right_edge = start_x
+        for idx, d in enumerate(main_contacts):
+            dw, _dh = _dev_schematic_size(catalog, d.library_id)
+            cx = start_x if idx == 0 else cursor
+            xs[d.tag] = cx
+            right_edge = max(right_edge, cx + dw)
+            cursor = cx + max(min_pitch, dw + min_gap)
+        return xs, right_edge
+
+    contact_x_by_tag, contacts_right_x = _layout_contacts(wx + 46.0, 48.0, 10.0)
+    # If contacts (plus any transformer placed beside them) crowd the right column,
+    # compress contact spacing cleanly while preserving a minimum horizontal gap.
+    needed_right = contacts_right_x + ((14.0 + max_xfmr_w) if xfmr_outputs else 0.0)
+    if main_contacts and needed_right > left_zone_limit:
+        contact_x_by_tag, contacts_right_x = _layout_contacts(left_rail_x + 12.0, 0.0, 8.0)
+
+    placements: list[tuple[ImportDeviceEntry, float, float]] = []
+    contacts_bottom_y = rung_y
+    parent_bottom_by_tag: dict[str, float] = {}
+
+    for d in main_contacts:
+        dw, dh = _dev_schematic_size(catalog, d.library_id)
+        cx = contact_x_by_tag[d.tag]
+        cy = max(body_top, rung_y - _default_pin_y(catalog, d.library_id))
+        placements.append((d, cx, cy))
+        contacts_bottom_y = max(contacts_bottom_y, cy + dh)
+        parent_bottom_by_tag[d.tag] = cy + dh
+        contacts_right_x = max(contacts_right_x, cx + dw)
+
+    # Parallel branch contacts directly below their parent contact, stacked cleanly.
+    for par_tag, parent_d in parallel_map.items():
+        par_d = next(d for d in all_left_contacts if d.tag == par_tag)
+        pw, ph = _dev_schematic_size(catalog, par_d.library_id)
+        cx = contact_x_by_tag.get(parent_d.tag, wx + 46.0)
+        parent_bot = parent_bottom_by_tag.get(parent_d.tag, rung_y + 10.0)
+        cy = max(parent_bot + 2.0, (rung_y + 20.0) - _default_pin_y(catalog, par_d.library_id))
+        placements.append((par_d, cx, cy))
+        parent_bottom_by_tag[parent_d.tag] = cy + ph
+        contacts_bottom_y = max(contacts_bottom_y, cy + ph)
+        contacts_right_x = max(contacts_right_x, cx + pw)
+
+    # Control transformers belong in the power/left zone, strictly clear of all
+    # contacts and never hardcoded inside the contact zone.
+    left_xfmr_bottom_y = rung_y
+    xfmr_right_x = contacts_right_x
+    if xfmr_outputs:
+        if main_contacts:
+            xfmr_x = max(wx + 64.0, contacts_right_x + 14.0)
+        else:
+            xfmr_x = wx + 64.0
+        # If there is still no horizontal room beside main_contacts before the
+        # right column, drop the transformer cleanly into a sub-band below contacts.
+        if main_contacts and xfmr_x + max_xfmr_w > left_zone_limit:
+            xfmr_x = wx + 64.0
+            xfmr_top_cursor = contacts_bottom_y + 8.0
+        else:
+            xfmr_top_cursor = None
+        prev_xfmr_bot: float | None = None
+        for x_idx, x_dev in enumerate(xfmr_outputs):
+            xw, xh = _dev_schematic_size(catalog, x_dev.library_id)
+            if x_idx == 0:
+                if xfmr_top_cursor is not None:
+                    cy = xfmr_top_cursor
+                else:
+                    cy = max(body_top, rung_y - _default_pin_y(catalog, x_dev.library_id))
+            else:
+                cy = max(
+                    (prev_xfmr_bot or rung_y) + stack_gap,
+                    rung_y - _default_pin_y(catalog, x_dev.library_id),
+                )
+            placements.append((x_dev, xfmr_x, cy))
+            prev_xfmr_bot = cy + xh
+            left_xfmr_bottom_y = max(left_xfmr_bottom_y, cy + xh)
+            if xfmr_top_cursor is None:
+                xfmr_right_x = max(xfmr_right_x, xfmr_x + xw)
+
+    # Right-column loads (coils, pilot lights, relays, timers) — keep strictly to
+    # the right of contacts/transformers and stack with non-overlapping vertical pitch.
+    if load_outputs:
+        min_out_x = max(contacts_right_x, xfmr_right_x) + 10.0 if (main_contacts or xfmr_outputs) else out_base_x
+        max_out_x = (ret_ol_x - max_load_w - 6.0) if ret_ol else (right_rail_x - max_load_w - 4.0)
+        if out_base_x < min_out_x:
+            out_base_x = min(min_out_x, max_out_x)
+
+    right_col_bottom_y = rung_y
+    right_col_x_spans: list[tuple[float, float]] = []
+    prev_load_bot: float | None = None
+    for o_idx, out_d in enumerate(load_outputs):
+        ow, oh = _dev_schematic_size(catalog, out_d.library_id)
+        if o_idx == 0:
+            cy = max(body_top, rung_y - _default_pin_y(catalog, out_d.library_id))
+        else:
+            cy = max(
+                (prev_load_bot or rung_y) + stack_gap,
+                (rung_y + 20.0 * o_idx) - _default_pin_y(catalog, out_d.library_id),
+            )
+        placements.append((out_d, out_base_x, cy))
+        prev_load_bot = cy + oh
+        right_col_bottom_y = max(right_col_bottom_y, cy + oh)
+        right_col_x_spans.append((out_base_x, out_base_x + ow))
+
+    # Return-side overload contacts between output A2 and right rail.
+    prev_ol_bot: float | None = None
+    for r_idx, ol_d in enumerate(ret_ol):
+        ol_w, ol_h = _dev_schematic_size(catalog, ol_d.library_id)
+        if r_idx == 0:
+            cy = max(body_top, rung_y - _default_pin_y(catalog, ol_d.library_id))
+        else:
+            cy = max(
+                (prev_ol_bot or rung_y) + stack_gap,
+                (rung_y + 20.0 * r_idx) - _default_pin_y(catalog, ol_d.library_id),
+            )
+        placements.append((ol_d, ret_ol_x, cy))
+        prev_ol_bot = cy + ol_h
+        right_col_bottom_y = max(right_col_bottom_y, cy + ol_h)
+        right_col_x_spans.append((ret_ol_x, ret_ol_x + ol_w))
+
+    # Terminal strip: right-hand column, never polluted by left-column transformers
+    # and never clamped onto the same coordinate when multiple terminals stack.
+    terminals_bottom_y = rung_y
+    if terminals:
+        max_term_w = max((_dev_schematic_size(catalog, t.library_id)[0] for t in terminals), default=16.0)
+        term_left = term_base_x
+        term_right = term_base_x + max_term_w
+        right_col_occupied = any(
+            not (span_r + 2.0 <= term_left or term_right + 2.0 <= span_l)
+            for span_l, span_r in right_col_x_spans
+        )
+        col_idx = 0
+        col_x = term_base_x
+        prev_term_bot: float | None = None
+        for t_idx, term_d in enumerate(terminals):
+            tw, th = _dev_schematic_size(catalog, term_d.library_id)
+            if t_idx == 0:
+                if right_col_occupied:
+                    cy = right_col_bottom_y + 6.0
+                else:
+                    cy = max(body_top, rung_y - _default_pin_y(catalog, term_d.library_id))
+            else:
+                cy = (prev_term_bot if prev_term_bot is not None else rung_y) + term_gap
+            # If a single rung holds more terminals than fit vertically in one
+            # column on a fresh page, spill cleanly into an adjacent column to
+            # the left rather than clamping two terminals onto the same y.
+            if prev_rung_y is None and t_idx > 0 and cy + th > max_body_bottom:
+                next_col_x = term_base_x - (col_idx + 1) * (max_term_w + 8.0)
+                min_safe_x = max(contacts_right_x, xfmr_right_x) + 10.0 if (main_contacts or xfmr_outputs) else (left_rail_x + 12.0)
+                if next_col_x >= min_safe_x:
+                    col_idx += 1
+                    col_x = next_col_x
+                    cy = max(body_top, rung_y - _default_pin_y(catalog, term_d.library_id))
+                    if any(
+                        not (span_r + 2.0 <= col_x or col_x + tw + 2.0 <= span_l)
+                        for span_l, span_r in right_col_x_spans
+                    ):
+                        cy = max(cy, right_col_bottom_y + 6.0)
+            placements.append((term_d, col_x, cy))
+            prev_term_bot = cy + th
+            terminals_bottom_y = max(terminals_bottom_y, cy + th)
+
+    rung_bottom_y = max(
+        rung_y,
+        contacts_bottom_y,
+        left_xfmr_bottom_y,
+        right_col_bottom_y,
+        terminals_bottom_y,
+    )
+    return rung_y, rung_bottom_y, placements, set(parallel_map.keys())
+
+
+def _paginate_control_rungs(
+    *,
+    probe_sheet: Sheet,
+    rung_groups: list[tuple[float, float, list[ImportDeviceEntry], list[ImportFromToRow]]],
+    rail_hot: str,
+    rail_ret: str,
+    catalog: Catalog,
+    max_rungs_per_sheet: int = 5,
+) -> list[list[tuple[float, float, list[ImportDeviceEntry], list[ImportFromToRow]]]]:
+    """Pack rungs onto sheets using actual symbol heights so nothing overflows or clamps."""
+    from panelcad.render.titleblock import working_rect
+
+    wx, wy, ww, wh = working_rect(probe_sheet)
+    max_body_bottom = wy + wh - 16.0
+    body_top = wy + 10.0
+
+    def _chunk_fits(chunk: list[tuple[float, float, list[ImportDeviceEntry], list[ImportFromToRow]]]) -> bool:
+        step = 36.0 if len(chunk) >= 5 else 42.0
+        p_rung_y: float | None = None
+        p_bot = body_top
+        for _mr, _my, devs, rows in chunk:
+            ry, rbot, _pl, _par = _place_control_rung(
+                c_devs=devs,
+                c_rows=rows,
+                rail_hot=rail_hot,
+                rail_ret=rail_ret,
+                catalog=catalog,
+                wx=wx,
+                wy=wy,
+                ww=ww,
+                wh=wh,
+                prev_rung_y=p_rung_y,
+                prev_bottom_y=p_bot,
+                step_y=step,
+            )
+            p_rung_y = ry
+            p_bot = rbot
+        return p_bot <= max_body_bottom
+
+    pages: list[list[tuple[float, float, list[ImportDeviceEntry], list[ImportFromToRow]]]] = []
+    cur_chunk: list[tuple[float, float, list[ImportDeviceEntry], list[ImportFromToRow]]] = []
+
+    for group in rung_groups:
+        candidate = cur_chunk + [group]
+        if cur_chunk and (len(candidate) > max_rungs_per_sheet or not _chunk_fits(candidate)):
+            pages.append(cur_chunk)
+            cur_chunk = [group]
+        else:
+            cur_chunk = candidate
+
+    if cur_chunk:
+        pages.append(cur_chunk)
+    return pages
+
+
 def _layout_and_wire_control_sheet(
     *,
     project: Project,
@@ -2941,160 +3405,41 @@ def _layout_and_wire_control_sheet(
 ) -> None:
     """Place components on clean NEMA/IEC ladder coordinates and route orthogonal wires with 0 collisions."""
     from panelcad.render.titleblock import working_rect
+
     wx, wy, ww, wh = working_rect(sheet)
     left_rail_x = wx + 18.0
     right_rail_x = wx + ww - 18.0
 
-    # Calculate rung y positions (keeping max y <= 215 mm so bottom-right title block at y >= 229 is untouched)
     n_rungs = len(rung_chunk)
-    rung_ys: list[float] = []
-    cur_y = wy + 34.0
     step_y = 36.0 if n_rungs >= 5 else 42.0
+    prev_rung_y: float | None = None
+    prev_bottom_y = wy + 10.0
 
     comp_by_tag: dict[str, Component] = {}
     wire_seq = 1
 
     for _min_r, _min_y, c_devs, c_rows in rung_chunk:
-        dev_set = {d.tag for d in c_devs}
-        # Identify parallel branches vs main chain
-        # A contact is parallel if another contact shares the exact same left & right neighbor in c_rows,
-        # or if it sits below another contact at nearly the same x
-        neighbors_map: dict[str, set[str]] = {d.tag: set() for d in c_devs}
-        for r in c_rows:
-            ft = rail_hot if r.from_tag.upper() in (_RAIL_HOT_TOKENS | {rail_hot.upper()}) else r.from_tag
-            tt = rail_ret if r.to_tag.upper() in (_RAIL_RET_TOKENS | {rail_ret.upper()}) else r.to_tag
-            if ft in neighbors_map:
-                neighbors_map[ft].add(tt)
-            if tt in neighbors_map:
-                neighbors_map[tt].add(ft)
-
-        outputs = sorted([d for d in c_devs if d.role == "control_output"], key=lambda d: (d.y, d.x))
-        ol_contacts = sorted([d for d in c_devs if d.role == "control_ol_contact"], key=lambda d: d.x)
-        contacts = sorted([d for d in c_devs if d.role == "control_contact"], key=lambda d: (d.x, d.y))
-        terminals = sorted(
-            [d for d in c_devs if d.role == "control_terminal"],
-            key=lambda d: (d.x, d.y),
+        rung_y, rung_bottom_y, placements, parallel_tags = _place_control_rung(
+            c_devs=c_devs,
+            c_rows=c_rows,
+            rail_hot=rail_hot,
+            rail_ret=rail_ret,
+            catalog=catalog,
+            wx=wx,
+            wy=wy,
+            ww=ww,
+            wh=wh,
+            prev_rung_y=prev_rung_y,
+            prev_bottom_y=prev_bottom_y,
+            step_y=step_y,
         )
-
-        # Separate return-side overload contacts (connected to rail_ret or sitting to the right of outputs)
-        ret_ol: list[ImportDeviceEntry] = []
-        left_ol: list[ImportDeviceEntry] = []
-        for olc in ol_contacts:
-            if rail_ret in neighbors_map.get(olc.tag, set()) or (outputs and olc.x > outputs[0].x):
-                ret_ol.append(olc)
-            else:
-                left_ol.append(olc)
-
-        all_left_contacts = sorted(contacts + left_ol, key=lambda d: (d.x, d.y))
-        parallel_map: dict[str, ImportDeviceEntry] = {}  # par_tag -> parent_dev
-        main_contacts: list[ImportDeviceEntry] = []
-
-        for d in all_left_contacts:
-            nbs = frozenset(neighbors_map.get(d.tag, set()))
-            parent = None
-            for m in main_contacts:
-                m_nbs = frozenset(neighbors_map.get(m.tag, set()))
-                if (len(nbs) >= 2 and nbs == m_nbs) or (abs(d.x - m.x) <= 12.0 and d.y > m.y + 6.0):
-                    parent = m
-                    break
-            if parent is not None:
-                parallel_map[d.tag] = parent
-            else:
-                main_contacts.append(d)
-
-        rung_y = cur_y
-        rung_ys.append(rung_y)
-
-        # Place main series contacts left-to-right
-        contact_x_by_tag: dict[str, float] = {}
-        for idx, d in enumerate(main_contacts):
-            cx = wx + 46.0 + idx * 48.0
-            cy = rung_y - _default_pin_y(catalog, d.library_id)
-            contact_x_by_tag[d.tag] = cx
-            comp = _make_synth_component(d, cx, cy, catalog)
+        for dev, cx, cy in placements:
+            comp = _make_synth_component(dev, cx, cy, catalog)
             sheet.components.append(comp)
-            comp_by_tag[d.tag] = comp
+            comp_by_tag[dev.tag] = comp
 
-        # Place parallel branch contacts directly below their parent contact
-        has_subrow = False
-        for par_tag, parent_d in parallel_map.items():
-            par_d = next(d for d in all_left_contacts if d.tag == par_tag)
-            cx = contact_x_by_tag.get(parent_d.tag, wx + 46.0)
-            cy = (rung_y + 20.0) - _default_pin_y(catalog, par_d.library_id)
-            comp = _make_synth_component(par_d, cx, cy, catalog)
-            sheet.components.append(comp)
-            comp_by_tag[par_d.tag] = comp
-            has_subrow = True
-
-        # Place outputs on the right (leaving room on the right if a return-side overload contact is present).
-        # A control transformer belongs in the power block on the left, never stacked into the L2 load column.
-        out_base_x = (wx + ww - 102.0) if ret_ol else (wx + ww - 58.0)
-        # Ensure outputs stay strictly to the right of the rightmost series contact
-        if main_contacts:
-            min_out_x = wx + 46.0 + len(main_contacts) * 48.0 + 10.0
-            if out_base_x < min_out_x:
-                out_base_x = min(min_out_x, wx + ww - 54.0)
-
-        max_body_bottom = wy + wh - 16.0
-        output_bottom_y = rung_y
-        for o_idx, out_d in enumerate(outputs):
-            oy_line = rung_y + (20.0 * o_idx)
-            if o_idx > 0:
-                has_subrow = True
-            is_xfmr = "transformer" in str(out_d.library_id or "").lower()
-            ox = (wx + 64.0) if is_xfmr else out_base_x
-            cy = oy_line - _default_pin_y(catalog, out_d.library_id)
-            try:
-                dev_h = float(catalog.get(out_d.library_id).schematic_height)
-            except KeyError:
-                dev_h = 16.0
-            if cy + dev_h > max_body_bottom:
-                cy = max(wy + 6.0, max_body_bottom - dev_h)
-            comp = _make_synth_component(out_d, ox, cy, catalog)
-            sheet.components.append(comp)
-            comp_by_tag[out_d.tag] = comp
-            output_bottom_y = max(output_bottom_y, cy + dev_h)
-
-        # Place return-side overload contacts between output A2 and right rail
-        for r_idx, ol_d in enumerate(ret_ol):
-            oy_line = rung_y + (20.0 * r_idx)
-            cx = wx + ww - 52.0
-            cy = oy_line - _default_pin_y(catalog, ol_d.library_id)
-            comp = _make_synth_component(ol_d, cx, cy, catalog)
-            sheet.components.append(comp)
-            comp_by_tag[ol_d.tag] = comp
-            output_bottom_y = max(output_bottom_y, cy + 16.0)
-
-        # Terminal strip: one right-hand column (panel A toward the rungs,
-        # field B toward L2). Never left-contact placement next to L1, and never
-        # stacked on top of a load/transformer already sitting in that column.
-        if terminals:
-            term_base_x = min(right_rail_x - 36.0, wx + ww - 40.0)
-            term_start_y = rung_y
-            right_col_occupied = any(
-                "transformer" not in str(o.library_id or "").lower() and abs(out_base_x - term_base_x) < 28.0
-                for o in outputs
-            ) or bool(ret_ol)
-            if right_col_occupied:
-                term_start_y = max(rung_y, output_bottom_y + 12.0)
-            for t_idx, term_d in enumerate(terminals):
-                try:
-                    dev_h = float(catalog.get(term_d.library_id).schematic_height)
-                except KeyError:
-                    dev_h = 12.0
-                cy = (term_start_y + (18.0 * t_idx)) - _default_pin_y(catalog, term_d.library_id)
-                if cy + dev_h > max_body_bottom:
-                    cy = max(wy + 6.0, max_body_bottom - dev_h)
-                comp = _make_synth_component(term_d, term_base_x, cy, catalog)
-                sheet.components.append(comp)
-                comp_by_tag[term_d.tag] = comp
-                if t_idx or right_col_occupied:
-                    has_subrow = True
-
-        # Advance cur_y for next rung
-        cur_y = rung_y + (44.0 if has_subrow else step_y)
-        if cur_y > wy + wh - 42.0:
-            cur_y = min(cur_y, wy + wh - 34.0)
+        prev_rung_y = rung_y
+        prev_bottom_y = rung_bottom_y
 
         # Emit wires for this rung with clean Manhattan routing
         for r in c_rows:
@@ -3106,7 +3451,7 @@ def _layout_and_wire_control_sheet(
                 left_rail_x=left_rail_x,
                 right_rail_x=right_rail_x,
                 rung_y=rung_y,
-                parallel_tags=set(parallel_map.keys()),
+                parallel_tags=parallel_tags,
                 catalog=catalog,
             )
             if not frm_ref or not to_ref:

@@ -28,6 +28,11 @@ ROOT = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "scan_ladder
 
 
 def test_typed_scan_dispatcher_routes_schematic_panel_and_terminal() -> None:
+    from panelcad.importer.tesseract_runtime import find_tesseract
+    from panelcad.ocr.backend import page_engine_ready
+
+    expected_layout_backend = "tesseract" if (find_tesseract() or not page_engine_ready()) else "electrical"
+
     schem = Image.open(ROOT / "schematic" / "dpi_150.png").convert("RGB")
     s_route = route_scan_page(schem, 431.8, 279.4)
     assert isinstance(s_route, ScanPageRoute)
@@ -38,7 +43,7 @@ def test_typed_scan_dispatcher_routes_schematic_panel_and_terminal() -> None:
     term = Image.open(ROOT / "terminal" / "dpi_200.png").convert("RGB")
     t_route = route_scan_page(term, 431.8, 279.4)
     assert t_route.reader_kind == "terminal"
-    assert t_route.ocr_backend == "tesseract"
+    assert t_route.ocr_backend == expected_layout_backend
     assert t_route.layout_mode == "preserve"
 
     panel_raw = Image.open(ROOT / "panel" / "clean_300.png")
@@ -47,7 +52,7 @@ def test_typed_scan_dispatcher_routes_schematic_panel_and_terminal() -> None:
     panel = panel_raw.convert("RGB")
     p_route = route_scan_page(panel, panel.size[0] * 25.4 / px, panel.size[1] * 25.4 / px)
     assert p_route.reader_kind == "panel"
-    assert p_route.ocr_backend == "tesseract"
+    assert p_route.ocr_backend == expected_layout_backend
     assert p_route.layout_mode == "preserve"
 
 
@@ -208,20 +213,98 @@ def test_preserve_mode_quarantine_defaults_and_issue_block() -> None:
 
 
 def test_nema_transformer_primary_pin_tags_are_not_classified_as_pilot_lights() -> None:
-    """H1..H4 on a NEMA/ANSI sheet are transformer primary terminals, never pilot lights."""
+    """H1..H4 on a NEMA/ANSI sheet stay unresolved (never pb_no/pilot_light) and infer no wires."""
 
-    from panelcad.importer.ladder_synth import _classify_device_role_and_library
+    from panelcad.importer.agent_questions import questions_for
+    from panelcad.importer.ladder_synth import (
+        _classify_device_role_and_library,
+        extract_import_from_to,
+        synthesize_imported_ladder,
+    )
 
     catalog = Session.create("H-tags").catalog
     for tag in ("H1", "H2", "H3", "H4"):
-        role_nema, lid_nema, _pins = _classify_device_role_and_library(
+        role_nema, lid_nema, pins_nema = _classify_device_role_and_library(
             tag, "", "", "", [], "NEMA/ANSI", catalog
         )
-        assert "pilot_light" not in lid_nema, (tag, role_nema, lid_nema)
+        assert role_nema == "unresolved", (tag, role_nema, lid_nema)
+        assert lid_nema == "reconstruct.needs_info", (tag, role_nema, lid_nema)
+        assert pins_nema == [], (tag, pins_nema)
+        assert "pilot_light" not in lid_nema
+        assert "pb_no" not in lid_nema
+
     role_iec, lid_iec, _pins = _classify_device_role_and_library(
         "H1", "", "", "", [], "IEC", catalog
     )
     assert lid_iec == "iec.operators.pilot_light"
+
+    # End-to-end ladder synthesis with unconfirmed OCR H2/H3 when T1 was missed:
+    # never fabricate pb_no pushbuttons or an inferred H2 -> H3 wire 101; send to questions.
+    facts = {
+        "title_block": {"standard": "NEMA/ANSI", "rail_hot": "L1", "rail_return": "L2"},
+        "devices": [
+            {
+                "tag": "PB1",
+                "library_id": "nema.operators.pb_no",
+                "type": "pushbutton",
+                "symbol": "pushbutton",
+                "x": 90.0,
+                "y": 110.0,
+                "confidence": 0.9,
+            },
+            {
+                "tag": "M1",
+                "library_id": "nema.contactors.coil",
+                "type": "coil",
+                "symbol": "coil",
+                "x": 300.0,
+                "y": 110.0,
+                "confidence": 0.9,
+            },
+            {
+                "tag": "H2",
+                "library_id": "",
+                "type": "",
+                "symbol": "",
+                "source": "ocr",
+                "unconfirmed": True,
+                "guess": True,
+                "x": 100.0,
+                "y": 38.0,
+                "confidence": 0.48,
+            },
+            {
+                "tag": "H3",
+                "library_id": "",
+                "type": "",
+                "symbol": "",
+                "source": "ocr",
+                "unconfirmed": True,
+                "guess": True,
+                "x": 120.0,
+                "y": 38.0,
+                "confidence": 0.48,
+            },
+        ],
+        "wires": [
+            {"from": "L1", "to": "PB1.3", "number": "102"},
+            {"from": "PB1.4", "to": "M1.A1", "number": "107"},
+            {"from": "M1.A2", "to": "L2", "number": "104"},
+        ],
+    }
+    sched = extract_import_from_to(facts, catalog=catalog)
+    for row in sched.from_to_rows:
+        assert row.from_tag not in {"H2", "H3"} and row.to_tag not in {"H2", "H3"}, row.to_dict()
+    synth = synthesize_imported_ladder(facts, target_standard="NEMA/ANSI", catalog=catalog)
+    placed_tags = {c.id for sh in synth.project.sheets for c in sh.components}
+    assert "H2" not in placed_tags and "H3" not in placed_tags, placed_tags
+    for sh in synth.project.sheets:
+        for w in sh.wires:
+            assert "H2" not in str(w.frm) and "H2" not in str(w.to), w
+            assert "H3" not in str(w.frm) and "H3" not in str(w.to), w
+    qs = questions_for(synth)
+    q_refs = {str(q.get("ref") or "").upper() for q in qs}
+    assert {"H2", "H3"} <= q_refs, qs
 
 
 def test_panel_and_terminal_readers_fall_back_to_electrical_when_tesseract_absent(
@@ -229,7 +312,7 @@ def test_panel_and_terminal_readers_fall_back_to_electrical_when_tesseract_absen
 ) -> None:
     """Without a Tesseract binary, bundled electrical OCR must still route and read panel/terminal scans."""
 
-    from panelcad.importer import scan_dispatch, tesseract_runtime
+    from panelcad.importer import raster, scan_dispatch, tesseract_runtime
     from panelcad.ocr.backend import active_backend, page_engine_ready
 
     if not page_engine_ready():
@@ -242,10 +325,101 @@ def test_panel_and_terminal_readers_fall_back_to_electrical_when_tesseract_absen
         seen_backends.append(active_backend())
         return {"devices": [], "wires": [], "xrefs": []}
 
-    from panelcad.importer import raster
-
     monkeypatch.setattr(raster, "read_pixels", _fake_read_pixels)
     dummy = Image.new("RGB", (200, 100), "white")
     scan_dispatch.read_panel_scan(dummy, width_mm=200.0, height_mm=100.0, catalog=None)
     scan_dispatch.read_terminal_scan(dummy, width_mm=200.0, height_mm=100.0, catalog=None)
     assert seen_backends == ["electrical", "electrical"]
+
+
+def test_scan_dispatch_explicit_tesseract_and_route_backend_reporting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit ocr_backend='tesseract' fails loudly; route reports engine actually used."""
+
+    from panelcad.importer import scan_dispatch, tesseract_runtime
+    from panelcad.ocr import backend as ocr_backend
+    from panelcad.ocr.tesseract_runtime import TesseractMissing
+
+    dummy = Image.new("RGB", (200, 100), "white")
+
+    # 1. Explicit ocr_backend="tesseract" with Tesseract absent and ONNX ready -> must raise TesseractMissing.
+    monkeypatch.setattr(tesseract_runtime, "find_tesseract", lambda: "")
+    monkeypatch.setattr(ocr_backend, "page_engine_ready", lambda: True)
+    with pytest.raises(TesseractMissing):
+        scan_dispatch.dispatch_scan_read(
+            dummy,
+            width_mm=200.0,
+            height_mm=100.0,
+            catalog=None,
+            ocr_backend="tesseract",
+        )
+
+    # 2. ScanPageRoute.ocr_backend accurately reports engine used for panel/terminal pages.
+    monkeypatch.setattr(scan_dispatch, "peek_layout_page_kind", lambda *_a, **_k: "panel_layout")
+    r_elec = scan_dispatch.route_scan_page(dummy, 200.0, 100.0)
+    assert r_elec.reader_kind == "panel"
+    assert r_elec.ocr_backend == "electrical"
+
+    monkeypatch.setattr(ocr_backend, "page_engine_ready", lambda: False)
+    r_missing = scan_dispatch.route_scan_page(dummy, 200.0, 100.0)
+    assert r_missing.reader_kind == "panel"
+    assert r_missing.ocr_backend == "tesseract"
+
+    monkeypatch.setattr(tesseract_runtime, "find_tesseract", lambda: "tesseract")
+    r_tess = scan_dispatch.route_scan_page(dummy, 200.0, 100.0)
+    assert r_tess.reader_kind == "panel"
+    assert r_tess.ocr_backend == "tesseract"
+
+
+def test_scan_dispatch_surfaces_onnx_runtime_failure_and_peek_logging(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """ONNX load/inference crashes must surface as OcrRuntimeError or ocr_error/ocr_skipped, never clean empty."""
+
+    from panelcad.importer import raster, scan_dispatch, tesseract_runtime
+    from panelcad.ocr import backend as ocr_backend, weights
+    from panelcad.ocr.ppocr import OcrRuntimeError
+    from panelcad.ocr.tesseract_runtime import TesseractMissing
+
+    monkeypatch.setattr(tesseract_runtime, "find_tesseract", lambda: "")
+    monkeypatch.setattr(ocr_backend, "page_engine_ready", lambda: True)
+    monkeypatch.setattr(ppocr, "available", lambda: True)
+    monkeypatch.setattr(weights, "weights_ready", lambda: True)
+
+    def _boom():
+        raise RuntimeError("simulated onnx runtime crash")
+
+    monkeypatch.setattr(ppocr, "_page", _boom)
+    img = Image.new("RGB", (1000, 1000), "white")
+
+    catalog = Session.create("ONNX").catalog
+
+    # allow_missing_ocr=False raises OcrRuntimeError loudly.
+    with pytest.raises(OcrRuntimeError, match="simulated onnx runtime crash"):
+        scan_dispatch.read_panel_scan(img, width_mm=200.0, height_mm=200.0, catalog=catalog)
+
+    # allow_missing_ocr=True stamps ocr_error and ocr_skipped instead of returning a clean empty page.
+    facts = scan_dispatch.read_terminal_scan(
+        img, width_mm=200.0, height_mm=200.0, catalog=catalog, allow_missing_ocr=True
+    )
+    assert "simulated onnx runtime crash" in str(facts.get("ocr_error") or "")
+    assert facts.get("ocr_skipped") is True
+
+    # peek_layout_page_kind logs unexpected errors under electrical OCR and propagates TesseractMissing when pinned.
+    def _bad_title(*_args, **_kwargs):
+        raise ValueError("corrupt title crop")
+
+    monkeypatch.setattr(raster, "_title_tokens", _bad_title)
+    with caplog.at_level(logging.WARNING, logger="panelcad.importer.scan_dispatch"):
+        assert scan_dispatch.peek_layout_page_kind(img, 200.0, 200.0) == ""
+    assert any("peek_layout_page_kind failed" in rec.message for rec in caplog.records)
+
+    def _missing_tess(*_args, **_kwargs):
+        raise TesseractMissing("tesseract not found")
+
+    monkeypatch.setattr(raster, "_title_tokens", _missing_tess)
+    with ocr_backend.ocr_scope("tesseract"):
+        with pytest.raises(TesseractMissing):
+            scan_dispatch.peek_layout_page_kind(img, 200.0, 200.0)
