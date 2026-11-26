@@ -458,4 +458,52 @@ def test_operators_estop_2nc_selector_and_limit_switches():
         assert stem_bot == pytest.approx(blade_y_at_stem, abs=0.05), lib_id
 
 
+def test_timer_labels_clear_leads_and_contacts_have_valid_delay_marks():
+    """On-delay timer labels clear pin-18/3 leads; timed contacts have non-overlapping delay marks."""
+
+    catalog = default_catalog()
+    for lib_id in ("iec.timers.on_delay", "nema.timers.on_delay"):
+        dev = catalog.get(lib_id)
+        for prim in dev.primitives:
+            if prim.type == "text":
+                assert not (prim.x >= 22.0 and abs(prim.y - 30.0) <= 3.0), (lib_id, prim)
+
+    for lib_id in (
+        "iec.timers.contact_notc",
+        "iec.timers.contact_ncto",
+        "iec.timers.contact_noto",
+        "iec.timers.contact_nctc",
+    ):
+        dev = catalog.get(lib_id)
+        arcs = [p for p in dev.primitives if p.type == "arc"]
+        assert len(arcs) == 1, lib_id
+        arc = arcs[0]
+        # Vertical stem joins the blade to the delay arc center/crest.
+        stems = [
+            p
+            for p in dev.primitives
+            if p.type == "line" and p.x == p.x2 == pytest.approx(arc.x) and min(p.y, p.y2) < 10.0
+        ]
+        assert len(stems) == 1, lib_id
+
+    for lib_id in (
+        "nema.timers.contact_notc",
+        "nema.timers.contact_ncto",
+        "nema.timers.contact_noto",
+        "nema.timers.contact_nctc",
+    ):
+        dev = catalog.get(lib_id)
+        bars = [p for p in dev.primitives if p.type == "line" and p.x == p.x2 and p.x in (11.0, 17.0)]
+        assert len(bars) == 2, lib_id
+        bar_top = min(min(b.y, b.y2) for b in bars)
+        bar_bot = max(max(b.y, b.y2) for b in bars)
+        arrow_stem = next(p for p in dev.primitives if p.type == "line" and p.x == p.x2 == 14.0)
+        arrow_head = next(p for p in dev.primitives if p.type == "polyline")
+        arrow_bot = max(arrow_stem.y, arrow_stem.y2, *(pt[1] for pt in arrow_head.points))
+        txt = next(p for p in dev.primitives if p.type == "text")
+        assert bar_top > arrow_bot + 0.5, (lib_id, bar_top, arrow_bot)
+        assert bar_bot < txt.y - txt.size + 0.05, (lib_id, bar_bot, txt)
+
+
+
 

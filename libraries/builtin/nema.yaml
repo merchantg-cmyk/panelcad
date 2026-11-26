@@ -302,7 +302,8 @@ devices:
       draw:
         - rect: [6, 6, 24, 28]
         - circle: [18, 20, 5]
-        - text: [26, 32, "TR", 2.2]
+        - text: [18, 21.2, "TR", 2.2]
+        - text: [13, 31.8, "TON", 1.9]
         - line: [0, 20, 13, 20]
         - line: [23, 20, 36, 20]
         - line: [22, 10, 36, 10]
@@ -1455,11 +1456,11 @@ devices:
       draw:
         - line: [0, 10, 11, 10]
         - line: [17, 10, 28, 10]
-        - line: [11, 4.5, 11, 15.5]
-        - line: [17, 4.5, 17, 15.5]
-        - line: [14, 5.5, 14, 1.5]
-        - polyline: [[12.3, 3.5], [14, 1.5], [15.7, 3.5]]
-        - text: [14, 17, "NOTC", 1.8]
+        - line: [11, 6, 11, 14]
+        - line: [17, 6, 17, 14]
+        - line: [14, 5.0, 14, 1.0]
+        - polyline: [[12.3, 3.0], [14, 1.0], [15.7, 3.0]]
+        - text: [14, 17.4, "NOTC", 1.7]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
     props: { contact: NOTC, timing: on-delay }
 
@@ -1477,12 +1478,12 @@ devices:
       draw:
         - line: [0, 10, 11, 10]
         - line: [17, 10, 28, 10]
-        - line: [11, 4.5, 11, 15.5]
-        - line: [17, 4.5, 17, 15.5]
-        - line: [8.5, 15, 19.5, 5]
-        - line: [14, 5.5, 14, 1.5]
-        - polyline: [[12.3, 3.5], [14, 1.5], [15.7, 3.5]]
-        - text: [14, 17, "NCTO", 1.8]
+        - line: [11, 6, 11, 14]
+        - line: [17, 6, 17, 14]
+        - line: [8.5, 13.8, 19.5, 6.2]
+        - line: [14, 5.0, 14, 1.0]
+        - polyline: [[12.3, 3.0], [14, 1.0], [15.7, 3.0]]
+        - text: [14, 17.4, "NCTO", 1.7]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
     props: { contact: NCTO, timing: on-delay }
 
@@ -1500,11 +1501,11 @@ devices:
       draw:
         - line: [0, 10, 11, 10]
         - line: [17, 10, 28, 10]
-        - line: [11, 4.5, 11, 15.5]
-        - line: [17, 4.5, 17, 15.5]
-        - line: [14, 1.5, 14, 5.5]
-        - polyline: [[12.3, 3.5], [14, 5.5], [15.7, 3.5]]
-        - text: [14, 17, "NOTO", 1.8]
+        - line: [11, 6, 11, 14]
+        - line: [17, 6, 17, 14]
+        - line: [14, 1.0, 14, 5.0]
+        - polyline: [[12.3, 3.0], [14, 5.0], [15.7, 3.0]]
+        - text: [14, 17.4, "NOTO", 1.7]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
     props: { contact: NOTO, timing: off-delay }
 
@@ -1522,12 +1523,12 @@ devices:
       draw:
         - line: [0, 10, 11, 10]
         - line: [17, 10, 28, 10]
-        - line: [11, 4.5, 11, 15.5]
-        - line: [17, 4.5, 17, 15.5]
-        - line: [8.5, 15, 19.5, 5]
-        - line: [14, 1.5, 14, 5.5]
-        - polyline: [[12.3, 3.5], [14, 5.5], [15.7, 3.5]]
-        - text: [14, 17, "NCTC", 1.8]
+        - line: [11, 6, 11, 14]
+        - line: [17, 6, 17, 14]
+        - line: [8.5, 13.8, 19.5, 6.2]
+        - line: [14, 1.0, 14, 5.0]
+        - polyline: [[12.3, 3.0], [14, 5.0], [15.7, 3.0]]
+        - text: [14, 17.4, "NCTC", 1.7]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
     props: { contact: NCTC, timing: off-delay }
 
