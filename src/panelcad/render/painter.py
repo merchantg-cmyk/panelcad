@@ -369,17 +369,32 @@ def _draw_column_selector(painter: Painter, device: Device, component: Component
     painter.line(cx, cy + 10.0, cx, mid_y)
     painter.line(cx, mid_y, hx, hy)
     painter.line(hx - 2.2, hy - 2.4, hx + 2.2, hy + 2.4)
+    ax, ay = pin_world(component, auto) if auto is not None else (hx, hy)
+    side_split = auto is not None and abs(hx - ax) >= 1.0
     painter.set_layer("TEXT")
     painter.set_fill("#111111")
-    painter.text(min(cx, hx) - 1.6, hy - 1.2, "Hand", 2.1, align="end")
+    if side_split:
+        if hx >= ax:
+            painter.text(hx + 2.8, hy - 1.0, "Hand", 2.1, align="start")
+        else:
+            painter.text(hx - 2.8, hy - 1.0, "Hand", 2.1, align="end")
+    else:
+        painter.text(min(cx, hx) - 1.6, hy - 1.2, "Hand", 2.1, align="end")
     if auto is not None:
-        ax, ay = pin_world(component, auto)
+        painter.set_layer("DEVICES")
         painter.set_stroke("#111111", 0.45)
         painter.set_fill(None)
         painter.line(cx, mid_y, ax, ay)
         painter.line(ax - 2.2, ay + 2.2, ax + 2.2, ay - 2.2)
+        painter.set_layer("TEXT")
         painter.set_fill("#111111")
-        painter.text(min(cx, ax) - 1.6, ay + 3.4, "Auto", 2.1, align="end")
+        if side_split:
+            if ax >= hx:
+                painter.text(ax + 2.8, ay - 1.0, "Auto", 2.1, align="start")
+            else:
+                painter.text(ax - 2.8, ay - 1.0, "Auto", 2.1, align="end")
+        else:
+            painter.text(min(cx, ax) - 1.6, ay + 3.4, "Auto", 2.1, align="end")
     painter.set_fill(None)
     return True
 

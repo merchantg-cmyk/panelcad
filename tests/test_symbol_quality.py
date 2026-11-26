@@ -293,3 +293,262 @@ def test_single_pole_nema_controls_do_not_receive_three_phase_supply_stubs():
     svg = sheet_to_svg(session.sheet(), session.catalog, project=session.project)
     assert 'width="100%"' not in svg
     assert 'fill="#f7f4ea"' in svg
+
+
+def test_fuses_draw_box_before_leads_and_iec_3p_has_through_conductor():
+    """Opaque fuse rectangles precede internal leads/S-curves so ink is not covered."""
+
+    catalog = default_catalog()
+    for lib_id in ("nema.protection.fuse_10a", "nema.protection.fuse", "nema.protection.fuse_3p"):
+        dev = catalog.get(lib_id)
+        rects = [(i, p) for i, p in enumerate(dev.primitives) if p.type == "rect"]
+        assert rects, lib_id
+        for r_idx, rect in rects:
+            rx1, rx2 = rect.x, rect.x + rect.w
+            ry1, ry2 = rect.y, rect.y + rect.h
+            for p_idx, prim in enumerate(dev.primitives):
+                if prim.type == "arc" and rx1 <= prim.x <= rx2 and ry1 <= prim.y <= ry2:
+                    assert r_idx < p_idx, (lib_id, r_idx, p_idx)
+                elif prim.type == "line":
+                    # Any lead intersecting this pole's box must be drawn after the rect.
+                    if max(prim.x, prim.x2) > rx1 and min(prim.x, prim.x2) < rx2 and max(prim.y, prim.y2) > ry1 and min(prim.y, prim.y2) < ry2:
+                        assert r_idx < p_idx, (lib_id, r_idx, p_idx)
+        # Every S-curve endpoint must meet a lead line.
+        lines = [p for p in dev.primitives if p.type == "line"]
+        ends = {(round(l.x, 3), round(l.y, 3)) for l in lines} | {(round(l.x2, 3), round(l.y2, 3)) for l in lines}
+        arcs = [p for p in dev.primitives if p.type == "arc"]
+        assert len(arcs) >= 2
+        # Check outer endpoints of each 2-arc S-curve pair
+        for i in range(0, len(arcs), 2):
+            a1, a2 = arcs[i], arcs[i + 1]
+            p_start = arc_point(a1.x, a1.y, a1.r, a1.start)
+            p_end = arc_point(a2.x, a2.y, a2.r, a2.start + a2.sweep)
+            assert (round(p_start[0], 3), round(p_start[1], 3)) in ends, (lib_id, p_start)
+            assert (round(p_end[0], 3), round(p_end[1], 3)) in ends, (lib_id, p_end)
+
+    iec_3p = catalog.get("iec.protection.fuse_3p")
+    for x in (8.0, 18.0, 28.0):
+        rect_idx = next(i for i, p in enumerate(iec_3p.primitives) if p.type == "rect" and p.x < x < p.x + p.w)
+        line_idx = next(
+            i
+            for i, p in enumerate(iec_3p.primitives)
+            if p.type == "line" and p.x == p.x2 == x and min(p.y, p.y2) == 0.0 and max(p.y, p.y2) == 50.0
+        )
+        assert rect_idx < line_idx, x
+
+
+def test_iec_contactor_aux_contact_and_nema_safety_relay_geometry():
+    """IEC 9A contactor has parallel blades + clean NO aux contact; NEMA safety relay has orthogonal coil leads."""
+
+    catalog = default_catalog()
+    km = catalog.get("iec.contactors.ac3_9a")
+    blades = [p for p in km.primitives if p.type == "line" and p.y == 16.0 and p.y2 == 22.0]
+    assert len(blades) == 3
+    assert [round(b.x2 - b.x, 3) for b in sorted(blades, key=lambda b: b.x)] == [3.0, 3.0, 3.0]
+    gang = next(p for p in km.primitives if p.type == "line" and p.y == p.y2 == 22.0)
+    assert (gang.x, gang.x2) == pytest.approx((13.0, 33.0))
+    aux_lines = [p for p in km.primitives if p.type == "line" and min(p.x, p.x2) >= 36.0]
+    ends = {(round(p.x, 2), round(p.y, 2)) for p in aux_lines} | {(round(p.x2, 2), round(p.y2, 2)) for p in aux_lines}
+    assert (40.0, 20.0) in ends and (40.0, 28.0) in ends
+    assert len([p for p in aux_lines if p.x != p.x2 and p.y != p.y2]) == 1
+
+    sr = catalog.get("nema.relays.safety_24vdc")
+    coil_lines = [p for p in sr.primitives if p.type == "line" and min(p.x, p.x2) <= 16.0 and max(p.y, p.y2) <= 28.0]
+    assert coil_lines
+    assert all(p.x == p.x2 or p.y == p.y2 for p in coil_lines)
+    texts = {p.text for p in sr.primitives if p.type == "text"}
+    assert {"SR", "SFTY"} <= texts
+    # Output contacts have vertical ticks at x=32 and x=30 and blades at y=16->20 and y=32->36.
+    ticks = [p for p in sr.primitives if p.type == "line" and p.x == p.x2 in (30.0, 32.0)]
+    assert len(ticks) == 4
+
+
+def test_operators_estop_2nc_selector_and_limit_switches():
+    """E-stop 2NC stem reaches lower blade, 2-pos selector pointer stays inside circle,
+    rotated column selector labels stay clear of branches, and limit switches have closed cams."""
+    from panelcad.core.models import Component
+    from panelcad.render.painter import Painter, draw_device
+    from panelcad.render.sheet import pin_world
+
+    catalog = default_catalog()
+
+    estop2 = catalog.get("iec.operators.estop_2nc")
+    stems = [p for p in estop2.primitives if p.type == "line" and p.x == p.x2 == 14.0]
+    assert stems and max(max(s.y, s.y2) for s in stems) >= 36.0
+
+    sel2 = catalog.get("iec.operators.selector_2pos")
+    circle = next(p for p in sel2.primitives if p.type == "circle")
+    pointer = next(
+        p for p in sel2.primitives if p.type == "line" and (p.x, p.y) == (circle.x, circle.y)
+    )
+    assert math.hypot(pointer.x2 - circle.x, pointer.y2 - circle.y) <= circle.r + 1e-6
+
+    class _RecPainter(Painter):
+        def __init__(self) -> None:
+            self.texts: list[tuple[float, float, str, str]] = []
+
+        def set_stroke(self, color: str, width: float) -> None:
+            pass
+
+        def set_fill(self, color: str | None) -> None:
+            pass
+
+        def rect(self, x: float, y: float, w: float, h: float) -> None:
+            pass
+
+        def line(self, x1: float, y1: float, x2: float, y2: float) -> None:
+            pass
+
+        def circle(self, x: float, y: float, r: float) -> None:
+            pass
+
+        def polyline(self, points: list[tuple[float, float]]) -> None:
+            pass
+
+        def text(
+            self,
+            x: float,
+            y: float,
+            text: str,
+            size: float,
+            align: str = "middle",
+            rotate: float = 0,
+        ) -> None:
+            self.texts.append((x, y, text, align))
+
+    sel3 = catalog.get("iec.operators.selector_3pos")
+    comp = Component(id="S1", library_id="iec.operators.selector_3pos", x=40.0, y=40.0, rotation=90)
+    rp = _RecPainter()
+    draw_device(rp, sel3, comp, captions=False)
+    hx, _ = pin_world(comp, sel3.pin("12"))
+    ax, _ = pin_world(comp, sel3.pin("14"))
+    lo_x, hi_x = min(hx, ax), max(hx, ax)
+    by_label = {txt: (x, y, align) for x, y, txt, align in rp.texts}
+    assert "Hand" in by_label and "Auto" in by_label
+    assert by_label["Hand"][0] < lo_x or by_label["Hand"][0] > hi_x
+    assert by_label["Auto"][0] < lo_x or by_label["Auto"][0] > hi_x
+
+    for lib_id in (
+        "iec.operators.limit_no",
+        "iec.operators.limit_nc",
+        "nema.operators.limit_no",
+        "nema.operators.limit_nc",
+    ):
+        dev = catalog.get(lib_id)
+        cams = [p for p in dev.primitives if p.type == "polyline"]
+        assert len(cams) == 1, lib_id
+        pts = cams[0].points
+        assert len(pts) == 4 and pts[0] == pts[-1], (lib_id, pts)
+        cam_bottom_y = max(pt[1] for pt in pts)
+        stems = [
+            p
+            for p in dev.primitives
+            if p.type == "line" and p.x == p.x2 and min(p.y, p.y2) == pytest.approx(cam_bottom_y)
+        ]
+        assert len(stems) == 1, lib_id
+        blade = max(
+            (p for p in dev.primitives if p.type == "line" and p.x != p.x2 and p.y != p.y2),
+            key=lambda p: abs(p.x2 - p.x),
+        )
+        stem_x = stems[0].x
+        stem_bot = max(stems[0].y, stems[0].y2)
+        t = (stem_x - blade.x) / (blade.x2 - blade.x)
+        assert 0.0 < t < 1.0
+        blade_y_at_stem = blade.y + t * (blade.y2 - blade.y)
+        assert stem_bot == pytest.approx(blade_y_at_stem, abs=0.05), lib_id
+
+
+def test_timer_labels_clear_leads_and_contacts_have_valid_delay_marks():
+    """On-delay timer labels clear pin-18/3 leads; timed contacts have non-overlapping delay marks."""
+
+    catalog = default_catalog()
+    for lib_id in ("iec.timers.on_delay", "nema.timers.on_delay"):
+        dev = catalog.get(lib_id)
+        for prim in dev.primitives:
+            if prim.type == "text":
+                assert not (prim.x >= 22.0 and abs(prim.y - 30.0) <= 3.0), (lib_id, prim)
+
+    for lib_id in (
+        "iec.timers.contact_notc",
+        "iec.timers.contact_ncto",
+        "iec.timers.contact_noto",
+        "iec.timers.contact_nctc",
+    ):
+        dev = catalog.get(lib_id)
+        arcs = [p for p in dev.primitives if p.type == "arc"]
+        assert len(arcs) == 1, lib_id
+        arc = arcs[0]
+        # Vertical stem joins the blade to the delay arc center/crest.
+        stems = [
+            p
+            for p in dev.primitives
+            if p.type == "line" and p.x == p.x2 == pytest.approx(arc.x) and min(p.y, p.y2) < 10.0
+        ]
+        assert len(stems) == 1, lib_id
+
+    for lib_id in (
+        "nema.timers.contact_notc",
+        "nema.timers.contact_ncto",
+        "nema.timers.contact_noto",
+        "nema.timers.contact_nctc",
+    ):
+        dev = catalog.get(lib_id)
+        bars = [p for p in dev.primitives if p.type == "line" and p.x == p.x2 and p.x in (11.0, 17.0)]
+        assert len(bars) == 2, lib_id
+        bar_top = min(min(b.y, b.y2) for b in bars)
+        bar_bot = max(max(b.y, b.y2) for b in bars)
+        arrow_stem = next(p for p in dev.primitives if p.type == "line" and p.x == p.x2 == 14.0)
+        arrow_head = next(p for p in dev.primitives if p.type == "polyline")
+        arrow_bot = max(arrow_stem.y, arrow_stem.y2, *(pt[1] for pt in arrow_head.points))
+        txt = next(p for p in dev.primitives if p.type == "text")
+        assert bar_top > arrow_bot + 0.5, (lib_id, bar_top, arrow_bot)
+        assert bar_bot < txt.y - txt.size + 0.05, (lib_id, bar_bot, txt)
+
+
+def test_terminals_pe_fan_and_offpage_geometry():
+    """Terminal 'X' sits inside its box, PE earth bars stand off the box with a stem,
+    24V fan leads touch the circle, and off-page TO/FROM labels stay inside bounds."""
+
+    catalog = default_catalog()
+
+    for lib_id in ("iec.terminals.x_2p5", "iec.terminals.phoenix_ut_2p5"):
+        dev = catalog.get(lib_id)
+        rect = next(p for p in dev.primitives if p.type == "rect")
+        txt = next(p for p in dev.primitives if p.type == "text" and p.text == "X")
+        assert rect.x < txt.x < rect.x + rect.w
+        assert rect.y + txt.size <= txt.y <= rect.y + rect.h
+
+    pe = catalog.get("iec.terminals.pe_4")
+    rect = next(p for p in pe.primitives if p.type == "rect")
+    box_bot = rect.y + rect.h
+    bars = [p for p in pe.primitives if p.type == "line" and p.y == p.y2 and p.y > box_bot]
+    assert len(bars) == 3
+    top_bar_y = min(b.y for b in bars)
+    assert top_bar_y > box_bot + 1.0
+    stems = [
+        p
+        for p in pe.primitives
+        if p.type == "line"
+        and p.x == p.x2 == 8.0
+        and min(p.y, p.y2) == pytest.approx(box_bot)
+        and max(p.y, p.y2) == pytest.approx(top_bar_y)
+    ]
+    assert len(stems) == 1
+
+    fan = catalog.get("iec.loads.fan_24v")
+    circle = next(p for p in fan.primitives if p.type == "circle")
+    leads = [p for p in fan.primitives if p.type == "line" and min(p.x, p.x2) == 0.0]
+    assert len(leads) == 2
+    for lead in leads:
+        end_x = max(lead.x, lead.x2)
+        assert _on_circle(end_x, lead.y, circle.x, circle.y, circle.r, tol=0.05)
+
+    for lib_id in ("iec.connection.offpage", "iec.connection.offpage_from"):
+        dev = catalog.get(lib_id)
+        txt = next(p for p in dev.primitives if p.type == "text")
+        assert 0.0 <= txt.y - txt.size and txt.y <= 5.5, (lib_id, txt)
+
+
+
+
+

@@ -182,7 +182,8 @@ devices:
         - { id: "3", x: 0, y: 18, side: left }
         - { id: "4", x: 26, y: 18, side: right }
       draw:
-        - polyline: [[10, 3], [18, 3], [18, 10]]
+        - polyline: [[8.5, 9], [14.5, 9], [14.5, 4], [8.5, 9]]
+        - line: [11.5, 9, 11.5, 15]
         - line: [0, 18, 8, 18]
         - line: [18, 18, 26, 18]
         - line: [8, 15, 8, 21]
@@ -203,7 +204,8 @@ devices:
         - { id: "1", x: 0, y: 18, side: left }
         - { id: "2", x: 26, y: 18, side: right }
       draw:
-        - polyline: [[10, 3], [18, 3], [18, 10]]
+        - polyline: [[10, 9], [16, 9], [16, 4], [10, 9]]
+        - line: [13, 9, 13, 16.5]
         - line: [0, 18, 8, 18]
         - line: [18, 18, 26, 18]
         - line: [8, 15, 8, 21]
@@ -300,7 +302,8 @@ devices:
       draw:
         - rect: [6, 6, 24, 28]
         - circle: [18, 20, 5]
-        - text: [26, 32, "TR", 2.2]
+        - text: [18, 21.2, "TR", 2.2]
+        - text: [13, 31.8, "TON", 1.9]
         - line: [0, 20, 13, 20]
         - line: [23, 20, 36, 20]
         - line: [22, 10, 36, 10]
@@ -442,8 +445,8 @@ devices:
         - { id: "1", x: 0, y: 7, side: left, electrical: power }
         - { id: "2", x: 28, y: 7, side: right, electrical: power }
       draw:
-        - line: [0, 7, 10, 7]
         - rect: [6, 2, 16, 10]
+        - line: [0, 7, 10, 7]
         - arc: [12, 7, 2.0, 180, -180]
         - arc: [16, 7, 2.0, 180, 180]
         - line: [18, 7, 28, 7]
@@ -466,18 +469,18 @@ devices:
         - { id: "4", x: 18, y: 50, side: bottom, electrical: power }
         - { id: "6", x: 28, y: 50, side: bottom, electrical: power }
       draw:
-        - line: [8, 0, 8, 16]
         - rect: [4, 12, 8, 16]
+        - line: [8, 0, 8, 16]
         - arc: [8, 18, 2.0, 90, -180]
         - arc: [8, 22, 2.0, 90, 180]
         - line: [8, 24, 8, 50]
-        - line: [18, 0, 18, 16]
         - rect: [14, 12, 8, 16]
+        - line: [18, 0, 18, 16]
         - arc: [18, 18, 2.0, 90, -180]
         - arc: [18, 22, 2.0, 90, 180]
         - line: [18, 24, 18, 50]
-        - line: [28, 0, 28, 16]
         - rect: [24, 12, 8, 16]
+        - line: [28, 0, 28, 16]
         - arc: [28, 18, 2.0, 90, -180]
         - arc: [28, 22, 2.0, 90, 180]
         - line: [28, 24, 28, 50]
@@ -1453,11 +1456,11 @@ devices:
       draw:
         - line: [0, 10, 11, 10]
         - line: [17, 10, 28, 10]
-        - line: [11, 4.5, 11, 15.5]
-        - line: [17, 4.5, 17, 15.5]
-        - line: [14, 5.5, 14, 1.5]
-        - polyline: [[12.3, 3.5], [14, 1.5], [15.7, 3.5]]
-        - text: [14, 17, "NOTC", 1.8]
+        - line: [11, 6, 11, 14]
+        - line: [17, 6, 17, 14]
+        - line: [14, 5.0, 14, 1.0]
+        - polyline: [[12.3, 3.0], [14, 1.0], [15.7, 3.0]]
+        - text: [14, 17.4, "NOTC", 1.7]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
     props: { contact: NOTC, timing: on-delay }
 
@@ -1475,12 +1478,12 @@ devices:
       draw:
         - line: [0, 10, 11, 10]
         - line: [17, 10, 28, 10]
-        - line: [11, 4.5, 11, 15.5]
-        - line: [17, 4.5, 17, 15.5]
-        - line: [8.5, 15, 19.5, 5]
-        - line: [14, 5.5, 14, 1.5]
-        - polyline: [[12.3, 3.5], [14, 1.5], [15.7, 3.5]]
-        - text: [14, 17, "NCTO", 1.8]
+        - line: [11, 6, 11, 14]
+        - line: [17, 6, 17, 14]
+        - line: [8.5, 13.8, 19.5, 6.2]
+        - line: [14, 5.0, 14, 1.0]
+        - polyline: [[12.3, 3.0], [14, 1.0], [15.7, 3.0]]
+        - text: [14, 17.4, "NCTO", 1.7]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
     props: { contact: NCTO, timing: on-delay }
 
@@ -1498,11 +1501,11 @@ devices:
       draw:
         - line: [0, 10, 11, 10]
         - line: [17, 10, 28, 10]
-        - line: [11, 4.5, 11, 15.5]
-        - line: [17, 4.5, 17, 15.5]
-        - line: [14, 1.5, 14, 5.5]
-        - polyline: [[12.3, 3.5], [14, 5.5], [15.7, 3.5]]
-        - text: [14, 17, "NOTO", 1.8]
+        - line: [11, 6, 11, 14]
+        - line: [17, 6, 17, 14]
+        - line: [14, 1.0, 14, 5.0]
+        - polyline: [[12.3, 3.0], [14, 5.0], [15.7, 3.0]]
+        - text: [14, 17.4, "NOTO", 1.7]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
     props: { contact: NOTO, timing: off-delay }
 
@@ -1520,12 +1523,12 @@ devices:
       draw:
         - line: [0, 10, 11, 10]
         - line: [17, 10, 28, 10]
-        - line: [11, 4.5, 11, 15.5]
-        - line: [17, 4.5, 17, 15.5]
-        - line: [8.5, 15, 19.5, 5]
-        - line: [14, 1.5, 14, 5.5]
-        - polyline: [[12.3, 3.5], [14, 5.5], [15.7, 3.5]]
-        - text: [14, 17, "NCTC", 1.8]
+        - line: [11, 6, 11, 14]
+        - line: [17, 6, 17, 14]
+        - line: [8.5, 13.8, 19.5, 6.2]
+        - line: [14, 1.0, 14, 5.0]
+        - polyline: [[12.3, 3.0], [14, 5.0], [15.7, 3.0]]
+        - text: [14, 17.4, "NCTC", 1.7]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
     props: { contact: NCTC, timing: off-delay }
 
@@ -1597,8 +1600,8 @@ devices:
         - { id: "1", x: 0, y: 7, side: left, electrical: power }
         - { id: "2", x: 28, y: 7, side: right, electrical: power }
       draw:
-        - line: [0, 7, 10, 7]
         - rect: [6, 2, 16, 10]
+        - line: [0, 7, 10, 7]
         - arc: [12, 7, 2.0, 180, -180]
         - arc: [16, 7, 2.0, 180, 180]
         - line: [18, 7, 28, 7]
@@ -1706,18 +1709,24 @@ devices:
         - { id: "24", x: 50, y: 40, side: right, electrical: output }
       draw:
         - rect: [8, 8, 34, 46]
-        - circle: [18, 22, 4]
-        - line: [0, 16, 8, 16]
-        - line: [8, 16, 18, 18]
-        - line: [0, 28, 8, 28]
-        - line: [8, 28, 18, 26]
+        - circle: [16, 22, 4]
+        - text: [16, 23.4, "SR", 2.0]
+        - text: [25, 50, "SFTY", 2.0]
+        - line: [0, 16, 16, 16]
+        - line: [16, 16, 16, 18]
+        - line: [16, 26, 16, 28]
+        - line: [0, 28, 16, 28]
         - line: [0, 40, 8, 40]
         - line: [0, 48, 8, 48]
-        - line: [30, 16, 36, 22]
-        - line: [36, 24, 50, 24]
-        - line: [30, 16, 50, 16]
-        - line: [30, 32, 36, 38]
-        - line: [36, 40, 50, 40]
-        - line: [30, 32, 50, 32]
+        - line: [32, 16, 50, 16]
+        - line: [32, 14, 32, 18]
+        - line: [32, 16, 38, 20]
+        - line: [30, 24, 50, 24]
+        - line: [30, 22, 30, 26]
+        - line: [32, 32, 50, 32]
+        - line: [32, 30, 32, 34]
+        - line: [32, 32, 38, 36]
+        - line: [30, 40, 50, 40]
+        - line: [30, 38, 30, 42]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic, symbol_only: true }
     props: { coil: 24VDC, channels: 2 }

@@ -13,7 +13,7 @@ _term: &feedthrough
     - rect: [3, 4, 10, 16]
     - line: [0, 12, 3, 12]
     - line: [13, 12, 16, 12]
-    - text: [8, 22, "X", 2.4]
+    - text: [8, 13.0, "X", 2.4]
 
 devices:
   - id: terminals.phoenix_ut_2p5

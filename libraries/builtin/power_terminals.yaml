@@ -16,7 +16,7 @@ devices:
         - rect: [3, 4, 10, 16]
         - line: [0, 12, 3, 12]
         - line: [13, 12, 16, 12]
-        - text: [8, 22, "X", 2.4]
+        - text: [8, 13.0, "X", 2.4]
     panel: { w: 5.2, h: 47, d: 48, din: true }
     props: { section: 2.5mm2, Ith: 24A, Un: 800V, jumper_family: generic, pitch_mm: 5.2 }
 
@@ -32,10 +32,11 @@ devices:
         - { id: A, x: 0, y: 12, side: left }
         - { id: B, x: 16, y: 12, side: right }
       draw:
-        - rect: [3, 4, 10, 16]
-        - line: [5, 20, 11, 20]
-        - line: [6, 22, 10, 22]
-        - line: [7, 24, 9, 24]
+        - rect: [3, 6, 10, 12]
+        - line: [8, 18, 8, 21]
+        - line: [4.5, 21, 11.5, 21]
+        - line: [5.8, 23, 10.2, 23]
+        - line: [7.0, 25, 9.0, 25]
         - line: [0, 12, 3, 12]
         - line: [13, 12, 16, 12]
     panel: { w: 6.2, h: 47, d: 48, din: true }
@@ -380,7 +381,7 @@ devices:
       draw:
         - line: [0, 6, 14, 6]
         - polyline: [[14, 2], [28, 6], [14, 10], [14, 2]]
-        - text: [16, 1, "TO", 1.8]
+        - text: [7, 4.5, "TO", 1.8]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
     props: { location: schematic-only, role: to }
 
@@ -413,7 +414,7 @@ devices:
       draw:
         - line: [18, 6, 32, 6]
         - polyline: [[18, 2], [4, 6], [18, 10], [18, 2]]
-        - text: [16, 1, "FROM", 1.8]
+        - text: [25, 4.5, "FROM", 1.8]
     panel: { w: 0, h: 0, d: 0, din: false, in_panel: false, mount: none, dims: generic }
     props: { location: schematic-only, role: from }
 
@@ -646,15 +647,12 @@ devices:
         - { id: "4", x: 18, y: 50, side: bottom, electrical: power }
         - { id: "6", x: 28, y: 50, side: bottom, electrical: power }
       draw:
-        - line: [8, 0, 8, 12]
         - rect: [4, 12, 8, 16]
-        - line: [8, 28, 8, 50]
-        - line: [18, 0, 18, 12]
+        - line: [8, 0, 8, 50]
         - rect: [14, 12, 8, 16]
-        - line: [18, 28, 18, 50]
-        - line: [28, 0, 28, 12]
+        - line: [18, 0, 18, 50]
         - rect: [24, 12, 8, 16]
-        - line: [28, 28, 28, 50]
+        - line: [28, 0, 28, 50]
     panel: { w: 0, h: 0, d: 0, din: true, in_panel: true, mount: din_rail, dims: generic }
     props: { poles: 3, location: panel }
 
