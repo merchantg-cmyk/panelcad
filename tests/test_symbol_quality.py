@@ -363,3 +363,99 @@ def test_iec_contactor_aux_contact_and_nema_safety_relay_geometry():
     assert len(ticks) == 4
 
 
+def test_operators_estop_2nc_selector_and_limit_switches():
+    """E-stop 2NC stem reaches lower blade, 2-pos selector pointer stays inside circle,
+    rotated column selector labels stay clear of branches, and limit switches have closed cams."""
+    from panelcad.core.models import Component
+    from panelcad.render.painter import Painter, draw_device
+    from panelcad.render.sheet import pin_world
+
+    catalog = default_catalog()
+
+    estop2 = catalog.get("iec.operators.estop_2nc")
+    stems = [p for p in estop2.primitives if p.type == "line" and p.x == p.x2 == 14.0]
+    assert stems and max(max(s.y, s.y2) for s in stems) >= 36.0
+
+    sel2 = catalog.get("iec.operators.selector_2pos")
+    circle = next(p for p in sel2.primitives if p.type == "circle")
+    pointer = next(
+        p for p in sel2.primitives if p.type == "line" and (p.x, p.y) == (circle.x, circle.y)
+    )
+    assert math.hypot(pointer.x2 - circle.x, pointer.y2 - circle.y) <= circle.r + 1e-6
+
+    class _RecPainter(Painter):
+        def __init__(self) -> None:
+            self.texts: list[tuple[float, float, str, str]] = []
+
+        def set_stroke(self, color: str, width: float) -> None:
+            pass
+
+        def set_fill(self, color: str | None) -> None:
+            pass
+
+        def rect(self, x: float, y: float, w: float, h: float) -> None:
+            pass
+
+        def line(self, x1: float, y1: float, x2: float, y2: float) -> None:
+            pass
+
+        def circle(self, x: float, y: float, r: float) -> None:
+            pass
+
+        def polyline(self, points: list[tuple[float, float]]) -> None:
+            pass
+
+        def text(
+            self,
+            x: float,
+            y: float,
+            text: str,
+            size: float,
+            align: str = "middle",
+            rotate: float = 0,
+        ) -> None:
+            self.texts.append((x, y, text, align))
+
+    sel3 = catalog.get("iec.operators.selector_3pos")
+    comp = Component(id="S1", library_id="iec.operators.selector_3pos", x=40.0, y=40.0, rotation=90)
+    rp = _RecPainter()
+    draw_device(rp, sel3, comp, captions=False)
+    hx, _ = pin_world(comp, sel3.pin("12"))
+    ax, _ = pin_world(comp, sel3.pin("14"))
+    lo_x, hi_x = min(hx, ax), max(hx, ax)
+    by_label = {txt: (x, y, align) for x, y, txt, align in rp.texts}
+    assert "Hand" in by_label and "Auto" in by_label
+    assert by_label["Hand"][0] < lo_x or by_label["Hand"][0] > hi_x
+    assert by_label["Auto"][0] < lo_x or by_label["Auto"][0] > hi_x
+
+    for lib_id in (
+        "iec.operators.limit_no",
+        "iec.operators.limit_nc",
+        "nema.operators.limit_no",
+        "nema.operators.limit_nc",
+    ):
+        dev = catalog.get(lib_id)
+        cams = [p for p in dev.primitives if p.type == "polyline"]
+        assert len(cams) == 1, lib_id
+        pts = cams[0].points
+        assert len(pts) == 4 and pts[0] == pts[-1], (lib_id, pts)
+        cam_bottom_y = max(pt[1] for pt in pts)
+        stems = [
+            p
+            for p in dev.primitives
+            if p.type == "line" and p.x == p.x2 and min(p.y, p.y2) == pytest.approx(cam_bottom_y)
+        ]
+        assert len(stems) == 1, lib_id
+        blade = max(
+            (p for p in dev.primitives if p.type == "line" and p.x != p.x2 and p.y != p.y2),
+            key=lambda p: abs(p.x2 - p.x),
+        )
+        stem_x = stems[0].x
+        stem_bot = max(stems[0].y, stems[0].y2)
+        t = (stem_x - blade.x) / (blade.x2 - blade.x)
+        assert 0.0 < t < 1.0
+        blade_y_at_stem = blade.y + t * (blade.y2 - blade.y)
+        assert stem_bot == pytest.approx(blade_y_at_stem, abs=0.05), lib_id
+
+
+
