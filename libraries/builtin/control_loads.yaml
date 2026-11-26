@@ -18,8 +18,8 @@ devices:
         - circle: [22, 18, 12]
         - line: [14, 18, 30, 18]
         - line: [22, 10, 22, 26]
-        - line: [0, 12, 10, 12]
-        - line: [0, 24, 10, 24]
+        - line: [0, 12, 11.608, 12]
+        - line: [0, 24, 11.608, 24]
         - text: [22, 34, "FAN", 2.4]
     panel: { w: 80, h: 80, d: 25, din: false, in_panel: true, mount: door, dims: generic }
     props: { supply: 24VDC }

@@ -505,5 +505,50 @@ def test_timer_labels_clear_leads_and_contacts_have_valid_delay_marks():
         assert bar_bot < txt.y - txt.size + 0.05, (lib_id, bar_bot, txt)
 
 
+def test_terminals_pe_fan_and_offpage_geometry():
+    """Terminal 'X' sits inside its box, PE earth bars stand off the box with a stem,
+    24V fan leads touch the circle, and off-page TO/FROM labels stay inside bounds."""
+
+    catalog = default_catalog()
+
+    for lib_id in ("iec.terminals.x_2p5", "iec.terminals.phoenix_ut_2p5"):
+        dev = catalog.get(lib_id)
+        rect = next(p for p in dev.primitives if p.type == "rect")
+        txt = next(p for p in dev.primitives if p.type == "text" and p.text == "X")
+        assert rect.x < txt.x < rect.x + rect.w
+        assert rect.y + txt.size <= txt.y <= rect.y + rect.h
+
+    pe = catalog.get("iec.terminals.pe_4")
+    rect = next(p for p in pe.primitives if p.type == "rect")
+    box_bot = rect.y + rect.h
+    bars = [p for p in pe.primitives if p.type == "line" and p.y == p.y2 and p.y > box_bot]
+    assert len(bars) == 3
+    top_bar_y = min(b.y for b in bars)
+    assert top_bar_y > box_bot + 1.0
+    stems = [
+        p
+        for p in pe.primitives
+        if p.type == "line"
+        and p.x == p.x2 == 8.0
+        and min(p.y, p.y2) == pytest.approx(box_bot)
+        and max(p.y, p.y2) == pytest.approx(top_bar_y)
+    ]
+    assert len(stems) == 1
+
+    fan = catalog.get("iec.loads.fan_24v")
+    circle = next(p for p in fan.primitives if p.type == "circle")
+    leads = [p for p in fan.primitives if p.type == "line" and min(p.x, p.x2) == 0.0]
+    assert len(leads) == 2
+    for lead in leads:
+        end_x = max(lead.x, lead.x2)
+        assert _on_circle(end_x, lead.y, circle.x, circle.y, circle.r, tol=0.05)
+
+    for lib_id in ("iec.connection.offpage", "iec.connection.offpage_from"):
+        dev = catalog.get(lib_id)
+        txt = next(p for p in dev.primitives if p.type == "text")
+        assert 0.0 <= txt.y - txt.size and txt.y <= 5.5, (lib_id, txt)
+
+
+
 
 
