@@ -2070,6 +2070,51 @@ def _rack(session: Any, module_comp: Any, io_sheet: Any) -> None:
     )
 
 
+def _seat_rack_modules(session: Any) -> None:
+    """Put each generated rack module's DIN clip on a TS35 rail.
+
+    Reflow packs by the enclosure outline, so the clip misses the sheet's
+    rail and the panel check reports the module as off the rail. Seating
+    starts from the sheet's default rail every time, so a second generate
+    leaves the rack where the first one put it.
+    """
+
+    from panelcad.core.layout import default_enclosure_and_rails, reseat_din_modules
+
+    def device_of(comp: Any) -> Any:
+        return session.catalog.get(comp.library_id)
+
+    for sheet in session.project.sheets:
+        if getattr(sheet, "kind", "") != "panel_layout" or sheet.enclosure is None:
+            continue
+        modules = [
+            comp
+            for comp in sheet.components
+            if comp.properties.get("io_module_ref") or comp.properties.get("io_module")
+        ]
+        if not modules:
+            continue
+        # A rack that holds only these modules gets a fresh default rail first.
+        # Otherwise a trimmed rail from the previous generate would seat the
+        # next generate somewhere else. A sheet that already holds other
+        # devices keeps its rails.
+        only_modules = all(
+            comp.properties.get("io_module_ref") or comp.properties.get("io_module")
+            for comp in sheet.components
+        )
+        if only_modules:
+            _enclosure, rails = default_enclosure_and_rails(sheet.page)
+            sheet.rails = rails
+        reseat_din_modules(
+            modules,
+            sheet.rails,
+            list(sheet.trays or []),
+            sheet.enclosure,
+            device_of,
+            order_x={comp.id: float(comp.x) for comp in modules},
+        )
+
+
 def _reflow_racks(session: Any) -> None:
     """Wrap rack modules onto rows, and onto another rack sheet, so each one stays in the enclosure."""
 
@@ -2178,9 +2223,24 @@ def _reflow_racks(session: Any) -> None:
                 if card.properties.get("io_module"):
                     homes[id(comp)] = (sheet, card, px, py, width, height)
                     break
-    for comp_id, (sheet, card, px, py, width, height) in homes.items():
-        del comp_id
-        card.properties["xref_rack"] = _zone_label(session, sheet, px + width / 2.0, py + min(height, 30.0) / 2.0)
+    _seat_rack_modules(session)
+    from panelcad.core.layout import footprint_size
+
+    for _comp_id, (sheet, card, _px, _py, _width, _height) in homes.items():
+        try:
+            placed = sheet.component(card.id)
+        except KeyError:
+            continue
+        device = session.catalog.get(placed.library_id)
+        placed_w, placed_h = footprint_size(device, placed)
+        if placed_w <= 0.0 or placed_h <= 0.0:
+            continue
+        card.properties["xref_rack"] = _zone_label(
+            session,
+            sheet,
+            float(placed.x) + placed_w / 2.0,
+            float(placed.y) + min(placed_h, 30.0) / 2.0,
+        )
 
 
 def _prepare_page(sheet: Any) -> None:

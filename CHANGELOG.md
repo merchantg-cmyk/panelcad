@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.5.30 — 2026-11-26
+
+- Unreadable tags stay `?`, including every `?`-prefixed tag. Catalog loads come from the published part. A 2-NC E-stop keeps its mate.
+- Control transformer primary (H1–H4) stays off L1/L2. X1 reaches L1 only through a secondary fuse or breaker.
+- Scan orientation, NEMA ladder synthesis, and electrical ONNX dispatch.
+- Wire corner and segment drag no longer crashes the drawing.
+- Symbol geometry for fuses, the IEC 9A contactor, the NEMA safety relay, the E-stop, selectors, timers, terminals, and off-page arrows.
+
 ## 0.5.29 — 2026-11-20
 
 - Wire drag fix.

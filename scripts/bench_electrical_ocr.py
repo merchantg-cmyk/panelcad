@@ -5,10 +5,10 @@ Tesseract and Paddle are optional baselines: if they are not installed, the
 JSON records that and still scores the engines that did run.
 
 Targets, and only these:
-  MichellesPC       shop PC
-  DESKTOP-3S1HOH0   home PC
+  shop-pc           shop PC
+  home-pc           home PC
 Do not run this on Drew-PC or the Pixel 6 Pro. A Cursor cloud VM result is
-not a local result. The JSON leaves MichellesPC and DESKTOP-3S1HOH0 empty
+not a local result. The JSON leaves shop-pc and home-pc empty
 unless ``platform.node()`` is one of those names.
 
 Working directory and command on either target PC

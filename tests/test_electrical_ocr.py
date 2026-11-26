@@ -263,11 +263,11 @@ def test_shipped_model_dir_is_used(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
 def test_local_target_gate() -> None:
     from panelcad.ocr.bench import counts_as_local_target, machine_role
 
-    assert machine_role("MichellesPC") == "michelles-pc"
-    assert machine_role("DESKTOP-3S1HOH0") == "home-pc"
+    assert machine_role("shop-pc") == "shop-pc"
+    assert machine_role("home-pc") == "home-pc"
     assert machine_role("cloud-vm") == "other"
-    assert counts_as_local_target("MichellesPC") is True
-    assert counts_as_local_target("DESKTOP-3S1HOH0") is True
+    assert counts_as_local_target("shop-pc") is True
+    assert counts_as_local_target("home-pc") is True
     assert counts_as_local_target("Drew-PC") is False
     assert counts_as_local_target("Pixel 6 Pro") is False
     samples = electrical_samples()

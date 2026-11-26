@@ -1911,10 +1911,62 @@ def _wire_numbers(session: Session) -> dict[str, tuple[str, str, str]]:
     return found
 
 
+def _rewritten_primary_fuse_rail(frm: str, to: str, session: Session) -> bool:
+    """A fuse-to-rail hop removed because that fuse now feeds a transformer primary.
+
+    The shop rule sends the primary off-page. That rewrite is not the model
+    changing a number the gap did not name.
+    """
+
+    ends: list[tuple[str, str | None]] = []
+    for text in (frm, to):
+        raw = str(text or "").strip()
+        if not raw:
+            return False
+        if "." not in raw:
+            ends.append((raw, None))
+            continue
+        ref, pin = raw.split(".", 1)
+        ends.append((ref, pin))
+    if len(ends) != 2:
+        return False
+    fuse_tag = ""
+    rail = False
+    for ref, pin in ends:
+        if pin is None and ref.upper() in {"L1", "L2", "L3", "N", "X1", "X2"}:
+            rail = True
+            continue
+        if not pin:
+            continue
+        comp = _find(session, ref)
+        if comp is not None and "fuse" in str(comp.library_id or "").lower():
+            fuse_tag = ref
+    if not fuse_tag or not rail:
+        return False
+    for sheet in session.project.sheets:
+        by_id = {comp.id: comp for comp in sheet.components}
+        for wire in sheet.wires:
+            for text in (wire.frm, wire.to):
+                raw = str(text or "")
+                if not raw.startswith(f"{fuse_tag}."):
+                    continue
+                mate = str(wire.to if raw == str(wire.frm) else wire.frm)
+                if "." not in mate:
+                    continue
+                mate_ref, mate_pin = mate.split(".", 1)
+                mate_comp = by_id.get(mate_ref)
+                if mate_comp is None or "transformer" not in str(mate_comp.library_id or "").lower():
+                    continue
+                if str(mate_pin or "").upper().startswith("H"):
+                    return True
+    return False
+
+
 def _numbers_outside_gap(
     before: dict[str, tuple[str, str, str]],
     after: dict[str, tuple[str, str, str]],
     unit: list[dict[str, Any]],
+    session: Session | None = None,
 ) -> list[str]:
     """Wire ids whose read number changed even though this item's gap did not name them."""
 
@@ -1939,6 +1991,8 @@ def _numbers_outside_gap(
         ends = {frm.split(".")[0].upper(), to.split(".")[0].upper()}
         dangling = bool(ends & challenged)
         if wire_id not in after:
+            if session is not None and _rewritten_primary_fuse_rail(frm, to, session):
+                continue
             if wire_id not in allowed and not dangling:
                 changed.append(wire_id)
             continue
@@ -1990,7 +2044,7 @@ def _apply_keeping_passes(
             _restore(session, snap)
             dropped.extend({"reason": "not applied", "item": item, "error": str(exc)} for item in unit)
             continue
-        outside = _numbers_outside_gap(numbers_before, _wire_numbers(session), run_unit)
+        outside = _numbers_outside_gap(numbers_before, _wire_numbers(session), run_unit, session)
         if outside:
             _restore(session, snap)
             violations += len(outside)
@@ -2000,6 +2054,9 @@ def _apply_keeping_passes(
             _restore(session, snap)
             dropped.extend({"reason": "not applied", "item": item} for item in unit)
             continue
+        # A primary fuse already on L1/L2 must leave the rail once it feeds H*.
+        # Do that before the layout gate, or the new primary rule drops a real T1.
+        rewrite_primary_fuse_rail_feeds(session)
         challenge = any(item.get("kind") == "challenge" for item in run_unit)
         # A number or a retag does not move a symbol, so the router must not
         # be asked to draw the sheet again. A new device is placed and routed.
@@ -2049,7 +2106,7 @@ def _apply_keeping_passes(
                 _restore(session, snap)
                 dropped.extend({"reason": "not issued", "item": item} for item in unit)
                 continue
-        outside = _numbers_outside_gap(numbers_before, _wire_numbers(session), run_unit)
+        outside = _numbers_outside_gap(numbers_before, _wire_numbers(session), run_unit, session)
         if outside:
             _restore(session, snap)
             violations += len(outside)

@@ -1,6 +1,6 @@
 """Compare the electrical engine with Tesseract and Paddle OCR.
 
-Run this on MichellesPC (shop) or DESKTOP-3S1HOH0 (home). Do not run it on
+Run this on shop-pc (shop) or home-pc (home). Do not run it on
 Drew-PC or the Pixel 6 Pro. A result from any other machine, including a
 Cursor cloud VM, is not a shop-PC or home-PC number.
 
@@ -43,8 +43,8 @@ from panelcad.ocr.electrical import ElectricalOcr
 from panelcad.ocr.samples import OcrSample, electrical_samples
 
 _LOCAL = {
-    "MICHELLESPC": "michelles-pc",
-    "DESKTOP-3S1HOH0": "home-pc",
+    "SHOP-PC": "shop-pc",
+    "HOME-PC": "home-pc",
 }
 _NOT_TARGETS = ("Drew-PC", "Pixel 6 Pro")
 
@@ -55,7 +55,7 @@ def machine_role(hostname: str | None = None) -> str:
 
 
 def counts_as_local_target(hostname: str | None = None) -> bool:
-    return machine_role(hostname) in {"michelles-pc", "home-pc"}
+    return machine_role(hostname) in {"shop-pc", "home-pc"}
 
 
 def run_benchmark() -> dict[str, Any]:
@@ -69,8 +69,8 @@ def run_benchmark() -> dict[str, Any]:
     hostname = platform.node()
     role = machine_role(hostname)
     local = {
-        "MichellesPC": None,
-        "DESKTOP-3S1HOH0": None,
+        "shop-pc": None,
+        "home-pc": None,
     }
     payload = {
         "measured_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -80,8 +80,8 @@ def run_benchmark() -> dict[str, Any]:
         "platform": platform.platform(),
         "python": platform.python_version(),
         "local_targets": {
-            "MichellesPC": "Shop PC. Leave null until this script is run there.",
-            "DESKTOP-3S1HOH0": "Home PC. Leave null until this script is run there.",
+            "shop-pc": "Shop PC. Leave null until this script is run there.",
+            "home-pc": "Home PC. Leave null until this script is run there.",
         },
         "not_targets": list(_NOT_TARGETS),
         "local_results": local,
@@ -105,16 +105,16 @@ def run_benchmark() -> dict[str, Any]:
             "Null means that path was not on disk. "
             "runtime_memory is null: Tesseract is a separate process, so resident "
             "set was not compared. "
-            "A machine_role of other is not a MichellesPC or DESKTOP-3S1HOH0 result."
+            "A machine_role of other is not a shop-pc or home-pc result."
         ),
     }
     _attach_memory(payload)
     _attach_size(payload)
     payload["scans"] = score_scan_proofs()
-    if role == "michelles-pc":
-        local["MichellesPC"] = _public_scores(engines)
+    if role == "shop-pc":
+        local["shop-pc"] = _public_scores(engines)
     elif role == "home-pc":
-        local["DESKTOP-3S1HOH0"] = _public_scores(engines)
+        local["home-pc"] = _public_scores(engines)
     return payload
 
 
@@ -933,7 +933,7 @@ def _print_summary(payload: dict[str, Any]) -> None:
         f"local_target {payload['counts_as_local_target']}"
     )
     if role == "other":
-        print("This run is not MichellesPC or DESKTOP-3S1HOH0. Local result slots stay empty.")
+        print("This run is not shop-pc or home-pc. Local result slots stay empty.")
     for name, result in payload["engines"].items():
         if not result.get("available"):
             size = result.get("size") or {}

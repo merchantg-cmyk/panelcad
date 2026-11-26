@@ -1644,8 +1644,19 @@ def test_an_open_secondary_or_contact_pin_blocks_issue(tmp_path: Path):
     assert "T1 pin H4 does not land" in text
     assert "M1-13 pin 4 does not land" in text
     assert _issue(session, set()) is False
-    session.wire("T1.H4", "L2", number="101")
-    session.wire("T1.X1", "L1", number="102")
+    # Clearing step. Primary never lands on L1/L2: H4 goes off-page, and H1's
+    # fuse (already on L1) leaves the rail for an off-page feed. X1 reaches L1
+    # only through a secondary fuse, as wire 102. X2 returns on L2 as 104.
+    from panelcad.importer.cleanup import (
+        land_primary_offpage_feed,
+        land_transformer_secondary_hot_via_fuse,
+        rewrite_primary_fuse_rail_feeds,
+    )
+
+    sheet = _sheet(session)
+    rewrite_primary_fuse_rail_feeds(session)
+    land_primary_offpage_feed(session, sheet.id, "T1", "H4", "EXT")
+    land_transformer_secondary_hot_via_fuse(session, sheet.id, "T1", "FU3", hot="L1", hot_number="102")
     session.wire("T1.X2", "L2", number="104")
     session.wire("M1-13.4", "PB1.4", number="107")
     assert not any("secondary" in item or "M1-13 pin" in item or "pin H4" in item for item in _completion_issues(session))
