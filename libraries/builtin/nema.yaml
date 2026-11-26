@@ -442,8 +442,8 @@ devices:
         - { id: "1", x: 0, y: 7, side: left, electrical: power }
         - { id: "2", x: 28, y: 7, side: right, electrical: power }
       draw:
-        - line: [0, 7, 10, 7]
         - rect: [6, 2, 16, 10]
+        - line: [0, 7, 10, 7]
         - arc: [12, 7, 2.0, 180, -180]
         - arc: [16, 7, 2.0, 180, 180]
         - line: [18, 7, 28, 7]
@@ -466,18 +466,18 @@ devices:
         - { id: "4", x: 18, y: 50, side: bottom, electrical: power }
         - { id: "6", x: 28, y: 50, side: bottom, electrical: power }
       draw:
-        - line: [8, 0, 8, 16]
         - rect: [4, 12, 8, 16]
+        - line: [8, 0, 8, 16]
         - arc: [8, 18, 2.0, 90, -180]
         - arc: [8, 22, 2.0, 90, 180]
         - line: [8, 24, 8, 50]
-        - line: [18, 0, 18, 16]
         - rect: [14, 12, 8, 16]
+        - line: [18, 0, 18, 16]
         - arc: [18, 18, 2.0, 90, -180]
         - arc: [18, 22, 2.0, 90, 180]
         - line: [18, 24, 18, 50]
-        - line: [28, 0, 28, 16]
         - rect: [24, 12, 8, 16]
+        - line: [28, 0, 28, 16]
         - arc: [28, 18, 2.0, 90, -180]
         - arc: [28, 22, 2.0, 90, 180]
         - line: [28, 24, 28, 50]
@@ -1597,8 +1597,8 @@ devices:
         - { id: "1", x: 0, y: 7, side: left, electrical: power }
         - { id: "2", x: 28, y: 7, side: right, electrical: power }
       draw:
-        - line: [0, 7, 10, 7]
         - rect: [6, 2, 16, 10]
+        - line: [0, 7, 10, 7]
         - arc: [12, 7, 2.0, 180, -180]
         - arc: [16, 7, 2.0, 180, 180]
         - line: [18, 7, 28, 7]

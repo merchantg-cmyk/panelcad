@@ -646,15 +646,12 @@ devices:
         - { id: "4", x: 18, y: 50, side: bottom, electrical: power }
         - { id: "6", x: 28, y: 50, side: bottom, electrical: power }
       draw:
-        - line: [8, 0, 8, 12]
         - rect: [4, 12, 8, 16]
-        - line: [8, 28, 8, 50]
-        - line: [18, 0, 18, 12]
+        - line: [8, 0, 8, 50]
         - rect: [14, 12, 8, 16]
-        - line: [18, 28, 18, 50]
-        - line: [28, 0, 28, 12]
+        - line: [18, 0, 18, 50]
         - rect: [24, 12, 8, 16]
-        - line: [28, 28, 28, 50]
+        - line: [28, 0, 28, 50]
     panel: { w: 0, h: 0, d: 0, din: true, in_panel: true, mount: din_rail, dims: generic }
     props: { poles: 3, location: panel }
 

@@ -293,3 +293,46 @@ def test_single_pole_nema_controls_do_not_receive_three_phase_supply_stubs():
     svg = sheet_to_svg(session.sheet(), session.catalog, project=session.project)
     assert 'width="100%"' not in svg
     assert 'fill="#f7f4ea"' in svg
+
+
+def test_fuses_draw_box_before_leads_and_iec_3p_has_through_conductor():
+    """Opaque fuse rectangles precede internal leads/S-curves so ink is not covered."""
+
+    catalog = default_catalog()
+    for lib_id in ("nema.protection.fuse_10a", "nema.protection.fuse", "nema.protection.fuse_3p"):
+        dev = catalog.get(lib_id)
+        rects = [(i, p) for i, p in enumerate(dev.primitives) if p.type == "rect"]
+        assert rects, lib_id
+        for r_idx, rect in rects:
+            rx1, rx2 = rect.x, rect.x + rect.w
+            ry1, ry2 = rect.y, rect.y + rect.h
+            for p_idx, prim in enumerate(dev.primitives):
+                if prim.type == "arc" and rx1 <= prim.x <= rx2 and ry1 <= prim.y <= ry2:
+                    assert r_idx < p_idx, (lib_id, r_idx, p_idx)
+                elif prim.type == "line":
+                    # Any lead intersecting this pole's box must be drawn after the rect.
+                    if max(prim.x, prim.x2) > rx1 and min(prim.x, prim.x2) < rx2 and max(prim.y, prim.y2) > ry1 and min(prim.y, prim.y2) < ry2:
+                        assert r_idx < p_idx, (lib_id, r_idx, p_idx)
+        # Every S-curve endpoint must meet a lead line.
+        lines = [p for p in dev.primitives if p.type == "line"]
+        ends = {(round(l.x, 3), round(l.y, 3)) for l in lines} | {(round(l.x2, 3), round(l.y2, 3)) for l in lines}
+        arcs = [p for p in dev.primitives if p.type == "arc"]
+        assert len(arcs) >= 2
+        # Check outer endpoints of each 2-arc S-curve pair
+        for i in range(0, len(arcs), 2):
+            a1, a2 = arcs[i], arcs[i + 1]
+            p_start = arc_point(a1.x, a1.y, a1.r, a1.start)
+            p_end = arc_point(a2.x, a2.y, a2.r, a2.start + a2.sweep)
+            assert (round(p_start[0], 3), round(p_start[1], 3)) in ends, (lib_id, p_start)
+            assert (round(p_end[0], 3), round(p_end[1], 3)) in ends, (lib_id, p_end)
+
+    iec_3p = catalog.get("iec.protection.fuse_3p")
+    for x in (8.0, 18.0, 28.0):
+        rect_idx = next(i for i, p in enumerate(iec_3p.primitives) if p.type == "rect" and p.x < x < p.x + p.w)
+        line_idx = next(
+            i
+            for i, p in enumerate(iec_3p.primitives)
+            if p.type == "line" and p.x == p.x2 == x and min(p.y, p.y2) == 0.0 and max(p.y, p.y2) == 50.0
+        )
+        assert rect_idx < line_idx, x
+
