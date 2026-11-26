@@ -336,3 +336,30 @@ def test_fuses_draw_box_before_leads_and_iec_3p_has_through_conductor():
         )
         assert rect_idx < line_idx, x
 
+
+def test_iec_contactor_aux_contact_and_nema_safety_relay_geometry():
+    """IEC 9A contactor has parallel blades + clean NO aux contact; NEMA safety relay has orthogonal coil leads."""
+
+    catalog = default_catalog()
+    km = catalog.get("iec.contactors.ac3_9a")
+    blades = [p for p in km.primitives if p.type == "line" and p.y == 16.0 and p.y2 == 22.0]
+    assert len(blades) == 3
+    assert [round(b.x2 - b.x, 3) for b in sorted(blades, key=lambda b: b.x)] == [3.0, 3.0, 3.0]
+    gang = next(p for p in km.primitives if p.type == "line" and p.y == p.y2 == 22.0)
+    assert (gang.x, gang.x2) == pytest.approx((13.0, 33.0))
+    aux_lines = [p for p in km.primitives if p.type == "line" and min(p.x, p.x2) >= 36.0]
+    ends = {(round(p.x, 2), round(p.y, 2)) for p in aux_lines} | {(round(p.x2, 2), round(p.y2, 2)) for p in aux_lines}
+    assert (40.0, 20.0) in ends and (40.0, 28.0) in ends
+    assert len([p for p in aux_lines if p.x != p.x2 and p.y != p.y2]) == 1
+
+    sr = catalog.get("nema.relays.safety_24vdc")
+    coil_lines = [p for p in sr.primitives if p.type == "line" and min(p.x, p.x2) <= 16.0 and max(p.y, p.y2) <= 28.0]
+    assert coil_lines
+    assert all(p.x == p.x2 or p.y == p.y2 for p in coil_lines)
+    texts = {p.text for p in sr.primitives if p.type == "text"}
+    assert {"SR", "SFTY"} <= texts
+    # Output contacts have vertical ticks at x=32 and x=30 and blades at y=16->20 and y=32->36.
+    ticks = [p for p in sr.primitives if p.type == "line" and p.x == p.x2 in (30.0, 32.0)]
+    assert len(ticks) == 4
+
+
