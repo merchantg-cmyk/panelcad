@@ -768,3 +768,49 @@ def test_transformer_top_tag_keeps_extra_clearance_below_working_rect() -> None:
     _wx, wy, _ww, _wh = working_rect(sheet)
     tag_top = float(t1.y) - float(TAG_DY) - float(TAG_SIZE) * float(TEXT_ASCENT)
     assert tag_top >= float(wy) + 2.5 - 1e-6, (t1.y, wy, tag_top)
+
+
+def test_device_label_overlapping_adjacent_symbol_body_fails_elementary_gate() -> None:
+    """Issued Demo Controls must keep PL1's tag clear of CR1's body, and squeezing them must fail."""
+
+    from panelcad.core.ink import text_box
+    from panelcad.examples.scan_ladder_demo import build_scan_ladder_demo
+    from panelcad.render.sheet_labels import place_device_tags
+
+    session = build_scan_ladder_demo()
+    sheet = session.project.sheet("elementary")
+    assert elementary_layout_issues(session, sheet) == []
+
+    cr1 = sheet.component("CR1")
+    cr1_dev = session.catalog.get(cr1.library_id)
+    cr1_bot = float(cr1.y) + float(cr1_dev.schematic_height)
+    tags = place_device_tags(sheet, session.catalog, ladder=True, project=session.project, sheet_no=1)
+    pl1_tag = tags["PL1"]
+    pl1_tbox = text_box(pl1_tag[0], pl1_tag[1], "PL1", pl1_tag[3], pl1_tag[2])
+    assert pl1_tbox is not None
+    assert pl1_tbox[1] >= cr1_bot - 0.1, (cr1_bot, pl1_tbox)
+
+    # Shoving CR1 down so PL1's tag sits inside CR1's body must fail the elementary gate.
+    cr1.y = float(sheet.component("PL1").y) - float(cr1_dev.schematic_height) + 0.1
+    issues = elementary_layout_issues(session, sheet)
+    assert any("device label PL1 overlaps CR1" in item for item in issues), issues
+
+
+def test_contact_right_of_leftmost_load_fails_elementary_gate() -> None:
+    """A contact sitting between M1 and OL1 or right of PL1 must fail _loads_on_the_right."""
+
+    from panelcad.examples.scan_ladder_demo import build_scan_ladder_demo
+
+    # Contact moved immediately right of PL1 (just past PL1's left edge / right pin)
+    s1 = build_scan_ladder_demo()
+    sh1 = s1.project.sheet("elementary")
+    sh1.component("CR1-13").x = float(sh1.component("PL1").x) + 24.2
+    issues1 = elementary_layout_issues(s1, sh1)
+    assert any("CR1-13 sits to the right of the coil" in item for item in issues1), issues1
+
+    # Contact moved between M1 (leftmost load) and OL1 (rightmost load)
+    s2 = build_scan_ladder_demo()
+    sh2 = s2.project.sheet("elementary")
+    sh2.component("PB1").x = float(sh2.component("M1").x) + 30.0
+    issues2 = elementary_layout_issues(s2, sh2)
+    assert any("PB1 sits to the right of the coil" in item for item in issues2), issues2

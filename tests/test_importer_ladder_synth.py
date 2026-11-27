@@ -698,8 +698,13 @@ def test_control_sheet_transformer_contacts_and_next_rung_have_zero_overlaps() -
     sh = project.sheets[0]
     t1 = sh.component("T1")
     es1 = sh.component("ES1")
+    t1_w = float(cat.get("nema.power.control_transformer").schematic_width)
     t1_h = float(cat.get("nema.power.control_transformer").schematic_height)
     assert float(es1.y) > float(t1.y) + t1_h
+    # Primary fuses FU1/FU2 stay left of T1; secondary fuse FU3 (wired to X1) sits right of T1.
+    assert float(sh.component("FU1").x) < float(t1.x)
+    assert float(sh.component("FU2").x) < float(t1.x)
+    assert float(sh.component("FU3").x) >= float(t1.x) + t1_w + 10.0
 
 
 def test_control_sheet_terminals_never_stack_and_left_xfmr_does_not_pollute_right_col() -> None:
@@ -753,6 +758,13 @@ def test_control_sheet_terminals_never_stack_and_left_xfmr_does_not_pollute_righ
     ]
     assert len(term_coords) == 4
     assert len(set(term_coords)) == 4, f"Stacked terminal coordinates: {term_coords}"
+    # Every stacked pair in the same column must keep >= 6.0 mm clear gap (elementary cramped gate).
+    term_h = float(cat.get("nema.terminals.feed_through").schematic_height)
+    for sh in project.sheets:
+        terms = sorted((c for c in sh.components if c.id.startswith("X1-")), key=lambda c: (round(c.x, 1), c.y))
+        for a, b in zip(terms, terms[1:]):
+            if abs(float(a.x) - float(b.x)) < 1.0:
+                assert float(b.y) - (float(a.y) + term_h) >= 6.0 - 1e-6, (a.id, b.id, a.y, b.y)
 
     # Case 2: Left-column T1 (52 mm tall) must not pollute right-column output_bottom_y for X1-1.
     proj2 = Project(name="No Cross-Column Pollution")
