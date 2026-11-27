@@ -391,6 +391,7 @@ def elementary_layout_issues(session: Session, sheet: Sheet) -> list[str]:
     issues.extend(_bad_routes(session, sheet, catalog))
     issues.extend(_stacked_notes(session, sheet))
     issues.extend(_body_problems(session, sheet, catalog))
+    issues.extend(_device_tags_clear_bodies(session, sheet, catalog))
     issues.extend(_wires_cross_device_labels(session, sheet, catalog))
     issues.extend(_terminal_gate(session, sheet, catalog))
     issues.extend(_loads_on_the_right(session, sheet, catalog))
@@ -777,7 +778,8 @@ def _rung_y(session, sheet, by_id, devices, series, floor: float, *, snap: bool)
         pin = _pin_named(devices[ref], "", "left")
         if pin is None:
             continue
-        above = max(above, float(pin.y))
+        head = _tag_headroom(by_id[ref], devices[ref])
+        above = max(above, float(pin.y) + head)
         below = max(below, float(devices[ref].schematic_height) - float(pin.y))
     minimum = floor + _GAP + above
     if snap:
@@ -876,113 +878,43 @@ def _squeeze_control_rows(
         ]
 
     moved = 0
-    # Stable order by Y so we can push the lower symbol down.
-    ordered = sorted(ids, key=lambda ref: (float(by_id[ref].y), ref))
-    for i, upper in enumerate(ordered):
-        for lower in ordered[i + 1 :]:
-            if abs(float(by_id[upper].x) - float(by_id[lower].x)) > 22.0:
-                continue
-            need = max(float(devices[upper].schematic_height), float(devices[lower].schematic_height)) + _GAP
-            gap = float(by_id[lower].y) - float(by_id[upper].y)
-            if gap >= need - 0.2:
-                continue
-            # Same rung (wire cohort on one Y) — leave pin-aligned series alone.
-            if set(rung_mates(lower)) & set(rung_mates(upper)):
-                continue
-            dy = need - gap
-            # ``control_ids`` sometimes omits a mate; never shift an empty list.
-            lower_mates = rung_mates(lower) or [lower]
-            # Title room is gated by the colliding column only — a right-hand
-            # coil on the same rung (CR1 with M1-23) must not block separating
-            # M1-23 from CR1-13 on the left.
-            lower_col = [
-                ref
-                for ref in lower_mates
-                if abs(float(by_id[ref].x) - float(by_id[lower].x)) <= 22.0
-            ] or [lower]
-            new_bottom = max(_bottom(by_id[ref], devices[ref]) for ref in lower_col) + dy
-            if new_bottom <= limit + 0.2:
-                moved += shift(lower_mates, dy)
-                continue
-            above = None
-            for ref in ordered:
-                if ref == upper:
-                    break
-                if abs(float(by_id[ref].x) - float(by_id[upper].x)) <= 22.0:
-                    above = ref
-            upper_mates = rung_mates(upper) or [upper]
-            max_up = min(float(by_id[ref].y) for ref in upper_mates) - (power_floor + _GAP)
-            if above is not None:
-                need_above = (
-                    max(
-                        float(devices[above].schematic_height),
-                        float(devices[upper].schematic_height),
-                    )
-                    + _GAP
-                )
-                max_up = min(
-                    max_up,
-                    float(by_id[upper].y) - (float(by_id[above].y) + need_above),
-                )
-            # Keep this rung's pin-Y conductor out of aux tags the horizontal
-            # span will cross (preserve 109 vs the below-body "M1-13" tag).
-            span_lo = min(float(by_id[ref].x) for ref in upper_mates)
-            span_hi = max(
-                float(by_id[ref].x) + float(devices[ref].schematic_width)
-                for ref in upper_mates
-            )
-            pin0 = device_pin_y(upper)
-            for other in ids:
-                if other in upper_mates or other not in by_id:
-                    continue
-                if _role(by_id[other].library_id) != "aux":
-                    continue
-                ox = float(by_id[other].x)
-                ow = float(devices[other].schematic_width)
-                if ox + ow < span_lo - 1.0 or ox > span_hi + 1.0:
-                    continue
-                if float(by_id[other].y) >= pin0 - 0.5:
-                    continue
-                # ``_tag_floor`` includes a trailing gap; ink ends ``_GAP`` sooner.
-                text_bottom = _tag_floor(by_id[other], devices[other]) - _GAP
-                max_up = min(max_up, max(0.0, pin0 - text_bottom - _WIRE_CLEAR))
-            up = min(dy, max(0.0, max_up))
-            if up <= 0.05:
-                continue
-            moved += shift(upper_mates, -up)
-            rem = dy - up
-            if rem > 0.05:
-                bottom2 = max(_bottom(by_id[ref], devices[ref]) for ref in lower_col) + rem
-                if bottom2 <= limit + 0.2:
-                    moved += shift(lower_mates, rem)
-    # Title overflow: pull offenders up without crossing power_floor.
-    # Use pin-Y rung mates (not the full wire cohort) so lifting CR1 does not
-    # drag M1-23 back into CR1-13 after a column separation.
-    ordered = sorted(ids, key=lambda ref: (float(by_id[ref].y), ref))
-    for ref in list(ordered):
-        bottom = _bottom(by_id[ref], devices[ref])
-        if bottom <= limit + 0.2:
-            continue
-        band = rung_mates(ref) or [ref]
-        up = bottom - limit
-        max_up = max(0.0, min(float(by_id[item].y) for item in band) - (power_floor + _GAP))
-        # Never pull a band up through a seal-in under the start (different
-        # column). That pack made M1-13 look like it sat on CR1-13→PL1.
-        band_top = min(float(by_id[item].y) for item in band)
+
+    def _pair_need(upper_ref: str, lower_ref: str) -> float:
+        upper_h = float(devices[upper_ref].schematic_height)
+        lower_head = _tag_headroom(by_id[lower_ref], devices[lower_ref])
+        return upper_h + max(_GAP, lower_head + 1.5)
+
+    def _band_headroom(band_refs: list[str]) -> float:
+        return max((_tag_headroom(by_id[r], devices[r]) for r in band_refs), default=0.0)
+
+    def _can_lift_band(band: list[str], ignore: set[str] | None = None) -> float:
+        """Maximum upward shift for ``band`` that keeps it clear of power_floor and all upper symbols/tags."""
+        skip = set(band) | (ignore or set())
+        band_top = min(float(by_id[item].y) - _tag_headroom(by_id[item], devices[item]) for item in band)
+        max_up = max(0.0, band_top - (power_floor + _GAP))
         band_pin = min(device_pin_y(item) for item in band)
         span_lo = min(float(by_id[item].x) for item in band)
         span_hi = max(
             float(by_id[item].x) + float(devices[item].schematic_width) for item in band
         )
         for other in ids:
-            if other in band or other not in by_id:
-                continue
-            if _role(by_id[other].library_id) != "aux":
+            if other in skip or other not in by_id:
                 continue
             if set(rung_mates(other)) & set(band):
                 continue
-            # Seal-in under a start button: same column, drop band, and wired
-            # to that start (cohort). Do not treat an aux→lamp series as seal-in.
+            ox = float(by_id[other].x)
+            ow = float(devices[other].schematic_width)
+            # Same-column clearance against ANY upper symbol (coil, pilot, contact, etc.).
+            for item in band:
+                if abs(ox - float(by_id[item].x)) > 22.0:
+                    continue
+                if float(by_id[other].y) < float(by_id[item].y) - 0.2:
+                    need = _pair_need(other, item)
+                    other_bot = float(by_id[other].y) + need
+                    max_up = min(max_up, max(0.0, float(by_id[item].y) - other_bot))
+            if _role(by_id[other].library_id) != "aux":
+                continue
+            # Seal-in under a start button: same column, drop band, and wired to that start.
             under_start = False
             other_pin = device_pin_y(other)
             other_mates = set(cohort(other))
@@ -992,27 +924,143 @@ def _squeeze_control_rows(
                     continue
                 if start not in other_mates:
                     continue
-                if abs(float(by_id[start].x) - float(by_id[other].x)) > 22.0:
+                if abs(float(by_id[start].x) - ox) > 22.0:
                     continue
                 if 0.5 < other_pin - device_pin_y(start) <= _DROP_MM + _GAP + 2.0:
                     under_start = True
                     break
-            ox = float(by_id[other].x)
-            ow = float(devices[other].schematic_width)
             crosses_span = not (ox + ow < span_lo - 1.0 or ox > span_hi + 1.0)
             if not under_start and not crosses_span:
                 continue
-            # Clear the below-body tag ink, not just the symbol body — otherwise
-            # squeeze pulls CR1/109 up through the "M1-13" text.
             other_clear = _tag_floor(by_id[other], devices[other])
-            if float(by_id[other].y) < band_top + 0.2:
-                max_up = min(max_up, band_top - other_clear)
+            for item in band:
+                if abs(ox - float(by_id[item].x)) <= 22.0 and float(by_id[other].y) < float(by_id[item].y) + 0.2:
+                    max_up = min(max_up, max(0.0, float(by_id[item].y) - other_clear))
             if crosses_span and float(by_id[other].y) < band_pin - 0.5:
                 text_bottom = other_clear - _GAP
                 max_up = min(max_up, max(0.0, band_pin - text_bottom - _WIRE_CLEAR))
-        up = min(up, max_up)
-        if up > 0.05:
-            moved += shift(band, -up)
+        return max_up
+
+    def _lift_with_cascade(band: list[str], want_up: float) -> float:
+        """Lift ``band`` up by up to ``want_up``, cascading into upper bands if needed."""
+        if want_up <= 0.05:
+            return 0.0
+        direct = min(want_up, _can_lift_band(band))
+        if direct >= want_up - 0.05:
+            shift(band, -direct)
+            return direct
+        # Group all control items into vertical bands (joining a seal-in aux with its start rung).
+        band_groups: list[list[str]] = []
+        seen_refs: set[str] = set()
+        for r in sorted(ids, key=lambda ref: (device_pin_y(ref), ref)):
+            if r in seen_refs:
+                continue
+            grp = list(rung_mates(r) or [r])
+            # Attach any seal-in aux sitting immediately below a start button in this band.
+            grp_cohort = set(cohort(r))
+            for cand in ids:
+                if cand in grp or cand in seen_refs or cand not in grp_cohort:
+                    continue
+                if _role(by_id[cand].library_id) != "aux":
+                    continue
+                for member in list(grp):
+                    lib = by_id[member].library_id.lower()
+                    if "pb_no" in lib and "aux" not in lib:
+                        if abs(float(by_id[member].x) - float(by_id[cand].x)) <= 22.0 and 0.5 < device_pin_y(cand) - device_pin_y(member) <= _DROP_MM + _GAP + 2.0:
+                            grp.append(cand)
+                            break
+            seen_refs.update(grp)
+            band_groups.append(grp)
+        band_groups.sort(key=lambda g: min(device_pin_y(x) for x in g))
+        target_idx = next((idx for idx, g in enumerate(band_groups) if set(g) & set(band)), None)
+        if target_idx is None:
+            if direct > 0.05:
+                shift(band, -direct)
+            return direct
+        # Lift upper bands in top-down order to open room for target band.
+        needed = want_up
+        for idx in range(target_idx):
+            g = band_groups[idx]
+            room = _can_lift_band(g)
+            step = min(needed, room)
+            if step > 0.05:
+                shift(g, -step)
+        actual = min(want_up, _can_lift_band(band))
+        if actual > 0.05:
+            shift(band, -actual)
+            return actual
+        return 0.0
+
+    # Stable order by Y so we can push the lower symbol down or lift upper bands.
+    ordered = sorted(ids, key=lambda ref: (float(by_id[ref].y), ref))
+    for i, upper in enumerate(ordered):
+        for lower in ordered[i + 1 :]:
+            if abs(float(by_id[upper].x) - float(by_id[lower].x)) > 22.0:
+                continue
+            need = _pair_need(upper, lower)
+            gap = float(by_id[lower].y) - float(by_id[upper].y)
+            if gap >= need - 0.2:
+                continue
+            # Same rung (wire cohort on one Y) — leave pin-aligned series alone.
+            if set(rung_mates(lower)) & set(rung_mates(upper)):
+                continue
+            dy = need - gap
+            # ``control_ids`` sometimes omits a mate; never shift an empty list.
+            lower_mates = rung_mates(lower) or [lower]
+            lower_col = [
+                ref
+                for ref in lower_mates
+                if abs(float(by_id[ref].x) - float(by_id[lower].x)) <= 22.0
+            ] or [lower]
+            new_bottom = max(_bottom(by_id[ref], devices[ref]) for ref in lower_col) + dy
+            if new_bottom <= limit + 0.2:
+                moved += shift(lower_mates, dy)
+                continue
+            upper_mates = rung_mates(upper) or [upper]
+            lifted = _lift_with_cascade(upper_mates, dy)
+            if lifted > 0.05:
+                moved += len(upper_mates)
+            rem = dy - lifted
+            if rem > 0.05:
+                bottom2 = max(_bottom(by_id[ref], devices[ref]) for ref in lower_col) + rem
+                if bottom2 <= limit + 0.2:
+                    moved += shift(lower_mates, rem)
+    # Title overflow: pull offenders up without colliding with upper symbols or tags.
+    ordered = sorted(ids, key=lambda ref: (float(by_id[ref].y), ref))
+    for ref in list(ordered):
+        bottom = _bottom(by_id[ref], devices[ref])
+        if bottom <= limit + 0.2:
+            continue
+        band = rung_mates(ref) or [ref]
+        up = bottom - limit
+        lifted = _lift_with_cascade(band, up)
+        if lifted > 0.05:
+            moved += len(band)
+    # Final pass: if lifting opened room or left any same-column pair too close, separate cleanly.
+    ordered = sorted(ids, key=lambda ref: (float(by_id[ref].y), ref))
+    for i, upper in enumerate(ordered):
+        for lower in ordered[i + 1 :]:
+            if abs(float(by_id[upper].x) - float(by_id[lower].x)) > 22.0:
+                continue
+            if set(rung_mates(lower)) & set(rung_mates(upper)):
+                continue
+            need = _pair_need(upper, lower)
+            gap = float(by_id[lower].y) - float(by_id[upper].y)
+            if gap >= need - 0.2:
+                continue
+            dy = need - gap
+            upper_mates = rung_mates(upper) or [upper]
+            lifted = _lift_with_cascade(upper_mates, dy)
+            if lifted > 0.05:
+                moved += len(upper_mates)
+            rem = dy - lifted
+            if rem > 0.05:
+                lower_mates = rung_mates(lower) or [lower]
+                lower_col = [
+                    r for r in lower_mates if abs(float(by_id[r].x) - float(by_id[lower].x)) <= 22.0
+                ] or [lower]
+                if max(_bottom(by_id[r], devices[r]) for r in lower_col) + rem <= limit + 0.2:
+                    moved += shift(lower_mates, rem)
     if moved:
         clear_route_cache()
         _route_primary_return(session, sheet, by_id, devices)
@@ -1519,6 +1567,21 @@ def _bottom(comp: Component, device: Any) -> float:
     return float(comp.y) + float(device.schematic_height)
 
 
+def _tag_headroom(comp: Component, device: Any) -> float:
+    """Vertical space above ``comp.y`` occupied by an above-body printed tag."""
+
+    from panelcad.core.ink import TAG_DY, TAG_SIZE, TEXT_ASCENT
+    from panelcad.core.ladder import is_aux_library
+    from panelcad.render.sheet_labels import _expects_visible_tag
+
+    if is_aux_library(comp.library_id) or comp.properties.get("tag_below"):
+        return 0.0
+    if not _expects_visible_tag(comp, device):
+        return 0.0
+    scale = comp.visual_scale()
+    return float(TAG_DY + TAG_SIZE * TEXT_ASCENT) * scale
+
+
 def _tag_floor(comp: Component, device: Any) -> float:
     """Lowest Y occupied by the symbol body and its printed tag."""
 
@@ -1724,10 +1787,11 @@ def _bad_routes(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
             }
             if len(long_levels) >= 2:
                 issues.append(f"{sheet.id}: {wire.id} arches over the terminals")
-            if any(
+            has_vert = any(
                 abs(float(a.x) - float(b.x)) <= 0.8 and abs(float(a.y) - float(b.y)) > 2.0
                 for a, b in zip(pts, pts[1:], strict=False)
-            ):
+            )
+            if has_vert and not _valid_terminal_bypass(sheet, catalog, session.project, wire, pts):
                 issues.append(f"{sheet.id}: {wire.id} loops around the terminals")
         if kind == "power" and _power_jog(pts):
             issues.append(f"{sheet.id}: {wire.id} jogs through the power block")
@@ -1746,14 +1810,80 @@ def _bad_routes(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
                 continue
             skip.add(ref)
         walls = sheet_obstacles(sheet, catalog, skip=skip)
-        if path_hits_obstacles(pts, walls, skip_ends=True):
-            if _straight_terminal_jumper(sheet, catalog, pts):
-                continue
+        if path_hits_obstacles(pts, walls, skip_ends=False):
             issues.append(f"{sheet.id}: {wire.id} runs through a symbol")
             continue
         if _crosses_own_body(sheet, catalog, wire, pts):
             issues.append(f"{sheet.id}: {wire.id} runs through a symbol")
     return issues
+
+
+def _valid_terminal_bypass(
+    sheet: Sheet,
+    catalog: Catalog,
+    project: Any,
+    wire: Any,
+    pts: list[Any],
+) -> bool:
+    """True only for a single-side, single-channel bypass clearing a blocking terminal box.
+
+    Unblocked terminal wires must stay straight on the pin line. Cross-rung
+    loops, multi-level arches, dual-side detours, or rail wires that drop back
+    down after reaching the rail column are all rejected as terminal loops.
+    """
+
+    from panelcad.core.ladder import endpoint_is_rail, ladder_route
+    from panelcad.core.pin_geometry import parse_pin_ref
+    from panelcad.core.route import path_hits_obstacles
+    from panelcad.render.wiring import _path_enters_own_body, sheet_obstacles, wire_ends
+
+    if len(pts) < 4:
+        return False
+    try:
+        ax, ay, _aside, bx, by, _bside = wire_ends(sheet, catalog, wire, project)
+    except (KeyError, ValueError):
+        return False
+    # Both endpoints must belong to the same horizontal terminal row.
+    if abs(ay - by) > 2.0:
+        return False
+    row_y = (ay + by) * 0.5
+    plain = ladder_route(ax, ay, bx, by)
+    skip: set[str] = set()
+    for end in (wire.frm, wire.to):
+        try:
+            skip.add(parse_pin_ref(end)[0])
+        except ValueError:
+            pass
+    # Only allow a vertical detour when the straight pin-to-pin line is physically blocked.
+    walls = sheet_obstacles(sheet, catalog, skip=skip)
+    if not path_hits_obstacles(plain, walls, skip_ends=False) and not _path_enters_own_body(
+        sheet, catalog, wire, plain
+    ):
+        return False
+    ys = [float(p.y) for p in pts]
+    min_y, max_y = min(ys), max(ys)
+    # Must stay strictly on ONE side of the terminal row (never weaving above and below).
+    if min_y < row_y - 2.0 and max_y > row_y + 2.0:
+        return False
+    # Must stay in the immediate adjacent corridor of the terminal row (not crossing rungs).
+    if max(abs(min_y - row_y), abs(max_y - row_y)) > 26.0:
+        return False
+    # Distinct off-row horizontal channels: exactly one clean channel.
+    off_row_h = {
+        round(float(a.y), 1)
+        for a, b in zip(pts, pts[1:], strict=False)
+        if abs(float(a.y) - float(b.y)) <= 0.8
+        and abs(float(a.x) - float(b.x)) > 2.0
+        and abs(float(a.y) - row_y) > 2.0
+    }
+    if len(off_row_h) != 1:
+        return False
+    a_rail = endpoint_is_rail(sheet, wire.frm, project)
+    b_rail = endpoint_is_rail(sheet, wire.to, project)
+    if a_rail ^ b_rail:
+        # A rail bypass lands directly on the rail at the channel Y (4 points, no drop-back).
+        return len(pts) <= 4
+    return len(pts) <= 6
 
 
 def _power_jog(pts) -> bool:
@@ -1845,14 +1975,20 @@ def _crosses_own_body(sheet: Sheet, catalog: Catalog, wire, pts) -> bool:
             return True
         return path_hits_obstacles(pts, [component_obstacle(sheet, catalog, comp)], skip_ends=True)
 
+    # Universal strict interior check: no wire segment may pass through the
+    # body interior of either of its own endpoint symbols (terminal boxes included).
+    from panelcad.render.wiring import _path_enters_own_body
+
+    if _path_enters_own_body(sheet, catalog, wire, pts):
+        return True
+
     # Fuse/transformer ↔ neighbor on the far side of the landed pin.
     if power_far_from_neighbor(a_ref, a_pin, b_ref) and hits_body(a_ref):
         return True
     if power_far_from_neighbor(b_ref, b_pin, a_ref) and hits_body(b_ref):
         return True
 
-    # Far-pin rail landings: fuse/transformer/contact bodies. Terminal A→L2
-    # jumpers land on the left pin by design and must not fail here.
+    # Far-pin rail landings: any symbol body (terminal boxes included).
     device_ref = ""
     rail_ref = ""
     if endpoint_is_rail(sheet, wire.frm, None) and far_pin(a_ref, b_ref, b_pin):
@@ -1864,7 +2000,7 @@ def _crosses_own_body(sheet: Sheet, catalog: Catalog, wire, pts) -> bool:
     if not device_ref:
         return False
     device_comp = by_id.get(device_ref)
-    if device_comp is None or _role(device_comp.library_id) == "terminal":
+    if device_comp is None:
         return False
     # The pin faces the other rail. That is through the body only when the
     # drawn path enters the body. A jog that stays outside is a clean landing.
@@ -1921,6 +2057,147 @@ def _stacked_notes(session: Session, sheet: Sheet) -> list[str]:
             if a[0] < b[2] - 0.4 and a[2] > b[0] + 0.4 and a[1] < b[3] - 0.4 and a[3] > b[1] + 0.4:
                 return [f"{sheet.id}: {a_name} overlaps {b_name}"]
     return []
+
+
+def _device_tags_clear_bodies(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
+    """Printed device tags must stay >= 1 mm clear of other bodies and anchored to their own symbol."""
+
+    from math import hypot
+    from panelcad.core.ink import symbol_ink_box, text_box
+    from panelcad.core.ladder import is_ladder_sheet
+    from panelcad.core.route import component_aabb
+    from panelcad.render.label_avoid import TAG_REACH, resolve_labels
+    from panelcad.render.sheet_labels import _expects_visible_tag, place_device_tags
+
+    ladder = is_ladder_sheet(sheet, session.project)
+    # Check both natural tag placement and final resolved placement so neither a
+    # cramped layout nor a collision-pass nudge can hide a tag touching another
+    # symbol or drifting off its own symbol.
+    layout_sets: list[dict[str, tuple[float, float, str, float]]] = []
+    try:
+        raw_layouts = place_device_tags(
+            sheet,
+            catalog,
+            ladder=ladder,
+            project=session.project,
+            sheet_no=1,
+        )
+        if raw_layouts:
+            layout_sets.append(dict(raw_layouts))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        resolved_layouts = dict(
+            resolve_labels(
+                session.project,
+                catalog,
+                sheet,
+                ladder=ladder,
+                sheet_no=1,
+            ).tags
+        )
+        if resolved_layouts:
+            layout_sets.append(resolved_layouts)
+    except Exception:  # noqa: BLE001
+        pass
+    if not layout_sets:
+        return []
+
+    def _gap(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
+        dx = max(0.0, max(a[0], b[0]) - min(a[2], b[2]))
+        dy = max(0.0, max(a[1], b[1]) - min(a[3], b[3]))
+        return hypot(dx, dy)
+
+    bodies: dict[str, tuple[float, float, float, float]] = {}
+    inks: dict[str, tuple[float, float, float, float]] = {}
+    for comp in sheet.components:
+        device = _device(catalog, comp)
+        if device is None or "offpage" in comp.library_id.lower():
+            continue
+        scale = comp.visual_scale()
+        bodies[comp.id] = component_aabb(
+            comp.x,
+            comp.y,
+            float(device.schematic_width) * scale,
+            float(device.schematic_height) * scale,
+            int(comp.rotation or 0),
+            bool(comp.mirror),
+        )
+        inks[comp.id] = symbol_ink_box(comp, device)
+
+    min_clear_mm = 1.0
+    issues: list[str] = []
+    seen: set[str] = set()
+
+    def _add(msg: str) -> None:
+        if msg not in seen:
+            seen.add(msg)
+            issues.append(msg)
+
+    for layouts in layout_sets:
+        for comp in sheet.components:
+            device = _device(catalog, comp)
+            if device is None or "offpage" in comp.library_id.lower():
+                continue
+            if not _expects_visible_tag(comp, device):
+                continue
+            layout = layouts.get(comp.id)
+            if layout is None:
+                continue
+            tbox = text_box(layout[0], layout[1], comp.id, layout[3], layout[2])
+            if tbox is None:
+                continue
+            own_ink = inks.get(comp.id)
+            own_gap = _gap(tbox, own_ink) if own_ink is not None else 0.0
+            # Own drawn graphics must not be overlapped by the external tag.
+            if own_ink is not None and own_gap <= 0.0:
+                _add(f"{sheet.id}: device label {comp.id} overlaps {comp.id}")
+                continue
+            # Must stay >= 1.0 mm clear of every other symbol's body and drawn ink.
+            hit_other = False
+            for other_id, bbox in bodies.items():
+                if other_id == comp.id:
+                    continue
+                other_ink = inks.get(other_id, bbox)
+                gap_body = _gap(tbox, bbox)
+                gap_ink = _gap(tbox, other_ink)
+                if gap_body <= 0.0 or gap_ink <= 0.0:
+                    _add(f"{sheet.id}: device label {comp.id} overlaps {other_id}")
+                    hit_other = True
+                    break
+                if min(gap_body, gap_ink) < min_clear_mm:
+                    _add(
+                        f"{sheet.id}: device label {comp.id} is within {min_clear_mm:g} mm of {other_id}"
+                    )
+                    hit_other = True
+                    break
+            if hit_other or own_ink is None:
+                continue
+            # Must remain anchored to its own symbol (within TAG_REACH and nearer its
+            # own drawn body than any other symbol's drawn body).
+            if own_gap > TAG_REACH:
+                _add(f"{sheet.id}: device label {comp.id} is placed off its own symbol")
+                continue
+            nearer = next(
+                (
+                    other_id
+                    for other_id, other_ink in inks.items()
+                    if other_id != comp.id and _gap(tbox, other_ink) <= own_gap + 0.2
+                ),
+                None,
+            )
+            if nearer is not None:
+                _add(
+                    f"{sheet.id}: device label {comp.id} is placed closer to {nearer} than {comp.id}"
+                )
+                continue
+            # Unrotated above/below tags must stay horizontally centered over their symbol.
+            ref_side = str(comp.properties.get("ref_side") or "")
+            if not int(comp.rotation or 0) and ref_side not in {"left", "right"}:
+                tx_mid = (tbox[0] + tbox[2]) * 0.5
+                if tx_mid < own_ink[0] - 2.0 or tx_mid > own_ink[2] + 2.0:
+                    _add(f"{sheet.id}: device label {comp.id} is placed off its own symbol")
+    return issues
 
 
 def _wires_cross_device_labels(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
@@ -2603,9 +2880,10 @@ def _loads_on_the_right(session: Session, sheet: Sheet, catalog: Catalog) -> lis
             nxt = loads[idx + 1]
             if nxt[1] - cur[2] > 36.0:
                 issues.append(f"{sheet.id}: {cur[0]} is not next to L2")
+        leftmost_load = loads[0]
         for name, lx, _rx, is_load in group:
             if is_load:
                 continue
-            if lx > rightmost[2] + 2.0:
+            if lx > leftmost_load[1] - 0.5:
                 issues.append(f"{sheet.id}: {name} sits to the right of the coil")
     return issues

@@ -226,7 +226,7 @@ def _ref_obstacles(
         except KeyError:
             continue
         cat = (device.category or "").lower()
-        if cat.startswith("connection.") or cat.startswith("connection.notes"):
+        if (cat.startswith("connection.") and "terminal" not in cat) or cat.startswith("connection.notes"):
             continue
         layout = device_ref_layout(device, comp, ref_align=align)
         if layout is not None:

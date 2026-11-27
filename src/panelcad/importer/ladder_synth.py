@@ -3129,7 +3129,7 @@ def _place_control_rung(
     max_body_bottom = wy + wh - 16.0
     rung_clear_gap = 8.0
     stack_gap = 4.0
-    term_gap = 2.0
+    term_gap = 7.0
 
     (
         main_contacts,
@@ -3184,11 +3184,53 @@ def _place_control_rung(
 
     max_xfmr_w = max((_dev_schematic_size(catalog, d.library_id)[0] for d in xfmr_outputs), default=0.0)
 
-    def _layout_contacts(start_x: float, min_pitch: float, min_gap: float) -> tuple[dict[str, float], float]:
+    # Separate transformer secondary-side devices (wired to X1/X2, e.g. FU3) so they
+    # sit to the RIGHT of the transformer instead of crowding the primary (left) side.
+    sec_tags: set[str] = set()
+    if xfmr_outputs and main_contacts:
+        xfmr_tags = {x.tag for x in xfmr_outputs}
+        main_tags = {d.tag for d in main_contacts}
+        row_adj: dict[str, set[str]] = {t: set() for t in main_tags}
+        for r in c_rows:
+            ft, fp = r.from_tag, str(r.from_pin or "").upper()
+            tt, tp = r.to_tag, str(r.to_pin or "").upper()
+            if ft in xfmr_tags and tt in main_tags:
+                if fp.startswith("X"):
+                    sec_tags.add(tt)
+            elif tt in xfmr_tags and ft in main_tags:
+                if tp.startswith("X"):
+                    sec_tags.add(ft)
+            elif ft in main_tags and tt in main_tags:
+                row_adj[ft].add(tt)
+                row_adj[tt].add(ft)
+        # Include any main_contacts downstream of a secondary fuse (without crossing primary).
+        if sec_tags:
+            primary_seeds = set()
+            for r in c_rows:
+                ft, fp = r.from_tag, str(r.from_pin or "").upper()
+                tt, tp = r.to_tag, str(r.to_pin or "").upper()
+                if ft in xfmr_tags and tt in main_tags and fp.startswith("H"):
+                    primary_seeds.add(tt)
+                elif tt in xfmr_tags and ft in main_tags and tp.startswith("H"):
+                    primary_seeds.add(ft)
+            queue = list(sec_tags)
+            while queue:
+                cur = queue.pop(0)
+                for nbr in row_adj.get(cur, ()):
+                    if nbr not in sec_tags and nbr not in primary_seeds:
+                        sec_tags.add(nbr)
+                        queue.append(nbr)
+
+    left_main_contacts = [d for d in main_contacts if d.tag not in sec_tags]
+    sec_main_contacts = [d for d in main_contacts if d.tag in sec_tags]
+
+    def _layout_contacts(
+        items: list[ImportDeviceEntry], start_x: float, min_pitch: float, min_gap: float
+    ) -> tuple[dict[str, float], float]:
         xs: dict[str, float] = {}
         cursor = start_x
         right_edge = start_x
-        for idx, d in enumerate(main_contacts):
+        for idx, d in enumerate(items):
             dw, _dh = _dev_schematic_size(catalog, d.library_id)
             cx = start_x if idx == 0 else cursor
             xs[d.tag] = cx
@@ -3196,18 +3238,19 @@ def _place_control_rung(
             cursor = cx + max(min_pitch, dw + min_gap)
         return xs, right_edge
 
-    contact_x_by_tag, contacts_right_x = _layout_contacts(wx + 46.0, 48.0, 10.0)
-    # If contacts (plus any transformer placed beside them) crowd the right column,
-    # compress contact spacing cleanly while preserving a minimum horizontal gap.
-    needed_right = contacts_right_x + ((14.0 + max_xfmr_w) if xfmr_outputs else 0.0)
-    if main_contacts and needed_right > left_zone_limit:
-        contact_x_by_tag, contacts_right_x = _layout_contacts(left_rail_x + 12.0, 0.0, 8.0)
+    sec_total_w = sum(_dev_schematic_size(catalog, d.library_id)[0] + 14.0 for d in sec_main_contacts)
+    contact_x_by_tag, contacts_right_x = _layout_contacts(left_main_contacts, wx + 46.0, 48.0, 10.0)
+    # If contacts (plus any transformer and secondary devices placed beside them) crowd
+    # the right column, compress contact spacing cleanly while preserving a minimum gap.
+    needed_right = contacts_right_x + ((14.0 + max_xfmr_w + sec_total_w) if xfmr_outputs else 0.0)
+    if left_main_contacts and needed_right > left_zone_limit:
+        contact_x_by_tag, contacts_right_x = _layout_contacts(left_main_contacts, left_rail_x + 12.0, 0.0, 8.0)
 
     placements: list[tuple[ImportDeviceEntry, float, float]] = []
     contacts_bottom_y = rung_y
     parent_bottom_by_tag: dict[str, float] = {}
 
-    for d in main_contacts:
+    for d in left_main_contacts:
         dw, dh = _dev_schematic_size(catalog, d.library_id)
         cx = contact_x_by_tag[d.tag]
         cy = max(body_top, rung_y - _default_pin_y(catalog, d.library_id))
@@ -3233,18 +3276,20 @@ def _place_control_rung(
     left_xfmr_bottom_y = rung_y
     xfmr_right_x = contacts_right_x
     if xfmr_outputs:
-        if main_contacts:
+        if left_main_contacts:
             xfmr_x = max(wx + 64.0, contacts_right_x + 14.0)
         else:
             xfmr_x = wx + 64.0
-        # If there is still no horizontal room beside main_contacts before the
+        # If there is still no horizontal room beside left_main_contacts before the
         # right column, drop the transformer cleanly into a sub-band below contacts.
-        if main_contacts and xfmr_x + max_xfmr_w > left_zone_limit:
+        if left_main_contacts and xfmr_x + max_xfmr_w > left_zone_limit:
             xfmr_x = wx + 64.0
             xfmr_top_cursor = contacts_bottom_y + 8.0
         else:
             xfmr_top_cursor = None
         prev_xfmr_bot: float | None = None
+        first_xfmr_cy: float | None = None
+        first_xfmr_dev: ImportDeviceEntry | None = None
         for x_idx, x_dev in enumerate(xfmr_outputs):
             xw, xh = _dev_schematic_size(catalog, x_dev.library_id)
             if x_idx == 0:
@@ -3252,6 +3297,8 @@ def _place_control_rung(
                     cy = xfmr_top_cursor
                 else:
                     cy = max(body_top, rung_y - _default_pin_y(catalog, x_dev.library_id))
+                first_xfmr_cy = cy
+                first_xfmr_dev = x_dev
             else:
                 cy = max(
                     (prev_xfmr_bot or rung_y) + stack_gap,
@@ -3262,6 +3309,24 @@ def _place_control_rung(
             left_xfmr_bottom_y = max(left_xfmr_bottom_y, cy + xh)
             if xfmr_top_cursor is None:
                 xfmr_right_x = max(xfmr_right_x, xfmr_x + xw)
+        # Place secondary-side fuses/devices to the RIGHT of the transformer, aligned with X1.
+        if sec_main_contacts and first_xfmr_cy is not None and first_xfmr_dev is not None:
+            sec_pin_y = rung_y
+            try:
+                t_lib = catalog.get(first_xfmr_dev.library_id)
+                x1_pin = next((p for p in t_lib.pins if str(p.id).upper() == "X1"), None)
+                if x1_pin is not None:
+                    sec_pin_y = first_xfmr_cy + float(x1_pin.y)
+            except KeyError:
+                pass
+            sec_cursor = xfmr_right_x + 14.0
+            for sd in sec_main_contacts:
+                sw, sh = _dev_schematic_size(catalog, sd.library_id)
+                sy = max(body_top, sec_pin_y - _default_pin_y(catalog, sd.library_id))
+                placements.append((sd, sec_cursor, sy))
+                left_xfmr_bottom_y = max(left_xfmr_bottom_y, sy + sh)
+                xfmr_right_x = max(xfmr_right_x, sec_cursor + sw)
+                sec_cursor = sec_cursor + sw + 14.0
 
     # Right-column loads (coils, pilot lights, relays, timers) — keep strictly to
     # the right of contacts/transformers and stack with non-overlapping vertical pitch.

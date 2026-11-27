@@ -768,3 +768,170 @@ def test_transformer_top_tag_keeps_extra_clearance_below_working_rect() -> None:
     _wx, wy, _ww, _wh = working_rect(sheet)
     tag_top = float(t1.y) - float(TAG_DY) - float(TAG_SIZE) * float(TEXT_ASCENT)
     assert tag_top >= float(wy) + 2.5 - 1e-6, (t1.y, wy, tag_top)
+
+
+def test_device_label_overlapping_adjacent_symbol_body_fails_elementary_gate() -> None:
+    """Issued Demo Controls must keep PL1's tag clear of CR1's body, and squeezing them must fail."""
+
+    from panelcad.core.ink import text_box
+    from panelcad.examples.scan_ladder_demo import build_scan_ladder_demo
+    from panelcad.render.sheet_labels import place_device_tags
+
+    session = build_scan_ladder_demo()
+    sheet = session.project.sheet("elementary")
+    assert elementary_layout_issues(session, sheet) == []
+
+    cr1 = sheet.component("CR1")
+    cr1_dev = session.catalog.get(cr1.library_id)
+    cr1_bot = float(cr1.y) + float(cr1_dev.schematic_height)
+    tags = place_device_tags(sheet, session.catalog, ladder=True, project=session.project, sheet_no=1)
+    pl1_tag = tags["PL1"]
+    pl1_tbox = text_box(pl1_tag[0], pl1_tag[1], "PL1", pl1_tag[3], pl1_tag[2])
+    assert pl1_tbox is not None
+    assert pl1_tbox[1] >= cr1_bot - 0.1, (cr1_bot, pl1_tbox)
+
+    # Shoving CR1 down so PL1's tag sits inside CR1's body must fail the elementary gate.
+    cr1.y = float(sheet.component("PL1").y) - float(cr1_dev.schematic_height) + 0.1
+    issues = elementary_layout_issues(session, sheet)
+    assert any("device label PL1 overlaps CR1" in item for item in issues), issues
+
+
+def test_contact_right_of_leftmost_load_fails_elementary_gate() -> None:
+    """A contact sitting between M1 and OL1 or right of PL1 must fail _loads_on_the_right."""
+
+    from panelcad.examples.scan_ladder_demo import build_scan_ladder_demo
+
+    # Contact moved immediately right of PL1 (just past PL1's left edge / right pin)
+    s1 = build_scan_ladder_demo()
+    sh1 = s1.project.sheet("elementary")
+    sh1.component("CR1-13").x = float(sh1.component("PL1").x) + 24.2
+    issues1 = elementary_layout_issues(s1, sh1)
+    assert any("CR1-13 sits to the right of the coil" in item for item in issues1), issues1
+
+    # Contact moved between M1 (leftmost load) and OL1 (rightmost load)
+    s2 = build_scan_ladder_demo()
+    sh2 = s2.project.sheet("elementary")
+    sh2.component("PB1").x = float(sh2.component("M1").x) + 30.0
+    issues2 = elementary_layout_issues(s2, sh2)
+    assert any("PB1 sits to the right of the coil" in item for item in issues2), issues2
+
+
+def test_wire_through_terminal_body_fails_and_series_terminals_stay_broken_segments() -> None:
+    """Any wire passing through a terminal box (foreign or own) must fail; series stays pin-to-pin."""
+
+    from panelcad.core.models import Point
+    from panelcad.core.route import path_hits_obstacles
+    from panelcad.examples.scan_ladder_demo import build_scan_ladder_demo
+    from panelcad.render.wiring import _body_interior, component_obstacle, route_sheet_wires, wire_ends
+
+    # 1. Issued Demo Controls must have zero wires crossing any symbol body (terminals included).
+    s = build_scan_ladder_demo()
+    sh = s.project.sheet("elementary")
+    assert elementary_layout_issues(s, sh) == []
+    routes = route_sheet_wires(sh, s.catalog, project=s.project)
+    for w in sh.wires:
+        pts = routes[w.id]
+        ends = {str(w.frm).split(".")[0], str(w.to).split(".")[0]}
+        for comp in sh.components:
+            if "offpage" in comp.library_id.lower():
+                continue
+            if comp.id in ends:
+                rect = _body_interior(component_obstacle(sh, s.catalog, comp, pad=0.0))
+                assert not path_hits_obstacles(pts, [rect], skip_ends=False), (w.id, comp.id, pts)
+            else:
+                rect = component_obstacle(sh, s.catalog, comp)
+                assert not path_hits_obstacles(pts, [rect], skip_ends=False), (w.id, comp.id, pts)
+
+    # 2. Forcing a straight horizontal wire through a foreign terminal box (X1-1.B -> L2 through X1-2..X1-4) must fail.
+    s_foreign = build_scan_ladder_demo()
+    sh_f = s_foreign.project.sheet("elementary")
+    w_rail = next(w for w in sh_f.wires if "X1-1.B" in {w.frm, w.to})
+    ax, ay, _as, bx, by, _bs = wire_ends(sh_f, s_foreign.catalog, w_rail, s_foreign.project)
+    w_rail.points = [Point(x=(ax + bx) * 0.5, y=ay)]
+    issues_f = elementary_layout_issues(s_foreign, sh_f)
+    assert any(f"{w_rail.id} runs through a symbol" in item for item in issues_f), issues_f
+
+    # 3. Forcing a straight horizontal jumper through its own terminal box (X1-2.A -> X1-3.A through X1-2) must fail.
+    s_own = build_scan_ladder_demo()
+    sh_o = s_own.project.sheet("elementary")
+    w_jmp = next(w for w in sh_o.wires if {"X1-2.A", "X1-3.A"} == {w.frm, w.to})
+    ax, ay, _as, bx, by, _bs = wire_ends(sh_o, s_own.catalog, w_jmp, s_own.project)
+    w_jmp.points = [Point(x=(ax + bx) * 0.5, y=ay)]
+    issues_o = elementary_layout_issues(s_own, sh_o)
+    assert any(f"{w_jmp.id} runs through a symbol" in item for item in issues_o), issues_o
+
+    # 4. Terminals wired in series on a rung must draw as broken horizontal segments ending on pins.
+    s_ser = Session.create("Series terminals", sheet_id="elementary", title="Elementary")
+    s_ser.set_title_block(standard="NEMA/ANSI", drawing_style="ladder", coil_style="circle", drawn_by="Demo")
+    sh_ser = s_ser.project.sheet("elementary")
+    sh_ser.page.size = "TABLOID"
+    sh_ser.page.orientation = "landscape"
+    sh_ser.drawing_style = "ladder"
+    s_ser.place("nema.operators.pb_no", ref="PB1", x=0, y=0, snap=False)
+    s_ser.place("nema.contactors.coil", ref="M1", x=0, y=0, snap=False)
+    s_ser.place("nema.contactors.aux_no", ref="M1-13", x=0, y=0, snap=False)
+    for tag in ("X1-1", "X1-2", "X1-3"):
+        s_ser.place("iec.terminals.phoenix_ut_2p5", ref=tag, x=0, y=0, snap=False)
+    s_ser.wire("L1", "PB1.3", number="102")
+    s_ser.wire("PB1.4", "M1.A1", number="105")
+    s_ser.wire("M1.A2", "L2", number="104")
+    s_ser.wire("L1", "M1-13.3", number="102")
+    s_ser.wire("M1-13.4", "X1-1.A", number="201")
+    w_s1 = s_ser.wire("X1-1.B", "X1-2.A", number="202")
+    w_s2 = s_ser.wire("X1-2.B", "X1-3.A", number="203")
+    w_s3 = s_ser.wire("X1-3.B", "L2", number="204")
+    layout_elementary(s_ser, sh_ser)
+    assert elementary_layout_issues(s_ser, sh_ser) == []
+    ser_routes = route_sheet_wires(sh_ser, s_ser.catalog, project=s_ser.project)
+    for w in (w_s1, w_s2, w_s3):
+        pts = ser_routes[w.id]
+        assert len(pts) == 2 and abs(pts[0].y - pts[1].y) < 0.1, (w.id, pts)
+
+
+def test_device_tag_within_1mm_or_off_own_symbol_fails_elementary_gate() -> None:
+    """Device tags must stay >= 1 mm clear of other bodies and anchored cleanly over their own symbol."""
+
+    from panelcad.core.ink import symbol_ink_box, text_box
+    from panelcad.examples.scan_ladder_demo import build_scan_ladder_demo
+    from panelcad.render.label_avoid import resolve_labels
+
+    s = build_scan_ladder_demo()
+    sh = s.project.sheet("elementary")
+    assert elementary_layout_issues(s, sh) == []
+
+    # Clean PL1 tag sits centered directly above PL1's drawn lamp circle, far clear of CR1.
+    res = resolve_labels(s.project, s.catalog, sh, ladder=True, sheet_no=1)
+    pl1 = sh.component("PL1")
+    cr1 = sh.component("CR1")
+    pl1_ink = symbol_ink_box(pl1, s.catalog.get(pl1.library_id))
+    cr1_dev = s.catalog.get(cr1.library_id)
+    cr1_bot = float(cr1.y) + float(cr1_dev.schematic_height)
+    pl1_tag = res.tags["PL1"]
+    pl1_box = text_box(pl1_tag[0], pl1_tag[1], "PL1", pl1_tag[3], pl1_tag[2])
+    assert pl1_box is not None
+    assert 1.0 <= pl1_ink[1] - pl1_box[3] <= 4.0, (pl1_ink, pl1_box)
+    assert pl1_box[1] - cr1_bot >= 4.0, (cr1_bot, pl1_box)
+    assert abs((pl1_box[0] + pl1_box[2]) * 0.5 - (pl1_ink[0] + pl1_ink[2]) * 0.5) < 0.5
+
+    # 1. Tag within 1 mm of another symbol's body (0.5 mm clear, not overlapping) must fail.
+    s_close = build_scan_ladder_demo()
+    sh_c = s_close.project.sheet("elementary")
+    cr1_c = sh_c.component("CR1")
+    cr1_c_dev = s_close.catalog.get(cr1_c.library_id)
+    cr1_c.y = pl1_box[1] - 0.5 - float(cr1_c_dev.schematic_height)
+    issues_c = elementary_layout_issues(s_close, sh_c)
+    assert any("PL1" in item and ("within 1 mm" in item or "overlaps CR1" in item) for item in issues_c), issues_c
+
+    # 2. Tag floating off its own symbol (up toward CR1, closer to CR1 than PL1) must fail.
+    s_float = build_scan_ladder_demo()
+    sh_fl = s_float.project.sheet("elementary")
+    sh_fl.component("PL1").properties["ref_dy"] = -4.5
+    issues_fl = elementary_layout_issues(s_float, sh_fl)
+    assert any("PL1" in item and ("closer to CR1" in item or "placed off its own symbol" in item) for item in issues_fl), issues_fl
+
+    # 3. Tag shifted horizontally off its own symbol must fail.
+    s_off = build_scan_ladder_demo()
+    sh_of = s_off.project.sheet("elementary")
+    sh_of.component("PL1").properties["ref_dx"] = -25.0
+    issues_of = elementary_layout_issues(s_off, sh_of)
+    assert any("PL1" in item and "placed off its own symbol" in item for item in issues_of), issues_of

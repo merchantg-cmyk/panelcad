@@ -592,6 +592,411 @@ def _orthogonal(points: list[Point], tol: float = 0.6) -> bool:
     )
 
 
+def _is_terminal_comp(comp: Component, device: Device) -> bool:
+    cat = (device.category or "").lower()
+    lib = (comp.library_id or "").lower()
+    return "terminal" in cat or "terminal" in lib
+
+
+def _body_interior(rect: Rect, inset: float = 0.6) -> Rect:
+    """Strict interior of a symbol box so a pin on the edge does not count as inside."""
+
+    x0, y0, x1, y1 = rect
+    dx = min(inset, max(0.0, (x1 - x0) * 0.25))
+    dy = min(inset, max(0.0, (y1 - y0) * 0.25))
+    return (x0 + dx, y0 + dy, x1 - dx, y1 - dy)
+
+
+def _path_enters_own_body(
+    sheet: Sheet,
+    catalog: Catalog,
+    wire: Wire,
+    points: list[Point],
+) -> bool:
+    """True when a route cuts across the interior of one of its own endpoint symbols."""
+
+    if len(points) < 2:
+        return False
+    for end in (wire.frm, wire.to):
+        try:
+            ref, _pin = parse_pin_ref(end)
+            comp = sheet.component(ref)
+            device = catalog.get(comp.library_id)
+        except (ValueError, KeyError):
+            continue
+        if "offpage" in (comp.library_id or "").lower():
+            continue
+        if (device.category or "").lower().startswith("connection.notes"):
+            continue
+        box = component_obstacle(sheet, catalog, comp, pad=0.0)
+        interior = _body_interior(box, inset=0.6)
+        if path_hits_obstacles(points, [interior], skip_ends=False):
+            return True
+    return False
+
+
+def _terminal_row_routes(
+    sheet: Sheet,
+    catalog: Catalog,
+    project: Project | None = None,
+) -> dict[str, list[Point]]:
+    """Planar obstacle-clearing routes for horizontal terminal rows on ladder sheets.
+
+    Unblocked series hops (``X1-1.B -> X1-2.A``, ``M1-33.4 -> X1-1.A``,
+    ``X1-4.B -> L2``) stay straight horizontal segments on the pin line.
+    Blocked terminal-to-rail leads step cleanly into nested horizontal channels
+    above the terminal row and land directly on the rail; blocked same-row
+    jumpers (e.g. ``X1-2.A -> X1-3.A``, ``X1-4.A -> X1-2.A``) share a clean
+    channel below the row. No wire passes through any terminal box or tag.
+    """
+
+    from panelcad.core.ink import device_ref_layout, text_box
+    from panelcad.core.ladder import endpoint_is_rail, is_ladder_sheet, ladder_route
+
+    if not is_ladder_sheet(sheet, project):
+        return {}
+    by_id = {comp.id: comp for comp in sheet.components}
+    devs: dict[str, Device] = {}
+    for comp in sheet.components:
+        try:
+            devs[comp.id] = catalog.get(comp.library_id)
+        except KeyError:
+            continue
+    term_comps: list[tuple[Component, float]] = []
+    for comp in sheet.components:
+        dev = devs.get(comp.id)
+        if dev is None or not _is_terminal_comp(comp, dev):
+            continue
+        if int(comp.rotation or 0) % 180 != 0:
+            continue
+        lpins = [p for p in dev.pins if str(p.side) == "left"]
+        rpins = [p for p in dev.pins if str(p.side) == "right"]
+        if not lpins or not rpins:
+            continue
+        _px, py = pin_world(comp, lpins[0])
+        term_comps.append((comp, py))
+    if not term_comps:
+        return {}
+
+    # Cluster terminals sharing a horizontal pin row.
+    term_comps.sort(key=lambda item: (item[1], item[0].x))
+    rows: list[list[tuple[Component, float]]] = []
+    for comp, py in term_comps:
+        if rows and abs(rows[-1][0][1] - py) <= 2.0:
+            rows[-1].append((comp, py))
+        else:
+            rows.append([(comp, py)])
+
+    wx, wy, ww, wh = working_rect(sheet)
+    tx, ty, tw, th = title_block_rect(sheet)
+    title_top = ty
+
+    # Precompute component obstacles and device tags for corridor discovery.
+    comp_boxes: dict[str, Rect] = {}
+    tag_boxes: dict[str, Rect] = {}
+    for comp in sheet.components:
+        dev = devs.get(comp.id)
+        if dev is None or (dev.category or "").lower().startswith("connection.notes"):
+            continue
+        comp_boxes[comp.id] = component_obstacle(sheet, catalog, comp, pad=0.8)
+        layout = device_ref_layout(dev, comp, ref_align="middle")
+        if layout is not None:
+            tbox = text_box(layout[0], layout[1], comp.id, layout[3], layout[2])
+            if tbox is not None:
+                tag_boxes[comp.id] = tbox
+
+    # Straight horizontal non-terminal wires provide horizontal ceilings/floors.
+    other_h_wires: list[tuple[float, float, float]] = []
+    for w in sheet.wires:
+        ends: set[str] = set()
+        for end in (w.frm, w.to):
+            try:
+                ends.add(parse_pin_ref(end)[0])
+            except ValueError:
+                pass
+        if any(cid in devs and _is_terminal_comp(by_id[cid], devs[cid]) for cid in ends if cid in by_id):
+            continue
+        try:
+            ax, ay, _as, bx, by, _bs = wire_ends(sheet, catalog, w, project)
+        except (KeyError, ValueError):
+            continue
+        if abs(ay - by) <= 0.8 and not w.points:
+            other_h_wires.append((min(ax, bx), max(ax, bx), (ay + by) * 0.5))
+
+    def _end_ref(end: str) -> str:
+        try:
+            return parse_pin_ref(end)[0]
+        except ValueError:
+            return str(end).split(".")[0]
+
+    def _clear_exit_x(
+        cid: str,
+        px: float,
+        side: str,
+        *,
+        going_up: bool,
+        row_ids: set[str],
+    ) -> float:
+        """Pick a stub X outside the pin's own obstacle and clear of neighboring bodies/tags."""
+        sign = 1.0 if side == "right" else -1.0
+        default = px + sign * 2.5
+        own = comp_boxes.get(cid)
+        min_edge = (own[2] + 0.4) if (own is not None and sign > 0) else ((own[0] - 0.4) if own is not None else px + sign * 1.2)
+        limit: float | None = None
+        for oid in row_ids:
+            if oid == cid:
+                continue
+            checks = [comp_boxes[oid]] if oid in comp_boxes else []
+            # Terminal tags sit near the top of the block (above the pin line),
+            # so they only constrain upward risers, not downward drops.
+            if going_up and oid in tag_boxes:
+                checks.append(tag_boxes[oid])
+            for box in checks:
+                if sign > 0 and box[0] > px - 0.2:
+                    cand = box[0] - 0.6
+                    limit = cand if limit is None else min(limit, cand)
+                elif sign < 0 and box[2] < px + 0.2:
+                    cand = box[2] + 0.6
+                    limit = cand if limit is None else max(limit, cand)
+        if sign > 0:
+            x = max(default, min_edge)
+            if limit is not None and x > limit:
+                x = max(min_edge, min(limit, (min_edge + limit) * 0.5))
+            return x
+        x = min(default, min_edge)
+        if limit is not None and x < limit:
+            x = min(min_edge, max(limit, (min_edge + limit) * 0.5))
+        return x
+
+    def _space_lanes(
+        lo: float,
+        hi: float,
+        count: int,
+        *,
+        prefer_pitch: float = 2.6,
+        pack: str = "center",
+    ) -> list[float]:
+        if count <= 0:
+            return []
+        if count == 1:
+            return [(lo + hi) * 0.5]
+        span = hi - lo
+        if span <= 0.1:
+            return [lo] * count
+        pitch = min(prefer_pitch, span / float(count - 1))
+        total = pitch * float(count - 1)
+        if pack == "lo":
+            start = lo
+        elif pack == "hi":
+            start = hi - total
+        else:
+            start = lo + (span - total) * 0.5
+        return [start + idx * pitch for idx in range(count)]
+
+    out: dict[str, list[Point]] = {}
+    for row in rows:
+        row.sort(key=lambda item: item[0].x)
+        row_ids = {comp.id for comp, _py in row}
+        row_y = sum(py for _comp, py in row) / float(len(row))
+        row_top = min(comp_boxes[cid][1] for cid in row_ids if cid in comp_boxes)
+        row_bot = max(comp_boxes[cid][3] for cid in row_ids if cid in comp_boxes)
+        for cid in row_ids:
+            if cid in tag_boxes:
+                row_top = min(row_top, tag_boxes[cid][1] - 0.5)
+                row_bot = max(row_bot, tag_boxes[cid][3] + 0.5)
+
+        rail_wires: list[tuple[Wire, float, float, str, float, float, str, bool]] = []
+        jumper_wires: list[tuple[Wire, float, float, str, float, float, str]] = []
+        span_xs: list[float] = []
+
+        for wire in sheet.wires:
+            if wire.points:
+                try:
+                    ax0, ay0, _as0, bx0, by0, _bs0 = wire_ends(sheet, catalog, wire, project)
+                    stored = [Point(x=ax0, y=ay0), *list(wire.points), Point(x=bx0, y=by0)]
+                    if _orthogonal(stored):
+                        continue
+                except (KeyError, ValueError):
+                    pass
+            a_ref = _end_ref(wire.frm)
+            b_ref = _end_ref(wire.to)
+            if not ({a_ref, b_ref} & row_ids):
+                continue
+            if a_ref == b_ref:
+                continue
+            try:
+                ax, ay, a_side, bx, by, b_side = wire_ends(sheet, catalog, wire, project)
+            except (KeyError, ValueError):
+                continue
+            # Only handle horizontal-row wires whose endpoints share this terminal row's Y.
+            if abs(ay - row_y) > 2.0 or abs(by - row_y) > 2.0:
+                continue
+            plain = ladder_route(ax, ay, bx, by)
+            skip = {ref for ref in (a_ref, b_ref) if ref in by_id}
+            walls = sheet_obstacles(sheet, catalog, skip=skip)
+            blocked = path_hits_obstacles(plain, walls, skip_ends=False) or _path_enters_own_body(
+                sheet, catalog, wire, plain
+            )
+            if not blocked:
+                continue
+            a_rail = endpoint_is_rail(sheet, wire.frm, project)
+            b_rail = endpoint_is_rail(sheet, wire.to, project)
+            if a_rail ^ b_rail:
+                rail_wires.append((wire, ax, ay, a_side, bx, by, b_side, a_rail))
+                span_xs.extend((ax, bx))
+            elif a_ref in row_ids or b_ref in row_ids:
+                jumper_wires.append((wire, ax, ay, a_side, bx, by, b_side))
+                span_xs.extend((ax, bx))
+
+        if not rail_wires and not jumper_wires:
+            continue
+
+        x_lo = min(span_xs) - 4.0
+        x_hi = max(span_xs) + 4.0
+
+        # Compute open horizontal corridor ABOVE the terminal row.
+        above_ceil = wy + 4.0
+        for cid, box in comp_boxes.items():
+            if cid in row_ids:
+                continue
+            if box[2] < x_lo or box[0] > x_hi:
+                continue
+            if box[3] <= row_top + 0.5:
+                above_ceil = max(above_ceil, box[3] + 1.5)
+        for cid, tbox in tag_boxes.items():
+            if cid in row_ids:
+                continue
+            if tbox[2] < x_lo or tbox[0] > x_hi:
+                continue
+            if tbox[3] <= row_top + 0.5:
+                above_ceil = max(above_ceil, tbox[3] + 1.5)
+        for w_lo, w_hi, w_y in other_h_wires:
+            if w_hi < x_lo or w_lo > x_hi:
+                continue
+            if w_y <= row_top + 0.5:
+                above_ceil = max(above_ceil, w_y + 2.4)
+        above_floor = row_top - 1.5
+
+        # Compute open horizontal corridor BELOW the terminal row.
+        below_ceil = row_bot + 1.5
+        below_floor = min(wy + wh - 4.0, title_top - 2.0)
+        for cid, box in comp_boxes.items():
+            if cid in row_ids:
+                continue
+            if box[2] < x_lo or box[0] > x_hi:
+                continue
+            if box[1] >= row_bot - 0.5:
+                below_floor = min(below_floor, box[1] - 1.5)
+        for cid, tbox in tag_boxes.items():
+            if cid in row_ids:
+                continue
+            if tbox[2] < x_lo or tbox[0] > x_hi:
+                continue
+            if tbox[1] >= row_bot - 0.5:
+                below_floor = min(below_floor, tbox[1] - 1.5)
+        for w_lo, w_hi, w_y in other_h_wires:
+            if w_hi < x_lo or w_lo > x_hi:
+                continue
+            if w_y >= row_bot - 0.5:
+                below_floor = min(below_floor, w_y - 2.4)
+
+        above_room = above_floor - above_ceil
+        below_room = below_floor - below_ceil
+        rails_above = above_room >= 2.0 or above_room >= below_room
+
+        # Route blocked terminal-to-rail wires into nested non-crossing lanes.
+        if rail_wires:
+            # Sort longest horizontal span first so outermost lane goes furthest from row.
+            rail_wires.sort(key=lambda item: (-abs(item[1] - item[4]), item[0].id))
+            ordered_keys: list[str] = []
+            for item in rail_wires:
+                key = _conductor_key(item[0])
+                if key not in ordered_keys:
+                    ordered_keys.append(key)
+            if rails_above:
+                # Pack toward the upper ceiling so the bottommost channel keeps
+                # generous room for wire numbers above the terminal row.
+                lanes_y = _space_lanes(
+                    above_ceil, max(above_ceil, above_floor), len(ordered_keys), pack="lo"
+                )
+                # Outermost (longest span) takes smallest Y (topmost), shortest takes bottommost.
+                key_to_y = dict(zip(ordered_keys, lanes_y))
+            else:
+                lanes_y = _space_lanes(
+                    below_ceil, max(below_ceil, below_floor), len(ordered_keys), pack="hi"
+                )
+                # Outermost (longest span) takes largest Y (bottommost).
+                key_to_y = dict(zip(ordered_keys, reversed(lanes_y)))
+            for wire, ax, ay, a_side, bx, by, b_side, a_rail in rail_wires:
+                lane_y = key_to_y[_conductor_key(wire)]
+                going_up = lane_y < row_y
+                if a_rail:
+                    dev_ref = _end_ref(wire.to)
+                    exit_x = _clear_exit_x(dev_ref, bx, b_side, going_up=going_up, row_ids=row_ids)
+                    pts = [
+                        Point(x=ax, y=lane_y),
+                        Point(x=exit_x, y=lane_y),
+                        Point(x=exit_x, y=by),
+                        Point(x=bx, y=by),
+                    ]
+                else:
+                    dev_ref = _end_ref(wire.frm)
+                    exit_x = _clear_exit_x(dev_ref, ax, a_side, going_up=going_up, row_ids=row_ids)
+                    pts = [
+                        Point(x=ax, y=ay),
+                        Point(x=exit_x, y=ay),
+                        Point(x=exit_x, y=lane_y),
+                        Point(x=bx, y=lane_y),
+                    ]
+                out[wire.id] = present_route(pts)
+
+        # Route blocked terminal-to-terminal jumpers into the opposite clean corridor.
+        if jumper_wires:
+            jumpers_below = rails_above and below_room >= 0.5
+            if not rails_above and above_room >= 0.5:
+                jumpers_below = False
+            elif not rail_wires:
+                jumpers_below = below_room >= above_room
+            # Group by conductor key so shared-net jumpers (e.g. 202) share one clean bus.
+            key_span: dict[str, float] = {}
+            for item in jumper_wires:
+                key = _conductor_key(item[0])
+                key_span[key] = max(key_span.get(key, 0.0), abs(item[1] - item[4]))
+            # Shortest span closest to the row, widest span outermost (zero crossings).
+            ordered_keys = sorted(key_span, key=lambda k: (key_span[k], k))
+            if jumpers_below:
+                lo, hi = below_ceil, max(below_ceil, below_floor)
+                if len(ordered_keys) == 1:
+                    lanes_y = [min(lo + 2.0, (lo + hi) * 0.5)]
+                else:
+                    lanes_y = _space_lanes(lo, hi, len(ordered_keys))
+                key_to_y = dict(zip(ordered_keys, lanes_y))
+            else:
+                lo, hi = above_ceil, max(above_ceil, above_floor)
+                if len(ordered_keys) == 1:
+                    lanes_y = [max(hi - 2.0, (lo + hi) * 0.5)]
+                else:
+                    lanes_y = list(reversed(_space_lanes(lo, hi, len(ordered_keys))))
+                key_to_y = dict(zip(ordered_keys, lanes_y))
+            for wire, ax, ay, a_side, bx, by, b_side in jumper_wires:
+                lane_y = key_to_y[_conductor_key(wire)]
+                going_up = lane_y < row_y
+                a_ref = _end_ref(wire.frm)
+                b_ref = _end_ref(wire.to)
+                exit_a = _clear_exit_x(a_ref, ax, a_side, going_up=going_up, row_ids=row_ids)
+                exit_b = _clear_exit_x(b_ref, bx, b_side, going_up=going_up, row_ids=row_ids)
+                pts = [
+                    Point(x=ax, y=ay),
+                    Point(x=exit_a, y=ay),
+                    Point(x=exit_a, y=lane_y),
+                    Point(x=exit_b, y=lane_y),
+                    Point(x=exit_b, y=by),
+                    Point(x=bx, y=by),
+                ]
+                out[wire.id] = present_route(pts)
+    return out
+
+
 def route_wire(
     sheet: Sheet,
     catalog: Catalog,
@@ -628,9 +1033,13 @@ def route_wire(
                 ref = str(end).split(".")[0]
             if ref:
                 ends.add(ref)
+        if is_ladder_sheet(sheet, project) and _terminal_end(sheet, catalog, ends):
+            planned = _terminal_row_routes(sheet, catalog, project).get(wire.id)
+            if planned is not None:
+                return planned
         # A supply body on a rung is always walked around. Any other straight
-        # rung that cuts a symbol is walked around too, except a terminal
-        # jumper (a jog is a loop) and a phase lane (it has to stay on its pin).
+        # rung that cuts a symbol (including terminal boxes or its own body) is
+        # walked around too; only a phase lane stays on its pin.
         blocks = _supply_interiors(sheet, catalog)
         around = bool(blocks and path_hits_obstacles(plain, blocks, skip_ends=True))
         walls = sheet_obstacles(sheet, catalog, skip=ends)
@@ -638,12 +1047,18 @@ def route_wire(
         # a pin Y along a neighbor's top/bottom edge (e.g. IEC column branches) stays
         # straight instead of ducking through adjacent terminal labels.
         body_walls = sheet_obstacles(sheet, catalog, skip=ends, pad=-0.5)
+        is_power_pair = _any_category(sheet, catalog, ends, ("protection.fuse", "power.transformer"))
         if (
             not around
-            and body_walls
-            and not _terminal_end(sheet, catalog, ends)
             and not _power_lane(sheet, catalog, ends)
-            and path_hits_obstacles(plain, body_walls, skip_ends=True)
+            and (
+                (body_walls and path_hits_obstacles(plain, body_walls, skip_ends=True))
+                or (
+                    is_ladder_sheet(sheet, project)
+                    and not is_power_pair
+                    and _path_enters_own_body(sheet, catalog, wire, plain)
+                )
+            )
         ):
             around = True
         if around:
@@ -656,7 +1071,9 @@ def route_wire(
                 if comp is None:
                     continue
                 wall = component_obstacle(sheet, catalog, comp)
-                if path_hits_obstacles(plain, [wall], skip_ends=True):
+                if path_hits_obstacles(plain, [wall], skip_ends=True) or path_hits_obstacles(
+                    plain, [_body_interior(component_obstacle(sheet, catalog, comp, pad=0.0))], skip_ends=False
+                ):
                     own_walls.append(wall)
             wx, wy, ww, wh = working_rect(sheet)
             bounds = (wx, wy + 4.0, wx + ww, wy + wh - 2.0)
@@ -745,6 +1162,11 @@ def _straight_routes(
     )
     symbols = [] if skip_pull else sheet_obstacles(sheet, catalog, skip=set())
     walls = [] if skip_pull else [*symbols, *pin_keepouts(sheet, catalog)]
+    terminal_planned = (
+        _terminal_row_routes(sheet, catalog, project)
+        if is_ladder_sheet(sheet, project)
+        else {}
+    )
     for wire in sheet.wires:
         key = _conductor_key(wire)
         foreign = [
@@ -752,7 +1174,10 @@ def _straight_routes(
             for path, prior_key in zip(prior, prior_keys)
             if prior_key != key
         ]
-        pts = route_wire(sheet, catalog, wire, project=project)
+        if wire.id in terminal_planned:
+            pts = terminal_planned[wire.id]
+        else:
+            pts = route_wire(sheet, catalog, wire, project=project)
         manual = False
         if wire.points and len(pts) >= 2 and _orthogonal(pts):
             manual = True
