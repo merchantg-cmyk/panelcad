@@ -17,11 +17,126 @@ from panelcad.core.route import Rect, component_aabb
 # contents.py pin dots; painter.py tag at (x, y - 2.5) size 3.0.
 PIN_DOT_R = 0.7
 TAG_DY = 2.5
+# Baseline clearance above a symbol's actual drawn top ink for centered ladder tags.
+TAG_INK_DY = 3.0
 TAG_SIZE = 3.0
 # Ascent / descent / advance as multiples of font size (mm).
 TEXT_ASCENT = 0.90
 TEXT_DESCENT = 0.25
 TEXT_ADVANCE = 0.62
+
+
+def _xf_local(
+    x: float,
+    y: float,
+    ox: float,
+    oy: float,
+    rotation: int,
+    scale: float,
+    mirror: bool,
+) -> tuple[float, float]:
+    rx, ry = rotate_point(x * scale, y * scale, rotation)
+    if mirror:
+        rx = -rx
+    return (ox + rx, oy + ry)
+
+
+def symbol_ink_box(component: Component, device: Device) -> Rect:
+    """World AABB of a symbol's actual drawn graphics (excluding external tags).
+
+    Falls back to ``component_aabb`` for primitive-less symbols, notes, and PLC cards.
+    """
+
+    from panelcad.core.primitives import Primitive, arc_polyline
+    from panelcad.render.painter import is_control_coil, notes_box
+
+    s = component.visual_scale()
+    s = s if s > 0 else 1.0
+    rot = int(component.rotation or 0)
+    mirror = bool(component.mirror)
+    w = float(device.schematic_width) * s
+    h = float(device.schematic_height) * s
+    cat = (device.category or "").lower()
+    if cat.startswith("connection.notes"):
+        nw, nh = notes_box(component, s)
+        return (component.x, component.y, component.x + nw, component.y + nh)
+    if component.properties.get("ladder_card") or component.properties.get("ladder_coil"):
+        cw = max(w, float(component.properties.get("card_w") or 0.0) * s)
+        ch = max(h, float(component.properties.get("card_h") or 0.0) * s)
+        return component_aabb(component.x, component.y, cw, ch, rot, mirror)
+    if is_control_coil(device, component.library_id) and rot not in {90, 270}:
+        pin_y = 14.0 * s
+        for pin in device.pins:
+            if str(pin.id).upper() == "A1":
+                pin_y = float(pin.y) * s
+                break
+        cy = component.y + pin_y
+        half = min(w, h) * 0.32
+        return (component.x, cy - half, component.x + w, cy + half)
+    prims = list(getattr(device, "primitives", None) or [])
+    if not prims:
+        return component_aabb(component.x, component.y, w, h, rot, mirror)
+    ox, oy = float(component.x), float(component.y)
+    xs: list[float] = []
+    ys: list[float] = []
+    for raw in prims:
+        prim = raw if isinstance(raw, Primitive) else Primitive.model_validate(raw)
+        if prim.type == "rect":
+            for lx, ly in (
+                (prim.x, prim.y),
+                (prim.x + prim.w, prim.y),
+                (prim.x + prim.w, prim.y + prim.h),
+                (prim.x, prim.y + prim.h),
+            ):
+                px, py = _xf_local(lx, ly, ox, oy, rot, s, mirror)
+                xs.append(px)
+                ys.append(py)
+        elif prim.type == "line":
+            for lx, ly in ((prim.x, prim.y), (prim.x2, prim.y2)):
+                px, py = _xf_local(lx, ly, ox, oy, rot, s, mirror)
+                xs.append(px)
+                ys.append(py)
+        elif prim.type == "circle":
+            cx, cy = _xf_local(prim.x, prim.y, ox, oy, rot, s, mirror)
+            r = float(prim.r) * s
+            xs.extend((cx - r, cx + r))
+            ys.extend((cy - r, cy + r))
+        elif prim.type == "arc":
+            for lx, ly in arc_polyline(prim.x, prim.y, prim.r, prim.start, prim.sweep):
+                px, py = _xf_local(lx, ly, ox, oy, rot, s, mirror)
+                xs.append(px)
+                ys.append(py)
+        elif prim.type == "polyline":
+            for lx, ly in prim.points:
+                px, py = _xf_local(lx, ly, ox, oy, rot, s, mirror)
+                xs.append(px)
+                ys.append(py)
+        elif prim.type == "text" and str(prim.text or "").strip():
+            px, py = _xf_local(prim.x, prim.y, ox, oy, rot, s, mirror)
+            tbox = text_box(px, py, str(prim.text), float(prim.size or 2.2) * s, "middle")
+            if tbox is not None:
+                xs.extend((tbox[0], tbox[2]))
+                ys.extend((tbox[1], tbox[3]))
+    if not xs:
+        return component_aabb(component.x, component.y, w, h, rot, mirror)
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
+def _drawn_top_world(device: Device, component: Component) -> float | None:
+    """World Y of the topmost drawn ink of an unrotated symbol, keeping top pins clear."""
+
+    if int(component.rotation or 0) != 0:
+        return None
+    if not getattr(device, "primitives", None):
+        return None
+    if component.properties.get("ladder_card") or component.properties.get("ladder_coil"):
+        return None
+    # Symbols with pins on the top edge receive vertical leads into y=0; keep their
+    # tag above the full frame so it never tucks onto incoming top conductors.
+    if any(str(getattr(pin, "side", "")).lower() == "top" for pin in device.pins):
+        return None
+    ink = symbol_ink_box(component, device)
+    return float(ink[1])
 
 
 def text_box(x: float, y: float, text: str, size: float, align: str = "start") -> Rect | None:
@@ -252,7 +367,15 @@ def device_ref_layout(
         dx = float(raw_dx)
     if raw_dy not in (None, ""):
         dy = float(raw_dy)
-    return (rx + dx, component.y - TAG_DY * s + dy, align, TAG_SIZE)
+    base_y = component.y - TAG_DY * s
+    if align == "middle" and raw_dy in (None, ""):
+        # Symbols with dead air above their drawn graphics (e.g. pilot lights,
+        # pushbuttons, E-stops) used to float their centered tag up into the
+        # rung above. Anchor directly over the symbol's drawn top ink instead.
+        drawn_top = _drawn_top_world(device, component)
+        if drawn_top is not None:
+            base_y = max(base_y, drawn_top - TAG_INK_DY * s)
+    return (rx + dx, base_y + dy, align, TAG_SIZE)
 
 
 def _include_tag(

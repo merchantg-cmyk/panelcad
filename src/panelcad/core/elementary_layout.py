@@ -1787,10 +1787,11 @@ def _bad_routes(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
             }
             if len(long_levels) >= 2:
                 issues.append(f"{sheet.id}: {wire.id} arches over the terminals")
-            if any(
+            has_vert = any(
                 abs(float(a.x) - float(b.x)) <= 0.8 and abs(float(a.y) - float(b.y)) > 2.0
                 for a, b in zip(pts, pts[1:], strict=False)
-            ):
+            )
+            if has_vert and not _valid_terminal_bypass(sheet, catalog, session.project, wire, pts):
                 issues.append(f"{sheet.id}: {wire.id} loops around the terminals")
         if kind == "power" and _power_jog(pts):
             issues.append(f"{sheet.id}: {wire.id} jogs through the power block")
@@ -1809,14 +1810,80 @@ def _bad_routes(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
                 continue
             skip.add(ref)
         walls = sheet_obstacles(sheet, catalog, skip=skip)
-        if path_hits_obstacles(pts, walls, skip_ends=True):
-            if _straight_terminal_jumper(sheet, catalog, pts):
-                continue
+        if path_hits_obstacles(pts, walls, skip_ends=False):
             issues.append(f"{sheet.id}: {wire.id} runs through a symbol")
             continue
         if _crosses_own_body(sheet, catalog, wire, pts):
             issues.append(f"{sheet.id}: {wire.id} runs through a symbol")
     return issues
+
+
+def _valid_terminal_bypass(
+    sheet: Sheet,
+    catalog: Catalog,
+    project: Any,
+    wire: Any,
+    pts: list[Any],
+) -> bool:
+    """True only for a single-side, single-channel bypass clearing a blocking terminal box.
+
+    Unblocked terminal wires must stay straight on the pin line. Cross-rung
+    loops, multi-level arches, dual-side detours, or rail wires that drop back
+    down after reaching the rail column are all rejected as terminal loops.
+    """
+
+    from panelcad.core.ladder import endpoint_is_rail, ladder_route
+    from panelcad.core.pin_geometry import parse_pin_ref
+    from panelcad.core.route import path_hits_obstacles
+    from panelcad.render.wiring import _path_enters_own_body, sheet_obstacles, wire_ends
+
+    if len(pts) < 4:
+        return False
+    try:
+        ax, ay, _aside, bx, by, _bside = wire_ends(sheet, catalog, wire, project)
+    except (KeyError, ValueError):
+        return False
+    # Both endpoints must belong to the same horizontal terminal row.
+    if abs(ay - by) > 2.0:
+        return False
+    row_y = (ay + by) * 0.5
+    plain = ladder_route(ax, ay, bx, by)
+    skip: set[str] = set()
+    for end in (wire.frm, wire.to):
+        try:
+            skip.add(parse_pin_ref(end)[0])
+        except ValueError:
+            pass
+    # Only allow a vertical detour when the straight pin-to-pin line is physically blocked.
+    walls = sheet_obstacles(sheet, catalog, skip=skip)
+    if not path_hits_obstacles(plain, walls, skip_ends=False) and not _path_enters_own_body(
+        sheet, catalog, wire, plain
+    ):
+        return False
+    ys = [float(p.y) for p in pts]
+    min_y, max_y = min(ys), max(ys)
+    # Must stay strictly on ONE side of the terminal row (never weaving above and below).
+    if min_y < row_y - 2.0 and max_y > row_y + 2.0:
+        return False
+    # Must stay in the immediate adjacent corridor of the terminal row (not crossing rungs).
+    if max(abs(min_y - row_y), abs(max_y - row_y)) > 26.0:
+        return False
+    # Distinct off-row horizontal channels: exactly one clean channel.
+    off_row_h = {
+        round(float(a.y), 1)
+        for a, b in zip(pts, pts[1:], strict=False)
+        if abs(float(a.y) - float(b.y)) <= 0.8
+        and abs(float(a.x) - float(b.x)) > 2.0
+        and abs(float(a.y) - row_y) > 2.0
+    }
+    if len(off_row_h) != 1:
+        return False
+    a_rail = endpoint_is_rail(sheet, wire.frm, project)
+    b_rail = endpoint_is_rail(sheet, wire.to, project)
+    if a_rail ^ b_rail:
+        # A rail bypass lands directly on the rail at the channel Y (4 points, no drop-back).
+        return len(pts) <= 4
+    return len(pts) <= 6
 
 
 def _power_jog(pts) -> bool:
@@ -1908,14 +1975,20 @@ def _crosses_own_body(sheet: Sheet, catalog: Catalog, wire, pts) -> bool:
             return True
         return path_hits_obstacles(pts, [component_obstacle(sheet, catalog, comp)], skip_ends=True)
 
+    # Universal strict interior check: no wire segment may pass through the
+    # body interior of either of its own endpoint symbols (terminal boxes included).
+    from panelcad.render.wiring import _path_enters_own_body
+
+    if _path_enters_own_body(sheet, catalog, wire, pts):
+        return True
+
     # Fuse/transformer ↔ neighbor on the far side of the landed pin.
     if power_far_from_neighbor(a_ref, a_pin, b_ref) and hits_body(a_ref):
         return True
     if power_far_from_neighbor(b_ref, b_pin, a_ref) and hits_body(b_ref):
         return True
 
-    # Far-pin rail landings: fuse/transformer/contact bodies. Terminal A→L2
-    # jumpers land on the left pin by design and must not fail here.
+    # Far-pin rail landings: any symbol body (terminal boxes included).
     device_ref = ""
     rail_ref = ""
     if endpoint_is_rail(sheet, wire.frm, None) and far_pin(a_ref, b_ref, b_pin):
@@ -1927,7 +2000,7 @@ def _crosses_own_body(sheet: Sheet, catalog: Catalog, wire, pts) -> bool:
     if not device_ref:
         return False
     device_comp = by_id.get(device_ref)
-    if device_comp is None or _role(device_comp.library_id) == "terminal":
+    if device_comp is None:
         return False
     # The pin faces the other rail. That is through the body only when the
     # drawn path enters the body. A jog that stays outside is a clean landing.
@@ -1987,60 +2060,143 @@ def _stacked_notes(session: Session, sheet: Sheet) -> list[str]:
 
 
 def _device_tags_clear_bodies(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
-    """A printed device tag must not overlap another symbol's body."""
+    """Printed device tags must stay >= 1 mm clear of other bodies and anchored to their own symbol."""
 
-    from panelcad.core.ink import text_box
+    from math import hypot
+    from panelcad.core.ink import symbol_ink_box, text_box
     from panelcad.core.ladder import is_ladder_sheet
     from panelcad.core.route import component_aabb
+    from panelcad.render.label_avoid import TAG_REACH, resolve_labels
     from panelcad.render.sheet_labels import _expects_visible_tag, place_device_tags
 
+    ladder = is_ladder_sheet(sheet, session.project)
+    # Check both natural tag placement and final resolved placement so neither a
+    # cramped layout nor a collision-pass nudge can hide a tag touching another
+    # symbol or drifting off its own symbol.
+    layout_sets: list[dict[str, tuple[float, float, str, float]]] = []
     try:
-        layouts = place_device_tags(
+        raw_layouts = place_device_tags(
             sheet,
             catalog,
-            ladder=is_ladder_sheet(sheet, session.project),
+            ladder=ladder,
             project=session.project,
             sheet_no=1,
         )
+        if raw_layouts:
+            layout_sets.append(dict(raw_layouts))
     except Exception:  # noqa: BLE001
+        pass
+    try:
+        resolved_layouts = dict(
+            resolve_labels(
+                session.project,
+                catalog,
+                sheet,
+                ladder=ladder,
+                sheet_no=1,
+            ).tags
+        )
+        if resolved_layouts:
+            layout_sets.append(resolved_layouts)
+    except Exception:  # noqa: BLE001
+        pass
+    if not layout_sets:
         return []
-    bodies: list[tuple[str, tuple[float, float, float, float]]] = []
+
+    def _gap(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
+        dx = max(0.0, max(a[0], b[0]) - min(a[2], b[2]))
+        dy = max(0.0, max(a[1], b[1]) - min(a[3], b[3]))
+        return hypot(dx, dy)
+
+    bodies: dict[str, tuple[float, float, float, float]] = {}
+    inks: dict[str, tuple[float, float, float, float]] = {}
     for comp in sheet.components:
         device = _device(catalog, comp)
         if device is None or "offpage" in comp.library_id.lower():
             continue
-        box = component_aabb(
+        scale = comp.visual_scale()
+        bodies[comp.id] = component_aabb(
             comp.x,
             comp.y,
-            float(device.schematic_width),
-            float(device.schematic_height),
+            float(device.schematic_width) * scale,
+            float(device.schematic_height) * scale,
             int(comp.rotation or 0),
+            bool(comp.mirror),
         )
-        bodies.append((comp.id, box))
+        inks[comp.id] = symbol_ink_box(comp, device)
+
+    min_clear_mm = 1.0
     issues: list[str] = []
-    for comp in sheet.components:
-        device = _device(catalog, comp)
-        if device is None or "offpage" in comp.library_id.lower():
-            continue
-        if not _expects_visible_tag(comp, device):
-            continue
-        layout = layouts.get(comp.id)
-        if layout is None:
-            continue
-        tbox = text_box(layout[0], layout[1], comp.id, layout[3], layout[2])
-        if tbox is None:
-            continue
-        for other_id, bbox in bodies:
-            if other_id == comp.id:
+    seen: set[str] = set()
+
+    def _add(msg: str) -> None:
+        if msg not in seen:
+            seen.add(msg)
+            issues.append(msg)
+
+    for layouts in layout_sets:
+        for comp in sheet.components:
+            device = _device(catalog, comp)
+            if device is None or "offpage" in comp.library_id.lower():
                 continue
-            if (
-                tbox[0] < bbox[2] - 0.1
-                and tbox[2] > bbox[0] + 0.1
-                and tbox[1] < bbox[3] - 0.1
-                and tbox[3] > bbox[1] + 0.1
-            ):
-                issues.append(f"{sheet.id}: device label {comp.id} overlaps {other_id}")
-                break
+            if not _expects_visible_tag(comp, device):
+                continue
+            layout = layouts.get(comp.id)
+            if layout is None:
+                continue
+            tbox = text_box(layout[0], layout[1], comp.id, layout[3], layout[2])
+            if tbox is None:
+                continue
+            own_ink = inks.get(comp.id)
+            own_gap = _gap(tbox, own_ink) if own_ink is not None else 0.0
+            # Own drawn graphics must not be overlapped by the external tag.
+            if own_ink is not None and own_gap <= 0.0:
+                _add(f"{sheet.id}: device label {comp.id} overlaps {comp.id}")
+                continue
+            # Must stay >= 1.0 mm clear of every other symbol's body and drawn ink.
+            hit_other = False
+            for other_id, bbox in bodies.items():
+                if other_id == comp.id:
+                    continue
+                other_ink = inks.get(other_id, bbox)
+                gap_body = _gap(tbox, bbox)
+                gap_ink = _gap(tbox, other_ink)
+                if gap_body <= 0.0 or gap_ink <= 0.0:
+                    _add(f"{sheet.id}: device label {comp.id} overlaps {other_id}")
+                    hit_other = True
+                    break
+                if min(gap_body, gap_ink) < min_clear_mm:
+                    _add(
+                        f"{sheet.id}: device label {comp.id} is within {min_clear_mm:g} mm of {other_id}"
+                    )
+                    hit_other = True
+                    break
+            if hit_other or own_ink is None:
+                continue
+            # Must remain anchored to its own symbol (within TAG_REACH and nearer its
+            # own drawn body than any other symbol's drawn body).
+            if own_gap > TAG_REACH:
+                _add(f"{sheet.id}: device label {comp.id} is placed off its own symbol")
+                continue
+            nearer = next(
+                (
+                    other_id
+                    for other_id, other_ink in inks.items()
+                    if other_id != comp.id and _gap(tbox, other_ink) <= own_gap + 0.2
+                ),
+                None,
+            )
+            if nearer is not None:
+                _add(
+                    f"{sheet.id}: device label {comp.id} is placed closer to {nearer} than {comp.id}"
+                )
+                continue
+            # Unrotated above/below tags must stay horizontally centered over their symbol.
+            ref_side = str(comp.properties.get("ref_side") or "")
+            if not int(comp.rotation or 0) and ref_side not in {"left", "right"}:
+                tx_mid = (tbox[0] + tbox[2]) * 0.5
+                if tx_mid < own_ink[0] - 2.0 or tx_mid > own_ink[2] + 2.0:
+                    _add(f"{sheet.id}: device label {comp.id} is placed off its own symbol")
     return issues
 
 

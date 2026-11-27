@@ -419,25 +419,56 @@ def _avoid(
     # label that already reads cleanly stays where it was drawn.
     crossing = _wire_boxes({**routes, **lead_routes}, clear=-TOUCH_DEPTH)
     link_names = {name for name, _box in links}
-    plain_bodies = [box for name, box in named_bodies if name not in link_names]
+    plain_named = [(name, box) for name, box in named_bodies if name not in link_names]
+    plain_bodies = [box for _name, box in plain_named]
     link_ink = [_shrink(box, 1.0 + TOUCH_DEPTH) for _name, box in links]
+    from panelcad.core.ink import symbol_ink_box
+
+    ink_of: dict[str, tuple[float, float, float, float]] = {}
+    for comp in sheet.components:
+        device = catalog.devices.get(comp.library_id)
+        if device is None:
+            continue
+        ink_of[comp.id] = symbol_ink_box(comp, device)
     for _ in range(6):
         changed = False
         for cid, layout in list(tags.items()):
             own = tag_boxes(cid, layout)
+            own_ink = ink_of.get(cid)
+            # Test a tag against its own drawn ink (not empty frame padding above
+            # the graphics), while keeping every foreign symbol's full body solid.
+            tag_plain_bodies = [
+                (own_ink if (own_ink is not None and name == f"body:{cid}") else box)
+                for name, box in plain_named
+            ]
+            tag_all_bodies = [
+                (own_ink if (own_ink is not None and name == f"body:{cid}") else box)
+                for name, box in named_bodies
+            ]
             blocked_by = _others(
-                own, plain_bodies, fixed, _all_tags(tags, tag_boxes, skip=cid), _all_marks(marks, mark_boxes), xref_boxes()
+                own, tag_plain_bodies, fixed, _all_tags(tags, tag_boxes, skip=cid), _all_marks(marks, mark_boxes), xref_boxes()
             )
             blocked_by.extend(conductors)
             blocked_by.extend(box for boxes in crossing.values() for box in boxes)
             blocked_by.extend(link_ink)
-            if not own or not _hits(own, blocked_by):
+            rival_inks = [
+                ink_of.get(name.split(":", 1)[1], box)
+                for name, box in named_bodies
+                if name.startswith("body:") and name.split(":", 1)[1] != cid
+            ]
+            off_own = (
+                ladder
+                and bool(own)
+                and own_ink is not None
+                and not _reads_as_own(own[0], own_ink, rival_inks)
+            )
+            if not own or (not _hits(own, blocked_by) and not off_own):
                 continue
             found = _search_tag(
                 cid,
                 layout,
                 sheet,
-                bodies,
+                tag_all_bodies,
                 fixed,
                 tags,
                 tag_boxes,
@@ -446,7 +477,7 @@ def _avoid(
                 xref_boxes,
                 bounds,
                 conductors,
-                body_of.get(cid),
+                own_ink if own_ink is not None else body_of.get(cid),
                 captions=captions,
                 wires=all_wires,
                 rivals=[box for name, box in named_bodies if name.split(":", 1)[1] != cid],
