@@ -300,6 +300,9 @@ def _detect_border_frame_quad(gray: np.ndarray) -> tuple[np.ndarray, dict[str, f
     left_lines: list[tuple[float, tuple[float, float, float, float]]] = []
     right_lines: list[tuple[float, tuple[float, float, float, float]]] = []
 
+    # Length picks the ruled edge. Position only breaks a near tie: a
+    # title-block glyph must not move the frame by a whole title block.
+    pos = 0.05
     for raw in lines.reshape(-1, 4):
         x1, y1, x2, y2 = [float(v) / float(scale) for v in raw]
         length = math.hypot(x2 - x1, y2 - y1)
@@ -307,15 +310,15 @@ def _detect_border_frame_quad(gray: np.ndarray) -> tuple[np.ndarray, dict[str, f
         if abs(ang) <= 25.0 or abs(abs(ang) - 180.0) <= 25.0:
             ymid = 0.5 * (y1 + y2)
             if ymid < h * 0.32:
-                top_lines.append((length - ymid * 0.5, (x1, y1, x2, y2)))
+                top_lines.append((length - ymid * pos, (x1, y1, x2, y2)))
             elif ymid > h * 0.68:
-                bottom_lines.append((length + ymid * 0.5, (x1, y1, x2, y2)))
+                bottom_lines.append((length + ymid * pos, (x1, y1, x2, y2)))
         elif 65.0 <= abs(ang) <= 115.0:
             xmid = 0.5 * (x1 + x2)
             if xmid < w * 0.32:
-                left_lines.append((length - xmid * 0.5, (x1, y1, x2, y2)))
+                left_lines.append((length - xmid * pos, (x1, y1, x2, y2)))
             elif xmid > w * 0.68:
-                right_lines.append((length + xmid * 0.5, (x1, y1, x2, y2)))
+                right_lines.append((length + xmid * pos, (x1, y1, x2, y2)))
 
     if not (top_lines and bottom_lines and left_lines and right_lines):
         return None

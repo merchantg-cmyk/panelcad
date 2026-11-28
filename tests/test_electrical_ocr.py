@@ -268,7 +268,7 @@ def test_local_target_gate() -> None:
     assert machine_role("cloud-vm") == "other"
     assert counts_as_local_target("shop-pc") is True
     assert counts_as_local_target("home-pc") is True
-    assert counts_as_local_target("Drew-PC") is False
+    assert counts_as_local_target("other-pc") is False
     assert counts_as_local_target("Pixel 6 Pro") is False
     samples = electrical_samples()
     by_name = {sample.name: sample for sample in samples}

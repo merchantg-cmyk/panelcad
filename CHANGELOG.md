@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.5.31 — 2026-11-28
+
+- Elementary tags stay off symbol bodies. A contact that belongs on the right stays on the right. A scan secondary fuse lands on the transformer secondary, not on the primary.
+- Wires on a terminal row go around the terminal boxes. A tag drawn in the ink stays on that ink. Wire numbers stay off terminal tags. The elementary checkers stay strict.
+
 ## 0.5.30 — 2026-11-26
 
 - Unreadable tags stay `?`, including every `?`-prefixed tag. Catalog loads come from the published part. A 2-NC E-stop keeps its mate.

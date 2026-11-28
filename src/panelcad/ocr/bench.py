@@ -1,7 +1,7 @@
 """Compare the electrical engine with Tesseract and Paddle OCR.
 
 Run this on shop-pc (shop) or home-pc (home). Do not run it on
-Drew-PC or the Pixel 6 Pro. A result from any other machine, including a
+other-pc or the Pixel 6 Pro. A result from any other machine, including a
 Cursor cloud VM, is not a shop-PC or home-PC number.
 
 Shop or home, after the usual bench setup (see the module docstring of
@@ -46,7 +46,7 @@ _LOCAL = {
     "SHOP-PC": "shop-pc",
     "HOME-PC": "home-pc",
 }
-_NOT_TARGETS = ("Drew-PC", "Pixel 6 Pro")
+_NOT_TARGETS = ("other-pc", "Pixel 6 Pro")
 
 
 def machine_role(hostname: str | None = None) -> str:

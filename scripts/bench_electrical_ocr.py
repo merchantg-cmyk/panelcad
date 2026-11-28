@@ -7,7 +7,7 @@ JSON records that and still scores the engines that did run.
 Targets, and only these:
   shop-pc           shop PC
   home-pc           home PC
-Do not run this on Drew-PC or the Pixel 6 Pro. A Cursor cloud VM result is
+Do not run this on other-pc or the Pixel 6 Pro. A Cursor cloud VM result is
 not a local result. The JSON leaves shop-pc and home-pc empty
 unless ``platform.node()`` is one of those names.
 

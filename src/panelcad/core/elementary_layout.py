@@ -402,6 +402,7 @@ def elementary_layout_issues(session: Session, sheet: Sheet) -> list[str]:
     issues.extend(_rail_without_a_load(sheet))
     issues.extend(_rail_gaps(session, sheet, catalog))
     issues.extend(_shorted_numbers(session, sheet))
+    issues.extend(_return_pin_shorts(session, sheet))
     issues.extend(_transformer_control_rules(session, sheet))
     return issues
 
@@ -2818,6 +2819,53 @@ def _rail_gaps(session: Session, sheet: Sheet, catalog: Catalog) -> list[str]:
             px, _py = pin_world(comp, right_pins[0])
             if 0.0 < right - px <= near:
                 issues.append(f"{sheet.id}: {comp.id} does not land on {ret}")
+    return issues
+
+
+def _return_pin_shorts(session: Session, sheet: Sheet) -> list[str]:
+    """A return landed on a pin that already carries a different wire number.
+
+    The tee shorts that net to the return. A pin whose only wire is the return,
+    or a tee that keeps the same number, is a normal landing.
+    """
+
+    from panelcad.core.ladder import endpoint_is_rail, rail_names
+    from panelcad.core.pin_geometry import parse_pin_ref
+
+    _hot, ret = rail_names(sheet, session.project)
+    ret_name = ret.upper()
+    by_pin: dict[tuple[str, str], list[Any]] = {}
+    for wire in sheet.wires:
+        for text in (wire.frm, wire.to):
+            if endpoint_is_rail(sheet, text, session.project):
+                continue
+            try:
+                ref, pin = parse_pin_ref(text)
+            except ValueError:
+                continue
+            by_pin.setdefault((ref, pin), []).append(wire)
+    issues: list[str] = []
+    for (ref, pin), wires in by_pin.items():
+        rail_wires = []
+        others = []
+        for wire in wires:
+            ends = (str(wire.frm), str(wire.to))
+            to_return = any(
+                endpoint_is_rail(sheet, end, session.project)
+                and str(end).split(".")[0].upper() == ret_name
+                for end in ends
+            )
+            if to_return:
+                rail_wires.append(wire)
+            else:
+                others.append(wire)
+        for rail_wire in rail_wires:
+            rail_num = str(rail_wire.number or "").strip()
+            for other in others:
+                other_num = str(other.number or "").strip()
+                if other_num and other_num != "?" and other_num != rail_num:
+                    issues.append(f"{sheet.id}: {rail_wire.id} shorts {ref}.{pin} to {ret}")
+                    break
     return issues
 
 

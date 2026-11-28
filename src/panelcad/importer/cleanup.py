@@ -4656,9 +4656,12 @@ def _defect_gaps(session: Session, sheet: Sheet) -> list[dict[str, Any]]:
             tag = body.split(" is a fuse from ", 1)[0].strip()
             extra = {"tag": tag, "wires": _wires_touching(sheet, {tag})}
             gap_id = f"fuse_rail:{sheet.id}:{tag}"
-        elif "runs through a symbol" in text:
+        elif "runs through a symbol" in text or " shorts " in text:
             kind = "checker_wire"
-            wire_id = body.split(" runs through a symbol", 1)[0].strip()
+            if " shorts " in text:
+                wire_id = body.split(" shorts ", 1)[0].strip()
+            else:
+                wire_id = body.split(" runs through a symbol", 1)[0].strip()
             wire = next((w for w in sheet.wires if str(w.id) == wire_id), None)
             extra = {
                 "wire_id": wire_id,

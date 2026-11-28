@@ -959,11 +959,17 @@ def _terminal_row_routes(
                 jumpers_below = below_room >= above_room
             # Group by conductor key so shared-net jumpers (e.g. 202) share one clean bus.
             key_span: dict[str, float] = {}
+            key_tie: dict[str, str] = {}
             for item in jumper_wires:
                 key = _conductor_key(item[0])
                 key_span[key] = max(key_span.get(key, 0.0), abs(item[1] - item[4]))
+                wire_id = str(item[0].id)
+                prev = key_tie.get(key)
+                if prev is None or wire_id < prev:
+                    key_tie[key] = wire_id
             # Shortest span closest to the row, widest span outermost (zero crossings).
-            ordered_keys = sorted(key_span, key=lambda k: (key_span[k], k))
+            # Equal spans stay in wire-id order, so editing a number does not swap lanes.
+            ordered_keys = sorted(key_span, key=lambda k: (key_span[k], key_tie[k]))
             if jumpers_below:
                 lo, hi = below_ceil, max(below_ceil, below_floor)
                 if len(ordered_keys) == 1:
